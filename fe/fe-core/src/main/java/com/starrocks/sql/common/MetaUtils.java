@@ -28,6 +28,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -284,8 +285,15 @@ public class MetaUtils {
         return columnIds;
     }
 
+    /**
+     * Convert partition column to SQL representation for SHOW CREATE TABLE etc.
+     * Only internal expression partition columns (__generated_partition_column_*) are expanded to
+     * their expression form; user-defined generated columns retain their column names to preserve
+     * DDL round-trippability.
+     */
     public static String getPartitionColumnToSql(Column column) {
-        if (column.isGeneratedColumn()) {
+        if (column.isGeneratedColumn()
+                && column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
             return column.generatedColumnExprToString();
         } else {
             return "`" + column.getName() + "`";
