@@ -215,6 +215,7 @@ bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
 }
 
+<<<<<<< HEAD
 Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
         return Status::OK();
@@ -235,4 +236,9 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     return Status::OK();
 }
 
+=======
+bool ExprContext::error_for_division_by_zero() const {
+    return _runtime_state != nullptr && _runtime_state->error_for_division_by_zero();
+}
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
 } // namespace starrocks

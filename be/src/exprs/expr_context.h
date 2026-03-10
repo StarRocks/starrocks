@@ -121,9 +121,13 @@ public:
     bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
+<<<<<<< HEAD
 
     Status rewrite_jit_expr(ObjectPool* pool);
 
+=======
+    bool error_for_division_by_zero() const;
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
     void set_build_from_only_in_filter(bool build_from_only_in_filter) {
         _build_from_only_in_filter = build_from_only_in_filter;
     }
@@ -131,7 +135,6 @@ public:
 
 private:
     friend class Expr;
-    friend class OlapScanNode;
     friend class OlapScanNode;
     friend class EsPredicate;
 

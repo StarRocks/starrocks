@@ -47,7 +47,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
@@ -455,30 +462,58 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatter builder = DateUtils.unixDatetimeFormatter(fmtLiteral.getVarchar(), false);
         String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
-        if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt;
-            try {
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
-            } catch (DateTimeParseException e) {
-                // If parsing fails, it can be re-parsed from the position of the successful prefix string.
-                // This way datetime string can use incomplete format
-                // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
-                ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
-                        .parse(dateStr.substring(0, e.getErrorIndex())));
+        boolean allowThrowException = ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+        try {
+            if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
+                LocalDateTime ldt;
+                try {
+                    ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                } catch (DateTimeParseException e) {
+                    // If parsing fails, it can be re-parsed from the position of the successful prefix string.
+                    // This way datetime string can use incomplete format
+                    // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
+                    ldt = LocalDateTime.from(builder.withResolverStyle(ResolverStyle.STRICT)
+                            .parse(dateStr.substring(0, e.getErrorIndex())));
+                }
+                return ConstantOperator.createDatetimeOrNull(ldt);
+            } else {
+                LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+                return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
             }
-            return ConstantOperator.createDatetimeOrNull(ldt);
-        } else {
-            LocalDate ld = LocalDate.from(builder.withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
-            return ConstantOperator.createDatetimeOrNull(ld.atTime(0, 0, 0));
+        } catch (DateTimeParseException e) {
+            if (allowThrowException) {
+                throw new StarRocksPlannerException("Fail to parse date", ErrorType.USER_ERROR);
+            } else {
+                throw e;
+            }
         }
     }
 
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+<<<<<<< HEAD
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+=======
+        boolean allowThrowException = ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+        try {
+            LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                    StringUtils.strip(date.getVarchar(), "\r\n\t ")));
+            return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), DateType.DATE);
+        } catch (DateTimeParseException e) {
+            if (allowThrowException) {
+                throw new StarRocksPlannerException("Fail to parse date", ErrorType.USER_ERROR);
+            } else {
+                throw e;
+            }
+        }
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
@@ -1028,10 +1063,23 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createLargeInt(first.getLargeInt().multiply(second.getLargeInt()));
     }
 
+    private static ConstantOperator handleDivisionByZero(Type type) {
+        if (ConnectContext.get() != null
+                && SqlModeHelper.check(ConnectContext.get().getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            throw new StarRocksPlannerException("Division by zero", ErrorType.USER_ERROR);
+        }
+        return ConstantOperator.createNull(type);
+    }
+
     @ConstantFunction(name = "divide", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator divideDouble(ConstantOperator first, ConstantOperator second) {
         if (second.getDouble() == 0.0) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.DOUBLE);
+=======
+            return handleDivisionByZero(FloatType.DOUBLE);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createDouble(first.getDouble() / second.getDouble());
     }
@@ -1044,40 +1092,59 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator divideDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
-            return ConstantOperator.createNull(second.getType());
+            return handleDivisionByZero(second.getType());
         }
         return createDecimalConstant(first.getDecimal().divide(second.getDecimal()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator intDivideTinyInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getTinyInt() == 0) {
+            return handleDivisionByZero(IntegerType.TINYINT);
+        }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() / second.getTinyInt()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator intDivideSmallInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getSmallint() == 0) {
+            return handleDivisionByZero(IntegerType.SMALLINT);
+        }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() / second.getSmallint()));
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator intDivideInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getInt() == 0) {
+            return handleDivisionByZero(IntegerType.INT);
+        }
         return ConstantOperator.createInt(first.getInt() / second.getInt());
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator intDivideBigint(ConstantOperator first, ConstantOperator second) {
+        if (second.getBigint() == 0) {
+            return handleDivisionByZero(IntegerType.BIGINT);
+        }
         return ConstantOperator.createBigint(first.getBigint() / second.getBigint());
     }
 
     @ConstantFunction(name = "int_divide", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator intDivideLargeInt(ConstantOperator first, ConstantOperator second) {
+        if (second.getLargeInt().equals(BigInteger.ZERO)) {
+            return handleDivisionByZero(IntegerType.LARGEINT);
+        }
         return ConstantOperator.createLargeInt(first.getLargeInt().divide(second.getLargeInt()));
     }
 
     @ConstantFunction(name = "mod", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator modTinyInt(ConstantOperator first, ConstantOperator second) {
         if (second.getTinyInt() == 0) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.TINYINT);
+=======
+            return handleDivisionByZero(IntegerType.TINYINT);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() % second.getTinyInt()));
     }
@@ -1085,7 +1152,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator modSMALLINT(ConstantOperator first, ConstantOperator second) {
         if (second.getSmallint() == 0) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.SMALLINT);
+=======
+            return handleDivisionByZero(IntegerType.SMALLINT);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() % second.getSmallint()));
     }
@@ -1093,7 +1164,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator modInt(ConstantOperator first, ConstantOperator second) {
         if (second.getInt() == 0) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.INT);
+=======
+            return handleDivisionByZero(IntegerType.INT);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createInt(first.getInt() % second.getInt());
     }
@@ -1101,15 +1176,24 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
+<<<<<<< HEAD
             return ConstantOperator.createNull(Type.BIGINT);
+=======
+            return handleDivisionByZero(IntegerType.BIGINT);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
     }
 
     @ConstantFunction(name = "mod", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
+<<<<<<< HEAD
         if (second.getLargeInt().equals(new BigInteger("0"))) {
             return ConstantOperator.createNull(Type.LARGEINT);
+=======
+        if (second.getLargeInt().equals(BigInteger.ZERO)) {
+            return handleDivisionByZero(IntegerType.LARGEINT);
+>>>>>>> c4d771cbbb ([Enhancement] Improve sql_mode to handle Division by zero and Fail to parse date for str_to_date/str2date (#70004))
         }
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
@@ -1122,7 +1206,7 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator modDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
-            return ConstantOperator.createNull(first.getType());
+            return handleDivisionByZero(first.getType());
         }
 
         return createDecimalConstant(first.getDecimal().remainder(second.getDecimal()));
