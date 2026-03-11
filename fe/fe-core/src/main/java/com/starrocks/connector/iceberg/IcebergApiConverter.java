@@ -325,6 +325,13 @@ public class IcebergApiConverter {
                     column.setIsHidden(true);
                     fullSchema.add(column);
                 }
+                boolean hasLastUpdatedSequenceNumber = fullSchema.stream()
+                        .anyMatch(column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER));
+                if (!hasLastUpdatedSequenceNumber) {
+                    Column column = new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, IntegerType.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
             }
         }
         return fullSchema;
