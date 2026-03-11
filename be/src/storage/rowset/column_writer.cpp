@@ -704,6 +704,7 @@ Status ScalarColumnWriter::finish_current_page() {
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
     const uint8_t* ptr = column.raw_data();
+    // Currently, ColumnWriter does not support null-only columns
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
     return _append(ptr, null, column.size(), column.has_null());
@@ -711,6 +712,7 @@ Status ScalarColumnWriter::append(const Column& column) {
 
 Status ScalarColumnWriter::append(const Column& column, const Buffer<Slice>& data) {
     _total_mem_footprint += column.byte_size();
+    // Currently, ColumnWriter does not support null-only columns
     const auto* null = ColumnHelper::get_null_data_ptr(&column);
     const auto* ptr = reinterpret_cast<const uint8_t*>(data.data());
     return _append(ptr, null, column.size(), column.has_null());
