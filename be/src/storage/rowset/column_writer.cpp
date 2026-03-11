@@ -38,8 +38,8 @@
 #include <memory>
 
 #include "base/simd/simd.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
