@@ -147,6 +147,29 @@ public class CreateViewTest extends StarRocksTestBase  {
     }
 
     @Test
+    public void testCreateViewWithWindowFunctionIgnoreNullsWithExpression() throws Exception {
+        starRocksAssert.withTable("create table sample_data2 (\n" +
+                        "    timestamp DATETIME not null,\n" +
+                        "    username string,\n" +
+                        "    price int null\n" +
+                        ")PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");")
+                .withView("create view test_ignore_nulls_expr as select\n" +
+                        "    timestamp,\n" +
+                        "    username,\n" +
+                        "    last_value(if(price > 0, price, null) ignore nulls) over (partition by username) as price\n" +
+                        ", lead(if(price > 0, price, null) ignore nulls, 1, 0) over (partition by username) as leadValue\n" +
+                        "from sample_data2;");
+
+        Table view = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("test_ignore_nulls_expr");
+        Assertions.assertTrue(view instanceof View);
+        String str = ((View) view).getInlineViewDef();
+        Assertions.assertTrue(str.contains("ignore nulls"),
+                "Expected 'ignore nulls' in view def but got: " + str);
+    }
+
+    @Test
     public void createViewWithComment() throws Exception {
         starRocksAssert.withTable("CREATE TABLE test_table1 (\n" +
                 "  `event_day` date NULL COMMENT \"\" ,\n" +
