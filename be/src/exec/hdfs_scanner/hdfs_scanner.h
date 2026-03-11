@@ -507,7 +507,12 @@ protected:
 
 public:
     static constexpr const char* ICEBERG_ROW_ID = "_row_id";
+    static constexpr const char* ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
     static constexpr const char* ICEBERG_ROW_POSITION = "_pos";
+    // Iceberg v3 spec reserved field IDs for row lineage columns.
+    // See: https://iceberg.apache.org/spec/#reserved-field-ids
+    static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
+    static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
 };
 
 } // namespace starrocks

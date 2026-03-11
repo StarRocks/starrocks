@@ -439,6 +439,9 @@ struct THdfsScanRange {
     // mapping transformed bucket id, used to schedule scan range
     36: optional i32 bucket_id;
 
+    // Iceberg v3 row lineage: first row id of the data file, used to compute _row_id
+    // as first_row_id + row_position for non-compacted files.
+    // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
 }
 
