@@ -25,7 +25,7 @@
 
 namespace starrocks {
 RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _slot_id_set_list(tnode.repeat_node.slot_id_set_list),
           _all_slot_ids(tnode.repeat_node.all_slot_ids),
           _repeat_id_list(tnode.repeat_node.repeat_id_list),

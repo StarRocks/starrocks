@@ -23,7 +23,7 @@
 
 namespace starrocks {
 TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc)
-        : ExecNode(pool, tnode, desc), _tnode(tnode) {}
+        : PipelineNode(pool, tnode, desc), _tnode(tnode) {}
 
 TableFunctionNode::~TableFunctionNode() {
     if (runtime_state() != nullptr) {

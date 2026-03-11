@@ -33,7 +33,7 @@
 namespace starrocks {
 
 DictDecodeNode::DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 
 Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

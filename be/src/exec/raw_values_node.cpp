@@ -22,7 +22,7 @@
 namespace starrocks {
 
 RawValuesNode::RawValuesNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tuple_id(tnode.raw_values_node.tuple_id) {}
+        : PipelineNode(pool, tnode, descs), _tuple_id(tnode.raw_values_node.tuple_id) {}
 
 RawValuesNode::~RawValuesNode() {
     if (runtime_state() != nullptr) {

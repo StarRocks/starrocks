@@ -41,11 +41,10 @@
 namespace starrocks {
 
 TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode) {
+        : PipelineNode(pool, tnode, descs), _tnode(tnode) {
     _sort_keys = tnode.sort_node.__isset.sql_sort_keys ? tnode.sort_node.sql_sort_keys : "NONE";
     _offset = tnode.sort_node.__isset.offset ? tnode.sort_node.offset : 0;
     _materialized_tuple_desc = nullptr;
-    _sort_timer = nullptr;
 }
 
 TopNNode::~TopNNode() {

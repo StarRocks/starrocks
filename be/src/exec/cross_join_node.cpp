@@ -41,7 +41,7 @@
 namespace starrocks {
 
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 
 static bool _support_join_type(TJoinOp::type join_type) {
     // TODO: support all join types

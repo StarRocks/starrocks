@@ -45,7 +45,7 @@
 namespace starrocks {
 
 SelectNode::SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 
 SelectNode::~SelectNode() {
     if (runtime_state() != nullptr) {

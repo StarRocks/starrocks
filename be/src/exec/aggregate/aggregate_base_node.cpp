@@ -20,7 +20,7 @@
 namespace starrocks {
 
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode) {}
+        : PipelineNode(pool, tnode, descs), _tnode(tnode) {}
 
 AggregateBaseNode::~AggregateBaseNode() {
     if (runtime_state() != nullptr) {

@@ -43,7 +43,6 @@
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/runtime_filter/runtime_filter_descriptor.h"
 #include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_filter_worker.h"
@@ -51,7 +50,7 @@
 namespace starrocks {
 
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _hash_join_node(tnode.hash_join_node),
           _join_type(tnode.hash_join_node.join_op) {
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && tnode.hash_join_node.is_rewritten_from_not_in) {
