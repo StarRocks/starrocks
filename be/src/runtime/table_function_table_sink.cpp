@@ -25,6 +25,7 @@
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
