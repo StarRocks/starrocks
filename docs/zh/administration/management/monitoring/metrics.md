@@ -573,7 +573,7 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：该资源组内存配额比率的瞬时值
 
-### starrocks_be_resource_group_mem_allocated_bytes
+### starrocks_be_resource_group_mem_inuse_bytes
 
 - 单位：Byte
 - 类型：瞬时值
