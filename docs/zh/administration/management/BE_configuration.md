@@ -1259,6 +1259,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否在存算分离（Lake）表导入数据时启用并行 MemTable Finalize。启用后，MemTable 的 Finalize 操作（排序/聚合）将从写入线程移至 Flush 线程执行，使写入线程可以继续向新的 MemTable 插入数据，同时前一个 MemTable 正在并行进行 Finalize 和 Flush。这可以通过重叠 CPU 密集型的 Finalize 操作与 I/O 密集型的 Flush 操作来显著提高导入吞吐量。注意：当需要填充自增列时，此优化会自动禁用，因为自增 ID 的分配必须在 MemTable 提交 Flush 之前完成。
 - 引入版本：-
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 random bucketing 大小检查在 Lake metadata 缓存未命中时是否允许回退到对象存储 LIST。`true` 表示回退到 LIST 元数据文件计算 base size（历史行为、估算更准确）；`false` 表示跳过 LIST，直接使用 `base_size = 0`，可减少 LIST object 请求，但因大小估算精度下降，可能使 immutable 标记稍晚触发。
+- 引入版本：4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - 默认值：false
