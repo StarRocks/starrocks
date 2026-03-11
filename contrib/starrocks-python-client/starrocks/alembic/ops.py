@@ -664,6 +664,9 @@ class AlterTableEngineOp(ops.AlterTableOp):
                f"engine={self.engine!r}, schema={self.schema!r}, "
                f"existing_engine={self.existing_engine!r})")
 
+    def to_diff_tuple(self):
+        return ("alter_table_engine", self.schema, self.table_name, self.engine)
+
 @Operations.register_operation("alter_table_key")
 class AlterTableKeyOp(ops.AlterTableOp):
     """Represent an ALTER TABLE KEY operation for StarRocks."""
@@ -722,6 +725,9 @@ class AlterTableKeyOp(ops.AlterTableOp):
                f"key_type={self.key_type!r}, key_columns={self.key_columns!r}, "
                f"schema={self.schema!r}, existing_key_type={self.existing_key_type!r}, "
                f"existing_key_columns={self.existing_key_columns!r})")
+
+    def to_diff_tuple(self):
+        return ("alter_table_key", self.schema, self.table_name, self.key_type, self.key_columns)
 
 @Operations.register_operation("alter_table_partition")
 class AlterTablePartitionOp(ops.AlterTableOp):
@@ -784,6 +790,9 @@ class AlterTablePartitionOp(ops.AlterTableOp):
         return (f"AlterTablePartitionOp(table_name={self.table_name!r}, "
                f"partition_method={self.partition_method!r}, schema={self.schema!r}, "
                f"existing_partition_method={self.existing_partition_method!r})")
+
+    def to_diff_tuple(self):
+        return ("alter_table_partition", self.schema, self.table_name, self.partition_method)
 
 @Operations.register_operation("alter_table_distribution")
 class AlterTableDistributionOp(ops.AlterTableOp):
@@ -860,6 +869,9 @@ class AlterTableDistributionOp(ops.AlterTableOp):
                f"schema={self.schema!r}, existing_distribution_method={self.existing_distribution_method!r}, "
                f"existing_buckets={self.existing_buckets!r})")
 
+    def to_diff_tuple(self):
+        return ("alter_table_distribution", self.schema, self.table_name, self.distribution_method, self.buckets)
+
 
 @Operations.register_operation("alter_table_order")
 class AlterTableOrderOp(ops.AlterTableOp):
@@ -904,6 +916,9 @@ class AlterTableOrderOp(ops.AlterTableOp):
                f"order_by={self.order_by!r}, schema={self.schema!r}, "
                f"existing_order_by={self.existing_order_by!r})")
 
+    def to_diff_tuple(self):
+        return ("alter_table_order", self.schema, self.table_name, self.order_by)
+
 
 @Operations.register_operation("alter_table_properties")
 class AlterTablePropertiesOp(ops.AlterTableOp):
@@ -947,3 +962,6 @@ class AlterTablePropertiesOp(ops.AlterTableOp):
         return (f"AlterTablePropertiesOp(table_name={self.table_name!r}, "
                f"properties={self.properties!r}, schema={self.schema!r}, "
                f"existing_properties={self.existing_properties!r})")
+
+    def to_diff_tuple(self):
+        return ("alter_table_properties", self.schema, self.table_name, self.properties)
