@@ -50,7 +50,9 @@ RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | 
 ```
 
 :::note
-**ARRAY_AGG() window frame limitation:** When using ARRAY_AGG() as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
+**ARRAY_AGG() window frame limitation:**
+
+When using ARRAY_AGG() as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
 
 ```SQL
 -- Supported: RANGE frame
@@ -112,10 +114,14 @@ AVG([DISTINCT] expr) [OVER (*analytic_clause*)]
 `DISTINCT` is supported from StarRocks v4.0. When specified, AVG() calculates the average of only distinct values in the window.
 
 :::note
-**Window frame limitation:** When using AVG(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
+**Window frame limitation:**
+
+When using AVG(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
 :::
 
-**Examples:**
+**Examples**
+
+**Example 1: Basic usage**
 
 The following example uses stock data as an example.
 
@@ -172,6 +178,8 @@ For example, `12.87500000` in the first row is the average value of closing pric
 
 **Example 2: Using AVG(DISTINCT) over overall window**
 
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
 Calculate the average of distinct scores across all rows:
 
 ```SQL
@@ -195,9 +203,11 @@ Output:
 +----+---------+-------+-------------+
 ```
 
-The distinct average is 85.00 ((80 + 85 + 90) / 3).
+The distinct average is 85.00 (`(80 + 85 + 90) / 3`).
 
 **Example 3: Using AVG(DISTINCT) over framed window with RANGE frame**
+
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 Calculate the average of distinct scores within each subject partition using a RANGE frame:
 
@@ -235,7 +245,9 @@ Aggregates values (including NULL values) in a window into an array. You can use
 This function is supported from v3.4.
 
 :::tip
-**Important limitation:** ARRAY_AGG() as a window function **only supports RANGE window frames**. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
+**Window frame limitation:**
+
+ARRAY_AGG() as a window function only supports RANGE window frames. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
 :::
 
 **Syntax:**
@@ -261,11 +273,11 @@ Returns an ARRAY containing all values in the window.
 - When `DISTINCT` is specified, duplicate values are removed from the array.
 - When `ORDER BY` is specified within ARRAY_AGG(), the elements in the resulting array are sorted accordingly.
 
-**Examples:**
+**Examples**
 
-This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
 
-**Example 1: Basic ARRAY_AGG() over window**
+**Example 1: Basic usage**
 
 Collect all scores within each subject partition:
 
@@ -455,7 +467,9 @@ COUNT([DISTINCT] expr) [OVER (analytic_clause)]
 `DISTINCT` is supported from StarRocks v4.0. When specified, COUNT() counts only distinct values in the window.
 
 :::note
-**Window frame limitation:** When using COUNT(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
+**Window frame limitation:**
+
+When using COUNT(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
 
 ```SQL
 -- Supported: RANGE frame
@@ -466,7 +480,11 @@ count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND
 ```
 :::
 
-**Examples:**
+**Examples**
+
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
+
+**Example 1: Basic usage**
 
 Count the occurrence of math scores that are greater than 90 from the current row to the first row in the math partition. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -586,7 +604,7 @@ CUME_DIST() OVER (partition_by_clause order_by_clause)
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
-**Examples:**
+**Examples**
 
 The following example shows the cumulative distribution of each score within each `subject` group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -636,7 +654,7 @@ The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RA
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 The following example shows the ranking of math scores (sorted in descending order). This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -679,7 +697,9 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 ARRAY types are supported from StarRocks v3.5. You can use FIRST_VALUE() with ARRAY columns to get the first array value in the window.
 
-**Examples:**
+**Examples**
+
+**Example 1: Basic usage**
 
 Return the first `score` value for each member in each group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -776,7 +796,9 @@ By default, LAST_VALUE() calculates `rows between unbounded preceding and curren
 
 ARRAY types are supported from StarRocks v3.5. You can use LAST_VALUE() with ARRAY columns to get the last array value in the window.
 
-**Examples:**
+**Examples**
+
+**Example 1: Basic usage**
 
 Returns the last `score` for each member in the group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -870,6 +892,8 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 - `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
 - `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+
+**Examples**
 
 **Example 1: IGNORE NULLS is not specified**
 
@@ -1037,6 +1061,8 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 - `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
+**Examples**
+
 **Example 1: IGNORE NULLS is not specified**
 
 Create a table and insert values:
@@ -1175,7 +1201,7 @@ Returns the maximum value of the specified rows in the current window.
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the maximum value of rows from the first row to the row after the current row. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1243,7 +1269,7 @@ Returns the minimum value of the specified rows in the current window.
 MIN(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the lowest score among all rows for the math subject. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1308,7 +1334,7 @@ Window clause is not allowed in NTILE() function.
 
 NTILE() function returns BIGINT type of data.
 
-**Examples:**
+**Examples**
 
 The following example divides all rows in the partition into two buckets. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1372,9 +1398,11 @@ The return values range from 0 to 1. This function is useful for percentile calc
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function must be used with ORDER BY to sort partition rows into the desired order.**
+:::note
+PERCENT_RANK() must be used with ORDER BY to sort partition rows into the desired order.
+:::
 
-**Examples:**
+**Examples**
 
 The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1411,7 +1439,7 @@ The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() w
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Ranking math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1449,7 +1477,7 @@ Returns a continuously increasing integer starting from 1 for each row of a Part
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Rank math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1520,7 +1548,7 @@ QUALIFY <window_function>
 
 `<window_function>`: The `QUALIFY` clause can only be followed by a window function, including ROW_NUMBER(), RANK(), and DENSE_RANK().
 
-**Examples:**
+**Examples**
 
 ```SQL
 -- Create a table.
@@ -1549,7 +1577,7 @@ select * from sales_record order by city_id;
 +---------+--------+-------+
 ```
 
-Example 1: Obtain records whose row number is greater than 1 from the table.
+**Example 1: Obtain records whose row number is greater than 1 from the table**
 
 ```SQL
 SELECT city_id, item, sales
@@ -1564,7 +1592,9 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 +---------+--------+-------+
 ```
 
-Example 2: Obtain records whose row number is 1 from each partition of the table. The table is divided into two partitions by `item` and the first row in each partition is returned.
+**Example 2: Obtain records whose row number is 1 from each partition of the table**
+
+The table is divided into two partitions by `item` and the first row in each partition is returned.
 
 ```SQL
 SELECT city_id, item, sales
@@ -1624,12 +1654,18 @@ SUM([DISTINCT] expr) [OVER (analytic_clause)]
 `DISTINCT` is supported from StarRocks v4.0. When specified, SUM() sums only distinct values in the window.
 
 :::note
-**Window frame limitation:** When using SUM(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
+**Window frame limitation:**
+
+When using SUM(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
 :::
 
-**Examples:**
+**Examples**
 
-Group data by `subject` and calculate the sum of scores of all rows within the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
+
+**Example 1: Basic usage**
+
+Group data by `subject` and calculate the sum of scores of all rows within the group.
 
 ```SQL
 select *,
@@ -1743,7 +1779,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1785,7 +1821,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1825,7 +1861,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1865,7 +1901,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1923,7 +1959,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1979,7 +2015,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -2019,7 +2055,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
