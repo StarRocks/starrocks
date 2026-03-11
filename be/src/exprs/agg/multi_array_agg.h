@@ -112,7 +112,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& s = this->data(const_cast<AggDataPtr>(state));
 
-        auto* bin = _get_binary_column(to);
+        auto* bin = ColumnHelper::get_binary_column(to);
         auto& bytes = bin->get_bytes();
         size_t old_size = bytes.size();
         bytes.resize(old_size + s.buffer.size());
@@ -192,7 +192,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        auto* bin = _get_binary_column(dst.get());
+        auto* bin = ColumnHelper::get_binary_column(dst.get());
         auto& bytes = bin->get_bytes();
         auto& offsets = bin->get_offset();
 
@@ -270,13 +270,6 @@ private:
             }
         }
         return cols;
-    }
-
-    static BinaryColumn* _get_binary_column(Column* col) {
-        if (col->is_nullable()) {
-            return down_cast<BinaryColumn*>(down_cast<NullableColumn*>(col)->data_column().get());
-        }
-        return down_cast<BinaryColumn*>(col);
     }
 
     static bool _is_null(const Column* col, size_t row_num) {
