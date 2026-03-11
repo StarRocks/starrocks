@@ -52,19 +52,19 @@ public:
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
             std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
 
-    // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot into
-    // DeltaColumnGroupMetadataPB for shared-data replication. Also populates filename_map
-    // with old->new .cols filename mappings.
-    static Status convert_dcg_snapshot_for_non_pk(
+    // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
+    // into DeltaColumnGroupMetadataPB for shared-data replication.
+    // Also populates filename_map with old->new .cols filename mappings.
+    static Status convert_dcg_meta_for_non_pk(
             const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
             const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
             DeltaColumnGroupMetadataPB* dcg_meta,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
 
-    // Convert DeltaColumnGroupList from shared-nothing PK table snapshot into
-    // DeltaColumnGroupMetadataPB for shared-data replication. Also populates filename_map
-    // with old->new .cols filename mappings.
-    static Status convert_dcg_for_pk(
+    // Convert DeltaColumnGroupList from shared-nothing PK table snapshot
+    // into DeltaColumnGroupMetadataPB for shared-data replication.
+    // Also populates filename_map with old->new .cols filename mappings.
+    static Status convert_dcg_meta_for_pk(
             const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups,
             TTransactionId transaction_id, DeltaColumnGroupMetadataPB* dcg_meta,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);

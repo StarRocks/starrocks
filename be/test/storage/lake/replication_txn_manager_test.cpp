@@ -642,8 +642,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_h
     EXPECT_TRUE(lake::is_del(new_del));
 }
 
-// Test convert_dcg_for_pk: converts DeltaColumnGroupList from snapshot into DeltaColumnGroupMetadataPB
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_for_pk) {
+// Test convert_dcg_meta_for_pk: converts DeltaColumnGroupList from snapshot into DeltaColumnGroupMetadataPB
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk) {
     // Build DeltaColumnGroupList in the same format as shared-nothing PK snapshot
     std::unordered_map<uint32_t, DeltaColumnGroupList> delta_column_groups;
 
@@ -670,7 +670,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_for_pk) {
 
     // Call the extracted function
     ASSERT_TRUE(
-            lake::ReplicationTxnManager::convert_dcg_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map).ok());
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map)
+                    .ok());
 
     // Verify structure
     EXPECT_EQ(2, dcg_meta.dcgs_size());
@@ -886,8 +887,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_replication_n
     EXPECT_EQ(5, result_dcg.unique_column_ids(0).column_ids(0));
 }
 
-// Test convert_dcg_snapshot_for_non_pk: converts DeltaColumnGroupSnapshotPB into DeltaColumnGroupMetadataPB
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk) {
+// Test convert_dcg_meta_for_non_pk: converts DeltaColumnGroupSnapshotPB into DeltaColumnGroupMetadataPB
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     // Add entry: rowset_id="rs_001", segment_id=0
@@ -923,8 +924,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
     // Call the extracted function
-    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
-                                                                             &dcg_meta, &filename_map)
+    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                         &dcg_meta, &filename_map)
                         .ok());
 
     // Verify: rssid 7 (rowset_seg_id=7 + segment_id=0) and rssid 8 (7+1)
@@ -953,8 +954,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     EXPECT_TRUE(filename_map.count("rs_001_1_5_0.cols"));
 }
 
-// Test convert_dcg_snapshot_for_non_pk with unknown rowset_id (should skip)
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_unknown_rowset) {
+// Test convert_dcg_meta_for_non_pk with unknown rowset_id (should skip)
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_unknown_rowset) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     dcg_snapshot_pb.add_tablet_id(100);
@@ -972,8 +973,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
-                                                                             &dcg_meta, &filename_map)
+    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                         &dcg_meta, &filename_map)
                         .ok());
 
     // Unknown rowset should be skipped
@@ -981,8 +982,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     EXPECT_EQ(0, filename_map.size());
 }
 
-// Test that duplicate .cols filenames in convert_dcg_for_pk are detected
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_for_pk_duplicate_cols) {
+// Test that duplicate .cols filenames in convert_dcg_meta_for_pk are detected
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk_duplicate_cols) {
     std::unordered_map<uint32_t, DeltaColumnGroupList> delta_column_groups;
 
     // Two DCGs for the same segment with the SAME column file name → duplicate
@@ -1005,13 +1006,13 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_for_pk_dupl
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
     Status status =
-            lake::ReplicationTxnManager::convert_dcg_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map);
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_TRUE(status.message().find("Duplicated cols file") != std::string::npos) << status;
 }
 
-// Test that duplicate .cols filenames in convert_dcg_snapshot_for_non_pk are detected
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_duplicate_cols) {
+// Test that duplicate .cols filenames in convert_dcg_meta_for_non_pk are detected
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_duplicate_cols) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     // Two entries with the same column file name → duplicate
@@ -1043,14 +1044,14 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    Status status = lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id,
-                                                                                 9999, &dcg_meta, &filename_map);
+    Status status = lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                             &dcg_meta, &filename_map);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_TRUE(status.message().find("Duplicated cols file") != std::string::npos) << status;
 }
 
-// Test convert_dcg_snapshot_for_non_pk: versions_size != dcgs_size mismatch
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_versions_dcgs_mismatch) {
+// Test convert_dcg_meta_for_non_pk: versions_size != dcgs_size mismatch
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_versions_dcgs_mismatch) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     dcg_snapshot_pb.add_tablet_id(100);
@@ -1072,14 +1073,14 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    Status status = lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id,
-                                                                                 9999, &dcg_meta, &filename_map);
+    Status status = lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                             &dcg_meta, &filename_map);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_TRUE(status.message().find("Mismatch between versions_size") != std::string::npos) << status;
 }
 
-// Test convert_dcg_snapshot_for_non_pk: column_ids_size != column_files_size mismatch
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_column_ids_files_mismatch) {
+// Test convert_dcg_meta_for_non_pk: column_ids_size != column_files_size mismatch
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_column_ids_files_mismatch) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     dcg_snapshot_pb.add_tablet_id(100);
@@ -1101,14 +1102,14 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    Status status = lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id,
-                                                                                 9999, &dcg_meta, &filename_map);
+    Status status = lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                             &dcg_meta, &filename_map);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_TRUE(status.message().find("Mismatch between column_ids_size") != std::string::npos) << status;
 }
 
-// Test convert_dcg_snapshot_for_non_pk with empty snapshot (no entries)
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_empty) {
+// Test convert_dcg_meta_for_non_pk with empty snapshot (no entries)
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_empty) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
@@ -1117,16 +1118,16 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
-                                                                             &dcg_meta, &filename_map)
+    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                         &dcg_meta, &filename_map)
                         .ok());
 
     EXPECT_EQ(0, dcg_meta.dcgs_size());
     EXPECT_EQ(0, filename_map.size());
 }
 
-// Test convert_dcg_snapshot_for_non_pk with multiple DCGs per segment (different versions)
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_for_non_pk_multiple_dcgs_per_segment) {
+// Test convert_dcg_meta_for_non_pk with multiple DCGs per segment (different versions)
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_non_pk_multiple_dcgs_per_segment) {
     DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
 
     // Single entry with multiple DCGs (different versions) for one segment
@@ -1155,8 +1156,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
-                                                                             &dcg_meta, &filename_map)
+    ASSERT_TRUE(lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                         &dcg_meta, &filename_map)
                         .ok());
 
     // rssid = 10 + 0 = 10
@@ -1181,15 +1182,16 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_snapshot_fo
     EXPECT_TRUE(filename_map.count("file_v5.cols"));
 }
 
-// Test convert_dcg_for_pk with empty delta_column_groups
-TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_for_pk_empty) {
+// Test convert_dcg_meta_for_pk with empty delta_column_groups
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk_empty) {
     std::unordered_map<uint32_t, DeltaColumnGroupList> delta_column_groups;
 
     DeltaColumnGroupMetadataPB dcg_meta;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
     ASSERT_TRUE(
-            lake::ReplicationTxnManager::convert_dcg_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map).ok());
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map)
+                    .ok());
 
     EXPECT_EQ(0, dcg_meta.dcgs_size());
     EXPECT_EQ(0, filename_map.size());

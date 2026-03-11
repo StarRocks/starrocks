@@ -160,6 +160,35 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
     return Status::OK();
 }
 
+// Build rssid_remap for DCG application during replication.
+// Maps source rssid to target rssid based on which op_writes will actually be applied.
+// For PK tables: an op_write is applied when dels_size > 0 || num_rows > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (num_rows > 0 || has_delete_predicate).
+std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
+                                                         uint32_t start_target_id, bool is_pk) {
+    std::unordered_map<uint32_t, uint32_t> rssid_remap;
+    uint32_t target_id = start_target_id;
+    for (const auto& op_write : op_replication.op_writes()) {
+        bool included = false;
+        if (is_pk) {
+            included = op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
+                       op_write.rowset().has_delete_predicate();
+        } else {
+            included = op_write.has_rowset() &&
+                       (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate());
+        }
+        if (included) {
+            uint32_t source_id = op_write.rowset().id();
+            uint32_t step = get_rowset_id_step(op_write.rowset());
+            for (uint32_t i = 0; i < step; i++) {
+                rssid_remap[source_id + i] = target_id + i;
+            }
+            target_id += step;
+        }
+    }
+    return rssid_remap;
+}
+
 void apply_replication_dcg_meta(const TxnLogPB_OpReplication& op_replication,
                                 const std::unordered_map<uint32_t, uint32_t>& rssid_remap, TabletMetadataPB* metadata) {
     if (!op_replication.has_dcg_meta()) return;
@@ -613,24 +642,7 @@ private:
         }
 
         if (txn_meta.incremental_snapshot()) {
-            // Pre-compute source rssid -> target rssid mapping for DCG application.
-            // Each op_write's rowset gets assigned a new ID starting from next_rowset_id.
-            // We simulate this mapping before applying writes so DCG keys can be remapped.
-            std::unordered_map<uint32_t, uint32_t> rssid_remap;
-            {
-                uint32_t target_id = _metadata->next_rowset_id();
-                for (const auto& op_write : op_replication.op_writes()) {
-                    if (op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
-                        op_write.rowset().has_delete_predicate()) {
-                        uint32_t source_id = op_write.rowset().id();
-                        uint32_t step = get_rowset_id_step(op_write.rowset());
-                        for (uint32_t i = 0; i < step; i++) {
-                            rssid_remap[source_id + i] = target_id + i;
-                        }
-                        target_id += step;
-                    }
-                }
-            }
+            auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/true);
 
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
@@ -1181,23 +1193,7 @@ private:
 
         int64_t base_version = _metadata->version();
         if (txn_meta.incremental_snapshot()) {
-            // Pre-compute source rssid -> target rssid mapping for DCG application.
-            // Non-PK apply_write_log assigns new IDs from next_rowset_id to each rowset.
-            std::unordered_map<uint32_t, uint32_t> rssid_remap;
-            {
-                uint32_t target_id = _metadata->next_rowset_id();
-                for (const auto& op_write : op_replication.op_writes()) {
-                    if (op_write.has_rowset() &&
-                        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
-                        uint32_t source_id = op_write.rowset().id();
-                        uint32_t step = get_rowset_id_step(op_write.rowset());
-                        for (uint32_t i = 0; i < step; i++) {
-                            rssid_remap[source_id + i] = target_id + i;
-                        }
-                        target_id += step;
-                    }
-                }
-            }
+            auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/false);
 
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
@@ -1235,23 +1231,7 @@ private:
                 }
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
-                // Build rssid remapping: source rssid -> target rssid.
-                // Use the same condition as apply_write_log to ensure current_next_id advances
-                // in lockstep with the actual next_rowset_id updates.
-                std::unordered_map<uint32_t, uint32_t> rssid_remap;
-                uint32_t current_next_id = _metadata->next_rowset_id();
-                for (const auto& op_write : op_replication.op_writes()) {
-                    if (op_write.has_rowset() &&
-                        (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
-                        const auto& rowset = op_write.rowset();
-                        uint32_t source_id = rowset.id();
-                        uint32_t step = get_rowset_id_step(rowset);
-                        for (uint32_t i = 0; i < step; i++) {
-                            rssid_remap[source_id + i] = current_next_id + i;
-                        }
-                        current_next_id += step;
-                    }
-                }
+                auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/false);
                 for (const auto& op_write : op_replication.op_writes()) {
                     RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
