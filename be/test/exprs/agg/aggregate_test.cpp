@@ -2949,8 +2949,6 @@ TEST_F(AggregateTest, test_multi_array_agg_basic) {
     // Update
     func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(), state->state());
 
-    func->prepare_for_output(local_ctx.get());
-
     // Serialize to VARBINARY blob
     auto serde_col = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state->state(), serde_col.get());
@@ -2967,8 +2965,6 @@ TEST_F(AggregateTest, test_multi_array_agg_basic) {
 
     auto state2 = ManagedAggrState::create(local_ctx2.get(), func);
     func->merge_batch_single_state(local_ctx2.get(), state2->state(), serde_col.get(), 0, serde_col->size());
-
-    func->prepare_for_output(local_ctx2.get());
 
     // Finalize to struct
     TypeDescriptor type_array_varchar;
@@ -3043,8 +3039,6 @@ TEST_F(AggregateTest, test_multi_array_agg_with_order_by) {
 
     func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(), state->state());
 
-    func->prepare_for_output(local_ctx.get());
-
     // Finalize: return struct with only 2 agg columns (not the order-by column)
     TypeDescriptor type_array_varchar;
     type_array_varchar.type = LogicalType::TYPE_ARRAY;
@@ -3117,8 +3111,6 @@ TEST_F(AggregateTest, test_multi_array_agg_multiple_groups) {
         func->update_batch_single_state(local_ctx.get(), int_col->size(), raw_columns.data(), state2->state());
     }
 
-    func->prepare_for_output(local_ctx.get());
-
     // Build result type
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
@@ -3177,8 +3169,6 @@ TEST_F(AggregateTest, test_multi_array_agg_merge) {
         func->update_batch_single_state(local_ctx.get(), int_col->size(), raw_columns.data(), state1->state());
     }
 
-    func->prepare_for_output(local_ctx.get());
-
     // Serialize to VARBINARY
     auto serde_col = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_col.get());
@@ -3195,8 +3185,6 @@ TEST_F(AggregateTest, test_multi_array_agg_merge) {
 
     auto state2 = ManagedAggrState::create(local_ctx2.get(), func);
     func->merge_batch_single_state(local_ctx2.get(), state2->state(), serde_col.get(), 0, serde_col->size());
-
-    func->prepare_for_output(local_ctx2.get());
 
     // Finalize to struct
     TypeDescriptor type_array_int;
@@ -3267,8 +3255,6 @@ TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
     auto state = ManagedAggrState::create(local_ctx2.get(), func);
     func->merge_batch_single_state(local_ctx2.get(), state->state(), serde_col.get(), 0, serde_col->size());
 
-    func->prepare_for_output(local_ctx2.get());
-
     // Finalize
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
@@ -3305,8 +3291,6 @@ TEST_F(AggregateTest, test_multi_array_agg_empty_group) {
 
     auto state = ManagedAggrState::create(local_ctx.get(), func);
     // Don't update — empty group
-
-    func->prepare_for_output(local_ctx.get());
 
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
