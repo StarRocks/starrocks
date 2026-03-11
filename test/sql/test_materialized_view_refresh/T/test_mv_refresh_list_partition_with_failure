@@ -1,0 +1,73 @@
+-- name: test_mv_refresh_list_partition_with_failure @sequential
+
+-- Test that when an MV refresh fails, the original data is preserved.
+-- This test verifies the fix for the issue where MV refresh failure was
+-- causing the MV to end up with 0 rows.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    id BIGINT,
+    province VARCHAR(64) not null,
+    age SMALLINT,
+    dt VARCHAR(10)
+)
+DUPLICATE KEY(id)
+PARTITION BY LIST (province) (
+    PARTITION p1 VALUES IN ("beijing"),
+    PARTITION p2 VALUES IN ("guangdong")
+)
+DISTRIBUTED BY RANDOM
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO t1 VALUES (1, 'beijing', 10, '2021-12-01'), (2, 'guangdong', 20, '2021-12-02');
+
+-- Create MV
+CREATE MATERIALIZED VIEW mv1
+PARTITION BY province
+REFRESH DEFERRED MANUAL
+DISTRIBUTED BY RANDOM
+PROPERTIES ('replication_num' = '1')
+AS SELECT dt, province, sum(age) as total_age FROM t1 GROUP BY dt, province;
+
+-- Initial refresh
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+-- Verify MV has data
+SELECT * FROM mv1 ORDER BY province;
+
+-- Get row count before failure
+SELECT count(*) as cnt FROM mv1;
+
+-- Add new data to trigger a refresh
+INSERT INTO t1 VALUES (3, 'beijing', 30, '2021-12-03');
+
+-- Enable fail point to simulate refresh failure after partition sync but before insert
+ADMIN ENABLE FAILPOINT 'MV_REFRESH_INJECT_FAILURE';
+
+-- This refresh should fail due to injected failure
+-- [UC] means the command may fail
+[UC] REFRESH MATERIALIZED VIEW mv1;
+
+-- Disable fail point
+ADMIN DISABLE FAILPOINT 'MV_REFRESH_INJECT_FAILURE';
+
+-- Verify MV still has the original data (not 0 rows)
+-- This is the key assertion - after refresh failure, MV should retain original data
+SELECT count(*) as cnt FROM mv1;
+
+-- Now do a successful refresh
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+
+-- Verify MV has updated data after successful refresh
+SELECT * FROM mv1 ORDER BY province;
+
+-- Cleanup
+DROP MATERIALIZED VIEW mv1;
+DROP TABLE t1;
+DROP DATABASE db_${uuid0};
+
+CLEANUP {
+    ADMIN DISABLE FAILPOINT 'MV_REFRESH_INJECT_FAILURE';
+} END CLEANUP
