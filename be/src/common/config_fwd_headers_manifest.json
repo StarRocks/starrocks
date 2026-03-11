@@ -716,6 +716,8 @@
         "lake_enable_alter_struct",
         "table_schema_service_max_retries",
         "lake_publish_version_slow_log_ms",
+        "lake_enable_accurate_pk_row_count",
+        "lake_tablet_stat_slow_log_ms",
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
         "lake_enable_publish_version_trace_log",
