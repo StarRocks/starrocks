@@ -1140,6 +1140,8 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         return;
                     }
 
+                    auto task_start_us = butil::gettimeofday_us();
+
                     // Don't fill meta cache to avoid polluting the cache
                     lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = true};
                     auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, cache_opts);
@@ -1149,16 +1151,57 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         return;
                     }
 
+                    // Determine if this is a primary-key tablet.  Only PK tablets maintain delete vectors
+                    // (delvec), so calling get_rowset_num_deletes() for non-PK tablets is wasteful.
+                    const bool is_pk_tablet = (*tablet_metadata)->schema().keys_type() == PRIMARY_KEYS;
+                    const bool accurate_mode = is_pk_tablet && config::lake_enable_accurate_pk_row_count;
+                    const int num_rowsets = (*tablet_metadata)->rowsets_size();
+
                     int64_t num_rows = 0;
                     int64_t data_size = 0;
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
-                        size_t num_deletes =
-                                _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset);
-                        num_rows += rowset.num_rows() - num_deletes;
+                        int64_t num_deletes = 0;
+                        if (is_pk_tablet) {
+                            if (accurate_mode) {
+                                // Accurate mode (default): fetch delete vectors from object storage.
+                                // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
+                                num_deletes = static_cast<int64_t>(
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
+                            } else {
+                                // Approximate mode: prefer the pre-stored num_dels field in rowset
+                                // metadata. This avoids additional I/O while still providing a reasonable estimate.
+                                // Rows deleted but not yet compacted may be slightly overcounted.
+                                if (rowset.has_num_dels()) {
+                                    num_deletes = rowset.num_dels();
+                                } else {
+                                    // Fallback for old metadata without num_dels.
+                                    num_deletes =
+                                            static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
+                                                    tablet_id, version, rowset));
+                                }
+                            }
+                        }
+                        // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
+                        // Clamp to avoid negative contribution when approximate num_dels overcounts.
+                        int64_t rowset_live_rows = rowset.num_rows() - num_deletes;
+                        if (UNLIKELY(rowset_live_rows < 0)) {
+                            rowset_live_rows = 0;
+                        }
+                        num_rows += rowset_live_rows;
                         data_size += rowset.data_size();
                     }
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                         data_size += file.size();
+                    }
+
+                    auto elapsed_ms = (butil::gettimeofday_us() - task_start_us) / 1000;
+                    if (elapsed_ms >= config::lake_tablet_stat_slow_log_ms) {
+                        TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:slow_log", nullptr);
+                        LOG(WARNING) << "Slow tablet stat collection. tablet_id: " << tablet_id
+                                     << ", version: " << version << ", is_pk_tablet: " << is_pk_tablet
+                                     << ", accurate_mode: " << accurate_mode << ", num_rowsets: " << num_rowsets
+                                     << ", num_rows: " << num_rows << ", data_size: " << data_size
+                                     << ", elapsed_ms: " << elapsed_ms;
                     }
 
                     std::lock_guard l(response_mtx);
