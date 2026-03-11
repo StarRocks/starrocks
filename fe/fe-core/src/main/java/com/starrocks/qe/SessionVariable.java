@@ -948,6 +948,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT = "enable_aggregation_pipeline_share_limit";
 
+    public static final String ENABLE_MULTI_ARRAY_AGG_V2 = "enable_multi_array_agg_v2";
+
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
@@ -2090,6 +2092,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT, flag = VariableMgr.INVISIBLE)
     private boolean enableAggregationPipelineShareLimit = true;
 
+    @VarAttr(name = ENABLE_MULTI_ARRAY_AGG_V2)
+    private boolean enableMultiArrayAggV2 = false;
+
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
@@ -2377,6 +2382,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableAggregationPipelineShareLimit() {
         return enableAggregationPipelineShareLimit;
+    }
+
+    public boolean isEnableMultiArrayAggV2() {
+        return enableMultiArrayAggV2;
     }
 
     public String getThriftPlanProtocol() {

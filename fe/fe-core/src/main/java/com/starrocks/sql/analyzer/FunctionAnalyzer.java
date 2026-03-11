@@ -71,6 +71,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 
 import java.math.BigInteger;
@@ -1348,12 +1349,6 @@ public class FunctionAnalyzer {
             for (int i = 0; i < argSize; ++i) {
                 argsTypes[i] = argumentTypes[i] == NullType.NULL ? BooleanType.BOOLEAN : argumentTypes[i];
             }
-            // Intermediate type: Struct<Array<col1>, ..., Array<colN>, Array<orderby1>, ..., Array<orderbyM>>
-            ArrayList<Type> intermediateFields = new ArrayList<>(argSize);
-            for (Type t : argsTypes) {
-                intermediateFields.add(new ArrayType(t));
-            }
-            Type intermediateType = new StructType(intermediateFields);
             // Return type: Struct<Array<col1>, ..., Array<colK>> (only aggregation columns)
             ArrayList<Type> returnFields = new ArrayList<>(numAggCols);
             for (int i = 0; i < numAggCols; ++i) {
@@ -1362,9 +1357,14 @@ public class FunctionAnalyzer {
             Type returnType = new StructType(returnFields);
             fn.setArgsType(argsTypes);
             fn.setRetType(returnType);
-            ((AggregateFunction) fn).setIntermediateType(intermediateType);
             ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
             ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+            if (ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().isEnableMultiArrayAggV2()) {
+                // V2 intermediate type: VARBINARY blob
+                ((AggregateFunction) fn).setIntermediateType(VarbinaryType.VARBINARY);
+                fn.setFunctionName(new FunctionName("multi_array_agg_v2"));
+            }
         } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
             // min_n/max_n(value, n) returns array<value_type>
             // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')

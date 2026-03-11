@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 
+#include "column/binary_column.h"
 #include "exprs/agg/base_aggregate_test.h"
 
 namespace starrocks {
@@ -2915,6 +2916,7 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
 TEST_F(AggregateTest, test_multi_array_agg_basic) {
     // multi_array_agg(varchar_col, int_col) -> struct{array<varchar>, array<int>}
     // No ORDER BY, two aggregation columns
+    // Intermediate type: VARBINARY blob
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
                                              TypeDescriptor::from_logical_type(TYPE_INT)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
@@ -2924,7 +2926,7 @@ TEST_F(AggregateTest, test_multi_array_agg_basic) {
     local_ctx->set_nulls_first({});
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     auto state = ManagedAggrState::create(local_ctx.get(), func);
@@ -2947,29 +2949,12 @@ TEST_F(AggregateTest, test_multi_array_agg_basic) {
     // Update
     func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(), state->state());
 
-    // Serialize
-    TypeDescriptor type_array_varchar;
-    type_array_varchar.type = LogicalType::TYPE_ARRAY;
-    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
-
-    TypeDescriptor type_array_int;
-    type_array_int.type = LogicalType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
-
-    TypeDescriptor type_struct;
-    type_struct.type = LogicalType::TYPE_STRUCT;
-    type_struct.children.emplace_back(type_array_varchar);
-    type_struct.children.emplace_back(type_array_int);
-    type_struct.field_names.emplace_back("c0");
-    type_struct.field_names.emplace_back("c1");
-
     func->prepare_for_output(local_ctx.get());
 
-    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
+    // Serialize to VARBINARY blob
+    auto serde_col = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state->state(), serde_col.get());
-    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(),
-                     "[{c0:['hello',NULL,'world'],c1:[10,20,NULL]}]"),
-              0);
+    ASSERT_EQ(serde_col->size(), 1);
 
     // Merge into a new state (fresh context for new shared state)
     std::vector<TypeDescriptor> arg_types2 = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
@@ -2985,7 +2970,22 @@ TEST_F(AggregateTest, test_multi_array_agg_basic) {
 
     func->prepare_for_output(local_ctx2.get());
 
-    // Finalize
+    // Finalize to struct
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
     MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
     func->finalize_to_column(local_ctx2.get(), state2->state(), result_col.get());
     ASSERT_EQ(strcmp(result_col->debug_string().c_str(),
@@ -3009,7 +3009,7 @@ TEST_F(AggregateTest, test_multi_array_agg_with_order_by) {
     local_ctx->set_nulls_first(nulls_first);
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     auto state = ManagedAggrState::create(local_ctx.get(), func);
@@ -3080,7 +3080,7 @@ TEST_F(AggregateTest, test_multi_array_agg_multiple_groups) {
     local_ctx->set_nulls_first({});
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     // Create two groups
@@ -3147,7 +3147,7 @@ TEST_F(AggregateTest, test_multi_array_agg_multiple_groups) {
 }
 
 TEST_F(AggregateTest, test_multi_array_agg_merge) {
-    // Test serialize -> merge -> finalize cycle
+    // Test serialize -> merge -> finalize cycle with VARBINARY intermediate
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
                                              TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
@@ -3157,7 +3157,7 @@ TEST_F(AggregateTest, test_multi_array_agg_merge) {
     local_ctx->set_nulls_first({});
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     // Phase 1: update and serialize
@@ -3179,24 +3179,10 @@ TEST_F(AggregateTest, test_multi_array_agg_merge) {
 
     func->prepare_for_output(local_ctx.get());
 
-    TypeDescriptor type_array_int;
-    type_array_int.type = LogicalType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
-
-    TypeDescriptor type_array_varchar;
-    type_array_varchar.type = LogicalType::TYPE_ARRAY;
-    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
-
-    TypeDescriptor type_struct;
-    type_struct.type = LogicalType::TYPE_STRUCT;
-    type_struct.children.emplace_back(type_array_int);
-    type_struct.children.emplace_back(type_array_varchar);
-    type_struct.field_names.emplace_back("c0");
-    type_struct.field_names.emplace_back("c1");
-
-    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
+    // Serialize to VARBINARY
+    auto serde_col = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_col.get());
-    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(), "[{c0:[1,2],c1:['a','b']}]"), 0);
+    ASSERT_EQ(serde_col->size(), 1);
 
     // Phase 2: merge serialized data into a new state (fresh context)
     std::vector<TypeDescriptor> arg_types2 = {TypeDescriptor::from_logical_type(TYPE_INT),
@@ -3212,12 +3198,30 @@ TEST_F(AggregateTest, test_multi_array_agg_merge) {
 
     func->prepare_for_output(local_ctx2.get());
 
+    // Finalize to struct
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
     MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
     func->finalize_to_column(local_ctx2.get(), state2->state(), result_col.get());
     ASSERT_EQ(strcmp(result_col->debug_string().c_str(), "[{c0:[1,2],c1:['a','b']}]"), 0);
 }
 
 TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
+    // convert_to_serialize_format produces VARBINARY blobs, each with 1 row
+    // Verify round-trip: convert -> merge -> finalize
     std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
                                              TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
@@ -3227,7 +3231,7 @@ TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
     local_ctx->set_nulls_first({});
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
@@ -3246,6 +3250,26 @@ TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
     columns.emplace_back(int_col);
     columns.emplace_back(char_col);
 
+    // Convert to VARBINARY serialize format
+    MutableColumnPtr serde_col = BinaryColumn::create();
+    func->convert_to_serialize_format(local_ctx.get(), columns, int_col->size(), serde_col);
+    ASSERT_EQ(serde_col->size(), 3); // 3 rows, each a single-element blob
+
+    // Merge all 3 blobs into one group
+    std::vector<TypeDescriptor> arg_types2 = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                              TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> local_ctx2(
+            FunctionContext::create_test_context(std::move(arg_types2), return_type));
+    local_ctx2->set_is_asc_order({});
+    local_ctx2->set_nulls_first({});
+    local_ctx2->set_runtime_state(runtime_state.get());
+
+    auto state = ManagedAggrState::create(local_ctx2.get(), func);
+    func->merge_batch_single_state(local_ctx2.get(), state->state(), serde_col.get(), 0, serde_col->size());
+
+    func->prepare_for_output(local_ctx2.get());
+
+    // Finalize
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
     type_array_int.children.emplace_back(LogicalType::TYPE_INT);
@@ -3261,11 +3285,9 @@ TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
     type_struct.field_names.emplace_back("c0");
     type_struct.field_names.emplace_back("c1");
 
-    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
-    func->convert_to_serialize_format(local_ctx.get(), columns, int_col->size(), serde_col);
-    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(),
-                     "[{c0:[10],c1:['a']}, {c0:[20],c1:['b']}, {c0:[30],c1:['c']}]"),
-              0);
+    MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx2.get(), state->state(), result_col.get());
+    ASSERT_EQ(strcmp(result_col->debug_string().c_str(), "[{c0:[10,20,30],c1:['a','b','c']}]"), 0);
 }
 
 TEST_F(AggregateTest, test_multi_array_agg_empty_group) {
@@ -3278,7 +3300,7 @@ TEST_F(AggregateTest, test_multi_array_agg_empty_group) {
     local_ctx->set_nulls_first({});
     local_ctx->set_runtime_state(runtime_state.get());
 
-    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg_v2", TYPE_BIGINT, TYPE_STRUCT, false);
     ASSERT_TRUE(func != nullptr);
 
     auto state = ManagedAggrState::create(local_ctx.get(), func);
