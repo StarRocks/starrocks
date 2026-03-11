@@ -588,6 +588,19 @@ public:
         }
     }
 
+    static const uint8_t* get_null_data_ptr(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column_data().data();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column_data().data();
+        } else {
+            return nullptr;
+        }
+    }
+
     static const Column* get_data_column(const Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
