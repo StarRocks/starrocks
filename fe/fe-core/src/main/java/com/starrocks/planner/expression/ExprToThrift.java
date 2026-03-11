@@ -74,6 +74,8 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TAggregateExpr;
@@ -548,6 +550,13 @@ public final class ExprToThrift {
             }
             if (!childType.isComplexType()) {
                 msg.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
+            }
+            if (childType.isStructType() && node.getType().isStructType()) {
+                ConnectContext ctx = ConnectContext.get();
+                if (ctx != null && SqlModeHelper.check(ctx.getSessionVariable().getSqlMode(),
+                        SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
+                    msg.setCast_struct_by_name(true);
+                }
             }
             return null;
         }
