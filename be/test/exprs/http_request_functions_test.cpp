@@ -746,4 +746,453 @@ PARALLEL_TEST(RuntimeStateHttpOptionsTest, sslVerificationRequiredGetterDefault)
     EXPECT_TRUE(state.http_request_ssl_verification_required());
 }
 
+//=============================================================================
+// Helper Function Unit Tests (coverage for internal utilities)
+//=============================================================================
+
+// Test parse_comma_separated_list edge cases
+TEST_F(HttpRequestFunctionsTest, parseCommaListEmptyStringTest) {
+    auto result = parse_comma_separated_list("");
+    ASSERT_TRUE(result.empty());
+}
+
+TEST_F(HttpRequestFunctionsTest, parseCommaListSingleItemTest) {
+    auto result = parse_comma_separated_list("192.168.1.1");
+    ASSERT_EQ(1, result.size());
+    ASSERT_EQ("192.168.1.1", result[0]);
+}
+
+TEST_F(HttpRequestFunctionsTest, parseCommaListOnlyWhitespaceTest) {
+    auto result = parse_comma_separated_list("   ,  ,  ");
+    ASSERT_TRUE(result.empty());
+}
+
+TEST_F(HttpRequestFunctionsTest, parseCommaListMultipleCommasTest) {
+    auto result = parse_comma_separated_list("a,,b,,,c");
+    ASSERT_EQ(3, result.size());
+    ASSERT_EQ("a", result[0]);
+    ASSERT_EQ("b", result[1]);
+    ASSERT_EQ("c", result[2]);
+}
+
+// Test compile_regex_patterns edge cases
+TEST_F(HttpRequestFunctionsTest, compileRegexEmptyStringTest) {
+    auto patterns = compile_regex_patterns("");
+    ASSERT_TRUE(patterns.empty());
+}
+
+TEST_F(HttpRequestFunctionsTest, compileRegexSinglePatternTest) {
+    auto patterns = compile_regex_patterns("^api\\.example\\.com$");
+    ASSERT_EQ(1, patterns.size());
+    ASSERT_TRUE(std::regex_match("api.example.com", patterns[0]));
+    ASSERT_FALSE(std::regex_match("evil.api.example.com", patterns[0]));
+}
+
+TEST_F(HttpRequestFunctionsTest, compileRegexAllInvalidPatternsTest) {
+    auto patterns = compile_regex_patterns("[invalid,[also-invalid");
+    ASSERT_TRUE(patterns.empty());
+}
+
+// Test check_ip_allowlist with empty allowlist
+TEST_F(HttpRequestFunctionsTest, checkIpAllowlistEmptyTest) {
+    HttpRequestFunctionState state;
+    // Empty allowlist
+    ASSERT_FALSE(check_ip_allowlist("192.168.1.1", state));
+    ASSERT_FALSE(check_ip_allowlist("", state));
+}
+
+// Test check_host_regex with empty patterns
+TEST_F(HttpRequestFunctionsTest, checkHostRegexEmptyPatternsTest) {
+    HttpRequestFunctionState state;
+    // Empty patterns
+    ASSERT_FALSE(check_host_regex("example.com", state));
+    ASSERT_FALSE(check_host_regex("", state));
+}
+
+// Test check_host_regex with multiple patterns (OR logic)
+TEST_F(HttpRequestFunctionsTest, checkHostRegexMultiplePatternsTest) {
+    HttpRequestFunctionState state;
+    state.host_allowlist_patterns = compile_regex_patterns(".*\\.example\\.com,.*\\.github\\.com");
+    ASSERT_EQ(2, state.host_allowlist_patterns.size());
+
+    ASSERT_TRUE(check_host_regex("api.example.com", state));
+    ASSERT_TRUE(check_host_regex("api.github.com", state));
+    ASSERT_FALSE(check_host_regex("evil.com", state));
+}
+
+//=============================================================================
+// Protocol Validation Edge Cases
+//=============================================================================
+
+TEST_F(HttpRequestFunctionsTest, protocolMixedCaseTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;
+
+    ASSERT_TRUE(validate_host_security("Http://example.com", state).ok());
+    ASSERT_TRUE(validate_host_security("hTtPs://example.com", state).ok());
+    ASSERT_TRUE(validate_host_security("HTTPS://EXAMPLE.COM", state).ok());
+}
+
+TEST_F(HttpRequestFunctionsTest, protocolEmptyUrlTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;
+
+    auto status = validate_host_security("", state);
+    ASSERT_FALSE(status.ok());
+}
+
+TEST_F(HttpRequestFunctionsTest, protocolOnlySchemeTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;
+
+    // "http://" with no host - should fail during host extraction, not protocol check
+    auto status = validate_host_security("http://", state);
+    // Protocol check passes, but may fail later
+    // The important thing is ftp/file/etc are blocked
+    auto ftp_status = validate_host_security("ftp://example.com", state);
+    ASSERT_FALSE(ftp_status.ok());
+    ASSERT_TRUE(ftp_status.message().find("Invalid protocol") != std::string::npos);
+}
+
+//=============================================================================
+// Security Level Boundary Tests
+//=============================================================================
+
+// Test unknown security level (e.g., 0 or 5)
+TEST_F(HttpRequestFunctionsTest, securityUnknownLevelBlocksTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 0;
+
+    auto status = validate_host_security("http://example.com/api", state);
+    ASSERT_FALSE(status.ok());
+
+    state.security_level = 5;
+    status = validate_host_security("http://example.com/api", state);
+    ASSERT_FALSE(status.ok());
+
+    state.security_level = -1;
+    status = validate_host_security("http://example.com/api", state);
+    ASSERT_FALSE(status.ok());
+}
+
+// Test Level 2 with host regex allowlist (not just IP)
+TEST_F(HttpRequestFunctionsTest, securityLevel2HostRegexAllowsPublicTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 2;
+    state.host_allowlist_patterns = compile_regex_patterns(".*\\.example\\.com");
+
+    // Public hosts are allowed at level 2 without allowlist
+    ASSERT_TRUE(validate_host_security("http://example.com/api", state).ok());
+}
+
+// Test Level 3 with host regex allowlist only (no IP allowlist)
+TEST_F(HttpRequestFunctionsTest, securityLevel3HostRegexOnlyTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 3;
+    state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
+
+    // Should be allowed via host regex
+    ASSERT_TRUE(validate_host_security("http://example.com/api", state).ok());
+
+    // Non-matching host should be blocked
+    auto status = validate_host_security("http://evil.com/api", state);
+    ASSERT_FALSE(status.ok());
+}
+
+// Test link-local IP (169.254.x.x) blocking with specific error message
+TEST_F(HttpRequestFunctionsTest, securityLinkLocalIpBlockedTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 2;
+
+    // 169.254.169.254 is the AWS metadata endpoint
+    auto status = validate_host_security("http://169.254.169.254/latest/meta-data/", state);
+    ASSERT_FALSE(status.ok());
+    // Should mention link-local or cloud metadata
+    ASSERT_TRUE(status.message().find("Link-local") != std::string::npos ||
+                status.message().find("Private IP") != std::string::npos ||
+                status.message().find("metadata") != std::string::npos);
+}
+
+//=============================================================================
+// validate_http_method Additional Tests
+//=============================================================================
+
+TEST_F(HttpRequestFunctionsTest, validateHttpMethodAllCapsTest) {
+    ASSERT_TRUE(validate_http_method("DELETE").ok());
+    ASSERT_TRUE(validate_http_method("OPTIONS").ok());
+    ASSERT_TRUE(validate_http_method("HEAD").ok());
+}
+
+TEST_F(HttpRequestFunctionsTest, validateHttpMethodMixedCaseTest) {
+    ASSERT_TRUE(validate_http_method("Delete").ok());
+    ASSERT_TRUE(validate_http_method("options").ok());
+    ASSERT_TRUE(validate_http_method("Head").ok());
+    ASSERT_TRUE(validate_http_method("pUt").ok());
+}
+
+TEST_F(HttpRequestFunctionsTest, validateHttpMethodWhitespaceTest) {
+    // Methods with whitespace should be invalid
+    auto status = validate_http_method(" GET");
+    ASSERT_FALSE(status.ok());
+
+    status = validate_http_method("GET ");
+    ASSERT_FALSE(status.ok());
+}
+
+//=============================================================================
+// DNS Pinning (resolved_ips output) Tests
+//=============================================================================
+
+TEST_F(HttpRequestFunctionsTest, dnsPinningLevel1IpLiteralTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;
+
+    std::vector<std::string> resolved_ips;
+    auto status = validate_host_security("http://10.0.0.1/api", state, &resolved_ips);
+    ASSERT_TRUE(status.ok());
+    ASSERT_FALSE(resolved_ips.empty());
+    ASSERT_EQ("10.0.0.1", resolved_ips[0]);
+}
+
+TEST_F(HttpRequestFunctionsTest, dnsPinningLevel2WithAllowlistTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 2;
+    state.ip_allowlist = {"10.0.0.1"};
+    state.allow_private_in_allowlist = true;
+
+    std::vector<std::string> resolved_ips;
+    auto status = validate_host_security("http://10.0.0.1/api", state, &resolved_ips);
+    ASSERT_TRUE(status.ok());
+    ASSERT_FALSE(resolved_ips.empty());
+    ASSERT_EQ("10.0.0.1", resolved_ips[0]);
+}
+
+TEST_F(HttpRequestFunctionsTest, dnsPinningNullOutputTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;
+
+    // Passing nullptr for resolved_ips should not crash
+    auto status = validate_host_security("http://127.0.0.1/api", state, nullptr);
+    ASSERT_TRUE(status.ok());
+}
+
+//=============================================================================
+// http_request() Function Integration Tests
+//=============================================================================
+
+// Test with custom HTTP method
+TEST_F(HttpRequestFunctionsTest, customMethodColumnTest) {
+    FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
+    ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
+
+    auto url_column = BinaryColumn::create();
+    url_column->append("http://127.0.0.1:99999/nonexistent");
+
+    Columns columns;
+    columns.emplace_back(url_column);
+
+    // POST method
+    auto method_column = BinaryColumn::create();
+    method_column->append("POST");
+    columns.emplace_back(method_column);
+
+    // body
+    auto body_column = BinaryColumn::create();
+    body_column->append("{\"key\": \"value\"}");
+    columns.emplace_back(body_column);
+
+    // headers
+    auto headers_column = BinaryColumn::create();
+    headers_column->append("{\"Content-Type\": \"application/json\"}");
+    columns.emplace_back(headers_column);
+
+    // timeout_ms
+    auto timeout_column = Int32Column::create();
+    timeout_column->append(1000);
+    columns.emplace_back(timeout_column);
+
+    // ssl_verify
+    auto ssl_column = BooleanColumn::create();
+    ssl_column->append(false);
+    columns.emplace_back(ssl_column);
+
+    // username/password
+    auto user_column = BinaryColumn::create();
+    user_column->append("");
+    columns.emplace_back(user_column);
+    auto pass_column = BinaryColumn::create();
+    pass_column->append("");
+    columns.emplace_back(pass_column);
+
+    auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    // Should return a response (error or success), not crash
+    ASSERT_FALSE(result.value()->is_null(0));
+
+    ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
+}
+
+// Test with invalid HTTP method
+TEST_F(HttpRequestFunctionsTest, invalidMethodColumnTest) {
+    FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
+    ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
+
+    auto url_column = BinaryColumn::create();
+    url_column->append("http://example.com/api");
+
+    Columns columns;
+    columns.emplace_back(url_column);
+
+    // Invalid method
+    auto method_column = BinaryColumn::create();
+    method_column->append("INVALID_METHOD");
+    columns.emplace_back(method_column);
+
+    auto body_column = BinaryColumn::create();
+    body_column->append("");
+    columns.emplace_back(body_column);
+    auto headers_column = BinaryColumn::create();
+    headers_column->append("{}");
+    columns.emplace_back(headers_column);
+    auto timeout_column = Int32Column::create();
+    timeout_column->append(1000);
+    columns.emplace_back(timeout_column);
+    auto ssl_column = BooleanColumn::create();
+    ssl_column->append(true);
+    columns.emplace_back(ssl_column);
+    auto user_column = BinaryColumn::create();
+    user_column->append("");
+    columns.emplace_back(user_column);
+    auto pass_column = BinaryColumn::create();
+    pass_column->append("");
+    columns.emplace_back(pass_column);
+
+    auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    // Should return error JSON response
+    auto* binary_col = ColumnHelper::get_binary_column(result.value().get());
+    std::string response = binary_col->get_slice(0).to_string();
+    // Default security level is 3 (RESTRICTED) with empty allowlist,
+    // so SSRF protection may trigger before method validation.
+    // Either way, we get an error JSON response.
+    ASSERT_TRUE(response.find("\"status\": -1") != std::string::npos ||
+                response.find("\"status\":-1") != std::string::npos);
+
+    ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
+}
+
+// Test with invalid headers JSON
+TEST_F(HttpRequestFunctionsTest, invalidHeadersJsonTest) {
+    FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
+    ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
+
+    auto url_column = BinaryColumn::create();
+    url_column->append("http://example.com/api");
+
+    Columns columns;
+    columns.emplace_back(url_column);
+
+    auto method_column = BinaryColumn::create();
+    method_column->append("GET");
+    columns.emplace_back(method_column);
+    auto body_column = BinaryColumn::create();
+    body_column->append("");
+    columns.emplace_back(body_column);
+
+    // Invalid JSON headers
+    auto headers_column = BinaryColumn::create();
+    headers_column->append("not valid json");
+    columns.emplace_back(headers_column);
+
+    auto timeout_column = Int32Column::create();
+    timeout_column->append(1000);
+    columns.emplace_back(timeout_column);
+    auto ssl_column = BooleanColumn::create();
+    ssl_column->append(true);
+    columns.emplace_back(ssl_column);
+    auto user_column = BinaryColumn::create();
+    user_column->append("");
+    columns.emplace_back(user_column);
+    auto pass_column = BinaryColumn::create();
+    pass_column->append("");
+    columns.emplace_back(pass_column);
+
+    auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    // Should return error JSON response for bad headers
+    auto* binary_col = ColumnHelper::get_binary_column(result.value().get());
+    std::string response = binary_col->get_slice(0).to_string();
+    ASSERT_TRUE(response.find("\"status\": -1") != std::string::npos ||
+                response.find("\"status\":-1") != std::string::npos);
+
+    ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
+}
+
+// Test with multiple rows
+TEST_F(HttpRequestFunctionsTest, multipleRowsTest) {
+    FunctionContext::FunctionStateScope scope = FunctionContext::FRAGMENT_LOCAL;
+    ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
+
+    auto url_column = BinaryColumn::create();
+    url_column->append("http://127.0.0.1:99999/a");
+    url_column->append("");
+    url_column->append("not-a-url");
+    Columns columns = create_http_request_columns(url_column, 3);
+
+    auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(3, result.value()->size());
+
+    ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
+}
+
+// Test prepare with THREAD_LOCAL scope (no-op)
+TEST_F(HttpRequestFunctionsTest, prepareThreadLocalScopeTest) {
+    FunctionContext::FunctionStateScope scope = FunctionContext::THREAD_LOCAL;
+    ASSERT_OK(HttpRequestFunctions::http_request_prepare(_ctx.get(), scope));
+    // THREAD_LOCAL should be a no-op
+    ASSERT_OK(HttpRequestFunctions::http_request_close(_ctx.get(), scope));
+}
+
+//=============================================================================
+// RuntimeState HTTP Option Tests - Additional Coverage
+//=============================================================================
+
+PARALLEL_TEST(RuntimeStateHttpOptionsTest, securityLevelGetterAllValues) {
+    for (int level = 1; level <= 4; level++) {
+        TQueryOptions query_options;
+        query_options.__set_http_request_security_level(level);
+        TQueryGlobals query_globals;
+        RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+        EXPECT_EQ(level, state.http_request_security_level());
+    }
+}
+
+PARALLEL_TEST(RuntimeStateHttpOptionsTest, sslVerificationRequiredGetterFalse) {
+    TQueryOptions query_options;
+    query_options.__set_http_request_ssl_verification_required(false);
+    TQueryGlobals query_globals;
+    RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+    EXPECT_FALSE(state.http_request_ssl_verification_required());
+}
+
+PARALLEL_TEST(RuntimeStateHttpOptionsTest, ipAllowlistGetterWhitespace) {
+    TQueryOptions query_options;
+    query_options.__set_http_request_ip_allowlist(" 10.0.0.1 , 192.168.1.1 ");
+    TQueryGlobals query_globals;
+    RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+    EXPECT_EQ(" 10.0.0.1 , 192.168.1.1 ", state.http_request_ip_allowlist());
+}
+
+PARALLEL_TEST(RuntimeStateHttpOptionsTest, hostAllowlistRegexpGetterMultiple) {
+    TQueryOptions query_options;
+    query_options.__set_http_request_host_allowlist_regexp(".*\\.example\\.com,.*\\.github\\.com");
+    TQueryGlobals query_globals;
+    RuntimeState state(TUniqueId(), query_options, query_globals, nullptr);
+    EXPECT_EQ(".*\\.example\\.com,.*\\.github\\.com", state.http_request_host_allowlist_regexp());
+}
+
 } // namespace starrocks

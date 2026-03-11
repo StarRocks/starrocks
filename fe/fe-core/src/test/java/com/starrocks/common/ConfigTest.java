@@ -198,6 +198,13 @@ public class ConfigTest {
         Config.setMutableConfig("http_request_allow_private_in_allowlist", "FALSE", false, "");
         Assertions.assertFalse(Config.http_request_allow_private_in_allowlist);
 
+        // Mixed case
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "True", false, "");
+        Assertions.assertTrue(Config.http_request_allow_private_in_allowlist);
+
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "False", false, "");
+        Assertions.assertFalse(Config.http_request_allow_private_in_allowlist);
+
         // Invalid value: should throw exception
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_allow_private_in_allowlist", "invalid", false, ""));
@@ -205,6 +212,10 @@ public class ConfigTest {
                 Config.setMutableConfig("http_request_allow_private_in_allowlist", "yes", false, ""));
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_allow_private_in_allowlist", "1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "0", false, ""));
     }
 
     @Test
@@ -219,6 +230,9 @@ public class ConfigTest {
         Config.setMutableConfig("http_request_ssl_verification_required", "True", false, "");
         Assertions.assertTrue(Config.http_request_ssl_verification_required);
 
+        Config.setMutableConfig("http_request_ssl_verification_required", "FALSE", false, "");
+        Assertions.assertFalse(Config.http_request_ssl_verification_required);
+
         // Invalid value: should throw exception
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_ssl_verification_required", "yes", false, ""));
@@ -226,6 +240,10 @@ public class ConfigTest {
                 Config.setMutableConfig("http_request_ssl_verification_required", "no", false, ""));
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_ssl_verification_required", "0", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "", false, ""));
     }
 
     @Test
@@ -236,13 +254,18 @@ public class ConfigTest {
             Assertions.assertEquals(i, Config.http_request_security_level);
         }
 
-        // Invalid values: 0, 5, negative
+        // Invalid values: 0, 5, negative, large numbers
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_security_level", "0", false, ""));
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_security_level", "5", false, ""));
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_security_level", "-1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_security_level", "100", false, ""));
+        // Non-integer should throw
+        Assertions.assertThrows(Exception.class, () ->
+                Config.setMutableConfig("http_request_security_level", "abc", false, ""));
     }
 
     @Test
@@ -259,6 +282,16 @@ public class ConfigTest {
         Config.setMutableConfig("http_request_ip_allowlist", "", false, "");
         Assertions.assertEquals("", Config.http_request_ip_allowlist);
 
+        // Valid: boundary octets (0 and 255)
+        Config.setMutableConfig("http_request_ip_allowlist", "0.0.0.0", false, "");
+        Assertions.assertEquals("0.0.0.0", Config.http_request_ip_allowlist);
+        Config.setMutableConfig("http_request_ip_allowlist", "255.255.255.255", false, "");
+        Assertions.assertEquals("255.255.255.255", Config.http_request_ip_allowlist);
+
+        // Valid: three IPs
+        Config.setMutableConfig("http_request_ip_allowlist", "1.2.3.4, 5.6.7.8, 9.10.11.12", false, "");
+        Assertions.assertEquals("1.2.3.4, 5.6.7.8, 9.10.11.12", Config.http_request_ip_allowlist);
+
         // Invalid: not an IP address
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_ip_allowlist", "not-an-ip", false, ""));
@@ -270,6 +303,22 @@ public class ConfigTest {
         // Invalid: hostname instead of IP
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_ip_allowlist", "example.com", false, ""));
+
+        // Invalid: octet > 255
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "256.1.1.1", false, ""));
+
+        // Invalid: too many octets
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "1.2.3.4.5", false, ""));
+
+        // Invalid: too few octets
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "1.2.3", false, ""));
+
+        // Invalid: IPv6 address (only IPv4 supported in allowlist)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "::1", false, ""));
     }
 
     @Test
@@ -286,6 +335,18 @@ public class ConfigTest {
         Config.setMutableConfig("http_request_host_allowlist_regexp", "", false, "");
         Assertions.assertEquals("", Config.http_request_host_allowlist_regexp);
 
+        // Valid: pattern with anchors
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "^api\\.example\\.com$", false, "");
+        Assertions.assertEquals("^api\\.example\\.com$", Config.http_request_host_allowlist_regexp);
+
+        // Valid: pattern with character classes
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "[a-z]+\\.example\\.com", false, "");
+        Assertions.assertEquals("[a-z]+\\.example\\.com", Config.http_request_host_allowlist_regexp);
+
+        // Valid: comma-separated with empty patterns (empty patterns are skipped)
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "api\\..*,,cdn\\..*", false, "");
+        Assertions.assertEquals("api\\..*,,cdn\\..*", Config.http_request_host_allowlist_regexp);
+
         // Invalid: malformed regex (unclosed bracket)
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_host_allowlist_regexp", "[invalid", false, ""));
@@ -293,5 +354,13 @@ public class ConfigTest {
         // Invalid: malformed regex (unclosed parenthesis)
         Assertions.assertThrows(DdlException.class, () ->
                 Config.setMutableConfig("http_request_host_allowlist_regexp", "(unclosed", false, ""));
+
+        // Invalid: malformed regex (dangling quantifier)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "*invalid", false, ""));
+
+        // Invalid: malformed regex (unbalanced braces)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "a{2", false, ""));
     }
 }
