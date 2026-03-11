@@ -45,6 +45,13 @@ namespace starrocks {
     M(TYPE_DECIMAL128)               \
     M(TYPE_DECIMAL256)
 
+#define APPLY_FOR_ALL_OBJECT_TYPE(M) \
+    M(TYPE_HLL)                      \
+    M(TYPE_OBJECT)                   \
+    M(TYPE_PERCENTILE)               \
+    M(TYPE_JSON)                     \
+    M(TYPE_VARIANT)
+
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
     M(TYPE_DECIMALV2)                \
