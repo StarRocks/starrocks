@@ -1052,8 +1052,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
                 return true;
             }
             // encode_datum failed (e.g., type mismatch or overflow). Fall through to binary fallback.
-            VLOG(3) << "variant shredded scalar encode failed for path '" << node.full_path
-                    << "'; falling back to binary value";
+            VLOG_FILE << "variant shredded scalar encode failed for path '" << node.full_path
+                      << "'; falling back to binary value";
         }
         Slice fallback_slice;
         if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
@@ -1312,7 +1312,7 @@ static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, con
 // For non-shredded bindings (node == nullptr), seeks the requested path from the current row payload.
 // dst is kept in object mode (VariantRowValue per entry); no nested typed_columns inside.
 static void append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
-                                       std::string_view row_metadata, std::string_view row_value, Column* dst) {
+                                       const VariantRowRef& full_row, Column* dst) {
     if (dst == nullptr) return;
     auto* nullable = down_cast<NullableColumn*>(dst);
     auto* inner_variant = down_cast<VariantColumn*>(nullable->data_column()->as_mutable_raw_ptr());
@@ -1402,8 +1402,8 @@ static void append_variant_binding_row(size_t row, const TopBinding& binding, st
             append_value(std::move(built).value());
             return;
         }
-        VLOG(3) << "variant shredded subtree build failed for path '" << binding.path
-                << "': " << built.status().to_string() << "; falling back";
+        VLOG_FILE << "variant shredded subtree build failed for path '" << binding.path
+                  << "': " << built.status().to_string() << "; falling back";
         if (append_fallback_from_node()) {
             return;
         }
@@ -1417,10 +1417,9 @@ static void append_variant_binding_row(size_t row, const TopBinding& binding, st
         return;
     }
 
-    VariantRowRef full_row(row_metadata, row_value);
     auto field = VariantPath::seek_view(full_row, parsed_path.value(), 0);
     if (!field.ok()) {
-        VLOG(3) << "variant row seek failed for path '" << binding.path << "': " << field.status().to_string();
+        VLOG_FILE << "variant row seek failed for path '" << binding.path << "': " << field.status().to_string();
         append_null();
         return;
     }
@@ -1627,7 +1626,8 @@ public:
             if (binding.kind == TopBinding::Kind::SCALAR) {
                 append_top_scalar_binding_value(_row, binding, typed_col_dst);
             } else {
-                append_variant_binding_row(_row, binding, _raw_metadata, _row_metadata, _row_value, typed_col_dst);
+                append_variant_binding_row(_row, binding, _raw_metadata, VariantRowRef(_row_metadata, _row_value),
+                                           typed_col_dst);
             }
         }
     }
@@ -1646,9 +1646,8 @@ private:
         }
 
         DCHECK(_batch_ctx.root_typed_value_type != nullptr);
-        ASSIGN_OR_RETURN(auto encoded,
-                         VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                      *_batch_ctx.root_typed_value_type));
+        ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
+                                                                    *_batch_ctx.root_typed_value_type));
 
         auto metadata_raw = encoded.get_metadata().raw();
         auto value_raw = encoded.get_value().raw();
@@ -1662,9 +1661,8 @@ private:
     Status _try_build_full_row() {
         _built_metadata_buf.clear();
         _built_value_buf.clear();
-        RETURN_IF_ERROR(build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value,
-                                                            _batch_ctx.shredded_fields, &_built_metadata_buf,
-                                                            &_built_value_buf));
+        RETURN_IF_ERROR(build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value, _batch_ctx.shredded_fields,
+                                                            &_built_metadata_buf, &_built_value_buf));
         _row_metadata = std::string_view(_built_metadata_buf.data(), _built_metadata_buf.size());
         _row_value = std::string_view(_built_value_buf.data(), _built_value_buf.size());
         if (_row_metadata.empty() || _row_value.empty()) {
