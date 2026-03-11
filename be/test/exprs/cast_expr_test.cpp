@@ -2548,4 +2548,258 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
+<<<<<<< HEAD
+=======
+// Test that struct-to-struct cast correctly reorders fields by name when field order differs
+TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
+    // Create source struct type: STRUCT<price INT, product_id VARCHAR>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"price", "product_id"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+
+    // Create target struct type: STRUCT<product_id VARCHAR, price INT>
+    // Note: same field names but different order
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"product_id", "price"},
+            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    // Verify it's a CastStructExpr with correct field indices
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 2);
+    // target field 0 (product_id) should come from source field 1
+    EXPECT_EQ(indices[0], 1);
+    // target field 1 (price) should come from source field 0
+    EXPECT_EQ(indices[1], 0);
+}
+
+// Test struct-to-struct cast with matching field order (no reordering needed)
+TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
+    // Create source struct type: STRUCT<a INT, b VARCHAR>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+
+    // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
+    // Same field order, just different types
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"a", "b"},
+            {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 2);
+    // Fields should map to themselves (same order)
+    EXPECT_EQ(indices[0], 0);
+    EXPECT_EQ(indices[1], 1);
+}
+
+// Test struct-to-struct cast with three fields in different order
+TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
+    // Create source struct type: STRUCT<x INT, y INT, z INT>
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"x", "y", "z"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+
+    // Create target struct type: STRUCT<z INT, x INT, y INT>
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"z", "x", "y"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 3);
+    // target field 0 (z) should come from source field 2
+    EXPECT_EQ(indices[0], 2);
+    // target field 1 (x) should come from source field 0
+    EXPECT_EQ(indices[1], 0);
+    // target field 2 (y) should come from source field 1
+    EXPECT_EQ(indices[2], 1);
+}
+
+// Test that position-based struct cast (different field names) still works.
+// When target field names are not in the source, positional mapping must be used.
+TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
+    // Source: STRUCT<key INT, value INT>  Target: STRUCT<key1 INT, value1 INT>
+    // Names don't overlap, so positional mapping should be used: key→key1 (idx 0), value→value1 (idx 1).
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
+            {"key", "value"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
+            {"key1", "value1"},
+            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+
+    ObjectPool pool;
+    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
+    ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
+    Expr* expr = expr_result.value();
+    pool.add(expr);
+
+    auto* cast_struct_expr = dynamic_cast<CastStructExpr*>(expr);
+    ASSERT_NE(cast_struct_expr, nullptr);
+
+    const auto& indices = cast_struct_expr->source_field_indices();
+    ASSERT_EQ(indices.size(), 2);
+    // Positional: target[0] comes from source[0], target[1] from source[1]
+    EXPECT_EQ(indices[0], 0);
+    EXPECT_EQ(indices[1], 1);
+}
+
+// Verifies primitive scalar values encode to variant JSON payloads correctly.
+TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
+    auto column = Int32Column::create();
+    column->append(123);
+    column->append(-7);
+
+    ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
+    auto json0 = variant_json_at(result, 0);
+    auto json1 = variant_json_at(result, 1);
+    ASSERT_TRUE(json0.ok());
+    ASSERT_TRUE(json1.ok());
+    EXPECT_EQ("123", json0.value());
+    EXPECT_EQ("-7", json1.value());
+}
+
+// Verifies const variant input can cast to complex types with stable semantics.
+TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
+    constexpr size_t kInputSize = 3;
+    {
+        auto const_variant = make_const_variant_column_from_json(R"([1,2])", kInputSize);
+        auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "[1,2]");
+    }
+
+    {
+        auto const_variant = make_const_variant_column_from_json(R"({"k1":1,"k2":2})", kInputSize);
+        auto result = cast_from_variant(gen_map_type_desc(TPrimitiveType::VARCHAR, TPrimitiveType::INT), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{'k1':1,'k2':2}");
+    }
+
+    {
+        auto const_variant = make_const_variant_column_from_json(R"({"x":7,"y":"s"})", kInputSize);
+        auto result = cast_from_variant(
+                gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::VARCHAR}, {"x", "y"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{x:7,y:'s'}");
+    }
+}
+
+// Verifies root typed-only scalar variant uses fast path for same-type cast and preserves null behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
+    auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_EQ(7, result->get(0).get_int64());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_EQ(-3, result->get(2).get_int64());
+    }
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_DOUBLE_EQ(7.0, result->get(0).get_double());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_DOUBLE_EQ(-3.0, result->get(2).get_double());
+    }
+}
+
+// Verifies const root typed-only scalar column keeps const/expanded cast semantics stable.
+TEST_F(VectorizedCastExprTest, const_root_typed_only_scalar_cast_from_variant) {
+    auto one_row_variant = make_root_typed_only_variant_bigint_column({11}, {0});
+    auto const_variant = ConstColumn::create(std::move(one_row_variant), 3);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), const_variant);
+    assert_const_or_expanded_result(result, 3, "11");
+}
+
+// Verifies root typed-only ARRAY variant can cast to ARRAY<INT> through get_row_value materialization.
+TEST_F(VectorizedCastExprTest, root_typed_only_array_cast_from_variant) {
+    auto variant_col = make_root_typed_only_variant_array_column(
+            {DatumArray{Datum((int32_t)1), Datum((int32_t)2)}, DatumArray{}}, {0, 1});
+    auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variant_col);
+    ASSERT_EQ(2, result->size());
+    ASSERT_EQ("[1,2]", result->debug_item(0));
+    ASSERT_TRUE(result->is_null(1));
+}
+
+// Verifies base_shredded root scalar keeps cast semantics equivalent to typed-only on same/different target types.
+TEST_F(VectorizedCastExprTest, base_shredded_root_scalar_cast_from_variant) {
+    auto variant_col = make_base_shredded_root_bigint_variant_column({7, 0, -3}, {0, 1, 0});
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_EQ(7, result->get(0).get_int64());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_EQ(-3, result->get(2).get_int64());
+    }
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_DOUBLE_EQ(7.0, result->get(0).get_double());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_DOUBLE_EQ(-3.0, result->get(2).get_double());
+    }
+}
+
+// Verifies const base_shredded root scalar keeps stable cast behavior.
+TEST_F(VectorizedCastExprTest, const_base_shredded_root_scalar_cast_from_variant) {
+    auto one_row_variant = make_base_shredded_root_bigint_variant_column({11}, {0});
+    auto const_variant = ConstColumn::create(std::move(one_row_variant), 3);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), const_variant);
+    assert_const_or_expanded_result(result, 3, "11");
+}
+
+// Verifies root typed-only MAP casts to MAP target and preserves nullable row behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_map_cast_from_variant) {
+    DatumMap m;
+    m[(Slice) "k1"] = (int32_t)1;
+    m[(Slice) "k2"] = (int32_t)2;
+    auto variant_col = make_root_typed_only_variant_map_column({m}, {0});
+    auto result = cast_from_variant(gen_map_type_desc(TPrimitiveType::VARCHAR, TPrimitiveType::INT), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_EQ("{'k1':1,'k2':2}", result->debug_item(0));
+}
+
+// Verifies root typed-only STRUCT casts to STRUCT target and preserves nullable row behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_struct_cast_from_variant) {
+    DatumStruct s{Datum(int32_t(7)), Datum("x")};
+    auto variant_col = make_root_typed_only_variant_struct_column({s}, {0});
+    auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::VARCHAR}, {"x", "y"}),
+                                    variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_EQ("{x:7,y:'x'}", result->debug_item(0));
+}
+
+// Verifies TYPE_VARIANT typed overlay cast mismatch returns NULL (no hard error).
+TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch_returns_null) {
+    VariantRowValue typed_obj = make_variant_row_from_json(R"({"x":1})");
+    auto variant_col = make_base_shredded_root_typed_variant_column(typed_obj, 1);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_TRUE(result->is_null(0));
+}
+
+>>>>>>> 6f9a33610c ([Enhancement] Introduce STRUCT_CAST_BY_NAME SQL mode for name-based struct field matching (#69845))
 } // namespace starrocks
