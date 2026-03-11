@@ -89,9 +89,10 @@ public:
         return ids;
     }
 
-    Status create_channel_context(ExecEnv* exec_env, const std::string& label, int channel_id, const std::string& db_name,
-                                  const std::string& table_name, TFileFormatType::type format, StreamLoadContext*& ctx,
-                                  const TUniqueId& load_id, long txn_id) {
+    Status create_channel_context(ExecEnv* exec_env, const std::string& label, int channel_id,
+                                  const std::string& db_name, const std::string& table_name,
+                                  TFileFormatType::type format, StreamLoadContext*& ctx, const TUniqueId& load_id,
+                                  long txn_id) {
         auto pipe = std::make_shared<StreamLoadPipe>(true);
         RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
         ctx = new StreamLoadContext(exec_env, load_id);
@@ -119,7 +120,8 @@ public:
         return Status::OK();
     }
 
-    Status put_channel_context(const std::string& label, const std::string& table_name, int channel_id, StreamLoadContext* ctx) {
+    Status put_channel_context(const std::string& label, const std::string& table_name, int channel_id,
+                               StreamLoadContext* ctx) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it == std::end(_channel_stream_map)) {

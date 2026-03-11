@@ -53,8 +53,8 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
-#include "storage/store_path.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/store_path.h"
 
 using rocksdb::DB;
 using rocksdb::DBOptions;
