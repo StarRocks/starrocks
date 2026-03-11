@@ -517,7 +517,7 @@ protected:
 };
 class TeradataFormat {
 public:
-    TeradataFormat() {}
+    TeradataFormat() = default;
     ~TeradataFormat() = default;
 
     bool prepare(std::string_view format);
