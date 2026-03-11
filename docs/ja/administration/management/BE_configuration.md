@@ -1341,6 +1341,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 各パーティションで同時に実行できるトランザクションの最大数。
 - 導入バージョン: -
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - デフォルト: false
@@ -1761,7 +1770,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が期待するクエリキャッシュサイズを提供するのに不十分な場合、BE のメモリ容量を増やすことができます。
 - 導入バージョン: -
 
-##### enable_json_flat
 
 - デフォルト: false
 - タイプ: Boolean

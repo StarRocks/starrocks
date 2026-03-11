@@ -1977,6 +1977,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The maximum number of transactions that can run concurrently in each partition.
 - Introduced in: -
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether to allow object-storage LIST fallback when lake metadata cache misses during random bucketing size checks. `true` means fallback to LIST metadata files to compute base size (historical behavior, more accurate size estimation). `false` means skip LIST and use `base_size = 0`, which reduces LIST object requests but may delay immutable marking due to less accurate size estimation.
+- Introduced in: 4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - Default: false

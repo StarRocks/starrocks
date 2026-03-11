@@ -1914,6 +1914,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：每个分区内部同时运行的最大事务数量。
 - 引入版本：-
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 random bucketing 大小检查在 Lake metadata 缓存未命中时是否允许回退到对象存储 LIST。`true` 表示回退到 LIST 元数据文件计算 base size（历史行为、估算更准确）；`false` 表示跳过 LIST，直接使用 `base_size = 0`，可减少 LIST object 请求，但因大小估算精度下降，可能使 immutable 标记稍晚触发。
+- 引入版本：4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - 默认值：false
