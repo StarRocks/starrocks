@@ -17,13 +17,13 @@
 #include <memory>
 #include <vector>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/query_cache/lane_arbiter.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::query_cache {
 class MultilaneOperator;

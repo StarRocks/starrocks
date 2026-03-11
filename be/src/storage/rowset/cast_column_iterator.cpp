@@ -18,6 +18,7 @@
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 

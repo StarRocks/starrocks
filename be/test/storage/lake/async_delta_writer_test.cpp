@@ -33,6 +33,7 @@
 #include "common/logging.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"

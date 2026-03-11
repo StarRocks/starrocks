@@ -40,6 +40,7 @@
 #include "fs/fs_starlet.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/join.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "service/staros_worker.h"
 #include "storage/chunk_helper.h"

@@ -24,7 +24,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "http/http_client.h"
-#include "runtime/descriptors.h"
+#include "runtime/descriptors_fwd.h"
+#include "runtime/runtime_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

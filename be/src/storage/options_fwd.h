@@ -14,12 +14,8 @@
 
 #pragma once
 
-#include "common/status.h"
-#include "parquet/schema.h"
-#include "runtime/descriptors_fwd.h"
-
 namespace starrocks {
 
-Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+struct StorePath;
 
-} //namespace starrocks
+} // namespace starrocks

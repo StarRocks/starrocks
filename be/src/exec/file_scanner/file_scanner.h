@@ -20,6 +20,7 @@
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 class SequentialFile;

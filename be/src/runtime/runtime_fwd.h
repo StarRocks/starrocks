@@ -18,5 +18,13 @@ namespace starrocks {
 
 class ExecEnv;
 class RuntimeState;
+class DataStreamRecvr;
+class MemPool;
+class MemTracker;
+class QueryStatistics;
+class QueryStatisticsRecvr;
+class ResultBufferMgr;
+class ResultQueueMgr;
+class RuntimeProfile;
 
 } // namespace starrocks

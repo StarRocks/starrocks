@@ -50,6 +50,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/descriptors.h"
 #include "storage/rowset/column_reader.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"

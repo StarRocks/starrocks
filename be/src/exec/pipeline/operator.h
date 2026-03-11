@@ -23,6 +23,7 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter/runtime_filter_probe.h"
 

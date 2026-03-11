@@ -27,12 +27,13 @@
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
-#include "runtime/descriptors.h"
+#include "runtime/descriptors_fwd.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
 
 class MemPool;
+class ExprContext;
 class RuntimeState;
 
 struct OlapTableColumnParam {

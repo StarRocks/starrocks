@@ -54,7 +54,6 @@
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/tablet.h"
 
 namespace starrocks {
