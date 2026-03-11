@@ -1381,6 +1381,45 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Truncate a date/datetime string value to the partition boundary defined by granularity.
+     * Returns the formatted canonical string for the partition start time.
+     * This is the single source of truth for date-to-partition-boundary mapping,
+     * used by both partition clause creation and dedup key generation.
+     */
+    public static String truncateToPartitionBoundary(String dateValue, String granularity) throws AnalysisException {
+        try {
+            if ("NULL".equalsIgnoreCase(dateValue)) {
+                dateValue = "0000-01-01";
+            }
+            DateTimeFormatter fmt = DateUtils.probeFormat(dateValue);
+            LocalDateTime dt = DateUtils.parseStringWithDefaultHSM(dateValue, fmt);
+            switch (granularity.toLowerCase()) {
+                case "minute":
+                    dt = dt.withSecond(0).withNano(0);
+                    return dt.format(DateUtils.MINUTE_FORMATTER_UNIX);
+                case "hour":
+                    dt = dt.withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.HOUR_FORMATTER_UNIX);
+                case "day":
+                    dt = dt.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.DATEKEY_FORMATTER_UNIX);
+                case "month":
+                    dt = dt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.MONTH_FORMATTER_UNIX);
+                case "year":
+                    dt = dt.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.YEAR_FORMATTER_UNIX);
+                default:
+                    throw new AnalysisException("unsupported automatic partition granularity: " + granularity);
+            }
+        } catch (AnalysisException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AnalysisException("failed to parse partition value: " + dateValue);
+        }
+    }
+
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
@@ -1588,34 +1627,30 @@ public class AnalyzerUtils {
                 if ("NULL".equalsIgnoreCase(partitionItem)) {
                     partitionItem = "0000-01-01";
                 }
+                String truncated = truncateToPartitionBoundary(partitionItem, granularity);
+                partitionName = DEFAULT_PARTITION_NAME_PREFIX + truncated;
+
                 beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
-                // The start date here is passed by BE through function calculation,
-                // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
                     case "minute":
                         beginTime = beginTime.withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
                         endTime = beginTime.plusMinutes(interval);
                         break;
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
                         endTime = beginTime.plusHours(interval);
                         break;
                     case "day":
                         beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
                         beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
                         beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
