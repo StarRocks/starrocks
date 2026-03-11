@@ -2910,4 +2910,394 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
     ASSERT_EQ(5, result_column->get_data()[0]);
 }
 
+// ==================== multi_array_agg tests ====================
+
+TEST_F(AggregateTest, test_multi_array_agg_basic) {
+    // multi_array_agg(varchar_col, int_col) -> struct{array<varchar>, array<int>}
+    // No ORDER BY, two aggregation columns
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    local_ctx->set_is_asc_order({});
+    local_ctx->set_nulls_first({});
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    // Create input columns
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    char_column->append_datum("hello");
+    char_column->append_datum(Datum());
+    char_column->append_datum("world");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(10);
+    int_column->append_datum(20);
+    int_column->append_datum(Datum());
+
+    std::vector<const Column*> raw_columns = {char_column.get(), int_column.get()};
+
+    // Update
+    func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(), state->state());
+
+    // Serialize
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
+    func->prepare_for_output(local_ctx.get());
+
+    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
+    func->serialize_to_column(local_ctx.get(), state->state(), serde_col.get());
+    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(),
+                     "[{c0:['hello',NULL,'world'],c1:[10,20,NULL]}]"),
+              0);
+
+    // Merge into a new state (fresh context for new shared state)
+    std::vector<TypeDescriptor> arg_types2 = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                              TypeDescriptor::from_logical_type(TYPE_INT)};
+    std::unique_ptr<FunctionContext> local_ctx2(
+            FunctionContext::create_test_context(std::move(arg_types2), return_type));
+    local_ctx2->set_is_asc_order({});
+    local_ctx2->set_nulls_first({});
+    local_ctx2->set_runtime_state(runtime_state.get());
+
+    auto state2 = ManagedAggrState::create(local_ctx2.get(), func);
+    func->merge_batch_single_state(local_ctx2.get(), state2->state(), serde_col.get(), 0, serde_col->size());
+
+    func->prepare_for_output(local_ctx2.get());
+
+    // Finalize
+    MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx2.get(), state2->state(), result_col.get());
+    ASSERT_EQ(strcmp(result_col->debug_string().c_str(),
+                     "[{c0:['hello',NULL,'world'],c1:[10,20,NULL]}]"),
+              0);
+}
+
+TEST_F(AggregateTest, test_multi_array_agg_with_order_by) {
+    // multi_array_agg(varchar_col, int_col ORDER BY int_col DESC NULLS FIRST)
+    // 2 agg columns, 1 order-by column => 3 args total
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    std::vector<bool> is_asc_order{false};
+    std::vector<bool> nulls_first{true};
+    local_ctx->set_is_asc_order(is_asc_order);
+    local_ctx->set_nulls_first(nulls_first);
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    // Input data:
+    // varchar_col: ["a", "b", "c", "d"]
+    // int_col:     [10, 30, NULL, 20]
+    // order_col (same as int_col): [10, 30, NULL, 20]
+    // ORDER BY int_col DESC NULLS FIRST => [NULL, 30, 20, 10] => ["c", "b", "d", "a"]
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+    char_column->append_datum("c");
+    char_column->append_datum("d");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(10);
+    int_column->append_datum(30);
+    int_column->append_datum(Datum());
+    int_column->append_datum(20);
+
+    MutableColumnPtr order_column = ColumnHelper::create_column(int_type, true);
+    order_column->append_datum(10);
+    order_column->append_datum(30);
+    order_column->append_datum(Datum());
+    order_column->append_datum(20);
+
+    std::vector<const Column*> raw_columns = {char_column.get(), int_column.get(), order_column.get()};
+
+    func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(), state->state());
+
+    func->prepare_for_output(local_ctx.get());
+
+    // Finalize: return struct with only 2 agg columns (not the order-by column)
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_struct_result;
+    type_struct_result.type = LogicalType::TYPE_STRUCT;
+    type_struct_result.children.emplace_back(type_array_varchar);
+    type_struct_result.children.emplace_back(type_array_int);
+    type_struct_result.field_names.emplace_back("c0");
+    type_struct_result.field_names.emplace_back("c1");
+
+    MutableColumnPtr result_col = ColumnHelper::create_column(type_struct_result, true);
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    // After ORDER BY int_col DESC NULLS FIRST: NULL, 30, 20, 10
+    ASSERT_EQ(strcmp(result_col->debug_string().c_str(),
+                     "[{c0:['c','b','d','a'],c1:[NULL,30,20,10]}]"),
+              0);
+}
+
+TEST_F(AggregateTest, test_multi_array_agg_multiple_groups) {
+    // Test that multiple groups work correctly with shared state
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    local_ctx->set_is_asc_order({});
+    local_ctx->set_nulls_first({});
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Create two groups
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+
+    // Group 1: int=[1,2], varchar=["x","y"]
+    {
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_col = ColumnHelper::create_column(int_type, false);
+        int_col->append_datum(1);
+        int_col->append_datum(2);
+
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_col = ColumnHelper::create_column(char_type, false);
+        char_col->append_datum("x");
+        char_col->append_datum("y");
+
+        std::vector<const Column*> raw_columns = {int_col.get(), char_col.get()};
+        func->update_batch_single_state(local_ctx.get(), int_col->size(), raw_columns.data(), state1->state());
+    }
+
+    // Group 2: int=[100], varchar=["z"]
+    {
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_col = ColumnHelper::create_column(int_type, false);
+        int_col->append_datum(100);
+
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_col = ColumnHelper::create_column(char_type, false);
+        char_col->append_datum("z");
+
+        std::vector<const Column*> raw_columns = {int_col.get(), char_col.get()};
+        func->update_batch_single_state(local_ctx.get(), int_col->size(), raw_columns.data(), state2->state());
+    }
+
+    func->prepare_for_output(local_ctx.get());
+
+    // Build result type
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
+    // Finalize group 1
+    MutableColumnPtr result1 = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx.get(), state1->state(), result1.get());
+    ASSERT_EQ(strcmp(result1->debug_string().c_str(), "[{c0:[1,2],c1:['x','y']}]"), 0);
+
+    // Finalize group 2
+    MutableColumnPtr result2 = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx.get(), state2->state(), result2.get());
+    ASSERT_EQ(strcmp(result2->debug_string().c_str(), "[{c0:[100],c1:['z']}]"), 0);
+}
+
+TEST_F(AggregateTest, test_multi_array_agg_merge) {
+    // Test serialize -> merge -> finalize cycle
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    local_ctx->set_is_asc_order({});
+    local_ctx->set_nulls_first({});
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    // Phase 1: update and serialize
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    {
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_col = ColumnHelper::create_column(int_type, false);
+        int_col->append_datum(1);
+        int_col->append_datum(2);
+
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_col = ColumnHelper::create_column(char_type, false);
+        char_col->append_datum("a");
+        char_col->append_datum("b");
+
+        std::vector<const Column*> raw_columns = {int_col.get(), char_col.get()};
+        func->update_batch_single_state(local_ctx.get(), int_col->size(), raw_columns.data(), state1->state());
+    }
+
+    func->prepare_for_output(local_ctx.get());
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
+    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_col.get());
+    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(), "[{c0:[1,2],c1:['a','b']}]"), 0);
+
+    // Phase 2: merge serialized data into a new state (fresh context)
+    std::vector<TypeDescriptor> arg_types2 = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                              TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> local_ctx2(
+            FunctionContext::create_test_context(std::move(arg_types2), return_type));
+    local_ctx2->set_is_asc_order({});
+    local_ctx2->set_nulls_first({});
+    local_ctx2->set_runtime_state(runtime_state.get());
+
+    auto state2 = ManagedAggrState::create(local_ctx2.get(), func);
+    func->merge_batch_single_state(local_ctx2.get(), state2->state(), serde_col.get(), 0, serde_col->size());
+
+    func->prepare_for_output(local_ctx2.get());
+
+    MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx2.get(), state2->state(), result_col.get());
+    ASSERT_EQ(strcmp(result_col->debug_string().c_str(), "[{c0:[1,2],c1:['a','b']}]"), 0);
+}
+
+TEST_F(AggregateTest, test_multi_array_agg_convert_to_serialize_format) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    local_ctx->set_is_asc_order({});
+    local_ctx->set_nulls_first({});
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_col = ColumnHelper::create_column(int_type, false);
+    int_col->append_datum(10);
+    int_col->append_datum(20);
+    int_col->append_datum(30);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_col = ColumnHelper::create_column(char_type, false);
+    char_col->append_datum("a");
+    char_col->append_datum("b");
+    char_col->append_datum("c");
+
+    Columns columns;
+    columns.emplace_back(int_col);
+    columns.emplace_back(char_col);
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_array_varchar;
+    type_array_varchar.type = LogicalType::TYPE_ARRAY;
+    type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.children.emplace_back(type_array_varchar);
+    type_struct.field_names.emplace_back("c0");
+    type_struct.field_names.emplace_back("c1");
+
+    MutableColumnPtr serde_col = ColumnHelper::create_column(type_struct, true);
+    func->convert_to_serialize_format(local_ctx.get(), columns, int_col->size(), serde_col);
+    ASSERT_EQ(strcmp(serde_col->debug_string().c_str(),
+                     "[{c0:[10],c1:['a']}, {c0:[20],c1:['b']}, {c0:[30],c1:['c']}]"),
+              0);
+}
+
+TEST_F(AggregateTest, test_multi_array_agg_empty_group) {
+    // Test that an empty group produces empty arrays
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    local_ctx->set_is_asc_order({});
+    local_ctx->set_nulls_first({});
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* func = get_aggregate_function("multi_array_agg", TYPE_BIGINT, TYPE_STRUCT, false);
+    ASSERT_TRUE(func != nullptr);
+
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+    // Don't update — empty group
+
+    func->prepare_for_output(local_ctx.get());
+
+    TypeDescriptor type_array_int;
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_struct;
+    type_struct.type = LogicalType::TYPE_STRUCT;
+    type_struct.children.emplace_back(type_array_int);
+    type_struct.field_names.emplace_back("c0");
+
+    MutableColumnPtr result_col = ColumnHelper::create_column(type_struct, true);
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    ASSERT_EQ(strcmp(result_col->debug_string().c_str(), "[{c0:[]}]"), 0);
+}
+
 } // namespace starrocks
