@@ -80,6 +80,8 @@ import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTa
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     private final ListPartitionDiffer differ;
     private final Logger logger;
+    // Partitions to be dropped after successful refresh (deferred drop)
+    private PCellSortedSet deferredDropPartitions = null;
 
     public MVPCTRefreshListPartitioner(MvTaskRunContext mvContext,
                                        TaskRunContext context,
@@ -140,13 +142,11 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         // drop old partitions and add new partitions
         final PartitionDiff partitionDiff = result.diff;
-        // We should delete the old partition first and then add the new one,
-        // because the old and new partitions may overlap
+        // Defer dropping old partitions until after the refresh succeeds to ensure
+        // that if the refresh fails, the original data is preserved.
         final PCellSortedSet deletes = partitionDiff.getDeletes();
-        for (String mvPartitionName : deletes.getPartitionNames()) {
-            dropPartition(db, mv, mvPartitionName);
-        }
-        logger.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
+        this.deferredDropPartitions = deletes;
+        logger.info("The process of synchronizing materialized view [{}] deferred delete partitions list [{}]",
                 mv.getName(), deletes);
 
         // add partitions
@@ -175,6 +175,24 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         mvContext.setRefBaseTableToCellMap(refBaseTablePartitionMap);
         mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
         return true;
+    }
+
+    @Override
+    public void dropDeferredPartitions() {
+        if (deferredDropPartitions == null || deferredDropPartitions.isEmpty()) {
+            return;
+        }
+        logger.info("The process of dropping deferred partitions for materialized view [{}] partitions list [{}]",
+                mv.getName(), deferredDropPartitions);
+        for (String mvPartitionName : deferredDropPartitions.getPartitionNames()) {
+            try {
+                dropPartition(db, mv, mvPartitionName);
+            } catch (Exception e) {
+                logger.warn("Failed to drop deferred partition {} for mv {}, skip",
+                        mvPartitionName, mv.getName(), e);
+            }
+        }
+        deferredDropPartitions = null;
     }
 
     @Override

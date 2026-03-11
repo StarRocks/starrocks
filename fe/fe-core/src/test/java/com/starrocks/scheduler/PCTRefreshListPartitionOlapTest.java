@@ -1806,4 +1806,85 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             Assertions.assertNotNull(execPlan);
         }
     }
+
+    /**
+     * Test that when an MV refresh fails, the original data is preserved.
+     * This test verifies the fix for the issue where MV refresh failure was
+     * causing the MV to end up with 0 rows.
+     */
+    @Test
+    public void testRefreshMVFailurePreservesOriginalData() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "properties ('partition_refresh_number' = '-1')" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                    ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        // First, do a successful refresh
+                        String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                        executeInsertSql(connectContext, insertSql);
+                        insertSql = "insert into t2 partition(p2) values(2, 2, '2021-12-02', 'guangdong');";
+                        executeInsertSql(connectContext, insertSql);
+
+                        ExecPlan execPlan = getExecPlan(taskRun);
+                        Assertions.assertNotNull(execPlan);
+
+                        // Verify MV has data
+                        Collection<Partition> partitions = materializedView.getPartitions();
+                        Assertions.assertEquals(2, partitions.size());
+                        long totalRowsBeforeFailure = partitions.stream()
+                                .mapToLong(Partition::getRowCount)
+                                .sum();
+                        Assertions.assertTrue(totalRowsBeforeFailure > 0, "MV should have data after successful refresh");
+
+                        // Now simulate a refresh failure by injecting a failure
+                        // The fail point should be triggered after partitions are synced but before insert
+                        com.starrocks.failpoint.FailPoint.enable();
+                        com.starrocks.failpoint.FailPoint.setTriggerPolicy("MV_REFRESH_INJECT_FAILURE",
+                                com.starrocks.failpoint.TriggerPolicy.timesPolicy(1));
+
+                        try {
+                            // Add new data to base table to trigger a refresh
+                            insertSql = "insert into t2 partition(p1) values(3, 3, '2021-12-03', 'beijing');";
+                            executeInsertSql(connectContext, insertSql);
+
+                            // This refresh should fail due to the injected failure
+                            getExecPlan(taskRun);
+                            Assertions.fail("Expected refresh to fail due to injected failure");
+                        } catch (Exception e) {
+                            // Expected failure - verify that original data is preserved
+                            partitions = materializedView.getPartitions();
+                            long totalRowsAfterFailure = partitions.stream()
+                                    .mapToLong(Partition::getRowCount)
+                                    .sum();
+                            // The original data should be preserved
+                            Assertions.assertEquals(totalRowsBeforeFailure, totalRowsAfterFailure,
+                                    "MV should retain original data after refresh failure");
+                        } finally {
+                            com.starrocks.failpoint.FailPoint.removeTriggerPolicy("MV_REFRESH_INJECT_FAILURE");
+                        }
+
+                        // Now do a successful refresh and verify data is updated
+                        execPlan = getExecPlan(taskRun);
+                        Assertions.assertNotNull(execPlan);
+
+                        // Verify MV still has data after successful refresh
+                        partitions = materializedView.getPartitions();
+                        long totalRowsAfterSuccess = partitions.stream()
+                                .mapToLong(Partition::getRowCount)
+                                .sum();
+                        Assertions.assertTrue(totalRowsAfterSuccess > 0, "MV should have data after successful refresh");
+                    });
+        });
+    }
 }

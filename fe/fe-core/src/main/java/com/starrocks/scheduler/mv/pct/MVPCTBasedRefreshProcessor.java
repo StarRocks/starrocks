@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -109,6 +110,10 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
             }
         }
 
+        // Inject failure for testing - this simulates a failure after partitions are synced
+        // but before the insert is executed
+        injectFailureForTest();
+
         // execute the ExecPlan of insert stmt
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
@@ -126,11 +131,24 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
             InsertStmt insertStmt = processExecPlan.insertStmt();
             executor.executePlan(mvExecPlan, insertStmt);
         }
-        // insert execute successfully, update the meta of mv according to ExecPlan
+        // insert execute successfully, drop deferred partitions and update the meta of mv according to ExecPlan
         try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
+            // Drop deferred partitions after successful insert to ensure that if the refresh fails,
+            // the original data is preserved.
+            mvRefreshPartitioner.dropDeferredPartitions();
             updateVersionMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
         }
         return Constants.TaskRunState.SUCCESS;
+    }
+
+    /**
+     * Inject a failure for testing purposes. This method is called to simulate a refresh failure
+     * after partitions have been synced but before the insert is executed.
+     */
+    private void injectFailureForTest() throws StarRocksException {
+        if (com.starrocks.failpoint.FailPoint.shouldTrigger("MV_REFRESH_INJECT_FAILURE")) {
+            throw new StarRocksException("Injected failure for MV refresh testing");
+        }
     }
 
     /**

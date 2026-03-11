@@ -53,6 +53,11 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
+    public void dropDeferredPartitions() {
+        // do nothing for non-partitioned mv
+    }
+
+    @Override
     public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) {
         // do nothing
