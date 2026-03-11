@@ -457,7 +457,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             return false;
         }
         // ignore shadow partition
-        if (lowerBound == PartitionKey.SHADOW_DATE_LITERAL) {
+        if (PartitionKey.isShadowDateLiteral(lowerDate)) {
             return true;
         }
         return upperDate.toLocalDateTime().toEpochSecond(ZoneOffset.UTC) ==
