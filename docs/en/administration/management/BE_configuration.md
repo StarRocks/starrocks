@@ -1463,7 +1463,193 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which Tablet Stat Cache updates.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### enable_bitmap_union_disk_format_with_set
+=======
+##### lake_enable_accurate_pk_row_count
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
+- Introduced in: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- Default: 300000
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
+- Introduced in: -
+
+##### tablet_writer_open_rpc_timeout_sec
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Timeout (in seconds) for the RPC that opens a tablet writer on a remote BE. The value is converted to milliseconds and applied to both the request timeout and the brpc control timeout when issuing the open call. The runtime uses the effective timeout as the minimum of `tablet_writer_open_rpc_timeout_sec` and half of the overall load timeout (i.e., min(`tablet_writer_open_rpc_timeout_sec`, `load_timeout_sec` / 2)). Set this to balance timely failure detection (too small may cause premature open failures) and giving BEs enough time to initialize writers (too large delays error handling).
+- Introduced in: v3.2.0
+
+##### transaction_apply_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Controls the maximum number of worker threads used by the UpdateManager's "update_apply" thread pool — the pool that applies rowsets for transactions (notably for primary-key tables). A value `>0` sets a fixed maximum thread count; 0 (the default) makes the pool size equal to the number of CPU cores. The configured value is applied at startup (UpdateManager::init) and can be changed at runtime via the update-config HTTP action, which updates the pool's max threads. Tune this to increase apply concurrency (throughput) or limit CPU/memory contention; min threads and idle timeout are governed by transaction_apply_thread_pool_num_min and transaction_apply_worker_idle_time_ms respectively.
+- Introduced in: v3.2.0
+
+##### transaction_apply_worker_idle_time_ms
+
+- Default: 500
+- Type: int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Sets the idle timeout (in milliseconds) for the UpdateManager's "update_apply" thread pool used to apply transactions/updates. The value is passed to ThreadPoolBuilder::set_idle_timeout via MonoDelta::FromMilliseconds, so worker threads that remain idle longer than this timeout may be terminated (subject to the pool's configured minimum thread count and max threads). Lower values free resources faster but increase thread creation/teardown overhead under bursty load; higher values keep workers warm for short bursts at the cost of higher baseline resource usage.
+- Introduced in: v3.2.11
+
+##### trash_file_expire_time_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- Introduced in: -
+
+##### unused_rowset_monitor_interval
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time interval at which to clean the expired rowsets.
+- Introduced in: -
+
+##### update_cache_expire_sec
+
+- Default: 360
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The expiration time of Update Cache.
+- Introduced in: -
+
+##### update_compaction_check_interval_seconds
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time interval at which to check compaction for Primary Key tables.
+- Introduced in: -
+
+##### update_compaction_delvec_file_io_amp_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+- Introduced in: -
+
+##### update_compaction_num_threads_per_disk
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of Compaction threads per disk for Primary Key tables.
+- Introduced in: -
+
+##### update_compaction_per_tablet_min_interval_seconds
+
+- Default: 120
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
+- Introduced in: -
+
+##### update_compaction_ratio_threshold
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. It is recommended to shrink this value if a single tablet becomes excessively large.
+- Introduced in: v3.1.5
+
+##### update_compaction_result_bytes
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum result size of a single compaction for Primary Key tables.
+- Introduced in: -
+
+##### update_compaction_size_threshold
+
+- Default: 268435456
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
+- Introduced in: -
+
+##### upload_worker_count
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads for the upload tasks of backup jobs on a BE node. `0` indicates setting the value to the number of CPU cores on the machine where the BE resides.
+- Introduced in: -
+
+##### vertical_compaction_max_columns_per_group
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of columns per group of Vertical Compactions.
+- Introduced in: -
+
+### Shared-data
+
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of segment files that need to be rebuilt in cloud-native Primary Key index. If the number of files that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the number of segments that must be replayed. Set to `0` to disable this early-flush strategy.
+- Introduced in: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- Default: 10000000
+- Type: Long
+- Unit: Rows
+- Is mutable: Yes
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Introduced in: -
+
+##### download_buffer_size
+
+- Default: 4194304
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Size (in bytes) of the in-memory copy buffer used when downloading snapshot files. SnapshotLoader::download passes this value to fs::copy as the per-transfer chunk size when reading from the remote sequential file into the local writable file. Larger values can improve throughput on high-bandwidth links by reducing syscall/IO overhead; smaller values reduce peak memory use per active transfer. Note: this parameter controls buffer size per stream, not the number of download threads—total memory consumption = download_buffer_size * number_of_concurrent_downloads.
+- Introduced in: v3.2.13
+
+##### graceful_exit_wait_for_frontend_heartbeat
+>>>>>>> 2536a287a8 ([Enhancement] Reduce lake pk tablet stat collection overhead in shared-data mode cluster (#69548))
 
 - Default: false
 - Type: Boolean
