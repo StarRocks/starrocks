@@ -1482,11 +1482,11 @@ static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& s
     }
 }
 
-static void build_full_row_from_shredded_fields(size_t row, std::string_view metadata_raw, std::string_view value_raw,
-                                                const std::vector<ShreddedFieldNode>& shredded_fields,
-                                                std::string* out_metadata, std::string* out_value) {
+static Status build_full_row_from_shredded_fields(size_t row, std::string_view metadata_raw, std::string_view value_raw,
+                                                  const std::vector<ShreddedFieldNode>& shredded_fields,
+                                                  std::string* out_metadata, std::string* out_value) {
     if (out_metadata == nullptr || out_value == nullptr) {
-        return;
+        return Status::OK();
     }
 
     std::vector<VariantBuilder::Overlay> overlays;
@@ -1497,23 +1497,19 @@ static void build_full_row_from_shredded_fields(size_t row, std::string_view met
     if (overlays.empty()) {
         out_metadata->assign(metadata_raw.data(), metadata_raw.size());
         out_value->assign(value_raw.data(), value_raw.size());
-        return;
+        return Status::OK();
     }
 
     const bool has_base_payload = !value_raw.empty();
     std::optional<VariantRowRef> base =
             has_base_payload ? std::optional<VariantRowRef>(VariantRowRef(metadata_raw, value_raw)) : std::nullopt;
-    auto built = VariantBuilder::build_row_from_overlays(base, std::move(overlays));
-    if (!built.ok()) {
-        out_metadata->assign(metadata_raw.data(), metadata_raw.size());
-        out_value->assign(value_raw.data(), value_raw.size());
-        return;
-    }
+    ASSIGN_OR_RETURN(auto built, VariantBuilder::build_row_from_overlays(base, std::move(overlays)));
 
-    auto metadata_built = built.value().get_metadata().raw();
-    auto value_built = built.value().get_value().raw();
+    auto metadata_built = built.get_metadata().raw();
+    auto value_built = built.get_value().raw();
     out_metadata->assign(metadata_built.data(), metadata_built.size());
     out_value->assign(value_built.data(), value_built.size());
+    return Status::OK();
 }
 
 class VariantReadRangeBatchContext {
@@ -1587,7 +1583,7 @@ public:
 
     void set_row(size_t row) { _row = row; }
 
-    bool prepare() {
+    StatusOr<bool> prepare() {
         const bool has_typed_value = _batch_ctx.has_typed_value_bitmap[_row];
         // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
         if (_batch_ctx.metadata_nulls[_row] || (_batch_ctx.value_nulls[_row] && !has_typed_value)) {
@@ -1605,12 +1601,13 @@ public:
         _row_metadata = _raw_metadata;
         _row_value = _raw_value;
 
-        if (_try_use_root_typed_row()) {
+        ASSIGN_OR_RETURN(bool use_root_typed_row, _try_use_root_typed_row());
+        if (use_root_typed_row) {
             return true;
         }
 
-        if (_batch_ctx.request_all_paths() && !_try_build_full_row()) {
-            return false;
+        if (_batch_ctx.request_all_paths()) {
+            RETURN_IF_ERROR(_try_build_full_row());
         }
         return true;
     }
@@ -1636,7 +1633,7 @@ public:
     }
 
 private:
-    bool _try_use_root_typed_row() {
+    StatusOr<bool> _try_use_root_typed_row() {
         if (_batch_ctx.root_typed_value_column == nullptr) {
             return false;
         }
@@ -1649,14 +1646,12 @@ private:
         }
 
         DCHECK(_batch_ctx.root_typed_value_type != nullptr);
-        auto encoded =
-                VariantEncoder::encode_datum(root_typed_data->get(root_typed_row), *_batch_ctx.root_typed_value_type);
-        if (!encoded.ok()) {
-            return false;
-        }
+        ASSIGN_OR_RETURN(auto encoded,
+                         VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
+                                                      *_batch_ctx.root_typed_value_type));
 
-        auto metadata_raw = encoded.value().get_metadata().raw();
-        auto value_raw = encoded.value().get_value().raw();
+        auto metadata_raw = encoded.get_metadata().raw();
+        auto value_raw = encoded.get_value().raw();
         _root_typed_metadata_buf.assign(metadata_raw.data(), metadata_raw.size());
         _root_typed_value_buf.assign(value_raw.data(), value_raw.size());
         _row_metadata = std::string_view(_root_typed_metadata_buf.data(), _root_typed_metadata_buf.size());
@@ -1664,14 +1659,20 @@ private:
         return true;
     }
 
-    bool _try_build_full_row() {
+    Status _try_build_full_row() {
         _built_metadata_buf.clear();
         _built_value_buf.clear();
-        build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value, _batch_ctx.shredded_fields,
-                                            &_built_metadata_buf, &_built_value_buf);
+        RETURN_IF_ERROR(build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value,
+                                                            _batch_ctx.shredded_fields, &_built_metadata_buf,
+                                                            &_built_value_buf));
         _row_metadata = std::string_view(_built_metadata_buf.data(), _built_metadata_buf.size());
         _row_value = std::string_view(_built_value_buf.data(), _built_value_buf.size());
-        return !_row_metadata.empty() && !_row_value.empty();
+        if (_row_metadata.empty() || _row_value.empty()) {
+            return Status::InternalError(strings::Substitute(
+                    "build full variant row produced empty payload, row=$0, metadata_size=$1, value_size=$2", _row,
+                    _row_metadata.size(), _row_value.size()));
+        }
+        return Status::OK();
     }
 
     const VariantReadRangeBatchContext& _batch_ctx;
@@ -1855,7 +1856,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
     for (size_t i = 0; i < num_rows; ++i) {
         materializer.set_row(i);
-        if (!materializer.prepare()) {
+        ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
+        if (!prepared) {
             variant_column->append_shredded_null();
             reconstructed_nulls[i] = 1;
             has_reconstructed_null = true;
