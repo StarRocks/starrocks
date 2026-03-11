@@ -205,7 +205,7 @@ TEST_F(UserFunctionCacheTest, download_wasm) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.wasm", real_port);
-        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath, CloudConfiguration{});
+        (void)cache.get_libpath(fid, URL, wasm_md5sum, TFunctionBinaryType::SRJAR, &libpath, TCloudConfiguration{});
     }
 }
 
