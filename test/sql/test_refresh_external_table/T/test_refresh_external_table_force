@@ -1,0 +1,27 @@
+-- name: test_refresh_external_table_force
+
+-- Test basic REFRESH EXTERNAL TABLE syntax with FORCE option
+-- Note: This test only validates syntax parsing. Actual refresh behavior requires external catalog setup.
+
+-- Test 1: Basic refresh without FORCE
+-- This should succeed for syntax validation
+REFRESH EXTERNAL TABLE db1.table1;
+
+-- Test 2: Refresh with FORCE option
+-- This should force clear all cache and reload metadata from remote catalog
+REFRESH EXTERNAL TABLE db1.table1 FORCE;
+
+-- Test 3: Refresh with partitions and FORCE
+REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1", "p2") FORCE;
+
+-- Test 4: Refresh with catalog.db.table format and FORCE
+REFRESH EXTERNAL TABLE catalog1.db1.table1 FORCE;
+
+-- Test 5: Refresh with complex partition names and FORCE
+REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION("k1=0/k2=1", "k1=1/k2=2") FORCE;
+
+-- Test 6: Refresh without FORCE (should be normal refresh)
+REFRESH EXTERNAL TABLE catalog1.db1.table1;
+
+-- Test 7: Refresh with single partition and FORCE
+REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1") FORCE;

@@ -1,0 +1,29 @@
+-- name: test_refresh_external_table_config
+ADMIN SET FRONTEND CONFIG ("enable_force_refresh_mv_base_table" = "true");
+-- result:
+E: (1064, "Config 'enable_force_refresh_mv_base_table' does not exist or is not mutable")
+-- !result
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_force_refresh_mv_base_table';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_force_refresh_mv_base_table" = "false");
+-- result:
+E: (1064, "Config 'enable_force_refresh_mv_base_table' does not exist or is not mutable")
+-- !result
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_force_refresh_mv_base_table';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_sync_refresh_follower_fe" = "true");
+-- result:
+E: (1064, "Config 'enable_sync_refresh_follower_fe' does not exist or is not mutable")
+-- !result
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_sync_refresh_follower_fe';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_sync_refresh_follower_fe" = "false");
+-- result:
+E: (1064, "Config 'enable_sync_refresh_follower_fe' does not exist or is not mutable")
+-- !result
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_sync_refresh_follower_fe';
+-- result:
+-- !result

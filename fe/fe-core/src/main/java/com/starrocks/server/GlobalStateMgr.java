@@ -2542,8 +2542,12 @@ public class GlobalStateMgr {
         TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
         List<String> partitionNames = stmt.getPartitions();
-        refreshExternalTable(context, tableName, partitionNames);
-        refreshOthersFeTable(tableName, partitionNames, true);
+        boolean isForce = stmt.isForce();
+        refreshExternalTable(context, tableName, partitionNames, isForce);
+
+        // Sync to other FEs based on config or force flag
+        boolean syncRefresh = isForce || Config.enable_sync_refresh_follower_fe;
+        refreshOthersFeTable(tableName, partitionNames, syncRefresh);
     }
 
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
@@ -2627,6 +2631,19 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
+        refreshExternalTable(context, tableName, partitions, false);
+    }
+
+    /**
+     * Refresh external table metadata.
+     *
+     * @param context    connect context
+     * @param tableName  table name to refresh
+     * @param partitions partition names to refresh, null means refresh all partitions
+     * @param isForce    if true, will force clear all cache and reload metadata from remote catalog
+     */
+    public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions,
+                                     boolean isForce) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
         String tblName = tableName.getTbl();
@@ -2652,7 +2669,8 @@ public class GlobalStateMgr {
             catalogName = (table).getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
+        // Force refresh clears all cache and reloads metadata from remote catalog
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions, !isForce);
     }
 
     public void initDefaultWarehouse() {

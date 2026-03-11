@@ -1766,7 +1766,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ConnectContext ctx = new ConnectContext();
         new Expectations() {
             {
-                icebergCatalog.refreshTable(anyString, anyString, (ConnectContext) any, null);
+                icebergCatalog.refreshTable(anyString, anyString, (ConnectContext) any, null, anyBoolean);
                 result = new StarRocksConnectorException("refresh failed");
             }
         };

@@ -1627,7 +1627,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             partitionNames = context.string().stream()
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
-        return new RefreshTableStmt(tableRef, partitionNames, createPos(context));
+        boolean isForce = context.FORCE() != null;
+        return new RefreshTableStmt(tableRef, partitionNames, isForce, createPos(context));
     }
 
     @Override

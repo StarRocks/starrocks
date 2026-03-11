@@ -1452,6 +1452,25 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_external_table_precise_refresh = true;
 
     /**
+     * Control whether to force refresh metadata from remote catalog when refreshing materialized view.
+     * When enabled, MV refresh will clear all base table cache and reload metadata from remote catalog.
+     * This ensures MV refresh uses the latest metadata but may increase refresh latency.
+     */
+    @ConfField(mutable = true, comment = "Whether to force clear cache and reload metadata from " +
+            "remote catalog when refreshing materialized view. Ensures latest metadata but may increase latency.")
+    public static boolean enable_force_refresh_mv_base_table = false;
+
+    /**
+     * Control whether to synchronously refresh metadata on all FEs when refreshing external table.
+     * When enabled, the refresh operation will block until all FEs have refreshed their metadata.
+     * When disabled (default), refresh on other FEs is asynchronous and non-blocking.
+     */
+    @ConfField(mutable = true, comment = "Whether to synchronously refresh metadata on all FEs " +
+            "when refreshing external table. Default is asynchronous (false).")
+    public static boolean enable_sync_refresh_follower_fe = false;
+
+
+    /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */
     @ConfField(mutable = true)

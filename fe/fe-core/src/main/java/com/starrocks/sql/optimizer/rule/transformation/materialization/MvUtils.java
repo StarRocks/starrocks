@@ -35,6 +35,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
@@ -1572,6 +1573,10 @@ public class MvUtils {
         }
     }
 
+    public static <K> Collection<K> shrinkToSize(Collection<K> set) {
+        return shrinkToSize(set, Config.max_mv_task_run_meta_message_values_length);
+    }
+
     /**
      * Trim the input set if its size is larger than maxLength.
      *
@@ -1582,6 +1587,10 @@ public class MvUtils {
             return set.stream().limit(maxLength).collect(Collectors.toSet());
         }
         return set;
+    }
+
+    public static <K, V> Map<K, V> shrinkToSize(Map<K, V> map) {
+        return shrinkToSize(map, Config.max_mv_task_run_meta_message_values_length);
     }
 
     /**

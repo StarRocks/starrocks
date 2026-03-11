@@ -161,7 +161,7 @@ public class CachingHiveMetastoreTest {
         }
 
         try {
-            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+            cachingHiveMetastore.refreshTable("db1", "tbl1", false);
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -175,7 +175,7 @@ public class CachingHiveMetastoreTest {
         Assertions.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
                 DatabaseTableName.of("db1", "tbl1")));
         try {
-            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+            cachingHiveMetastore.refreshTable("db1", "tbl1", false);
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -183,7 +183,7 @@ public class CachingHiveMetastoreTest {
                 DatabaseTableName.of("db1", "tbl1")));
 
         try {
-            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+            cachingHiveMetastore.refreshTable("db1", "tbl1", false);
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -205,7 +205,7 @@ public class CachingHiveMetastoreTest {
             cachingHiveMetastore.getPartitionsByNames("db1",
                     "tbl1", partitionNames);
             // put table tbl1 in table cache
-            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+            cachingHiveMetastore.refreshTable("db1", "tbl1", false);
         } catch (Exception e) {
             Assertions.fail();
         }

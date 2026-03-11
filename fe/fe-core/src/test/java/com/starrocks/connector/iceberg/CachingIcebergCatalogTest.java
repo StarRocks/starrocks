@@ -541,9 +541,9 @@ public class CachingIcebergCatalogTest {
         
         System.out.println("===== cache test =====");
         catalog.getTable(ctx, dbName, tblName);
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp1).currentSnapshot().snapshotId());
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp2).currentSnapshot().snapshotId());
 
         try {
@@ -582,7 +582,7 @@ public class CachingIcebergCatalogTest {
                 " should found in cache if present:" + 
                 tables.getIfPresent(new IcebergTableName(dbName, tblName)));
 
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
 
         Table t4 = catalog.getTable(ctx, dbName, tblName);
         System.out.println("Table SnapshotId:" + String.valueOf(((BaseTable) t4).currentSnapshot().snapshotId()) +
@@ -669,9 +669,9 @@ public class CachingIcebergCatalogTest {
         
         System.out.println("===== cache test =====");
         catalog.getTable(ctx, dbName, tblName);
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp1).currentSnapshot().snapshotId());
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
         System.out.printf("[main] put key val: %s -> %d %n", "snap key", ((BaseTable) tmp2).currentSnapshot().snapshotId());
 
         try {
@@ -682,7 +682,7 @@ public class CachingIcebergCatalogTest {
         System.out.println("[main] first get key val begin");
         Table t1 = catalog.getTable(ctx, dbName, tblName);
         System.out.println("[main] begin put key val begin snap 3");
-        catalog.refreshTable(dbName, dbName, ctx, null);
+        catalog.refreshTable(dbName, dbName, ctx, null, false);
         tables.invalidateAll();
         System.out.println("[main] finish put key val and invalidate all snap 3");
         System.out.println("[main] first get key val res:" + ((BaseTable) t1).currentSnapshot().snapshotId());
@@ -692,9 +692,9 @@ public class CachingIcebergCatalogTest {
         } catch (InterruptedException ie) {
         }
         System.out.println("[main] begin put key val begin snap 4, 5");
-        catalog.refreshTable(dbName, dbName, ctx, null);
+        catalog.refreshTable(dbName, dbName, ctx, null, false);
         catalog.getTable(ctx, dbName, tblName);
-        catalog.refreshTable(dbName, dbName, ctx, exector);
+        catalog.refreshTable(dbName, dbName, ctx, exector, false);
         System.out.println("[main] begin put key val begin snap 4, 5");
         try {
             Thread.sleep(6100);
@@ -716,7 +716,7 @@ public class CachingIcebergCatalogTest {
                 " should found in cache if present:" + 
                 tables.getIfPresent(new IcebergTableName(dbName, tblName)));
 
-        catalog.refreshTable(dbName, tblName, ctx, null);
+        catalog.refreshTable(dbName, tblName, ctx, null, false);
 
         Table t4 = catalog.getTable(ctx, dbName, tblName);
         System.out.println("Table SnapshotId:" + String.valueOf(((BaseTable) t4).currentSnapshot().snapshotId()) +
@@ -801,6 +801,75 @@ public class CachingIcebergCatalogTest {
         } finally {
             es.shutdownNow();
             System.out.println("===== test reload async end =====");
+        }
+    }
+
+    @Test
+    public void testForceRefreshTable(@Mocked IcebergCatalog delegate,
+                                       @Mocked IcebergCatalogProperties props,
+                                       @Mocked ConnectContext ctx) throws Exception {
+        System.out.println("===== test force refresh =====");
+        Table nativeTable1 = createBaseTableWithManifests(1, 1);
+        Table nativeTable2 = createBaseTableWithManifests(2, 2);
+        Mockito.when(((BaseTable) nativeTable1).operations().current().metadataFileLocation()).thenReturn("loc1");
+        Mockito.when(((BaseTable) nativeTable2).operations().current().metadataFileLocation()).thenReturn("loc2");
+
+        AtomicLong callCount = new AtomicLong(0);
+
+        new Expectations() {
+            {
+                props.isEnableIcebergMetadataCache();
+                result = true;
+                props.getIcebergMetaCacheTtlSec();
+                result = 60L;
+                props.getIcebergTableCacheRefreshIntervalSec();
+                result = 1L;
+                props.getIcebergTableCacheMemoryUsageRatio();
+                result = 1.0;
+                props.isEnableIcebergTableCache();
+                result = true;
+                props.getIcebergDataFileCacheMemoryUsageRatio();
+                result = 0.0;
+                props.getIcebergDeleteFileCacheMemoryUsageRatio();
+                result = 0.0;
+
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table capture(ConnectContext c, String db, String tbl) throws Exception {
+                        long idx = callCount.incrementAndGet();
+                        if (idx == 1) {
+                            return nativeTable1;
+                        }
+                        return nativeTable2;
+                    }
+                };
+            }
+        };
+
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog =
+                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            IcebergTableName key = new IcebergTableName("db1", "t1");
+
+            // First get - should load from delegate
+            Table cached = catalog.getTable(ctx, "db1", "t1");
+            Assertions.assertSame(nativeTable1, cached);
+            Assertions.assertEquals(1, callCount.get());
+
+            // Normal refresh - should not reload if metadata location is same
+            catalog.refreshTable("db1", "t1", ctx, null, false);
+            Table afterNormalRefresh = catalog.getTable(ctx, "db1", "t1");
+            Assertions.assertSame(nativeTable1, afterNormalRefresh);
+
+            // Force refresh - should clear cache and reload from delegate
+            catalog.refreshTable("db1", "t1", ctx, null, true);
+            Table afterForceRefresh = catalog.getTable(ctx, "db1", "t1");
+            Assertions.assertSame(nativeTable2, afterForceRefresh);
+            Assertions.assertEquals(2, callCount.get());
+        } finally {
+            es.shutdownNow();
+            System.out.println("===== test force refresh end =====");
         }
     }
 }

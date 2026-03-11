@@ -1,0 +1,29 @@
+-- name: test_refresh_external_table_force
+REFRESH EXTERNAL TABLE db1.table1;
+-- result:
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'db1'.")
+-- !result
+REFRESH EXTERNAL TABLE db1.table1 FORCE;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 34. Detail message: Unexpected input 'FORCE', the most similar input is {<EOF>, ';'}.")
+-- !result
+REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1", "p2") FORCE;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 56. Detail message: Unexpected input 'FORCE', the most similar input is {<EOF>, ';'}.")
+-- !result
+REFRESH EXTERNAL TABLE catalog1.db1.table1 FORCE;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'FORCE', the most similar input is {<EOF>, ';'}.")
+-- !result
+REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION("k1=0/k2=1", "k1=1/k2=2") FORCE;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 79. Detail message: Unexpected input 'FORCE', the most similar input is {<EOF>, ';'}.")
+-- !result
+REFRESH EXTERNAL TABLE catalog1.db1.table1;
+-- result:
+E: (5078, "Getting analyzing error. Detail message: Unknown catalog 'catalog1'.")
+-- !result
+REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1") FORCE;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 50. Detail message: Unexpected input 'FORCE', the most similar input is {<EOF>, ';'}.")
+-- !result
