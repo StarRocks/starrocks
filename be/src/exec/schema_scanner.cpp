@@ -76,6 +76,7 @@
 #include "exprs/literal.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

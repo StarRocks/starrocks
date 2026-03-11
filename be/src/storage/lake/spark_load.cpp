@@ -15,6 +15,9 @@
 #include "storage/lake/spark_load.h"
 
 #include "base/utility/defer_op.h"
+#include "exec/file_scanner/file_scanner.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
