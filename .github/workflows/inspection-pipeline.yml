@@ -149,7 +149,6 @@ jobs:
     needs:
       - info
     name: BE UT
-    if: false
     continue-on-error: true
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
@@ -209,7 +208,6 @@ jobs:
     name: FE UT
     needs:
       - info
-    if: false
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: ${{ needs.info.outputs.BRANCH }}
