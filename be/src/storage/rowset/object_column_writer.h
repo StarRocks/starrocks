@@ -36,7 +36,9 @@ public:
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); }
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); }
+    Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); }
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); }
+    bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
     uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
 
 private:
