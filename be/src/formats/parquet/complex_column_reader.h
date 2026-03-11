@@ -302,6 +302,11 @@ enum class VariantScalarMaterializeMode : uint8_t {
 // Exposed for unit tests and reused by VariantColumnReader internal binding selection.
 VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows);
 
+// Rebuild one VARIANT subtree binding directly from a shredded node.
+// Exposed for unit tests that need to cover object/subtree binding materialization.
+StatusOr<VariantRowValue> build_variant_binding_from_node_for_test(size_t row, const ShreddedFieldNode& node,
+                                                                   std::string_view metadata_raw);
+
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
 // It uses two ScalarColumnReader instances: one for reading metadata (type information)
 // and another for reading the actual variant values.

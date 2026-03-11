@@ -1156,6 +1156,42 @@ PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_base_payload_only) {
     EXPECT_EQ(base.get_value(), row_ref.get_value());
 }
 
+PARALLEL_TEST(VariantColumnTest, test_serialize_uses_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    VariantRowRef row_ref;
+    ASSERT_TRUE(col->try_get_row_ref(0, &row_ref));
+
+    std::vector<uint8_t> row_ref_buf(row_ref.serialize_size(), 0);
+    std::vector<uint8_t> col_buf(col->serialize_size(0), 0);
+    ASSERT_EQ(row_ref.serialize_size(), col->serialize_size(0));
+    ASSERT_EQ(row_ref.serialize(row_ref_buf.data()), row_ref_buf.size());
+    ASSERT_EQ(col->serialize(0, col_buf.data()), col_buf.size());
+    EXPECT_EQ(row_ref_buf, col_buf);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_put_mysql_row_buffer_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    MysqlRowBuffer buf;
+    col->put_mysql_row_buffer(&buf, 0);
+    ASSERT_EQ(10, buf.data().size());
+    EXPECT_EQ(0x09, buf.data()[0]);
+    EXPECT_EQ(R"({"k":"v"})", buf.data().substr(1));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_debug_item_row_ref_fast_path) {
+    auto col = VariantColumn::create();
+    VariantRowValue base = create_variant_row_from_json_text(R"({"k":"v"})");
+    col->append(&base);
+
+    EXPECT_EQ(R"({"k":"v"})", col->debug_item(0));
+}
+
 PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_returns_false_when_typed_overlay_exists) {
     auto col = VariantColumn::create();
     VariantRowValue base = create_variant_row_from_json_text(R"({"x":1})");

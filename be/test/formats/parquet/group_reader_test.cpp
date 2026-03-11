@@ -1375,6 +1375,33 @@ TEST_F(GroupReaderTest, VariantColumnReaderFallbackOnly) {
     ASSERT_NE(st.value(), nullptr);
 }
 
+TEST_F(GroupReaderTest, VariantObjectBindingBuildFromNode) {
+    ShreddedFieldNode salary_node;
+    salary_node.name = "salary";
+    salary_node.full_path = "profile.salary";
+    auto salary_path = VariantPathParser::parse_shredded_path(std::string_view("profile.salary"));
+    ASSERT_TRUE(salary_path.ok()) << salary_path.status().to_string();
+    salary_node.parsed_full_path = std::move(salary_path).value();
+    salary_node.typed_kind = ShreddedTypedKind::SCALAR;
+    salary_node.typed_value_read_type = std::make_unique<TypeDescriptor>(TYPE_BIGINT_DESC);
+    salary_node.typed_value_column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    salary_node.typed_value_column->as_mutable_ptr()->append_datum(Datum(int64_t{100}));
+
+    ShreddedFieldNode profile_node;
+    profile_node.name = "profile";
+    profile_node.full_path = "profile";
+    auto profile_path = VariantPathParser::parse_shredded_path(std::string_view("profile"));
+    ASSERT_TRUE(profile_path.ok()) << profile_path.status().to_string();
+    profile_node.parsed_full_path = std::move(profile_path).value();
+    profile_node.children.emplace_back(std::move(salary_node));
+
+    auto built = build_variant_binding_from_node_for_test(0, profile_node, std::string_view{});
+    ASSERT_TRUE(built.ok()) << built.status().to_string();
+    auto json = built.value().to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    ASSERT_EQ(R"({"salary":100})", json.value());
+}
+
 TEST_F(GroupReaderTest, VariantScalarMaterializeModeKeepsAllNullBinding) {
     ShreddedFieldNode node;
     node.typed_kind = ShreddedTypedKind::SCALAR;
