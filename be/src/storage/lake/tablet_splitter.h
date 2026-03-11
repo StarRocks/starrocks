@@ -15,14 +15,59 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
+
+// Segment-level information for range split calculation.
+struct SegmentSplitInfo {
+    VariantTuple min_key;
+    VariantTuple max_key;
+    int64_t num_rows = 0;
+    int64_t data_size = 0;
+    uint32_t source_id = 0; // Optional: for per-source statistics tracking (e.g., rowset_id)
+};
+
+// Per-range estimated statistics keyed by source_id.
+using SourceStats = std::unordered_map<uint32_t, std::pair<int64_t, int64_t>>; // source_id -> (num_rows, data_size)
+
+// Result of range split boundary calculation.
+struct RangeSplitResult {
+    // N-1 boundary VariantTuples for N splits.
+    std::vector<VariantTuple> boundaries;
+    // N estimated data sizes (bytes), one per split range.
+    std::vector<int64_t> range_data_sizes;
+    // N estimated row counts, one per split range.
+    std::vector<int64_t> range_num_rows;
+    // N per-source statistics, one per split range. Only populated when track_sources is true.
+    std::vector<SourceStats> range_source_stats;
+};
+
+// Calculate range split boundaries from segment information.
+//
+// This is the core algorithm shared by tablet splitting, resharding, and range-split compaction.
+// It builds ordered ranges from segment key boundaries, distributes data proportionally across
+// overlapping ranges, and then calculates split boundaries using a greedy algorithm.
+//
+// Parameters:
+//   segments: segment-level key bounds with data statistics
+//   target_split_count: desired number of splits (>= 2)
+//   target_value_per_split: target data size (or row count) per split
+//   use_num_rows: if true, use num_rows for balancing; otherwise use data_size
+//   track_sources: if true, track per-source (e.g., per-rowset) statistics in the result
+//
+// Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
+// splitting is not possible (e.g., not enough data or segments).
+StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
+                                                            int32_t target_split_count, int64_t target_value_per_split,
+                                                            bool use_num_rows, bool track_sources = false);
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
