@@ -20,7 +20,6 @@
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
-#include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
