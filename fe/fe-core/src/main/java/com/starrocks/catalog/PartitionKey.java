@@ -74,7 +74,7 @@ public class PartitionKey implements Comparable<PartitionKey> {
     // for hudi， it's __HIVE_DEFAULT_PARTITION__ or default
     private String nullPartitionValue = "";
 
-    public static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
+    private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
     private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
 
     // constructor for partition prune
@@ -494,6 +494,10 @@ public class PartitionKey implements Comparable<PartitionKey> {
             }
         }
         return Math.max(higher, 0);
+    }
+
+    public static boolean isShadowDateLiteral(DateLiteral literal) {
+        return literal.getYear() == 0 && literal.getMonth() == 0 && literal.getDay() == 0;
     }
 
     @Override
