@@ -400,8 +400,8 @@ Expression partitioning supports the following functions:
 
 **Time functions**:
 
-- timediff
-- datediff
+- `timediff`
+- `datediff`
 - `to_days`
 - `years_add`/`sub`
 - `quarters_add`/`sub`
