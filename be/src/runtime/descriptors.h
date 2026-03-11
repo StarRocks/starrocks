@@ -19,20 +19,19 @@
 
 #include <cstdint>
 #include <optional>
-#include <ostream>
 #include <unordered_map>
 #include <vector>
 
 #include "common/global_types.h"
-#include "common/status.h"
-#include "gen_cpp/Descriptors_types.h"     // for TTupleId
-#include "gen_cpp/FrontendService_types.h" // for TTupleId
+#include "common/logging.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class ObjectPool;
+class Status;
 class TDescriptorTable;
 class TSlotDescriptor;
 class TTupleDescriptor;

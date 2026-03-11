@@ -24,6 +24,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

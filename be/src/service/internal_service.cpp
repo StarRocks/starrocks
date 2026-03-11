@@ -84,6 +84,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"

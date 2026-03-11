@@ -24,7 +24,6 @@
 #include <unordered_map>
 
 #include "http/http_handler.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

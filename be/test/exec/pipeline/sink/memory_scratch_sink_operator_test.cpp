@@ -19,6 +19,7 @@
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

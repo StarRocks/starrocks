@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"

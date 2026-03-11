@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exec/tablet_info.h"
+#include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
 #include "storage/chunk_helper.h"

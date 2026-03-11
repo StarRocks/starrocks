@@ -1681,6 +1681,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 非アクティブなマテリアライズドビューをアクティブ化するときに、データ型の長さの一貫性を厳密にチェックするかどうか。この項目が `false` に設定されている場合、基底テーブルでデータ型の長さが変更されても、マテリアライズドビューのアクティブ化は影響を受けません。
 - Introduced in: v3.3.4
 
+##### `mv_fast_schema_change_mode`
+
+- デフォルト: strict
+- タイプ: String
+- 単位: -
+- 可変: はい
+- 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
+- 導入バージョン: v3.4.0
+
 ##### `enable_auto_collect_array_ndv`
 
 - Default: false
@@ -2971,13 +2980,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks クラスター内のすべてのテーブルで高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
+- Description: StarRocks クラスター内のすべてのテーブルでFast Schema Evolutionを有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。Fast Schema Evolutionを有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
 > - StarRocks Shared-data クラスターは v3.3.0 以降でこのパラメーターをサポートしています。
-> - 特定のテーブルの高速スキーマ進化を設定する必要がある場合 (特定のテーブルの高速スキーマ進化を無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
+> - 特定のテーブルのFast Schema Evolutionを設定する必要がある場合 (特定のテーブルのFast Schema Evolutionを無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
 
 ##### `enable_online_optimize_table`
 
@@ -4149,6 +4158,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: JDBC ネットワーク操作 (ソケット読み取り) のタイムアウト (ミリ秒単位)。このタイムアウトは、外部データベースが応答しない場合に無期限のブロッキングを防ぐために、データベースメタデータ呼び出し (getSchemas()、getTables()、getColumns() など) に適用されます。
 - Introduced in: v3.5.13
+
+##### `jdbc_connection_max_lifetime_ms`
+
+- デフォルト: 300000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続プール内の接続の最大寿命。このタイムアウト前に接続はリサイクルされ、古い接続を防ぎます。外部データベースの接続タイムアウトよりも短くする必要があります。許可される最小値は30000（30秒）です。
+- 導入バージョン: -
+
+##### `jdbc_connection_keepalive_time_ms`
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: アイドル状態のJDBC接続のキープアライブ間隔。アイドル状態の接続はこの間隔でテストされ、古い接続を積極的に検出します。0に設定するとキープアライブプロービングを無効にします。有効な場合、>= 30000かつ`jdbc_connection_max_lifetime_ms`より小さい必要があります。無効な有効値はサイレントに無効化されます（0にリセット）。
+- 導入バージョン: -
+
+##### `jdbc_connection_leak_detection_threshold_ms`
+
+- デフォルト: 0
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続リーク検出のしきい値。この値よりも長く接続が保持された場合、警告がログに記録されます。無効にするには0に設定します。これは、接続を長時間保持するコードパスを特定するためのデバッグ支援です。
+- 導入バージョン: -
+
 
 ##### `jdbc_connection_pool_size`
 

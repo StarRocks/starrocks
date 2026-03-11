@@ -19,6 +19,7 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

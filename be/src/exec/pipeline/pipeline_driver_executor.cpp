@@ -25,6 +25,7 @@
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/debug/query_trace.h"
 #include "util/stack_util.h"

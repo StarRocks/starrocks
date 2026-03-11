@@ -29,7 +29,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
-        <hikaricp.version>3.4.5</hikaricp.version>
+        <hikaricp.version>7.0.2</hikaricp.version>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>

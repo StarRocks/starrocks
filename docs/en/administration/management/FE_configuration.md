@@ -1681,6 +1681,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
+##### `mv_fast_schema_change_mode`
+
+- Default: strict
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the behavior of Materialized View (MV) Fast Schema Evolution (FSE). Valid values are: `strict` (default) - only allow FSE when `isSupportFastSchemaEvolutionInDanger` is true and clear affected partition entries from the version map; `force` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false and clear affected partition entries to trigger recomputation on refresh; `force_no_clear` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false but do not clear partition entries.
+- Introduced in: v3.4.0
+
 ##### `enable_auto_collect_array_ndv`
 
 - Default: false
@@ -2971,13 +2980,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- Description: Whether to enable Fast Schema Evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### `enable_online_optimize_table`
 
@@ -4137,6 +4146,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The timeout in milliseconds for JDBC network operations (socket read). This timeout applies to database metadata calls (e.g., getSchemas(), getTables(), getColumns()) to prevent indefinite blocking when the external database is unresponsive.
 - Introduced in: v3.5.13
+
+##### `jdbc_connection_max_lifetime_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum lifetime of a connection in the JDBC connection pool. Connections are recycled before this timeout to prevent stale connections. Should be shorter than the external database's connection timeout. Minimum allowed value is 30000 (30 seconds).
+- Introduced in: -
+
+##### `jdbc_connection_keepalive_time_ms`
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Keepalive interval for idle JDBC connections. Idle connections are tested at this interval to detect stale connections proactively. Set to 0 to disable keepalive probing. When enabled, must be >= 30000 and less than `jdbc_connection_max_lifetime_ms`. Invalid enabled values are silently disabled (reset to 0).
+- Introduced in: -
+
+##### `jdbc_connection_leak_detection_threshold_ms`
+
+- Default: 0
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Threshold for JDBC connection leak detection. If a connection is held longer than this, a warning is logged. Set to 0 to disable. This is a debugging aid for identifying code paths that hold connections too long.
+- Introduced in: -
 
 ##### `jdbc_connection_pool_size`
 
