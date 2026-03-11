@@ -49,7 +49,7 @@
 namespace starrocks {
 
 FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                                           std::unique_ptr<ScalarColumnWriter> json_writer)
+                                           std::unique_ptr<ObjectColumnWriter> json_writer)
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _json_meta(opts.meta),
           _wfile(wfile),
@@ -357,7 +357,7 @@ Status FlatJsonColumnWriter::finish_current_page() {
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
-                                                                  std::unique_ptr<ScalarColumnWriter> json_writer) {
+                                                                  std::unique_ptr<ObjectColumnWriter> json_writer) {
     VLOG(2) << "Create Json Column Writer " << opts.to_string();
     // compaction
     if (opts.is_compaction) {

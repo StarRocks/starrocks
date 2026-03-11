@@ -274,10 +274,9 @@ void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_
 }
 
 template <typename T>
-void ObjectColumn<T>::_build_slices() const {
-    // TODO(kks): improve this
-    _buffer.clear();
-    _slices.clear();
+void ObjectColumn<T>::build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const {
+    buffer.clear();
+    slices.clear();
 
     // FIXME(kks): bitmap itself compress is more effective than LZ4 compress?
     // Do we really need compress bitmap here?
@@ -291,12 +290,12 @@ void ObjectColumn<T>::_build_slices() const {
     }
 
     size_t size = byte_size();
-    _buffer.resize(size);
-    _slices.reserve(_pool.size());
+    buffer.resize(size);
+    slices.reserve(_pool.size());
     size_t old_size = 0;
     for (size_t i = 0; i < _pool.size(); ++i) {
-        size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
-        _slices.emplace_back(_buffer.data() + old_size, slice_size);
+        size_t slice_size = _pool[i].serialize(buffer.data() + old_size);
+        slices.emplace_back(buffer.data() + old_size, slice_size);
         old_size += slice_size;
     }
 }

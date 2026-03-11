@@ -213,6 +213,7 @@ public:
     Status init() override;
 
     Status append(const Column& column) override;
+    Status append(const Column&, const Buffer<Slice>& data);
 
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const Column& column);
@@ -274,7 +275,7 @@ private:
         _data_size += 20;
     }
 
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
