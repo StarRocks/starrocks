@@ -388,6 +388,9 @@ CONF_mInt64(max_compaction_candidate_num, "40960");
 CONF_mBool(enable_lazy_delta_column_compaction, "true");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
+// Number of cached update compaction candidates per thread per DataDir (disk).
+// Actual topn per DataDir (disk) = this value * update_compaction_num_threads_per_disk.
+CONF_mInt32(update_compaction_candidates_per_thread, "32");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // using this config to adjust chunk size used in compaction for row store

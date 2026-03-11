@@ -842,42 +842,84 @@ std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_com
     return pick_tablets;
 }
 
-TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
-    int64_t highest_score = 0;
-    TabletSharedPtr best_tablet;
+void TabletManager::build_update_compaction_candidates(int32_t topn_per_dir) {
+    if (topn_per_dir <= 0) {
+        std::lock_guard lg(_update_compaction_candidates_mutex);
+        _update_compaction_candidates.clear();
+        return;
+    }
+
+    // Temporary map: path_hash -> min-heap of {score, tablet_id}
+    std::unordered_map<size_t, std::vector<std::pair<int64_t, int64_t>>> tmp;
+
     for (const auto& tablets_shard : _tablets_shards) {
-        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard, PRIMARY_KEYS);
-        for (const auto& tablet_ptr : all_tablets_by_shard) {
-            // A not-ready tablet maybe a newly created tablet under schema-change, skip it
-            if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
-                continue;
-            }
+        auto tablets = _get_all_tablets_from_shard(tablets_shard, PRIMARY_KEYS);
+        for (const auto& tablet : tablets) {
+            if (tablet->tablet_state() == TABLET_NOTREADY) continue;
+            if (!tablet->is_used() || !tablet->init_succeeded()) continue;
+            int64_t score = tablet->updates()->get_compaction_score();
+            if (score <= 0) continue;
 
-            if (tablet_ptr->data_dir()->path_hash() != data_dir->path_hash() || !tablet_ptr->is_used() ||
-                !tablet_ptr->init_succeeded()) {
-                continue;
-            }
-
-            int64_t table_score = tablet_ptr->updates()->get_compaction_score();
-            // tablet_score maybe negative, which means it's not worthy to do compaction
-            if (table_score <= 0) {
-                continue;
-            }
-
-            if (table_score > highest_score) {
-                highest_score = table_score;
-                best_tablet = tablet_ptr;
+            size_t ph = tablet->data_dir()->path_hash();
+            auto& heap = tmp[ph];
+            if (static_cast<int32_t>(heap.size()) < topn_per_dir) {
+                heap.emplace_back(score, tablet->tablet_id());
+                std::push_heap(heap.begin(), heap.end(), std::greater<std::pair<int64_t, int64_t>>());
+            } else if (score > heap.front().first) {
+                std::pop_heap(heap.begin(), heap.end(), std::greater<std::pair<int64_t, int64_t>>());
+                heap.back() = {score, tablet->tablet_id()};
+                std::push_heap(heap.begin(), heap.end(), std::greater<std::pair<int64_t, int64_t>>());
             }
         }
     }
 
-    if (best_tablet != nullptr) {
+    // Sort each list by score ascend for easy consumption from back and track max score
+    int64_t max_score = 0;
+    for (auto& [ph, vec] : tmp) {
+        std::sort(vec.begin(), vec.end(), std::less<std::pair<int64_t, int64_t>>());
+        if (!vec.empty() && vec.back().first > max_score) {
+            max_score = vec.back().first;
+        }
+    }
+    StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(max_score);
+
+    std::lock_guard lg(_update_compaction_candidates_mutex);
+    _update_compaction_candidates = std::move(tmp);
+}
+
+TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
+    size_t ph = data_dir->path_hash();
+
+    // Pop one candidate at a time so other threads can access remaining candidates
+    while (true) {
+        std::pair<int64_t, int64_t> candidate;
+        {
+            std::lock_guard lg(_update_compaction_candidates_mutex);
+            auto it = _update_compaction_candidates.find(ph);
+            if (it == _update_compaction_candidates.end() || it->second.empty()) {
+                return nullptr;
+            }
+            candidate = it->second.back();
+            it->second.pop_back();
+            if (it->second.empty()) {
+                _update_compaction_candidates.erase(it);
+            }
+        }
+
+        auto [cached_score, tablet_id] = candidate;
+        auto tablet_ptr = get_tablet(tablet_id);
+        if (tablet_ptr == nullptr) continue;
+        if (tablet_ptr->tablet_state() == TABLET_NOTREADY) continue;
+        if (!tablet_ptr->is_used() || !tablet_ptr->init_succeeded()) continue;
+
+        int64_t score = tablet_ptr->updates()->get_compaction_score();
+        if (score <= 0) continue;
+
         VLOG(2) << "Found the best tablet to compact. "
                 << "compaction_type=update"
-                << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
-        StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
+                << " tablet_id=" << tablet_ptr->tablet_id() << " compaction_score=" << score;
+        return tablet_ptr;
     }
-    return best_tablet;
 }
 
 Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,

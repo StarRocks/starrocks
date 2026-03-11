@@ -198,6 +198,10 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");
     }
 
+    // Start a single thread to scan and cache update compaction candidates for all DataDirs
+    _update_compaction_scan_thread = std::thread([this] { _update_compaction_scan_thread_callback(nullptr); });
+    Thread::set_thread_name(_update_compaction_scan_thread, "upd_cmp_scan");
+
     int32_t update_compaction_num_threads_per_disk =
             config::update_compaction_num_threads_per_disk >= 0 ? config::update_compaction_num_threads_per_disk : 1;
     int32_t update_compaction_num_threads = update_compaction_num_threads_per_disk * data_dir_num;
@@ -370,6 +374,32 @@ void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* 
     return nullptr;
 }
 #endif
+
+int32_t StorageEngine::compute_update_compaction_topn() {
+    constexpr int MAX_TOPN = 8192;
+    int32_t per_thread = config::update_compaction_candidates_per_thread;
+    if (per_thread <= 0) per_thread = 3;
+    int32_t threads_per_disk = config::update_compaction_num_threads_per_disk;
+    if (threads_per_disk <= 0) threads_per_disk = 1;
+    return static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(per_thread) * threads_per_disk, MAX_TOPN));
+}
+
+void* StorageEngine::_update_compaction_scan_thread_callback(void* arg) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        int32_t interval = config::update_compaction_check_interval_seconds;
+        if (interval <= 0) {
+            interval = 1;
+        }
+
+        if (config::update_compaction_num_threads_per_disk > 0) {
+            int32_t topn = compute_update_compaction_topn();
+            _tablet_manager->build_update_compaction_candidates(topn);
+        }
+
+        SLEEP_IN_BG_WORKER(interval);
+    }
+    return nullptr;
+}
 
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER

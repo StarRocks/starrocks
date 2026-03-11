@@ -306,16 +306,13 @@ static void commit_rowsets(const TabletSharedPtr& tablet, std::vector<RowsetShar
 
 static void compact(const TabletSharedPtr& tablet, int64_t& version, int64_t expected_num_rowsets,
                     MemTracker* compaction_mem_tracker) {
-    const auto& best_tablet =
-            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(tablet->data_dir());
-    ASSERT_EQ(best_tablet->tablet_id(), tablet->tablet_id());
-    ASSERT_TRUE(best_tablet->updates()->get_compaction_score() > 0);
-    ASSERT_TRUE(best_tablet->updates()->compaction(compaction_mem_tracker).ok());
+    ASSERT_TRUE(tablet->updates()->get_compaction_score() > 0);
+    ASSERT_TRUE(tablet->updates()->compaction(compaction_mem_tracker).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    ASSERT_EQ(best_tablet->updates()->num_rowsets(), expected_num_rowsets);
-    ASSERT_EQ(best_tablet->updates()->version_history_count(), version + 1);
+    ASSERT_EQ(tablet->updates()->num_rowsets(), expected_num_rowsets);
+    ASSERT_EQ(tablet->updates()->version_history_count(), version + 1);
     // the time interval is not enough after last compaction
-    ASSERT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    ASSERT_EQ(tablet->updates()->get_compaction_score(), -1);
 }
 
 static Status full_clone(const TabletSharedPtr& sourcetablet, int64_t clone_version,

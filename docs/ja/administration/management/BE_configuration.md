@@ -2363,6 +2363,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Update Cache の有効期限。
 - 導入バージョン: -
 
+##### update_compaction_candidates_per_thread
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 各 DataDir のスレッドごとにキャッシュする主キーテーブルの更新コンパクション候補タブレット数。各 DataDir で実際にキャッシュされる上位 N 個の候補数 = この値 × `update_compaction_num_threads_per_disk`。バックグラウンドスキャンスレッドがすべてのタブレットを一括スキャンし、各 DataDir ごとにコンパクションスコアが最も高い上位 N 個のタブレットをキャッシュします。各 DataDir のコンパクションスレッドはキャッシュリストから取得するため、冗長なフルスキャンを回避できます。
+- 導入バージョン: v4.1.0, v4.0.9
+
 ##### update_compaction_check_interval_seconds
 
 - デフォルト: 10

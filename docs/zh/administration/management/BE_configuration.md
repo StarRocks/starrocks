@@ -2845,6 +2845,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Update Cache 的过期时间。
 - 引入版本：-
 
+##### update_compaction_candidates_per_thread
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 DataDir 中每个线程缓存的主键表更新 Compaction 候选 Tablet 数量。每个 DataDir 实际缓存的 top-N 候选数 = 该值 × `update_compaction_num_threads_per_disk`。后台扫描线程会统一扫描所有 Tablet，为每个 DataDir 选取得分最高的 top-N 个 Tablet 缓存。各 DataDir 的 Compaction 线程从缓存列表中取用，避免重复全量扫描。
+- 引入版本：v4.1.0, v4.0.9
+
 ##### update_compaction_check_interval_seconds
 
 - 默认值：10

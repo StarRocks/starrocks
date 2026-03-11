@@ -121,6 +121,9 @@ public:
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
+    // Single scan: populates cached top-N update compaction candidates for all DataDirs
+    void build_update_compaction_candidates(int32_t topn_per_dir);
+
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
 
@@ -309,6 +312,10 @@ private:
     // context for compaction checker
     size_t _cur_shard = 0;
     std::unordered_set<int64_t> _shard_visited_tablet_ids;
+
+    // Cached top-N update compaction candidates per DataDir (path_hash -> sorted vector of {score, tablet_id})
+    mutable std::mutex _update_compaction_candidates_mutex;
+    std::unordered_map<size_t, std::vector<std::pair<int64_t, int64_t>>> _update_compaction_candidates;
 };
 
 inline bool TabletManager::LockTable::is_locked(int64_t tablet_id) {
