@@ -1,59 +1,72 @@
 ---
 displayed_sidebar: docs
-keywords: ['analytic']
+keywords: ['窗口函数', '窗口']
 sidebar_position: 0.9
 ---
 
 # 窗口函数
 
-本文介绍如何使用 StarRocks 窗口函数。
+## 背景
 
-窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多行数据进行计算得到一个数据值。不同的是，窗口函数使用 OVER() 子句对**当前窗口**内的数据进行排序和分组，同时**对结果集的每一行**计算出一个单独的值，而不是对每个 GROUP BY 分组计算一个值。这种灵活的方式允许您在 SELECT 子句中增加额外的列，对结果集进行重新组织和过滤。
+窗口函数是一种特殊的内置函数。与聚合函数类似，它也对多个输入行进行计算以获得单个数据值。不同之处在于，窗口函数在特定窗口内处理输入数据，而不是使用“group by”方法。每个窗口中的数据可以使用 over() 子句进行排序和分组。窗口函数**为每一行计算一个单独的值**，而不是为每个组计算一个值。这种灵活性允许用户在 select 子句中添加额外的列并进一步过滤结果集。窗口函数只能出现在 select 列表和子句的最外层位置。它在查询的末尾生效，即在执行 `join`、`where` 和 `group by` 操作之后。窗口函数常用于分析趋势、计算异常值以及对大规模数据执行分桶分析。
 
-窗口函数在金融和科学计算领域较为常用，常被用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
-
-## 窗口函数语法及参数
+## 用法
 
 ### 语法
 
 ```SQL
-FUNCTION(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+function(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
 
-> 注意：窗口函数只能出现在 SELECT 列表和最外层的 ORDER BY 子句中。在查询过程中，窗口函数会在最后生效，也就是在执行完 Join，Where 和 GROUP BY 等操作之后生效。
+### PARTITION BY 子句
 
-### 参数说明
+Partition By 子句类似于 Group By。它根据一个或多个指定的列对输入行进行分组。具有相同值的行被分到一起。
 
-- **partition_by_clause**：Partition By 子句。该子句将输入行按照指定的一列或多列分组，相同值的行会被分到一组。
-- **order_by_clause**：Order By 子句。与外层的 Order By 类似，Order By 子句定义了输入行的排列顺序，如果指定了 Partition By，则 Order By 定义了每个 Partition 分组内的顺序。与外层 Order By 的唯一不同在于，OVER() 子句中的 `Order By n`（`n` 是正整数）相当于不做任何操作，而外层的 `Order By n` 表示按照第 `n` 列排序。
+### ORDER BY 子句
 
-  以下示例展示了在 SELECT 列表中增加一个 `id` 列，它的值是 `1`，`2`，`3` 等，顺序按照 `events` 表中的 `date_and_time` 列排序。
+`Order By` 子句与外部 `Order By` 基本相同。它定义了输入行的顺序。如果指定了 `Partition By`，则 `Order By` 定义了每个 Partition 分组内的顺序。唯一的区别是，`OVER` 子句中的 `Order By n` (n 是一个正整数) 等同于无操作，而外部 `Order By` 中的 `n` 表示按第 n 列排序。
 
-  ```SQL
-  SELECT row_number() 
-  OVER (ORDER BY date_and_time) 
-    AS id,
-       c1, c2, c3, c4
-  FROM events;
-  ```
+示例：
 
-- **window_clause**：Window 子句，可以用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window 子句支持的函数有：`AVG()`、`COUNT()`、`FIRST_VALUE()`、`LAST_VALUE()` 和 `SUM()`。对于 `MAX()` 和 `MIN()`，Window 子句可以通过 UNBOUNDED、PRECEDING 关键词指定开始范围。
+此示例展示了在 select 列表中添加一个 id 列，其值为 1、2、3 等，并按 events 表中的 `date_and_time` 列排序。
 
-    Window 子句语法：
+```SQL
+SELECT row_number() OVER (ORDER BY date_and_time) AS id,
+    c1, c2, c3, c4
+FROM events;
+```
 
-    ```SQL
-    ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
-    RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
-    ```
+### 窗口子句
 
-    > 注意：Window 子句必须在 Order By 子句之内。
-    > **ARRAY_AGG() 窗口帧限制**：当使用 ARRAY_AGG() 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
+窗口子句用于指定操作的行范围（基于当前行的前导行和后续行）。它支持以下语法：AVG()、COUNT()、FIRST_VALUE()、LAST_VALUE() 和 SUM()。对于 MAX() 和 MIN()，窗口子句可以指定从开始到 `UNBOUNDED PRECEDING`。
 
-## 窗口函数建表示例
+**语法：**
 
-本节创建的 `scores` 表将用于下面多个函数的示例。
+```SQL
+ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
+RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
+```
+
+:::note
+**ARRAY_AGG() 窗口帧限制：**
+
+当使用 ARRAY_AGG() 作为窗口函数时，只支持 RANGE 帧。不支持 ROWS 帧。例如：
+
+```SQL
+-- 支持：RANGE 帧
+array_agg(col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+
+-- 不支持：ROWS 帧（将导致错误）
+array_agg(col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+```
+
+:::
+
+## 窗口函数示例表
+
+本节创建一个示例表 `scores`。您可以使用此表测试下面的许多窗口函数。
 
 ```SQL
 CREATE TABLE `scores` (
@@ -83,225 +96,35 @@ INSERT INTO `scores` VALUES
   (6, "amber", "math", 92),
   (6, "amber", NULL, 90),
   (6, "amber", "physics", 100);
-  ```
-
-## ARRAY_AGG()
-
-`ARRAY_AGG()` 函数用于将窗口内的值（包括 NULL 值）聚合到一个数组中。可以与 `DISTINCT` 关键字结合使用来去除重复值，也可以使用 `ORDER BY` 子句来指定数组中元素的顺序。
-
-该函数从 3.4 版本开始支持。
-
-:::warning ARRAY_AGG() 窗口帧限制
-当使用 `ARRAY_AGG()` 作为窗口函数时，仅支持 **RANGE** 窗口帧。**不支持 ROWS 窗口帧**。如果指定 ROWS 帧，将返回错误。
-:::
-
-**语法**：
-
-```SQL
-ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_clause] [order_by_clause] [window_clause])
 ```
 
-**参数说明**：
+## 函数示例
 
-- `expr`：需要聚合的表达式。
-- `DISTINCT`：可选。如果指定，将从结果数组中去除重复值。
-- `ORDER BY`：可选。指定结果数组中元素的顺序。
+本节描述 StarRocks 中支持的窗口函数。
 
-**返回值**：
+### AVG()
 
-返回一个 ARRAY，其中包含窗口内的所有值。
+计算给定窗口中字段的平均值。此函数忽略 NULL 值。
 
-**使用说明**：
-
-- NULL 值会包含在结果数组中。
-- 如果没有指定窗口帧，默认使用 `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`。
-- ORDER BY 子句中具有相同值的行将获得相同的数组结果（因为使用 RANGE 帧）。
-- 仅支持 RANGE 帧；不支持 ROWS 帧。
-
-**示例**：
-
-以下示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
-
-示例一：基本 ARRAY_AGG() 窗口函数 - 累积收集每个分区中当前行及之前行的分数。
-
-```SQL
-SELECT *,
-    array_agg(score) 
-        OVER (
-            PARTITION BY subject 
-            ORDER BY score
-        ) AS score_list
-FROM scores
-WHERE subject IN ('math');
-```
-
-返回：
-
-```plaintext
-+------+-------+---------+-------+-------------------+
-| id   | name  | subject | score | score_list        |
-+------+-------+---------+-------+-------------------+
-|    1 | lily  | math    |  NULL | [null]            |
-|    5 | mike  | math    |    70 | [null,70]         |
-|    2 | tom   | math    |    80 | [null,70,80,80]   |
-|    4 | amy   | math    |    80 | [null,70,80,80]   |
-|    6 | amber | math    |    92 | [null,70,80,80,92]|
-|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
-+------+-------+---------+-------+-------------------+
-```
-
-注意：tom 和 amy 的分数都是 80，由于使用 RANGE 帧，他们获得相同的数组结果。
-
-示例二：使用 DISTINCT 去除重复值。
-
-```SQL
-SELECT *,
-    array_agg(DISTINCT score) 
-        OVER (
-            PARTITION BY subject 
-            ORDER BY score
-        ) AS unique_scores
-FROM scores
-WHERE subject IN ('math');
-```
-
-返回：
-
-```plaintext
-+------+-------+---------+-------+------------------+
-| id   | name  | subject | score | unique_scores    |
-+------+-------+---------+-------+------------------+
-|    1 | lily  | math    |  NULL | [null]           |
-|    5 | mike  | math    |    70 | [null,70]        |
-|    2 | tom   | math    |    80 | [null,70,80]     |
-|    4 | amy   | math    |    80 | [null,70,80]     |
-|    6 | amber | math    |    92 | [null,70,80,92]  |
-|    3 | jack  | math    |    95 | [null,70,80,92,95]|
-+------+-------+---------+-------+------------------+
-```
-
-示例三：使用 ORDER BY 在 ARRAY_AGG 内部排序数组元素。
-
-```SQL
-SELECT *,
-    array_agg(score ORDER BY score DESC) 
-        OVER (
-            PARTITION BY subject
-        ) AS scores_desc
-FROM scores
-WHERE subject IN ('math');
-```
-
-返回：
-
-```plaintext
-+------+-------+---------+-------+------------------------+
-| id   | name  | subject | score | scores_desc            |
-+------+-------+---------+-------+------------------------+
-|    1 | lily  | math    |  NULL | [95,92,80,80,70,null]  |
-|    5 | mike  | math    |    70 | [95,92,80,80,70,null]  |
-|    2 | tom   | math    |    80 | [95,92,80,80,70,null]  |
-|    4 | amy   | math    |    80 | [95,92,80,80,70,null]  |
-|    6 | amber | math    |    92 | [95,92,80,80,70,null]  |
-|    3 | jack  | math    |    95 | [95,92,80,80,70,null]  |
-+------+-------+---------+-------+------------------------+
-```
-
-示例四：使用显式 RANGE 帧聚合整个分区。
-
-```SQL
-SELECT *,
-    array_agg(score) 
-        OVER (
-            PARTITION BY subject 
-            ORDER BY score
-            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-        ) AS all_scores
-FROM scores
-WHERE subject IN ('math');
-```
-
-返回：
-
-```plaintext
-+------+-------+---------+-------+--------------------------+
-| id   | name  | subject | score | all_scores               |
-+------+-------+---------+-------+--------------------------+
-|    1 | lily  | math    |  NULL | [null,70,80,80,92,95]    |
-|    5 | mike  | math    |    70 | [null,70,80,80,92,95]    |
-|    2 | tom   | math    |    80 | [null,70,80,80,92,95]    |
-|    4 | amy   | math    |    80 | [null,70,80,80,92,95]    |
-|    6 | amber | math    |    92 | [null,70,80,80,92,95]    |
-|    3 | jack  | math    |    95 | [null,70,80,80,92,95]    |
-+------+-------+---------+-------+--------------------------+
-```
-
-示例五：实际用例 - 收集股票价格历史。
-
-```SQL
-SELECT 
-    stock_symbol,
-    closing_date,
-    closing_price,
-    array_agg(closing_price) 
-        OVER (
-            PARTITION BY stock_symbol 
-            ORDER BY closing_date
-            RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS price_history
-FROM stock_ticker;
-```
-
-返回：
-
-```plaintext
-+--------------+---------------------+---------------+--------------------------------------+
-| stock_symbol | closing_date        | closing_price | price_history                        |
-+--------------+---------------------+---------------+--------------------------------------+
-| JDR          | 2014-10-02 00:00:00 |         12.86 | [12.86]                              |
-| JDR          | 2014-10-03 00:00:00 |         12.89 | [12.86,12.89]                        |
-| JDR          | 2014-10-04 00:00:00 |         12.94 | [12.86,12.89,12.94]                  |
-| JDR          | 2014-10-05 00:00:00 |         12.55 | [12.86,12.89,12.94,12.55]            |
-| JDR          | 2014-10-06 00:00:00 |         14.03 | [12.86,12.89,12.94,12.55,14.03]      |
-| JDR          | 2014-10-07 00:00:00 |         14.75 | [12.86,12.89,12.94,12.55,14.03,14.75]|
-| JDR          | 2014-10-08 00:00:00 |         13.98 | [12.86,12.89,12.94,12.55,14.03,14.75,13.98]|
-+--------------+---------------------+---------------+--------------------------------------+
-```
-
-示例六：无效用法 - 尝试使用 ROWS 帧（将返回错误）。
-
-```SQL
--- 此查询将失败，因为 ARRAY_AGG 不支持 ROWS 帧
-SELECT *,
-    array_agg(score) 
-        OVER (
-            PARTITION BY subject 
-            ORDER BY score
-            ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  -- 错误！不支持！
-        ) AS nearby_scores
-FROM scores;
--- 错误: ARRAY_AGG 窗口函数不支持 ROWS 帧
-```
-
-## AVG()
-
-`AVG()` 函数用于计算特定窗口内选中字段的平均值。该函数忽略 NULL 值。
-
-**语法**：
+**语法：**
 
 ```SQL
 AVG([DISTINCT] expr) [OVER (*analytic_clause*)]
 ```
 
-从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`AVG()` 仅计算窗口内不重复值的平均值。
+`DISTINCT` 从 StarRocks v4.0 开始支持。指定后，AVG() 只计算窗口中不同值的平均值。
 
 :::note
-**窗口帧限制：** 当使用 `AVG(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
+**窗口帧限制：**
+
+当使用 AVG(DISTINCT) 作为窗口函数时，只支持 RANGE 帧。不支持 ROWS 帧。
 :::
 
-**示例**：
+**示例**
 
-以下示例模拟如下的股票数据，股票代码是 `JDR`，`closing price` 代表其每天的收盘价。
+**示例 1：基本用法**
+
+以下示例使用股票数据作为例子。
 
 ```SQL
 CREATE TABLE stock_ticker (
@@ -324,7 +147,7 @@ INSERT INTO stock_ticker VALUES
 ;
 ```
 
-计算该股票每日与其前后一日的收盘价均值。
+计算当前行以及其前后各行的平均收盘价。
 
 ```SQL
 select stock_symbol, closing_date, closing_price,
@@ -336,9 +159,9 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker;
 ```
 
-返回：
+输出：
 
-```Plain Text
+```plaintext
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
@@ -352,11 +175,13 @@ from stock_ticker;
 +--------------+---------------------+---------------+----------------+
 ```
 
-比如，第一行的 `moving_average` 取值 `12.87500000`，是 "2014-10-02" 的值 `12.86`，加前一天 "2014-10-02" 的值 null，再加后一天 "2014-10-03" 的值 `12.89` 之后的平均值。
+例如，第一行中的 `12.87500000` 是“2014-10-02” (`12.86`)、其前一天“2014-10-01”（null）和其后一天“2014-10-03” (`12.89`) 的收盘价的平均值。
 
-示例二：使用 AVG(DISTINCT) 处理整体窗口
+**示例 2：在整个窗口上使用 AVG(DISTINCT)**
 
-计算所有行中不重复分数的平均值：
+此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
+
+计算所有行中不同分数的平均值：
 
 ```SQL
 SELECT id, subject, score,
@@ -364,7 +189,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+-------------+
@@ -379,11 +204,13 @@ FROM test_scores;
 +----+---------+-------+-------------+
 ```
 
-不重复平均值为 85.00 ((80 + 85 + 90) / 3)。
+不同分数的平均值为 85.00 (`(80 + 85 + 90) / 3`)。
 
-示例三：使用 AVG(DISTINCT) 处理带 RANGE 帧的窗口
+**示例 3：在带有 RANGE 帧的帧窗口上使用 AVG(DISTINCT)**
 
-使用 RANGE 帧在每个科目分区内计算不重复分数的平均值：
+此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
+
+使用 RANGE 帧计算每个主题分区中不同分数的平均值：
 
 ```SQL
 SELECT id, subject, score,
@@ -395,7 +222,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+-------------+
@@ -410,22 +237,240 @@ FROM test_scores;
 +----+---------+-------+-------------+
 ```
 
-对于每一行，函数计算从分区开始到当前行的分数值（包括当前行）的不重复分数的平均值。
+对于每一行，该函数计算从分区开始到当前行分数（包括当前行分数）的不同分数的平均值。
 
-## COUNT()
+### ARRAY_AGG()
 
-`COUNT()` 函数用于返回特定窗口内满足要求的行的数目。
+将窗口中的值（包括 NULL 值）聚合到数组中。您可以使用可选的 `ORDER BY` 子句对数组中的元素进行排序。
 
-**语法**：
+此函数从 v3.4 开始支持。
+
+:::tip
+**窗口帧限制：**
+
+ARRAY_AGG() 作为窗口函数仅支持 RANGE 窗口帧。不支持 ROWS 窗口帧。如果未指定窗口帧，则使用默认的 `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`。
+:::
+
+**语法：**
+
+```SQL
+ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_clause] [order_by_clause] [window_clause])
+```
+
+**参数：**
+
+- `expr`：要聚合的表达式。它可以是任何受支持数据类型的列。
+- `DISTINCT`：可选。从结果数组中消除重复值。
+- `ORDER BY`：可选。指定数组中元素的顺序。
+
+**返回值：**
+
+返回一个包含窗口中所有值的 ARRAY。
+
+**使用说明：**
+
+- **不支持 ROWS 帧。** 只有 RANGE 帧可以与 ARRAY_AGG() 作为窗口函数一起使用。使用 ROWS 帧将导致错误。
+- NULL 值包含在结果数组中。
+- 当指定 `DISTINCT` 时，重复值将从数组中移除。
+- 当在 ARRAY_AGG() 中指定 `ORDER BY` 时，结果数组中的元素将相应地排序。
+
+**示例**
+
+这些示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
+
+**示例 1：基本用法**
+
+收集每个主题分区中的所有分数：
+
+```SQL
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS score_array
+FROM scores
+WHERE subject = 'math';
+```
+
+输出：
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | score_array          |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [null]               |
+|    5 | mike  | math    |    70 | [null,70]            |
+|    2 | tom   | math    |    80 | [null,70,80,80]      |
+|    4 | amy   | math    |    80 | [null,70,80,80]      |
+|    6 | amber | math    |    92 | [null,70,80,80,92]   |
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+----------------------+
+```
+
+注意：由于 RANGE 帧语义，具有相同 `score` 值（tom 和 amy 都有 80）的行会收到相同的数组。
+
+**示例 2: 窗口函数 ARRAY_AGG(DISTINCT)**
+
+在每个科目分区中收集不同的分数：
+
+```SQL
+SELECT *,
+    array_agg(DISTINCT score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS distinct_scores
+FROM scores
+WHERE subject = 'math';
+```
+
+输出：
+
+```plaintext
++------+-------+---------+-------+-------------------+
+| id   | name  | subject | score | distinct_scores   |
++------+-------+---------+-------+-------------------+
+|    1 | lily  | math    |  NULL | [null]            |
+|    5 | mike  | math    |    70 | [null,70]         |
+|    2 | tom   | math    |    80 | [null,70,80]      |
+|    4 | amy   | math    |    80 | [null,70,80]      |
+|    6 | amber | math    |    92 | [null,70,80,92]   |
+|    3 | jack  | math    |    95 | [null,70,80,92,95]|
++------+-------+---------+-------+-------------------+
+```
+
+**示例 3: 带 ORDER BY 的 ARRAY_AGG()**
+
+在数组中收集按降序排序的分数：
+
+```SQL
+SELECT *,
+    array_agg(score ORDER BY score DESC)
+        OVER (
+            PARTITION BY subject
+        ) AS scores_desc
+FROM scores
+WHERE subject = 'math';
+```
+
+输出：
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | scores_desc          |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [95,92,80,80,70,null]|
+|    5 | mike  | math    |    70 | [95,92,80,80,70,null]|
+|    2 | tom   | math    |    80 | [95,92,80,80,70,null]|
+|    4 | amy   | math    |    80 | [95,92,80,80,70,null]|
+|    6 | amber | math    |    92 | [95,92,80,80,70,null]|
+|    3 | jack  | math    |    95 | [95,92,80,80,70,null]|
++------+-------+---------+-------+----------------------+
+```
+
+**示例 4: 带 RANGE 帧的 ARRAY_AGG()**
+
+使用 RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING 收集整个分区中的所有分数：
+
+```SQL
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+            RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS all_scores
+FROM scores
+WHERE subject = 'math';
+```
+
+输出：
+
+```plaintext
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | all_scores           |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL | [null,70,80,80,92,95]|
+|    5 | mike  | math    |    70 | [null,70,80,80,92,95]|
+|    2 | tom   | math    |    80 | [null,70,80,80,92,95]|
+|    4 | amy   | math    |    80 | [null,70,80,80,92,95]|
+|    6 | amber | math    |    92 | [null,70,80,80,92,95]|
+|    3 | jack  | math    |    95 | [null,70,80,80,92,95]|
++------+-------+---------+-------+----------------------+
+```
+
+**示例 5: 按分数范围分区收集名称**
+
+使用 `stock_ticker` 表，在移动窗口中收集股票代码：
+
+```SQL
+SELECT
+    stock_symbol,
+    closing_date,
+    closing_price,
+    array_agg(closing_price)
+        OVER (
+            PARTITION BY stock_symbol
+            ORDER BY closing_date
+        ) AS price_history
+FROM stock_ticker;
+```
+
+输出：
+
+```plaintext
++--------------+---------------------+---------------+---------------------------------------+
+| stock_symbol | closing_date        | closing_price | price_history                         |
++--------------+---------------------+---------------+---------------------------------------+
+| JDR          | 2014-10-02 00:00:00 |         12.86 | [12.86]                               |
+| JDR          | 2014-10-03 00:00:00 |         12.89 | [12.86,12.89]                         |
+| JDR          | 2014-10-04 00:00:00 |         12.94 | [12.86,12.89,12.94]                   |
+| JDR          | 2014-10-05 00:00:00 |         12.55 | [12.86,12.89,12.94,12.55]             |
+| JDR          | 2014-10-06 00:00:00 |         14.03 | [12.86,12.89,12.94,12.55,14.03]       |
+| JDR          | 2014-10-07 00:00:00 |         14.75 | [12.86,12.89,12.94,12.55,14.03,14.75] |
+| JDR          | 2014-10-08 00:00:00 |         13.98 | [12.86,12.89,12.94,12.55,14.03,14.75,13.98] |
++--------------+---------------------+---------------+---------------------------------------+
+```
+
+**示例 6: 无效用法 - ROWS 帧（将导致错误）**
+
+以下查询将失败，因为不支持 ROWS 帧：
+
+```SQL
+-- 这将导致错误！
+SELECT *,
+    array_agg(score)
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+            ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING  -- NOT SUPPORTED!
+        ) AS score_array
+FROM scores;
+```
+
+错误信息：
+
+```plaintext
+ERROR: array_agg as window function does not support ROWS frame type. Please use RANGE frame instead.
+```
+
+### COUNT()
+
+计算给定窗口中满足指定条件的行总数。
+
+**语法：**
 
 ```SQL
 COUNT([DISTINCT] expr) [OVER (analytic_clause)]
 ```
 
-从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`COUNT()` 仅统计窗口内不重复的值。
+StarRocks v4.0 及更高版本支持 `DISTINCT`。指定后，COUNT() 仅计算窗口中的不同值。
 
 :::note
-**窗口帧限制：** 当使用 `COUNT(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。例如：
+**窗口帧限制：**
+
+当使用 COUNT(DISTINCT) 作为窗口函数时，只支持 RANGE 帧。不支持 ROWS 帧。例如：
 
 ```SQL
 -- 支持：RANGE 帧
@@ -434,11 +479,16 @@ count(distinct col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PREC
 -- 不支持：ROWS 帧（将导致错误）
 count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 ```
+
 :::
 
-**示例**：
+**示例**
 
-以下示例计算从**当前行到第一行**科目 `math` 分数大于 90 分的个数。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+这些示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
+
+**示例 1: 基本用法**
+
+计算数学分区中从当前行到第一行，分数大于 90 的数学成绩的出现次数。此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
 
 ```SQL
 select *,
@@ -451,8 +501,6 @@ select *,
 from scores where subject in ('math') and score > 90;
 ```
 
-返回：
-
 ```plaintext
 +------+-------+---------+-------+-------------+
 | id   | name  | subject | score | score_count |
@@ -462,9 +510,9 @@ from scores where subject in ('math') and score > 90;
 +------+-------+---------+-------+-------------+
 ```
 
-示例二：使用 COUNT(DISTINCT) 处理整体窗口
+**示例 2: 在整个窗口上使用 COUNT(DISTINCT)**
 
-统计所有行中不重复分数的个数：
+计算所有行中不同的分数：
 
 ```SQL
 CREATE TABLE test_scores (
@@ -488,7 +536,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+---------------+
@@ -503,11 +551,11 @@ FROM test_scores;
 +----+---------+-------+---------------+
 ```
 
-不重复计数为 4（值：80、85、90，以及如果有 NULL 值）。
+不同的计数是 4（值：80、85、90，如果存在则包括 NULL）。
 
-示例三：使用 COUNT(DISTINCT) 处理带 RANGE 帧的窗口
+**示例 3: 在带 RANGE 帧的框架窗口上使用 COUNT(DISTINCT)**
 
-使用 RANGE 帧在每个科目分区内统计不重复分数：
+使用 RANGE 帧计算每个科目分区中不同的分数：
 
 ```SQL
 SELECT id, subject, score,
@@ -519,7 +567,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+---------------+
@@ -534,33 +582,35 @@ FROM test_scores;
 +----+---------+-------+---------------+
 ```
 
-对于每一行，函数统计从分区开始到当前行的分数值（包括当前行）的不重复分数个数。
+对于每一行，该函数计算从分区开始到当前行分数（包括当前行分数）的不同分数。
 
-## CUME_DIST()
+### CUME_DIST()
 
-计算某个窗口或分区中某个值的累积分布，取值范围 0 到 1。常用于统计一个记录集中最高或者最低值的分布情况，即一个值在该记录集中的相对位置。比如，收入或销量前 10% 的人、考试排名后 5% 的学生等。
+CUME_DIST() 函数计算分区或窗口中值的累积分布，表示其在分区中的相对百分比位置。它常用于计算组中最高或最低值的分布。
 
-- 如果数据按升序排列，则统计小于等于当前值的数据在分区的占比。
-- 如果数据按降序排列，则统计大于等于当前值的数据在分区的占比。
+- 如果数据按升序排序，此函数计算小于或等于当前行值的百分比。
+- 如果数据按降序排序，此函数计算大于或等于当前行值的百分比。
 
-该函数从 3.2 版本开始支持。
+累积分布的范围是 0 到 1。它对于百分位数计算和数据分布分析很有用。
 
-**语法**：
+此函数从 v3.2 开始支持。
+
+**语法：**
 
 ```SQL
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ```
 
-- `partition_by_clause`: 可选。如果省略该子句，CUME_DIST() 函数会将整个结果集视为单个分区。
-- `order_by_clause`：必填。该函数必须与 ORDER BY 一起使用，对排序后的数据进行分布统计。
+- `partition_by_clause`：可选。如果未指定此子句，则将整个结果集作为一个分区进行处理。
+- `order_by_clause`：**此函数必须与 ORDER BY 一起使用，以将分区行按所需顺序排序。**
 
-CUME_DIST() 将 NULL 值作为最小值处理。
+CUME_DIST() 包含 NULL 值，并将其视为最低值。
 
-**示例**：
+**示例**
 
-以下示例计算各个科目下每个得分按照升序排序后的累积分布情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+以下示例显示了每个 `subject` 组中每个分数的累积分布。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
-```sql
+```plaintext
 SELECT *, 
     cume_dist() 
       OVER (
@@ -568,11 +618,6 @@ SELECT *,
         ORDER BY score
       ) AS cume_dist 
 FROM scores;
-```
-
-返回：
-
-```plaintext
 +------+-------+---------+-------+---------------------+
 | id   | name  | subject | score | cume_dist           |
 +------+-------+---------+-------+---------------------+
@@ -597,23 +642,23 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- 对于第一行 `cume_dist` 数据 `1`，分组 NULL 中只有这一行数据，且只有这一行自身满足 ”小于等于当前行“ 的要求，所以累积分布为 1。
-- 对于第二行数据 `0.2`，分组 `english` 中有 5 行数据，且只有这一行自身满足 ”小于等于当前行“ 的要求，所以累积分布为 0.2。
-- 对于第三行数据 `0.4`，分组 `english` 中有 5 行数据，且有两行（85 和 NULL）满足 ”小于等于当前行“ 的要求，所以累积分布为 0.4。
+- 对于第一行中的 `cume_dist`，`NULL` 组只有一行，并且只有这一行本身满足“小于或等于当前行”的条件。累积分布为 1。
+- 对于第二行中的 `cume_dist`，`english` 组有五行，并且只有这一行本身 (NULL) 满足“小于或等于当前行”的条件。累积分布为 0.2。
+- 对于第三行中的 `cume_dist`，`english` 组有五行，并且有两行（85 和 NULL）满足“小于或等于当前行”的条件。累积分布为 0.4。
 
-## DENSE_RANK()
+### DENSE_RANK()
 
-`DENSE_RANK()` 函数用来为特定窗口中的数据排名。当函数中出现相同排名时，下一行的排名为相同排名数加 1。因此，`DENSE_RANK()` 返回的序号**是连续的数字**。而 `RANK()` 返回的序号**有可能是不连续的数字**。举例：如果前面有两个排名 1，DENSE_RANK() 第三行仍然会返回排名 2，但是 RANK() 第三行会返回 3。
+DENSE_RANK() 函数用于表示排名。与 RANK() 不同，DENSE_RANK() **没有空缺** 数字。例如，如果有两个 1，DENSE_RANK() 的第三个数字仍然是 2，而 RANK() 的第三个数字是 3。
 
-**语法**：
+**语法：**
 
 ```SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**示例**：
+**示例**
 
-以下示例使用 `DENSE_RANK()` 对 math 科目的得分排名（采用降序）。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+以下示例显示了数学分数的排名（按降序排序）。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```SQL
 select *,
@@ -624,8 +669,6 @@ select *,
         ) as `rank`
 from scores where subject in ('math');
 ```
-
-返回：
 
 ```plaintext
 +------+-------+---------+-------+------+
@@ -640,25 +683,27 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-示例中有两个得分 80，排名都为 3，下一行的 70 排名是 4，排名是连续的。
+结果数据中有两行的分数为 80。它们的排名都是 3。下一个分数 70 的排名是 4。这表明 DENSE_RANK() **没有空缺** 数字。
 
-## FIRST_VALUE()
+### FIRST_VALUE()
 
-`FIRST_VALUE()` 函数返回窗口范围内的**第一个**值。
+FIRST_VALUE() 返回窗口范围的**第一个** 值。
 
-**语法**：
+**语法：**
 
 ```SQL
 FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ```
 
-从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果第一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回第一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
+`IGNORE NULLS` 从 v2.5.0 开始支持。它用于确定是否从计算中排除 `expr` 的 NULL 值。默认情况下，NULL 值包含在内，这意味着如果过滤结果中的第一个值为 NULL，则返回 NULL。如果指定 IGNORE NULLS，则返回过滤结果中的第一个非 NULL 值。如果所有值都为 NULL，即使指定 IGNORE NULLS，也返回 NULL。
 
-从 3.5 版本开始，`FIRST_VALUE()` 函数支持 ARRAY 类型。您可以使用 `FIRST_VALUE()` 处理 ARRAY 列，获取窗口中的第一个数组值。
+StarRocks v3.5 开始支持 ARRAY 类型。您可以将 FIRST_VALUE() 与 ARRAY 列一起使用，以获取窗口中的第一个数组值。
 
-**示例**：
+**示例**
 
-以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，按照降序返回每个分组中的最高分。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+**示例 1：基本用法**
+
+返回每个组中每个成员的第一个 `score` 值（降序），按 `subject` 分组。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```SQL
 select *,
@@ -670,9 +715,7 @@ select *,
 from scores;
 ```
 
-返回：
-
-```Plain Text
+```plaintext
 +------+-------+---------+-------+-------+
 | id   | name  | subject | score | first |
 +------+-------+---------+-------+-------+
@@ -697,9 +740,9 @@ from scores;
 +------+-------+---------+-------+-------+
 ```
 
-示例二：使用 FIRST_VALUE() 处理 ARRAY 类型数据
+**示例 2：将 FIRST_VALUE() 与 ARRAY 类型结合使用**
 
-建表并插入数据：
+创建包含 ARRAY 列的表：
 
 ```SQL
 CREATE TABLE test_array_value (
@@ -723,7 +766,7 @@ SELECT col_1, arr1,
 FROM test_array_value;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +-------+--------+------------+
@@ -737,27 +780,29 @@ FROM test_array_value;
 +-------+--------+------------+
 ```
 
-窗口中的第一个数组值 `[1,11]` 被返回给所有行。
+窗口中所有行都返回第一个数组值 `[1,11]`。
 
-## LAST_VALUE()
+### LAST_VALUE()
 
-`LAST_VALUE()` 返回窗口范围内的**最后一个**值。与 `FIRST_VALUE()` 相反。
+LAST_VALUE() 返回 **最后一个** 窗口范围的值。它与 FIRST_VALUE() 相反。
 
-**语法**：
+**语法：**
 
 ```SQL
 LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ```
 
-从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
+`IGNORE NULLS` 从 v2.5.0 开始支持。它用于确定是否从计算中排除 `expr` 的 NULL 值。默认情况下，NULL 值包含在内，这意味着如果过滤结果中的最后一个值为 NULL，则返回 NULL。如果指定 IGNORE NULLS，则返回过滤结果中的最后一个非 NULL 值。如果所有值都为 NULL，即使指定 IGNORE NULLS，也返回 NULL。
 
-LAST_VALUE() 默认会统计 `rows between unbounded preceding and current row`，即会对比当前行与之前所有行。如果每个分区只想显示一个结果，可以在 ORDER BY 后使用 `rows between unbounded preceding and unbounded following`.
+默认情况下，LAST_VALUE() 计算 `rows between unbounded preceding and current row`，它将当前行与其所有先行行进行比较。如果只想为每个分区显示一个值，请在 ORDER BY 之后使用 `rows between unbounded preceding and unbounded following`。
 
-从 3.5 版本开始，`LAST_VALUE()` 函数支持 ARRAY 类型。您可以使用 `LAST_VALUE()` 处理 ARRAY 列，获取窗口中的最后一个数组值。
+StarRocks v3.5 开始支持 ARRAY 类型。您可以将 LAST_VALUE() 与 ARRAY 列结合使用，以获取窗口中的最后一个数组值。
 
-**示例**：
+**示例**
 
-以下示例使用 `LAST_VALUE()` 函数，根据 `subject` 列分组，按照降序返回每个分组中的最低得分。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+**示例 1：基本用法**
+
+返回组中每个成员的最后一个 `score`（降序），按 `subject` 分组。此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
 
 ```SQL
 select *,
@@ -770,9 +815,7 @@ select *,
 from scores;
 ```
 
-返回：
-
-```Plain Text
+```plaintext
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | last |
 +------+-------+---------+-------+------+
@@ -797,9 +840,9 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
-示例二：使用 LAST_VALUE() 处理 ARRAY 类型数据
+**示例 2：将 LAST_VALUE() 与 ARRAY 类型结合使用**
 
-使用 FIRST_VALUE() 示例二中的表：
+使用 FIRST_VALUE() 示例 2 中的相同表：
 
 ```SQL
 SELECT col_1, arr1, 
@@ -810,7 +853,7 @@ SELECT col_1, arr1,
 FROM test_array_value;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +-------+--------+-----------+
@@ -824,39 +867,46 @@ FROM test_array_value;
 +-------+--------+-----------+
 ```
 
-窗口中的最后一个数组值 `[5,55]` 被返回给所有行。
+窗口中所有行都返回最后一个数组值 `[5,55]`。
 
-## LAG()
+### LAG()
 
-用来计算当前行**之前**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
+返回比当前行滞后 `offset` 行的行的值。此函数常用于比较行之间的数据并过滤数据。
 
-`LAG()` 函数支持查询以下数据类型：
+`LAG()` 可用于查询以下类型的数据：
 
-- 数值类型：TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
-- 字符串类型：CHAR、VARCHAR
-- 时间类型：DATE、DATETIME
-- 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
-- 从 3.5 版本开始，`LAG()` 函数支持查询 ARRAY 类型的数据。
+- 数值型：TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
+- 字符串型：CHAR, VARCHAR
+- 日期型：DATE, DATETIME
+- StarRocks v2.5 开始支持 BITMAP 和 HLL。
+- StarRocks v3.5 开始支持 ARRAY 类型。
 
-**语法**：
+**语法：**
 
 ```SQL
 LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
-**参数说明**：
+**参数：**
 
+<<<<<<< HEAD
 - `expr`: 需要计算的目标字段。
 - `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 - `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
 - `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之前并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
+=======
+- `expr`：要计算的字段。
+- `offset`：偏移量。它必须是 **正整数**。如果未指定此参数，则默认为 1。
+- `default`：如果未找到匹配行，则返回的默认值。如果未指定此参数，则默认为 NULL。`default` 支持任何与 `expr` 类型兼容的表达式，从 4.0 版本开始，默认值不再必须是常量，它可以是列名。
+- `IGNORE NULLS` 从 v3.0 开始支持。它用于确定 `expr` 的 NULL 值是否包含在结果中。默认情况下，在计数 `offset` 行时包含 NULL 值，这意味着如果目标行的值为 NULL，则返回 NULL。请参阅示例 1。如果指定 IGNORE NULLS，则在计数 `offset` 行时忽略 NULL 值，系统会继续搜索 `offset` 个非 NULL 值。如果找不到 `offset` 个非 NULL 值，则返回 NULL 或 `default`（如果已指定）。请参阅示例 2。
+>>>>>>> 399cd32c00 ([Doc] Revise Window Function Doc (#70014))
 
-**示例**：
+**示例**
 
-示例一：LAG() 中未指定 IGNORE NULLS
+**示例 1: 未指定 IGNORE NULLS**
 
-建表并插入数据：
+创建表并插入值:
 
 ```SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
@@ -875,11 +925,11 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-查询数据，指定 `offset` 为 2，向前查找 2 行；`default` 为 0，表示如果没有符合条件的行，则返回 0。
+查询此表中的数据，其中 `offset` 为 2，表示遍历前两行；`default` 为 0，表示如果没有找到匹配的行，则返回 0。
 
-返回：
+输出:
 
-```SQL
+```plaintext
 SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
@@ -898,13 +948,13 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
 ```
 
-可以看到对于前两行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+对于前两行，不存在前两行，因此返回默认值 0。
 
-对于第 3 行数据 NULL，往前遍历两行对应的值是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+对于第 3 行中的 NULL，向后两行的值为 NULL，并且由于允许 NULL 值，因此返回 NULL。
 
-示例二：LAG() 中指定了 IGNORE NULLS
+**示例 2: 指定 IGNORE NULLS**
 
-依然使用上面的数据表。
+使用上述表和参数设置。
 
 ```SQL
 SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
@@ -925,13 +975,13 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+---------------------------------------------+
 ```
 
-可以看到对于第 1-4 行，因为在当前行之前不存在 2 个 非 NULL 值，因此返回默认值 0。
+对于第 1 到 4 行，系统无法在前几行中为它们各自找到两个非 NULL 值，因此返回默认值 0。
 
-对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
+对于第 7 行中的值 6，向后两行的值为 NULL，并且由于指定了 IGNORE NULLS，因此忽略 NULL。系统继续搜索非 NULL 值，并返回第 4 行中的 2。
 
-示例三： LAG() 中默认值设置为列名
+**示例 3: 将 LAG() 中的默认值设置为列名**
 
-依然使用上面的数据表。
+使用上述表和参数设置。
 
 ```SQL
 SELECT col_1, col_2, LAG(col_2 ,2,col_1) OVER (ORDER BY col_1)
@@ -952,13 +1002,13 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+-------------------------------------------------+
 ```
 
-可以看到对于第 1-2 行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
+如您所见，对于第 1 行和第 2 行，向后扫描时没有两个非 NULL 值，因此返回的默认值是当前行的 col_1 值。
 
-其他行与示例一相同。
+所有其他行的行为与示例 1 相同。
 
-示例四：使用 LAG() 处理 ARRAY 类型数据
+**示例 4: 将 LAG() 与 ARRAY 类型一起使用**
 
-建表并插入数据：
+创建具有 ARRAY 列的表:
 
 ```SQL
 CREATE TABLE test_array_value (
@@ -976,14 +1026,14 @@ INSERT INTO test_array_value (col_1, arr1, arr2) VALUES
     (6, [6, 66], [106, 116]);
 ```
 
-使用 LAG() 查询 ARRAY 类型数据：
+使用 LAG() 和 ARRAY 类型查询数据:
 
 ```SQL
 SELECT col_1, arr1, LAG(arr1, 2, arr2) OVER (ORDER BY col_1) AS lag_result 
 FROM test_array_value;
 ```
 
-返回：
+输出:
 
 ```plaintext
 +-------+--------+-------------+
@@ -998,33 +1048,40 @@ FROM test_array_value;
 +-------+--------+-------------+
 ```
 
-对于前两行，由于不存在前两行，因此返回默认值 `arr2` 的值。
+对于前两行，不存在前两行，因此返回 `arr2` 中的默认值。
 
-## LEAD()
+### LEAD()
 
-用来计算当前行**之后**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
+返回领先当前行 `offset` 行的行的值。此函数通常用于比较行之间的值和筛选数据。
 
-`LEAD()` 支持的数据类型与 [LAG](#使用-lag-窗口函数) 相同。
+可由 `LEAD()` 查询的数据类型与 [LAG()](#lag)。
 
-**语法**：
+**语法:**
 
-```Haskell
+```sql
 LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
-**参数说明**：
+**参数:**
 
+<<<<<<< HEAD
 - `expr`: 需要计算的目标字段。
 - `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 - `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
 - `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之后并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
+=======
+- `expr`: 要计算的字段。
+- `offset`: 偏移量。它必须是一个正整数。如果未指定此参数，则默认为 1。
+- `default`: 如果未找到匹配的行，则返回的默认值。如果未指定此参数，则默认为 NULL。`default` 支持任何类型与 `expr` 兼容的表达式，从 4.0 版本开始，默认值不再必须是常量，它可以是列名。
+- `IGNORE NULLS` 从 v3.0 开始支持。它用于确定 `expr` 的 NULL 值是否包含在结果中。默认情况下，在计数 `offset` 行时包含 NULL 值，这意味着如果目标行的值为 NULL，则返回 NULL。请参阅示例 1。如果指定 IGNORE NULLS，则在计数 `offset` 行时忽略 NULL 值，系统继续搜索 `offset` 个非 NULL 值。如果找不到 `offset` 个非 NULL 值，则返回 NULL 或 `default`（如果已指定）。请参阅示例 2。
+>>>>>>> 399cd32c00 ([Doc] Revise Window Function Doc (#70014))
 
-**示例**：
+**示例**
 
-示例一：LEAD() 中未指定 IGNORE NULLS
+**示例 1: 未指定 IGNORE NULLS**
 
-建表并插入数据：
+创建表并插入值:
 
 ```SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
@@ -1043,11 +1100,11 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-查询数据，指定 `offset` 为 2，向后查找 2 行；`default` 为 0，表示如果没有符合条件的行，则返回 0。
+查询此表中的数据，其中 `offset` 为 2，表示遍历后续两行；`default` 为 0，表示如果没有找到匹配的行，则返回 0。
 
-返回结果：
+输出:
 
-```SQL
+```plaintext
 SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
 FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
@@ -1066,13 +1123,13 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
 ```
 
-可以看到对于第 1 行数据 NULL，往后遍历两行对应的数据是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+对于第一行，向前两行的值为 NULL，并且由于允许 NULL 值，因此返回 NULL。
 
-对于最后两行，因为往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+对于最后两行，不存在后续两行，因此返回默认值 0。
 
-示例二：LEAD() 中指定了 IGNORE NULLS
+**示例 2: 指定 IGNORE NULLS**
 
-依然使用上面的数据表。
+使用上述表和参数设置。
 
 ```SQL
 SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
@@ -1093,13 +1150,13 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+----------------------------------------------+
 ```
 
-可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+对于第 7 到 10 行，系统无法在后续行中找到两个非 NULL 值，因此返回默认值 0。
 
-对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
+对于第一行，向前两行的值为 NULL，并且由于指定了 IGNORE NULLS，NULL 被忽略。系统继续搜索第二个非 NULL 值，并返回第 4 行中的 2。
 
-示例三： LEAD() 中默认值设置为列名
+**示例 3：将 LEAD() 中的默认值设置为列名**
 
-依然使用上面的数据表。
+使用上述表格和参数设置。
 
 ```SQL
 SELECT col_1, col_2, LEAD(col_2 ,2,col_1) OVER (ORDER BY col_1)
@@ -1120,20 +1177,20 @@ FROM test_tbl ORDER BY col_1;
 +-------+-------+--------------------------------------------------+
 ```
 
-可以看到对于第 9-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
+如您所见，对于第 9 行和第 10 行，向前扫描时没有两个非 NULL 值，因此返回的默认值是当前行的 col_1 值。
 
-其他行与示例一相同。
+所有其他行的行为与示例 1 相同。
 
-示例四：使用 LEAD() 处理 ARRAY 类型数据
+**示例 4：将 LEAD() 与 ARRAY 类型一起使用**
 
-使用 LAG() 示例四中的表：
+使用 LAG() 示例 4 中的相同表格：
 
 ```SQL
 SELECT col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result 
 FROM test_array_value;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +-------+--------+-------------+
@@ -1148,25 +1205,25 @@ FROM test_array_value;
 +-------+--------+-------------+
 ```
 
-对于最后两行，由于不存在后两行，因此返回默认值 `arr2` 的值。
+对于最后两行，不存在后续的两行，因此返回 `arr2` 中的默认值。
 
-## MAX()
+### MAX()
 
-`MAX()` 函数返回当前窗口指定行数内数据的最大值。
+返回当前窗口中指定行的最大值。
 
-**语法**：
+**语法：**
 
 ```SQL
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-**示例**：
+**示例**
 
-以下示例计算**从第一行到当前行之后一行中**的 math 科目的得分最大值。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+计算从第一行到当前行之后一行的最大值。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```SQL
-select *, 
-    max(score)
+select *,
+    max(scores)
         over (
             partition by subject
             order by score
@@ -1174,7 +1231,9 @@ select *,
         ) as max
 from scores
 where subject in ('math');
+```
 
+```plain
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | max  |
 +------+-------+---------+-------+------+
@@ -1187,7 +1246,7 @@ where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-以下示例计算 `math` 科目所有行中的最大值。
+以下示例计算 `math` 科目所有行中的最高分。
 
 ```sql
 select *,
@@ -1201,7 +1260,9 @@ from scores
 where subject in ('math');
 ```
 
-从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前n行及后 `n` 行中的最大值。比如要计算当前行前 3 行和后 2 行中的最大值，语句可写为：
+从 StarRocks 2.4 开始，您可以将行范围指定为 `rows between n preceding and n following`，这意味着您可以捕获当前行之前的 `n` 行和当前行之后的 `n` 行。
+
+示例语句：
 
 ```sql
 select *,
@@ -1214,34 +1275,33 @@ from scores
 where subject in ('math');
 ```
 
-## MIN()
+### MIN()
 
-`MIN()` 函数返回当前窗口指定行数内数据的最小值。
+返回当前窗口中指定行的最小值。
 
-**语法**：
+**语法：**
 
-```sql
+```SQL
 MIN(expr) [OVER (analytic_clause)]
 ```
 
 **示例**
 
-以下示例计算所有行中的 math 科目得分的最小值。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+计算数学科目所有行中的最低分。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```SQL
-select *,
+select *, 
     min(score)
         over (
             partition by subject
             order by score
-            rows between unbounded preceding and unbounded following) as min
+            rows between unbounded preceding and unbounded following)
+            as min
 from scores
 where subject in ('math');
 ```
 
-返回：
-
-```Plain Text
+```plaintext
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | min  |
 +------+-------+---------+-------+------+
@@ -1254,7 +1314,9 @@ where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前n行以及后 `n` 行中的最小值。比如要计算当前行前 3 行和后 2 行中的最小值，语句可写为：
+从 StarRocks 2.4 开始，您可以将行范围指定为 `rows between n preceding and n following`，这意味着您可以捕获当前行之前的 `n` 行和当前行之后的 `n` 行。
+
+示例语句：
 
 ```SQL
 select *,
@@ -1267,32 +1329,30 @@ from scores
 where subject in ('math');
 ```
 
-## NTILE()
+### NTILE()
 
-`NTILE()` 函数将分区中已排序的数据**尽可能均匀**地分配至指定数量（`num_buckets`）的桶中，并返回每一行所在的桶号。桶的编号从 `1` 开始直至 `num_buckets`。`NTILE()` 的返回类型为 BIGINT。
+NTILE() 函数将分区中已排序的行尽可能平均地划分为指定数量的 `num_buckets`，将划分后的行存储在各自的桶中，从 1 `[1, 2, ..., num_buckets]` 开始，并返回每行所在的桶号。
 
-:::tip
+关于桶的大小：
 
-- 如果分区包含的行数无法被 `num_buckets` 整除，那么会存在两个不同的分桶大小，它们的差值为 1。较大的分桶位于较小的分桶之前。
-- 如果分区包含的行数可以被 `num_buckets` 整除，那么所有分桶的大小相同。
+- 如果行数可以被指定数量的 `num_buckets` 整除，则所有桶的大小都相同。
+- 如果行数不能被指定数量的 `num_buckets` 整除，则会有两种不同大小的桶。大小差异为 1。行数较多的桶将排在行数较少的桶前面。
 
-:::
-
-**语法**：
+**语法：**
 
 ```SQL
 NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 ```
 
-其中，`num_buckets` 是要划分桶的数量，必须是一个常量正整数，最大值为 BIGINT 的最大值，即 `2^63 - 1`。
+`num_buckets`：要创建的桶的数量。该值必须是一个正整数常量，其最大值为 `2^63 - 1`。
 
-> 注意
->
-> `NTILE()` 函数不能使用 Window 子句。
+NTILE() 函数中不允许使用窗口子句。
 
-**示例**：
+NTILE() 函数返回 BIGINT 类型的数据。
 
-以下示例使用 `NTILE()` 函数将当前窗口中的数据划分至 `2` 个桶中，划分结果见 `bucket_id` 列。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+**示例**
+
+以下示例将分区中的所有行划分为两个桶。此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```sql
 select *,
@@ -1304,9 +1364,9 @@ select *,
 from scores;
 ```
 
-返回：
+输出：
 
-```Plain Text
+```plaintext
 +------+-------+---------+-------+-----------+
 | id   | name  | subject | score | bucket_id |
 +------+-------+---------+-------+-----------+
@@ -1331,16 +1391,22 @@ from scores;
 +------+-------+---------+-------+-----------+
 ```
 
-如上述例子所示，`num_buckets` 为 `2`，此时：
+如上例所示，当 `num_buckets` 为 `2` 时：
 
-- 第 1 行是一个分区，划分在一个分桶中。
-- 2-7 行是一个分区，其中前 3 行在第一个分桶中、后 3 行在第二个分桶中。
+- 对于第一行，此分区只有此记录，并且只分配给一个桶。
+- 对于第 2 到 7 行，该分区有 6 条记录，前 3 条记录分配给桶 1，其他 3 条记录分配给桶 2。
 
-## PERCENT_RANK()
+### PERCENT_RANK()
 
-计算当前行在所在的分区内的相对排名，百分比。计算公式为 `(Rank - 1)/(Rows in partition - 1)`。`Rank` 表示该行数据在该分区内的排名。
+计算结果集中行的相对百分比排名。
 
-返回一个介于 0 和 1 之间的数。该函数常用于计算百分位和数据分布。
+PERCENT_RANK() 使用以下公式计算，其中 `Rank` 表示当前行在分区中的排名。
+
+```plaintext
+(Rank - 1)/(Rows in partition - 1)
+```
+
+返回值范围从 0 到 1。此函数对于百分位数计算和分析数据分布非常有用。它从 v3.2 开始支持。
 
 **语法：**
 
@@ -1348,11 +1414,13 @@ from scores;
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 ```
 
-该函数必须与 ORDER BY 一起使用，对排序后的数据进行分布统计。NULL 值作为最小值处理。
+:::note
+PERCENT_RANK() 必须与 ORDER BY 一起使用，以将分区行按所需顺序排序。
+:::
 
-**示例：**
+**示例**
 
-以下示例计算科目 math 下得分的排名情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+以下示例显示了 `math` 组中每个 `score` 的相对排名。此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
 
 ```SQL
 SELECT *,
@@ -1377,32 +1445,30 @@ FROM scores where subject in ('math');
 +------+-------+---------+-------+--------------+
 ```
 
-## RANK()
+### RANK()
 
-`RANK()` 函数用来对当前窗口内的数据进行排名，返回结果集是对分区内每行的排名，行的排名是相关行之前的排名数加一。与 `DENSE_RANK()` 不同的是，`RANK()` 返回的序号**有可能是不连续的数字**，而 `DENSE_RANK()` 返回的序号**是连续的数字**。举例：如果前面有两个排名 1，RANK() 第三行会返回 3，而 DENSE_RANK() 第三行仍然会返回排名 2。
+RANK() 函数用于表示排名。与 DENSE_RANK() 不同，RANK() 将会**出现空缺**数字。例如，如果出现两个并列的 1，则 RANK() 的第三个数字将是 3 而不是 2。
 
-**语法**：
+**语法：**
 
 ```SQL
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**示例**：
+**示例**
 
-以下示例对 math 科目的得分进行排名。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+对组中的数学分数进行排名。此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
 
 ```SQL
 select *, 
     rank() over(
         partition by subject
         order by score desc
-    ) as `rank`
+        ) as `rank`
 from scores where subject in ('math');
 ```
 
-返回：
-
-```Plain Text
+```plain
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | rank |
 +------+-------+---------+-------+------+
@@ -1415,34 +1481,30 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-示例中有两个得分 80，排名都为 3，下一行的 70 排名是 5。
+结果数据有两行分数为 80。它们都排名第 3。下一个分数 70 的排名是 5。
 
-## ROW_NUMBER()
+### ROW_NUMBER()
 
-`ROW_NUMBER()` 函数为每个 Partition 的每一行返回一个从 `1` 开始连续递增的整数。与 `RANK()` 和 `DENSE_RANK()` 不同的是，`ROW_NUMBER()` 返回的值**不会重复也不会出现空缺**，是**连续递增**的。
+为分区的每一行返回一个从 1 开始连续递增的整数。与 RANK() 和 DENSE_RANK() 不同，ROW_NUMBER() 返回的值**不重复或有空缺**并且**连续递增**。
 
-**语法**：
+**语法：**
 
 ```SQL
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-**示例**：
+**示例**
 
-以下示例对以 `subject` 列为分区的 math 科目的得分进行排名。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+对组中的数学分数进行排名。此示例使用 [示例表](#窗口函数示例表) `scores` 中的数据。
 
 ```SQL
-select *, 
-    row_number() over(
-        partition by subject 
-        order by score desc
-    ) as `rank`
+select *, row_number() over(
+    partition by subject
+    order by score desc) as `rank`
 from scores where subject in ('math');
 ```
 
-返回：
-
-```Plain Text
+```plaintext
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | rank |
 +------+-------+---------+-------+------+
@@ -1455,11 +1517,13 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
-## QUALIFY
+### QUALIFY()
 
-QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，可以使用 QUALIFY 来设置过滤条件，从多条记录中筛选符合条件的记录。QUALIFY 与聚合函数中的 HAVING 子句功能类似。该函数从 2.5 版本开始支持。
+QUALIFY 子句用于过滤窗口函数的结果。在 SELECT 语句中，您可以使用 QUALIFY 子句对列应用条件以过滤结果。QUALIFY 类似于聚合函数中的 HAVING 子句。此函数从 v2.5 开始支持。
 
-QUALIFY 提供了一种更为简洁的数据筛选方式。比如，如果不使用 QUALIFY，过滤语句比较复杂：
+QUALIFY 简化了 SELECT 语句的编写。
+
+在使用 QUALIFY 之前，SELECT 语句可能如下所示：
 
 ```SQL
 SELECT *
@@ -1471,7 +1535,7 @@ FROM (SELECT DATE,
 WHERE T1.SCORE_ROWNUMBER = 1;
 ```
 
-使用 QUALIFY 之后，语句可以简化成这样：
+使用 QUALIFY 后，语句缩短为：
 
 ```SQL
 SELECT DATE, PROVINCE_CODE, TOTAL_SCORE
@@ -1479,9 +1543,9 @@ FROM example_table
 QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
 ```
 
-当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。
+QUALIFY 仅支持以下三种窗口函数：ROW_NUMBER()、RANK() 和 DENSE_RANK()。
 
-**语法**：
+**语法：**
 
 ```SQL
 SELECT <column_list>
@@ -1492,28 +1556,33 @@ QUALIFY <window_function>
 [ ... ]
 ```
 
-**参数说明**：
+**参数：**
 
-- `<column_list>`: 要获取数据的列，多列使用逗号隔开。
-- `<data_source>`: 数据源，一般是表。
-- `<window_function>`: 用于过滤数据的窗口函数。当前仅支持 ROW_NUMBER()，RANK()，DENSE_RANK()。
+`<column_list>`：您要从中获取数据的列。
 
-**示例**：
+`<data_source>`：数据源通常是一个表。
+
+`<window_function>`：`QUALIFY` 子句只能后跟窗口函数，包括 ROW_NUMBER()、RANK() 和 DENSE_RANK()。
+
+**示例**
 
 ```SQL
+-- 创建表。
 CREATE TABLE sales_record (
    city_id INT,
    item STRING,
    sales INT
 ) DISTRIBUTED BY HASH(`city_id`);
 
-INSERT INTO sales_record VALUES
+-- 将数据插入表中。
+insert into sales_record values
 (1,'fruit',95),
 (2,'drinks',70),
 (3,'fruit',87),
 (4,'drinks',98);
 
-SELECT * FROM sales_record ORDER BY city_id;
+-- 从表中查询数据。
+select * from sales_record order by city_id;
 +---------+--------+-------+
 | city_id | item   | sales |
 +---------+--------+-------+
@@ -1524,7 +1593,7 @@ SELECT * FROM sales_record ORDER BY city_id;
 +---------+--------+-------+
 ```
 
-示例一：获取表中行号大于 1 的记录，无分区。
+**示例 1：从表中获取行号大于 1 的记录**
 
 ```SQL
 SELECT city_id, item, sales
@@ -1539,7 +1608,9 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 +---------+--------+-------+
 ```
 
-示例二：按照 `item` 将表分为 2 个分区，获取每个分区中 row number 为`1`的记录。
+**示例 2：从表的每个分区中获取行号为 1 的记录**
+
+该表通过 `item` 分为两个分区，并返回每个分区的首行。
 
 ```SQL
 SELECT city_id, item, sales
@@ -1552,9 +1623,12 @@ ORDER BY city_id;
 |       1 | fruit  |    95 |
 |       2 | drinks |    70 |
 +---------+--------+-------+
+2 rows in set (0.01 sec)
 ```
 
-示例三：按照 `item` 将表分为 2 个分区，使用 RANK() 获取每个分区里销量 `sales` 排名第一的记录。
+**示例 3：从表的每个分区中获取销售排名第一的记录**
+
+该表通过 `item` 分为两个分区，并返回每个分区中销售额最高的行。
 
 ```SQL
 SELECT city_id, item, sales
@@ -1569,11 +1643,11 @@ ORDER BY city_id;
 +---------+--------+-------+
 ```
 
-**注意事项**：
+**使用说明：**
 
-- 当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。
+- QUALIFY 仅支持以下三种窗口函数：ROW_NUMBER()、RANK() 和 DENSE_RANK()。
 
-- 带 QUALIFY 的查询语句中，子句的执行顺序如下：
+- 包含 QUALIFY 的查询中子句的执行顺序如下：
 
 1. FROM
 2. WHERE
@@ -1585,25 +1659,31 @@ ORDER BY city_id;
 8. ORDER BY
 9. LIMIT
 
-## SUM()
+### SUM()
 
-`SUM()` 函数对特定窗口内指定行求和。
+计算指定行的总和。
 
-**语法**：
+**语法：**
 
 ```SQL
 SUM([DISTINCT] expr) [OVER (analytic_clause)]
 ```
 
-从 4.0 版本开始支持 `DISTINCT`。当指定 `DISTINCT` 时，`SUM()` 仅对窗口内不重复的值求和。
+`DISTINCT` 从 StarRocks v4.0 开始支持。指定时，SUM() 仅对窗口中的不同值求和。
 
 :::note
-**窗口帧限制：** 当使用 `SUM(DISTINCT)` 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
+**窗口帧限制：**
+
+当使用 SUM(DISTINCT) 作为窗口函数时，仅支持 RANGE 帧。不支持 ROWS 帧。
 :::
 
-**示例**：
+**示例**
 
-以下示例将数据按照 `subject` 列进行分组，并在组内计算所有行 `score` 列数据的和。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+这些示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
+
+**示例 1：基本用法**
+
+按 `subject` 对数据进行分组，并计算组内所有行的分数总和。
 
 ```SQL
 select *,
@@ -1616,9 +1696,7 @@ select *,
 from scores;
 ```
 
-返回：
-
-```Plain Text
+```plaintext
 +------+-------+---------+-------+------+
 | id   | name  | subject | score | sum  |
 +------+-------+---------+-------+------+
@@ -1643,9 +1721,9 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
-示例二：使用 SUM(DISTINCT) 处理整体窗口
+**示例 2：在整个窗口上使用 SUM(DISTINCT)**
 
-对所有行中不重复分数求和：
+计算所有行的不同分数总和：
 
 ```SQL
 SELECT id, subject, score,
@@ -1653,7 +1731,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+-------------+
@@ -1668,11 +1746,11 @@ FROM test_scores;
 +----+---------+-------+-------------+
 ```
 
-不重复和为 255 (80 + 85 + 90)。
+不同的总和为 255 (80 + 85 + 90)。
 
-示例三：使用 SUM(DISTINCT) 处理带 RANGE 帧的窗口
+**示例 3：在带 RANGE 帧的框架窗口上使用 SUM(DISTINCT)**
 
-使用 RANGE 帧在每个科目分区内对不重复分数求和：
+使用 RANGE 帧计算每个主题分区中不同分数的总和：
 
 ```SQL
 SELECT id, subject, score,
@@ -1684,7 +1762,7 @@ SELECT id, subject, score,
 FROM test_scores;
 ```
 
-返回：
+输出：
 
 ```plaintext
 +----+---------+-------+-------------+
@@ -1699,29 +1777,29 @@ FROM test_scores;
 +----+---------+-------+-------------+
 ```
 
-对于每一行，函数对从分区开始到当前行的分数值（包括当前行）的不重复分数求和。
+对于每一行，该函数计算从分区开始到当前行分数（包括当前行分数）的所有不同分数的总和。
 
-## VARIANCE, VAR_POP, VARIANCE_POP
+### VARIANCE, VAR_POP, VARIANCE_POP
 
-VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIANCE_POP 是 VARIANCE 窗口函数的别名。
+返回表达式的总体方差。VAR_POP 和 VARIANCE_POP 是 VARIANCE 的别名。自 v2.5.10 起，这些函数可用作窗口函数。
 
-**语法**：
+**语法：**
 
 ```SQL
 VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须评估为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```plaintext
 select *,
@@ -1743,27 +1821,27 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## VAR_SAMP, VARIANCE_SAMP
+### VAR_SAMP, VARIANCE_SAMP
 
-VAR_SAMP() 窗口函数用于统计表达式的样本方差。
+返回表达式的样本方差。自 v2.5.10 起，这些函数可用作窗口函数。
 
-**语法**：
+**语法：**
 
 ```sql
 VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须评估为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```plaintext
 select *,
@@ -1771,7 +1849,6 @@ select *,
        over (partition by subject
             order by score) as VAR_SAMP
 from scores where subject in ('math');
-
 +------+-------+---------+-------+--------------------+
 | id   | name  | subject | score | VAR_SAMP           |
 +------+-------+---------+-------+--------------------+
@@ -1784,27 +1861,27 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## STD, STDDEV, STDDEV_POP
+### STD, STDDEV, STDDEV_POP
 
-STD() 窗口函数用于统计表达式的总体标准差。
+返回表达式的标准差。自 v2.5.10 起，这些函数可用作窗口函数。
 
-**语法**：
+**语法：**
 
 ```sql
 STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须评估为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+此示例使用以下数据：[示例表](#窗口函数示例表) `scores`。
 
 ```plaintext
 select *, STD(score)
@@ -1824,27 +1901,27 @@ from scores where subject in ('math');
 +------+-------+---------+-------+-------------------+
 ```
 
-## STDDEV_SAMP
+### STDDEV_SAMP
 
-STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
+返回表达式的样本标准差。自 v2.5.10 起，此函数可用作窗口函数。
 
-**语法**：
+**语法：**
 
 ```sql
 STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须评估为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+本示例使用[示例表](#窗口函数示例表)`scores` 中的数据。
 
 ```plaintext
 select *, STDDEV_SAMP(score)
@@ -1882,27 +1959,27 @@ from scores where subject in ('math');
 +------+-------+---------+-------+--------------------+
 ```
 
-## COVAR_SAMP
+### COVAR_SAMP
 
-COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
+返回两个表达式的样本协方差。此函数从 v2.5.10 开始支持。它也是一个聚合函数。
 
-**语法**：
+**语法：**
 
 ```sql
-COVAR_SAMP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须求值为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+本示例使用[示例表](#窗口函数示例表)`scores` 中的数据。
 
 ```plaintext
 select *, COVAR_SAMP(id, score) 
@@ -1936,30 +2013,29 @@ from scores where subject in ('math');
 |    2 | tom   | math    |    80 |    4.500000000000004 |
 |    6 | amber | math    |    92 | -0.24999999999999467 |
 |    3 | jack  | math    |    95 | -0.24999999999999467 |
-+------+-------+---------+-------+----------------------+
 ```
 
-## COVAR_POP
+### COVAR_POP
 
-COVAR_POP() 窗口函数用于统计表达式的总体协方差。
+返回两个表达式的总体协方差。此函数从 v2.5.10 开始支持。它也是一个聚合函数。
 
-**语法**：
+**语法：**
 
 ```sql
 COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须求值为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+本示例使用[示例表](#窗口函数示例表)`scores` 中的数据。
 
 ```plaintext
 select *, COVAR_POP(id, score)
@@ -1979,34 +2055,34 @@ from scores where subject in ('math');
 +------+-------+---------+-------+----------------------+
 ```
 
-## CORR
+### CORR
 
-CORR() 窗口函数用于统计表达式的相关系数。
+返回两个表达式之间的 Pearson 相关系数。此函数从 v2.5.10 开始支持。它也是一个聚合函数。
 
-**语法**：
+**语法：**
 
 ```sql
 CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 :::tip
-从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+从 2.5.13、3.0.7、3.1.4 及更高版本开始，此窗口函数支持 ORDER BY 和 Window 子句。
 :::
 
-**参数说明**：
+**参数：**
 
-当表达式 `expr` 为列值时，支持以下数据类型: TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL
+如果 `expr` 是表列，则它必须求值为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE 或 DECIMAL。
 
-**示例**：
+**示例**
 
-该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+本示例使用[示例表](#窗口函数示例表)`scores` 中的数据。
 
 ```plaintext
 select *, CORR(id, score)
     over (
         partition by subject
         order by score) as corr
-FROM scores where subject in ('math');
+from scores where subject in ('math');
 +------+-------+---------+-------+-----------------------+
 | id   | name  | subject | score | corr                  |
 +------+-------+---------+-------+-----------------------+
