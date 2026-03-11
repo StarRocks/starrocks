@@ -52,6 +52,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
+#include "storage/topn_runtime_filter_update_context.h"
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
@@ -65,7 +66,9 @@ OlapChunkSource::OlapChunkSource(ScanOperator* op, RuntimeProfile* runtime_profi
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
-          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {
+    _topn_rf_update_ctx = op->topn_rf_update_ctx();
+}
 
 OlapChunkSource::~OlapChunkSource() {
     _reader.reset();
@@ -274,6 +277,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.enable_gin_filter) {
         _params.enable_gin_filter = thrift_olap_scan_node.enable_gin_filter;
     }
+    _params.topn_rf_update_ctx = _topn_rf_update_ctx;
     _params.use_vector_index = _use_vector_index;
     if (_use_vector_index) {
         const TVectorSearchOptions& vector_options = thrift_olap_scan_node.vector_search_options;
@@ -861,6 +865,20 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
     if (chunk != nullptr && num_rows > 0) {
         _chunk_buffer.update_limiter(chunk);
     }
+    _update_topn_rf_update_ctx();
+}
+
+void OlapChunkSource::_update_topn_rf_update_ctx() {
+    if (_topn_rf_update_ctx == nullptr) {
+        return;
+    }
+    const auto& stats = _reader->stats();
+    const int64_t raw_rows = stats.raw_rows_read;
+    const int64_t runtime_filtered = stats.runtime_stats_filtered;
+    _topn_rf_update_ctx->update_stats(raw_rows - _prev_raw_rows_read, runtime_filtered - _prev_runtime_filtered);
+    _prev_raw_rows_read = raw_rows;
+    _prev_runtime_filtered = runtime_filtered;
+    _topn_rf_update_ctx->on_chunk_output();
 }
 
 void OlapChunkSource::_update_counter() {

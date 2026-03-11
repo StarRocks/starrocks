@@ -351,6 +351,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
     rs_opts.enable_gin_filter = params.enable_gin_filter;
     rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
+    rs_opts.topn_rf_update_ctx = params.topn_rf_update_ctx;
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;

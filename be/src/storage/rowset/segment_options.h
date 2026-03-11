@@ -29,6 +29,7 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
+#include "storage/topn_runtime_filter_update_context.h"
 
 namespace starrocks {
 class ColumnAccessPath;
@@ -120,6 +121,7 @@ public:
 
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    TopnRuntimeFilterUpdateContext* topn_rf_update_ctx = nullptr;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

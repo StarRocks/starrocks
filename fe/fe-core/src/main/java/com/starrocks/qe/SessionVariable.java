@@ -1047,6 +1047,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // 0 for disable, 1 for too many data; 2 for force
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
+    public static final String TOPN_RUNTIME_FILTER_UPDATE_MODE = "topn_runtime_filter_update_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
@@ -2122,6 +2123,31 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
+    @VarAttr(name = TOPN_RUNTIME_FILTER_UPDATE_MODE)
+    private String topnRuntimeFilterUpdateMode = SessionVariableConstants.AUTO;
+
+    public void setTopnRuntimeFilterUpdateMode(String mode) {
+        if (mode == null) {
+            this.topnRuntimeFilterUpdateMode = SessionVariableConstants.AUTO;
+            return;
+        }
+        String normalized = StringUtils.lowerCase(mode.trim());
+        switch (normalized) {
+            case "auto":
+                this.topnRuntimeFilterUpdateMode = SessionVariableConstants.AUTO;
+                break;
+            case "off":
+                this.topnRuntimeFilterUpdateMode = SessionVariableConstants.OFF;
+                break;
+            case "force":
+                this.topnRuntimeFilterUpdateMode = SessionVariableConstants.FORCE;
+                break;
+            default:
+                throw new SemanticException(
+                        "Invalid value for " + TOPN_RUNTIME_FILTER_UPDATE_MODE + ": " + mode
+                                + ". Valid values are: off, auto, force");
+        }
+    }
     @VarAttr(name = BACK_PRESSURE_MAX_ROUNDS)
     private int backPressureMaxRounds = 3;
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
@@ -5813,6 +5839,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.topnFilterBackPressureMode = value;
     }
 
+    public int getTopnRuntimeFilterUpdateMode() {
+        if (topnRuntimeFilterUpdateMode == null) {
+            return 1;
+        }
+        String mode = topnRuntimeFilterUpdateMode.toLowerCase();
+        if (SessionVariableConstants.OFF.equals(mode)) {
+            return 0;
+        }
+        if (SessionVariableConstants.FORCE.equals(mode)) {
+            return 2;
+        }
+        return 1;
+    }
+
     public int getBackPressureMaxRounds() {
         return this.backPressureMaxRounds;
     }
@@ -6149,6 +6189,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(true);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
+        tResult.setTopn_runtime_filter_update_mode(getTopnRuntimeFilterUpdateMode());
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 

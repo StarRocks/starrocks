@@ -459,6 +459,7 @@ private:
     // Build column-specific RuntimeFilterPredicates for late materialization
     // Group runtime filter predicates by ColumnId
     void _build_column_oriented_rf(ScanContext* ctx);
+    bool _use_small_chunk_threshold() const;
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -2195,10 +2196,18 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
     }
 }
 
+bool SegmentIterator::_use_small_chunk_threshold() const {
+    if (_opts.topn_rf_update_ctx == nullptr) {
+        return false;
+    }
+    return _opts.topn_rf_update_ctx->should_use_small_chunk_threshold();
+}
+
 StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_first_column(
         vector<rowid_t>* rowid, std::vector<Column*>& current_columns) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
-    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
+    const uint32_t return_chunk_threshold =
+            _use_small_chunk_threshold() ? 1 : std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
     const bool scan_range_normalized = _scan_range.is_sorted();
     Chunk* chunk = _context->_read_chunk.get();
@@ -2221,7 +2230,6 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
     size_t original_chunk_size = chunk_start;
     while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
-        // chunk->check_or_die();
         size_t next_start = first_col->size();
 
         // Count how many rowids were read by this _read() call
@@ -2329,7 +2337,8 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
-    const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
+    const uint32_t return_chunk_threshold =
+            _use_small_chunk_threshold() ? 1 : std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
     const bool scan_range_normalized = _scan_range.is_sorted();
 

@@ -68,6 +68,7 @@ public:
     bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
     bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
     std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
+    bool topn_filter_on_sort_key() const override { return _topn_filter_on_sort_key; }
 
 private:
     // non-pipeline methods.
@@ -146,6 +147,7 @@ private:
     int64_t _scan_mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_data_source_mem_bytes = 0;
+    bool _topn_filter_on_sort_key = false;
 
 #ifdef BE_TEST
     std::atomic_bool _use_stream_load_thread_pool = false;

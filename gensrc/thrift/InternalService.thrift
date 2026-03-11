@@ -366,6 +366,8 @@ struct TQueryOptions {
   
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
+  // 0: off, 1: auto, 2: force
+  212: optional i32 topn_runtime_filter_update_mode = 1;
 
 }
 

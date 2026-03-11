@@ -145,6 +145,7 @@ public:
     bool has_output() const;
     bool need_input() const;
     bool is_finished() const;
+    bool empty() const { return _in_chunk == nullptr && _out_chunk == nullptr; }
 
 private:
     static bool _check_json_schema_equallity(const Chunk* one, const Chunk* two);
