@@ -223,9 +223,11 @@ public class ReplaceLakePartitionTest {
     public void testLakeTableDeleteFromRecycleBin() {
         {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
+            // Mock getAllPartitions() to return empty so addLakeTablePartitionsToRecycleBin()
+            // treats the table as having no partitions, triggering immediate cleanup.
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -239,7 +241,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -253,7 +255,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
