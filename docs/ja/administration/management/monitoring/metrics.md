@@ -575,7 +575,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Instantaneous
 - 説明: リソースグループのメモリクォータの瞬時値。
 
-### starrocks_be_resource_group_mem_allocated_bytes
+### starrocks_be_resource_group_mem_inuse_bytes
 
 - 単位: Bytes
 - タイプ: Instantaneous
