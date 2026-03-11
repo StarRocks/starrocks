@@ -30,8 +30,6 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/descriptors.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks {

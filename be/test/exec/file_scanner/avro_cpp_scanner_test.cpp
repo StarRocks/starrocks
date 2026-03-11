@@ -21,6 +21,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "exec/file_scanner/file_scanner.h"
+#include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"

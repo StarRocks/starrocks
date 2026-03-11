@@ -24,6 +24,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
