@@ -28,9 +28,6 @@ public:
     ~LookUpNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status open(RuntimeState* state) override { return Status::OK(); }
-
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override { return Status::OK(); }
 
     Status collect_query_statistics(QueryStatistics* statistics) override { return Status::OK(); }
 
