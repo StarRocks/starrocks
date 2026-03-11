@@ -1322,6 +1322,49 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
+        } else if (fnName.equals(FunctionSet.MULTI_ARRAY_AGG)) {
+            if (isDistinct) {
+                throw new SemanticException("DISTINCT is not supported for multi_array_agg", pos);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            fn = fn.copy();
+            List<Boolean> isAscOrder = new ArrayList<>();
+            List<Boolean> nullsFirst = new ArrayList<>();
+            List<OrderByElement> orderByElements = params.getOrderByElements();
+            if (orderByElements != null) {
+                for (OrderByElement elem : orderByElements) {
+                    isAscOrder.add(elem.getIsAsc());
+                    nullsFirst.add(elem.getNullsFirstParam());
+                }
+            }
+            int numOrderBy = isAscOrder.size();
+            int numAggCols = argSize - numOrderBy;
+            if (numAggCols < 1) {
+                throw new SemanticException("multi_array_agg requires at least one aggregation column", pos);
+            }
+            // Normalize argument types (NULL -> BOOLEAN)
+            Type[] argsTypes = new Type[argSize];
+            for (int i = 0; i < argSize; ++i) {
+                argsTypes[i] = argumentTypes[i] == NullType.NULL ? BooleanType.BOOLEAN : argumentTypes[i];
+            }
+            // Intermediate type: Struct<Array<col1>, ..., Array<colN>, Array<orderby1>, ..., Array<orderbyM>>
+            ArrayList<Type> intermediateFields = new ArrayList<>(argSize);
+            for (Type t : argsTypes) {
+                intermediateFields.add(new ArrayType(t));
+            }
+            Type intermediateType = new StructType(intermediateFields);
+            // Return type: Struct<Array<col1>, ..., Array<colK>> (only aggregation columns)
+            ArrayList<Type> returnFields = new ArrayList<>(numAggCols);
+            for (int i = 0; i < numAggCols; ++i) {
+                returnFields.add(new ArrayType(argsTypes[i]));
+            }
+            Type returnType = new StructType(returnFields);
+            fn.setArgsType(argsTypes);
+            fn.setRetType(returnType);
+            ((AggregateFunction) fn).setIntermediateType(intermediateType);
+            ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
+            ((AggregateFunction) fn).setNullsFirst(nullsFirst);
         } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
             // min_n/max_n(value, n) returns array<value_type>
             // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')

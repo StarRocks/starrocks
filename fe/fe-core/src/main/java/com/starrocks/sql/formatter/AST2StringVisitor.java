@@ -1213,10 +1213,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             StringLiteral boundary = (StringLiteral) node.getChild(3);
             sb.append(", ").append(boundary.getValue());
             sb.append(")");
-        } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)) {
+        } else if (functionName.equals(FunctionSet.ARRAY_AGG) || functionName.equals(FunctionSet.GROUP_CONCAT)
+                || functionName.equals(FunctionSet.MULTI_ARRAY_AGG)) {
             int end = 1;
             if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
                 end = fnParams.exprs().size() - fnParams.getOrderByElemNum() - 1;
+            } else if (functionName.equals(FunctionSet.MULTI_ARRAY_AGG)) {
+                end = fnParams.exprs().size() - fnParams.getOrderByElemNum();
             }
             for (int i = 0; i < end && i < node.getChildren().size(); ++i) {
                 if (i != 0) {

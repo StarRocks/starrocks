@@ -404,6 +404,7 @@ public class FunctionSet {
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_UNIQUE_AGG = "array_unique_agg";
+    public static final String MULTI_ARRAY_AGG = "multi_array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -1295,6 +1296,10 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
                 Lists.newArrayList(AnyElementType.ANY_ELEMENT), AnyArrayType.ANY_ARRAY, AnyStructType.ANY_STRUCT, true,
                 true, true, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(MULTI_ARRAY_AGG,
+                Lists.newArrayList(AnyElementType.ANY_ELEMENT), AnyStructType.ANY_STRUCT, AnyStructType.ANY_STRUCT, true,
+                true, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(AnyElementType.ANY_ELEMENT), VarcharType.VARCHAR, AnyStructType.ANY_STRUCT, true,
