@@ -1002,7 +1002,6 @@ Status Aggregator::_evaluate_const_columns(int i) {
 
 Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
-    _prepare_agg_fns_for_output();
     // TODO(kks): we should approve memory allocate here
     auto use_intermediate = _use_intermediate_as_output();
     MutableColumns agg_result_column = _create_agg_result_columns(1, use_intermediate);
@@ -1278,16 +1277,6 @@ void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, MutableCol
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
-    }
-}
-
-void Aggregator::_prepare_agg_fns_for_output() {
-    if (_is_prepared_for_output) {
-        return;
-    }
-    _is_prepared_for_output = true;
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->prepare_for_output(_agg_fn_ctxs[i]);
     }
 }
 
@@ -1713,7 +1702,6 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
 Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
                                              bool force_use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
-    _prepare_agg_fns_for_output();
 
     RETURN_IF_ERROR(_hash_map_variant.visit([&, this](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;
