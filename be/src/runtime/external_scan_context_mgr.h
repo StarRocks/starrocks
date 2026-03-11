@@ -45,7 +45,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 

@@ -18,6 +18,7 @@
 #include "exec/exec_node.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

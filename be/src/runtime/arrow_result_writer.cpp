@@ -28,6 +28,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

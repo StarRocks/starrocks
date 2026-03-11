@@ -23,8 +23,7 @@
 #include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {
 

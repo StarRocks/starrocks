@@ -31,7 +31,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 

@@ -39,6 +39,7 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TSocket.h>
 
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>

@@ -29,6 +29,7 @@
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/external_cluster_snapshot_task.h"
 #include "storage/lake/replication_txn_manager.h"
