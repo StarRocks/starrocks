@@ -42,6 +42,7 @@ class RandomAccessFile;
 struct HdfsScanStats;
 class ExprContext;
 class TIcebergSchemaField;
+class THdfsScanRange;
 
 namespace parquet {
 class FileMetaData;
@@ -113,6 +114,7 @@ struct GroupReaderParam {
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 
     int32_t scan_range_id = -1;
+    const THdfsScanRange* scan_range = nullptr;
 };
 
 class GroupReader {
@@ -156,6 +158,8 @@ private:
     Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
 
     Status _create_column_readers();
+    StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
+    StatusOr<int64_t> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     Status _prepare_column_readers() const;
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices, bool ignore_reserved_field = false);

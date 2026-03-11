@@ -1799,4 +1799,433 @@ TEST_F(GroupReaderTest, StructColumnReaderFillDstColumnMissingSubfieldReader) {
     ASSERT_TRUE(st.is_internal_error());
 }
 
+// ==================== Iceberg v3 Row Lineage Tests ====================
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNullScanRange) {
+    auto* param = _create_group_reader_param();
+    param->scan_range = nullptr;
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(0);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+}
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueNoExtendedColumns) {
+    auto* param = _create_group_reader_param();
+    param->scan_range = _pool.add(new THdfsScanRange());
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(0);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+}
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueSlotNotFound) {
+    auto* param = _create_group_reader_param();
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(std::map<int32_t, TExpr>());
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(999);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+}
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueEmptyNodes) {
+    auto* param = _create_group_reader_param();
+
+    std::map<int32_t, TExpr> extended_columns;
+    TExpr expr;
+    expr.nodes = std::vector<TExprNode>();
+    extended_columns[0] = expr;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(extended_columns);
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(0);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_invalid_argument());
+}
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueWrongNodeType) {
+    auto* param = _create_group_reader_param();
+
+    std::map<int32_t, TExpr> extended_columns;
+    TExpr expr;
+    TExprNode node;
+    node.node_type = TExprNodeType::BOOL_LITERAL;
+    expr.nodes.push_back(node);
+    extended_columns[0] = expr;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(extended_columns);
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(0);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_invalid_argument());
+}
+
+TEST_F(GroupReaderTest, TestGetExtendedBigIntValueSuccess) {
+    auto* param = _create_group_reader_param();
+
+    std::map<int32_t, TExpr> extended_columns;
+    TExpr expr;
+    TExprNode node;
+    node.node_type = TExprNodeType::INT_LITERAL;
+    TIntLiteral int_literal;
+    int_literal.value = 42;
+    node.__set_int_literal(int_literal);
+    expr.nodes.push_back(node);
+    extended_columns[0] = expr;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(extended_columns);
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    auto result = group_reader->_get_extended_bigint_value(0);
+    ASSERT_OK(result);
+    ASSERT_EQ(result.value(), 42);
+}
+
+TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    SlotDescriptor slot(0, "_row_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    ASSERT_OK(result);
+    ASSERT_EQ(result.value(), nullptr);
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+    ASSERT_NE(group_reader->_column_readers[100], nullptr);
+    delete group_reader;
+}
+
+TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(seq_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    std::map<int32_t, TExpr> extended_columns;
+    TExpr expr;
+    TExprNode node;
+    node.node_type = TExprNodeType::INT_LITERAL;
+    TIntLiteral int_literal;
+    int_literal.value = 100;
+    node.__set_int_literal(int_literal);
+    expr.nodes.push_back(node);
+    extended_columns[101] = expr;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(extended_columns);
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+    ASSERT_NE(group_reader->_column_readers[101], nullptr);
+    delete group_reader;
+}
+
+// Helper to build a tparquet::FileMetaData that includes the standard 6 read_cols
+// PLUS extra iceberg reserved columns (_row_id and/or _last_updated_sequence_number)
+// with proper field_ids so that get_field_idx_by_field_id returns a valid index.
+static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* pool, const GroupReaderParam* param,
+                                                                    bool include_row_id, bool include_seq_num) {
+    tparquet::FileMetaData t_file_meta;
+
+    // Count total columns
+    size_t num_read_cols = param->read_cols.size();
+    size_t extra_cols = (include_row_id ? 1 : 0) + (include_seq_num ? 1 : 0);
+    size_t total_cols = num_read_cols + extra_cols;
+
+    // Build schema elements
+    std::vector<tparquet::SchemaElement> schema_elements;
+
+    // Root element
+    tparquet::SchemaElement root;
+    root.__set_num_children(static_cast<int32_t>(total_cols));
+    schema_elements.push_back(root);
+
+    // Standard read_cols
+    for (size_t i = 0; i < num_read_cols; i++) {
+        tparquet::SchemaElement elem;
+        elem.__set_type(param->read_cols[i].type_in_parquet);
+        elem.__set_name("c" + std::to_string(i));
+        elem.__set_num_children(0);
+        schema_elements.push_back(elem);
+    }
+
+    // _row_id column with ICEBERG_ROW_ID_COLUMN_ID field_id
+    if (include_row_id) {
+        tparquet::SchemaElement elem;
+        elem.__set_type(tparquet::Type::INT64);
+        elem.__set_name(HdfsScanner::ICEBERG_ROW_ID);
+        elem.__set_num_children(0);
+        elem.__set_field_id(HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+        schema_elements.push_back(elem);
+    }
+
+    // _last_updated_sequence_number column
+    if (include_seq_num) {
+        tparquet::SchemaElement elem;
+        elem.__set_type(tparquet::Type::INT64);
+        elem.__set_name(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER);
+        elem.__set_num_children(0);
+        elem.__set_field_id(HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID);
+        schema_elements.push_back(elem);
+    }
+
+    // Build row groups (2 row groups, each with column chunks for all columns)
+    std::vector<tparquet::RowGroup> row_groups;
+    for (size_t rg = 0; rg < 2; rg++) {
+        tparquet::RowGroup row_group;
+        std::vector<tparquet::ColumnChunk> cols;
+        for (size_t i = 0; i < total_cols; i++) {
+            tparquet::ColumnChunk col;
+            col.__set_file_path("c" + std::to_string(i));
+            col.file_offset = 0;
+            col.meta_data.data_page_offset = 4;
+            cols.push_back(col);
+        }
+        row_group.__set_columns(cols);
+        row_group.__set_num_rows(12);
+        row_groups.push_back(row_group);
+    }
+
+    t_file_meta.__set_version(0);
+    t_file_meta.__set_row_groups(row_groups);
+    t_file_meta.__set_schema(schema_elements);
+    return t_file_meta;
+}
+
+TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
+    auto* param = _create_group_reader_param();
+
+    // Build file metadata with _row_id physical column
+    auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
+                                                             /*include_row_id=*/true, /*include_seq_num=*/false);
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    auto* file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+    param->timezone = "UTC";
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    ASSERT_OK(group_reader->init());
+
+    SlotDescriptor slot(200, HdfsScanner::ICEBERG_ROW_ID, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    auto result = group_reader->_create_reserved_iceberg_column_reader(&slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID);
+    ASSERT_OK(result);
+    // Physical column found -> non-null reader
+    ASSERT_NE(result.value(), nullptr);
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
+    auto* param = _create_group_reader_param();
+
+    // Set up reserved_field_slots with _row_id
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    // Build file metadata WITH physical _row_id column (field_id matches)
+    auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
+                                                             /*include_row_id=*/true, /*include_seq_num=*/false);
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    auto* file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+    // The _row_id column reader should be created from the physical column (not IcebergRowIdReader)
+    ASSERT_NE(group_reader->_column_readers[100], nullptr);
+    delete group_reader;
+}
+
+TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation) {
+    auto* param = _create_group_reader_param();
+
+    // Set up reserved_field_slots with _last_updated_sequence_number
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(seq_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    // Build file metadata WITH physical _last_updated_sequence_number column (field_id matches)
+    auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
+                                                             /*include_row_id=*/false, /*include_seq_num=*/true);
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    auto* file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+    // The _last_updated_sequence_number reader should be created from the physical column
+    ASSERT_NE(group_reader->_column_readers[101], nullptr);
+    delete group_reader;
+}
+
+TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
+    auto* param = _create_group_reader_param();
+
+    // Set up reserved_field_slots with both _row_id and _last_updated_sequence_number
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    reserved_slots->push_back(seq_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    // Build file metadata with both physical iceberg columns
+    auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
+                                                             /*include_row_id=*/true, /*include_seq_num=*/true);
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    auto* file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+    // Both physical column readers should be created
+    ASSERT_NE(group_reader->_column_readers[100], nullptr);
+    ASSERT_NE(group_reader->_column_readers[101], nullptr);
+    delete group_reader;
+}
+
 } // namespace starrocks::parquet
