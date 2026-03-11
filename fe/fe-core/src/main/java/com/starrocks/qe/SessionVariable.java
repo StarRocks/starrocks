@@ -2255,6 +2255,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return splitTopNAggLimit;
     }
 
+    public void setEnableSplitTopNAgg(boolean enableSplitTopNAgg) {
+        this.enableSplitTopNAgg = enableSplitTopNAgg;
+    }
+
     public void setEnableDistinctAggOverWindow(boolean value) {
         this.enableDistinctAggOverWindow = value;
     }
