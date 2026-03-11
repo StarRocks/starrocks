@@ -53,7 +53,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "storage/type_traits.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
@@ -527,9 +526,10 @@ Status OlapScanNode::_prune_scan_ranges(const std::vector<TScanRangeParams>& sca
             Filter filter(col->size(), 1);
             partition_cols_chunk.append_column(std::move(col), slot->id());
 
+            std::vector<SlotId> slot_ids;
             for (auto* ctx : _partition_exprs) {
-                auto* ref = ctx->root()->get_column_ref();
-                if (!partition_cols_chunk.is_slot_exist(ref->slot_id())) {
+                slot_ids.clear();
+                if (ctx->root()->get_slot_ids(&slot_ids) != 1 || slot_ids[0] != slot->id()) {
                     continue;
                 }
                 ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(&partition_cols_chunk, filter.data()));
