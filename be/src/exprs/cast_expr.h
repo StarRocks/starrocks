@@ -353,9 +353,9 @@ private:
 //   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
 class CastStructExpr final : public Expr {
 public:
-    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts,
-                   std::vector<int> source_field_indices)
-            : Expr(node), _field_casts(std::move(field_casts)),
+    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts, std::vector<int> source_field_indices)
+            : Expr(node),
+              _field_casts(std::move(field_casts)),
               _source_field_indices(std::move(source_field_indices)) {}
 
     ~CastStructExpr() override = default;
