@@ -70,10 +70,9 @@ public:
 
         size_t old_cap = s.buffer.capacity();
         size_t off = s.buffer.size();
-        s.buffer.resize(off + row_size);
+        s.buffer.resize(off + row_size); // std::string zero-fills new bytes
         uint8_t* ptr = reinterpret_cast<uint8_t*>(s.buffer.data() + off);
 
-        memset(ptr, 0, nbm);
         uint8_t* bitmap = ptr;
         uint8_t* pos = ptr + nbm;
 
