@@ -20,12 +20,10 @@
 #include "base/string/parse_util.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
-#include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
-#include "storage/update_manager.h"
 #include "util/dynamic_cache.h"
 
 namespace starrocks {
@@ -147,12 +145,7 @@ public:
 
     string topn_memory_stats(size_t topn);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent);
-        return Status::OK();
-    }
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
 
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "exec/file_builder.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 

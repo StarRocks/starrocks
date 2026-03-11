@@ -28,7 +28,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 #include "util/disposable_closure.h"
 #include "util/internal_service_recoverable_stub.h"
 

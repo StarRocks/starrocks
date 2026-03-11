@@ -31,7 +31,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
