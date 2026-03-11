@@ -1659,62 +1659,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 node.getFnParamColumnRefs(), node.getFnResultColRefs());
     }
 
-    private Optional<Operator> findScanOperator(ExpressionContext context) {
-        final var operator = context.getChildOperator(0);
-        if (operator instanceof LogicalScanOperator || operator instanceof PhysicalScanOperator) {
-            return Optional.of(operator);
+    private Optional<ColumnStatistic> loadUnnestStatistics(ColumnRefOperator inputColumn) {
+        if (columnRefFactory == null) {
+            return Optional.empty();
         }
-
-        // There may be a projection operator between the unnest and the scan (e.g. in case of an EXCHANGE).
-        if (context.getExpression() != null) {
-            final var childExpr = context.getExpression().getInputs().get(0);
-            return findScanOperatorInTree(childExpr);
-        }
-
-        return Optional.empty();
-    }
-
-    private static final List<Class<? extends Operator>> ALLOWED_UNNEST_PROPAGATION_TYPES = List.of(LogicalScanOperator.class,
-            PhysicalScanOperator.class, LogicalProjectOperator.class, PhysicalProjectOperator.class);
-
-    private Optional<Operator> findScanOperatorInTree(OptExpression expr) {
-        Operator op = expr.getOp();
-        if (op instanceof LogicalScanOperator || op instanceof PhysicalScanOperator) {
-            return Optional.of(op);
-        }
-
-        // Only allow propagation through certain operator types to make sure we only apply stats when they're really
-        // based on the virtual stat.
-        final var eligibleChilds = expr.getInputs().stream() //
-                .filter(childExpr -> ALLOWED_UNNEST_PROPAGATION_TYPES.stream() //
-                        .anyMatch(eligibleClass -> eligibleClass.isInstance(childExpr.getOp()))) //
-                .toList();
-
-        for (final var child : eligibleChilds) {
-            Optional<Operator> result = findScanOperatorInTree(child);
-            if (result.isPresent()) {
-                return result;
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    private Optional<ColumnStatistic> loadUnnestStatistics(Operator scanOperator, ColumnRefOperator columnRef) {
-        Table table = null;
-        if (scanOperator instanceof LogicalScanOperator) {
-            table = ((LogicalScanOperator) scanOperator).getTable();
-        } else if (scanOperator instanceof PhysicalScanOperator) {
-            table = ((PhysicalScanOperator) scanOperator).getTable();
-        }
-
-        if (table == null) {
-            LOG.warn("Unnest statistics: Failed to load unnest statistics as no scan operator could be found.");
+        final var tableAndColumn = columnRefFactory.getTableAndColumn(inputColumn);
+        if (tableAndColumn == null || tableAndColumn.first == null) {
             return Optional.empty();
         }
 
+        final var table = tableAndColumn.first;
         try {
-            String virtualColumnName = VirtualStatistic.UNNEST.getVirtualColumnName(columnRef.getName());
+            String virtualColumnName = VirtualStatistic.UNNEST.getVirtualColumnName(inputColumn.getName());
 
             final var stat = GlobalStateMgr.getCurrentState() //
                     .getStatisticStorage() //
@@ -1768,14 +1724,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputToInputMapping.put(fnResultColRefs.get(i), fnParamColumnRefs.get(i));
             }
 
-            final var scanOperatorOpt = findScanOperator(context);
             for (final var outputColumn : outputColumns) {
                 ColumnRefOperator inputColumn = outputToInputMapping.get(outputColumn);
 
                 logUnnestStatisticsPropagationTotal();
                 // Apply UNNEST virtual statistics to corresponding output column
-                if (VirtualStatistic.UNNEST.isQueryingEnabled() && inputColumn != null && scanOperatorOpt.isPresent()) {
-                    final var virtualStat = loadUnnestStatistics(scanOperatorOpt.get(), inputColumn);
+                if (VirtualStatistic.UNNEST.isQueryingEnabled() && inputColumn != null) {
+                    final var virtualStat = loadUnnestStatistics(inputColumn);
                     virtualStat.ifPresent(columnStatistic -> {
                         logUnnestStatisticsPropagationSuccess();
                         builder.addColumnStatistic(outputColumn, columnStatistic);

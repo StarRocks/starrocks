@@ -132,5 +132,21 @@ public class VirtualStatisticPropagationTest extends PlanTestBase {
             ConnectContext.get().getSessionVariable().setEnableUnnestVirtualStatistics(true);
         }
     }
+
+    @Test
+    void itShouldPropagateUnnestStatsThroughJoinBetweenScanAndUnnest() throws Exception {
+        // GIVEN
+        // join_partner is joined with arr_table BEFORE the unnest
+        String sql = "select tarr.unnest from arr_table " +
+                "LEFT JOIN join_partner jp ON arr_table.k = CAST(jp.k AS INT), unnest(arr) AS tarr(unnest)";
+
+        // WHEN
+        String plan = getCostExplain(sql);
+        System.out.println(plan);
+
+        // THEN
+        assertNotNull(plan);
+        assertContains(plan, "unnest-->[-Infinity, Infinity, 0.987, NaN, NaN]");
+    }
 }
 
