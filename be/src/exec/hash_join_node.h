@@ -16,8 +16,8 @@
 
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline_node.h"
 #include "exec/join/join_hash_table.h"
+#include "exec/pipeline_node.h"
 
 namespace starrocks {
 
@@ -85,7 +85,6 @@ private:
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     std::map<SlotId, ExprContext*> _common_expr_ctxs;
-
 };
 
 } // namespace starrocks

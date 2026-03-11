@@ -23,9 +23,9 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
-#include "exec/pipeline_node.h"
 #include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
 

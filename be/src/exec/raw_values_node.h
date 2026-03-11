@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/pipeline_node.h"
 #include "exec/pipeline/set/raw_values_source_operator.h"
+#include "exec/pipeline_node.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

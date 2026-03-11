@@ -19,8 +19,8 @@
 
 #include "column/chunk.h"
 #include "common/global_types.h"
-#include "exec/pipeline_node.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline_node.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
 #include "types/type_descriptor.h"
