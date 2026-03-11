@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: Partition data in StarRocks
+description: StarRocks でデータをパーティション分割する
 sidebar_position: 10
 ---
 
