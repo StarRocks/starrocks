@@ -45,7 +45,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -1173,6 +1175,15 @@ public abstract class Type implements Cloneable {
         }
     }
 
+    private static boolean isCastStructByName() {
+        final ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return false;
+        }
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        return SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
+    }
+
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
@@ -1193,8 +1204,19 @@ public abstract class Type implements Cloneable {
             if (fromStruct.getFields().size() != toStruct.getFields().size()) {
                 return false;
             }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
+            boolean isCastByName = isCastStructByName();
+            for (int i = 0; i < toStruct.getFields().size(); ++i) {
+                StructField fromField = fromStruct.getField(i);
+                StructField toField;
+                if (isCastByName) {
+                    toField = toStruct.getField(fromField.getName());
+                } else {
+                    toField = toStruct.getField(i);
+                }
+                if (toField == null) {
+                    return false;
+                }
+                if (!canCastTo(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }

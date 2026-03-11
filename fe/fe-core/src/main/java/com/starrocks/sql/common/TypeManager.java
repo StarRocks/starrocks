@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.ArrayList;
@@ -103,19 +104,37 @@ public class TypeManager {
         return new MapType(keyCommon, valueCommon);
     }
 
+    private static boolean isCastStructByName() {
+        final ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return false;
+        }
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        return SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
+    }
+
     private static Type getCommonStructType(StructType t1, StructType t2) {
         if (t1.getFields().size() != t2.getFields().size()) {
             return Type.INVALID;
         }
+        boolean castByName = isCastStructByName();
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            StructField field1 = t1.getField(i);
+            StructField field2 = null;
+            if (castByName) {
+                field2 = t2.getField(field1.getName());
+            } else {
+                field2 = t2.getField(i);
+            }
+            if (field2 == null) {
+                return InvalidType.INVALID;
+            }
+            Type fieldCommon = getCommonSuperType(field1.getType(), field2.getType());
             if (!fieldCommon.isValid()) {
                 return Type.INVALID;
             }
-
-            // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            fields.add(new StructField(field1.getName(), fieldCommon));
         }
         return new StructType(fields);
     }

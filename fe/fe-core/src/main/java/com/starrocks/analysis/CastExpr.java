@@ -38,6 +38,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -144,10 +146,18 @@ public class CastExpr extends Expr {
         msg.node_type = TExprNodeType.CAST_EXPR;
         msg.setOpcode(opcode);
         msg.setOutput_column(outputColumn);
-        if (getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(getChild(0).getType().toThrift());
+        Type childType = getChild(0).getType();
+        if (childType.isComplexType()) {
+            msg.setChild_type_desc(childType.toThrift());
         } else {
-            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
+            msg.setChild_type(childType.getPrimitiveType().toThrift());
+        }
+        if (childType.isStructType() && type.isStructType()) {
+            ConnectContext ctx = ConnectContext.get();
+            if (ctx != null && SqlModeHelper.check(ctx.getSessionVariable().getSqlMode(),
+                    SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
+                msg.setCast_struct_by_name(true);
+            }
         }
     }
 
