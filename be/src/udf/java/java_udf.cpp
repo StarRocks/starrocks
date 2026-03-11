@@ -735,6 +735,22 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
     return Status::OK();
 }
 
+void ClassAnalyzer::strip_jni_generic_types(std::string* sign) {
+    std::string cleaned;
+    cleaned.reserve(sign->size());
+    int depth = 0;
+    for (char c : *sign) {
+        if (c == '<') {
+            depth++;
+        } else if (c == '>') {
+            depth--;
+        } else if (depth == 0) {
+            cleaned += c;
+        }
+    }
+    *sign = std::move(cleaned);
+}
+
 Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std::string* sign) {
     DCHECK(clazz != nullptr);
     DCHECK(sign != nullptr);
@@ -765,6 +781,14 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     *sign = helper.to_string(result_sign);
+    // Strip generic type parameters from signature to produce standard JNI method descriptor.
+    // Java's getGenericParameterTypes() may produce signatures with generic info that:
+    // 1. JNI GetMethodID cannot match against the erased method descriptor, returning NULL.
+    // 2. get_udaf_method_desc() uses exact string matching (e.g. type == "java/util/List")
+    //    to populate method_desc. Generic signatures like "java/util/List<java/lang/String>"
+    //    would fail to match, causing missing MethodTypeDescriptor entries and subsequent
+    //    out-of-bounds access in process()/update()/merge() when indexing method_desc[j+1].
+    strip_jni_generic_types(sign);
     return Status::OK();
 }
 
@@ -821,16 +845,42 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         if (sign[i] == '(' || sign[i] == ')') {
             continue;
         }
+        // Handle array types
         if (sign[i] == '[') {
-            while (sign[i] != ';') {
-                i++;
+            // Consume all leading '[' (for multi-dimensional arrays)
+            while (i < sign.size() && sign[i] == '[') {
+                ++i;
             }
+
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid array descriptor '{}': missing element type", sign));
+            }
+
+            // Handle element type: object array 'L...;' or primitive type (single char)
+            if (sign[i] == 'L') {
+                // Object array: [L<classname>;
+                ++i; // Skip 'L'
+                while (i < sign.size() && sign[i] != ';') {
+                    ++i;
+                }
+                if (i >= sign.size()) {
+                    return Status::InternalError(
+                            fmt::format("Invalid object array descriptor '{}': missing ';'", sign));
+                }
+                // i now points to ';', loop will increment it
+            }
+            // For primitive arrays ([I, [J, etc.), the single char is already at the right position
+
             desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
+            continue;
         }
         if (sign[i] == 'L') {
             int st = i + 1;
-            while (sign[i] != ';') {
+            while (i < sign.size() && sign[i] != ';') {
                 i++;
+            }
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid object type descriptor '{}': missing ';'", sign));
             }
             std::string type = sign.substr(st, i - st);
             if (false) {
