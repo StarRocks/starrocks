@@ -259,8 +259,6 @@ private:
         Page* tail = nullptr;
     };
 
-    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
-
     void _push_back_page(Page* page) {
         // add page to pages' tail
         if (_pages.tail != nullptr) {
@@ -276,6 +274,8 @@ private:
         // estimate (page footer + footer size + checksum) took 20 bytes
         _data_size += 20;
     }
+
+    Status _append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
