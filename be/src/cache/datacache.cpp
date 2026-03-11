@@ -28,7 +28,6 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "runtime/exec_env.h"
-#include "storage/options.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

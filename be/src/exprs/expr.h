@@ -39,12 +39,13 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/expr_jit_types.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

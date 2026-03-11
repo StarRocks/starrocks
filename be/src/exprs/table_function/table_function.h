@@ -18,7 +18,7 @@
 
 #include "column/fixed_length_column.h"
 #include "exprs/function_helper.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 

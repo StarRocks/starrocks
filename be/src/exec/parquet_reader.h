@@ -33,6 +33,7 @@
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "fs/fs.h"
+#include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

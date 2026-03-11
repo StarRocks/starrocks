@@ -18,6 +18,7 @@
 
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 class AnalytorTest : public ::testing::Test {

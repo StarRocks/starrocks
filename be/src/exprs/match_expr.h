@@ -16,7 +16,7 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 

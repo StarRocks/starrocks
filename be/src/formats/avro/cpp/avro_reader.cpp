@@ -26,6 +26,7 @@
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks {

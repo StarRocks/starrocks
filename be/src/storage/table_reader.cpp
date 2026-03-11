@@ -20,6 +20,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"

@@ -25,11 +25,13 @@
 
 namespace starrocks {
 
+class OlapTableSchemaParam;
 class OlapTablePartitionParam;
 class OlapTableLocationParam;
 class StarRocksNodesInfo;
 class LocalTabletReader;
 class PInternalService_RecoverableStub;
+class RowDescriptor;
 
 namespace serde {
 struct ProtobufChunkMeta;

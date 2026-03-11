@@ -35,24 +35,16 @@
 #pragma once
 
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "base/uid_util.h"
 #include "fs/fs.h"
 #include "storage/lake/location_provider.h"
-#include "storage/olap_define.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
 class MemTracker;
-
-struct StorePath {
-    StorePath() = default;
-    explicit StorePath(std::string path_) : path(std::move(path_)) {}
-    std::string path;
-    TStorageMedium::type storage_medium{TStorageMedium::HDD};
-};
 
 // parse a single root path of storage_root_path
 Status parse_root_path(const std::string& root_path, StorePath* path);

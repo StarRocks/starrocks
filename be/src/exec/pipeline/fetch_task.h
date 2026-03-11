@@ -19,11 +19,7 @@
 #include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "common/global_types.h"
-#include "runtime/runtime_state.h"
-
-namespace starrocks {
-class RuntimeState;
-}
+#include "runtime/runtime_fwd.h"
 namespace starrocks::pipeline {
 
 class FetchProcessor;

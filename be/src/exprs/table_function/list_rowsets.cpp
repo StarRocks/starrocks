@@ -22,6 +22,7 @@
 #include "gutil/casts.h"
 #include "json2pb/pb_to_json.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "types/logical_type.h"

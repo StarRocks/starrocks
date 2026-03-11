@@ -15,7 +15,6 @@
 #pragma once
 
 #include "exprs/table_function/table_function.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

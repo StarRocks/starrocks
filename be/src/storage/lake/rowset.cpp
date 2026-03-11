@@ -23,6 +23,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"

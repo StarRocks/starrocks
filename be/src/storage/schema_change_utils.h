@@ -17,6 +17,7 @@
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
+#include "runtime/descriptors.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet.h"

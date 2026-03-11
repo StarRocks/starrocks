@@ -78,7 +78,6 @@
 #include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/mem_hook.h"
-#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "types/time_types.h"
 #include "util/global_metrics_registry.h"

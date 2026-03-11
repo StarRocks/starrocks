@@ -26,6 +26,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -1774,6 +1775,13 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
         return version;
     }
     return 0;
+}
+
+Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    return Status::OK();
 }
 
 void UpdateManager::_print_memory_stats() {

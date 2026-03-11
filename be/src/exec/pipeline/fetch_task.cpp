@@ -20,6 +20,7 @@
 
 #include "base/brpc/ref_count_closure.h"
 #include "base/status_fmt.hpp"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "gen_cpp/internal_service.pb.h"
