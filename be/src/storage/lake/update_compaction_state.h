@@ -30,7 +30,7 @@ class UpdateManager;
 
 class CompactionState {
 public:
-    CompactionState() {}
+    CompactionState() = default;
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;

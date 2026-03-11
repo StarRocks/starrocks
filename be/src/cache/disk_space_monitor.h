@@ -41,7 +41,7 @@ public:
 
         virtual dev_t device_id(const std::string& path);
 
-        virtual ~FileSystemWrapper() {}
+        virtual ~FileSystemWrapper() = default;
     };
 
     struct DiskStats {

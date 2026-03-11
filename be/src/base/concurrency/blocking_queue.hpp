@@ -236,7 +236,7 @@ template <typename T, typename Container = std::deque<T>, typename Lock = std::m
           typename CV = std::condition_variable>
 class UnboundedBlockingQueue {
 public:
-    UnboundedBlockingQueue() {}
+    UnboundedBlockingQueue() = default;
     ~UnboundedBlockingQueue() { shutdown(); }
 
     // Return false iff empty *AND* has been shutdown.

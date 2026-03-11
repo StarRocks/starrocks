@@ -44,7 +44,7 @@ class TabletManager;
 class RowsMapperBuilder {
 public:
     RowsMapperBuilder(std::string filename) : _filename(std::move(filename)) {}
-    ~RowsMapperBuilder() {}
+    ~RowsMapperBuilder() = default;
     // append rssid rowids to file
     Status append(const std::vector<uint64_t>& rssid_rowids);
     Status finalize();
@@ -68,7 +68,7 @@ private:
 // which is critical for large compactions (can save GBs of memory).
 class RowsMapperIterator {
 public:
-    RowsMapperIterator() {}
+    RowsMapperIterator() = default;
     ~RowsMapperIterator();
     // Open file and prepare internal state.
     // IMPORTANT: Now accepts FileInfo instead of string to support both local and remote storage.

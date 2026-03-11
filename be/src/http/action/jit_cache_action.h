@@ -29,7 +29,7 @@ namespace starrocks {
 
 class JITCacheAction : public HttpHandler {
 public:
-    explicit JITCacheAction() {}
+    explicit JITCacheAction() = default;
     ~JITCacheAction() override = default;
 
     void handle(HttpRequest* req) override;

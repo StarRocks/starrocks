@@ -42,12 +42,7 @@ struct CompactionCandidate {
         score = other.score;
     }
 
-    CompactionCandidate& operator=(const CompactionCandidate& rhs) {
-        tablet = rhs.tablet;
-        type = rhs.type;
-        score = rhs.score;
-        return *this;
-    }
+    CompactionCandidate& operator=(const CompactionCandidate& rhs) = default;
 
     CompactionCandidate(CompactionCandidate&& other) {
         tablet = std::move(other.tablet);
