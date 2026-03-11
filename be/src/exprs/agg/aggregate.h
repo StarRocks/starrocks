@@ -118,6 +118,11 @@ public:
     // this information should be updated as well.
     virtual void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const {}
 
+    // Called once before the output phase begins (before serialize_to_column/finalize_to_column).
+    // Allows aggregate functions to prepare shared state for efficient per-group output.
+    // Default implementation is a no-op.
+    virtual void prepare_for_output(FunctionContext* ctx) const {}
+
     virtual std::string get_name() const = 0;
 
     // State management methods:

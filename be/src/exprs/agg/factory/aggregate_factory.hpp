@@ -44,6 +44,7 @@
 #include "exprs/agg/mann_whitney.h"
 #include "exprs/agg/map_agg.h"
 #include "exprs/agg/maxmin.h"
+#include "exprs/agg/multi_array_agg.h"
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/minmax_n.h"
 #include "exprs/agg/nullable_aggregate.h"
@@ -120,6 +121,8 @@ public:
     static AggregateFunctionPtr MakeArrayAggAggregateFunctionV2() {
         return new ArrayAggAggregateFunctionV2<ArrayAggState>();
     }
+
+    static AggregateFunctionPtr MakeMultiArrayAggAggregateFunction() { return new MultiArrayAggAggregateFunction(); }
 
     static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() { return new GroupConcatAggregateFunctionV2(); }
 

@@ -442,6 +442,7 @@ protected:
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
     bool _is_ht_eos = false;
+    bool _is_prepared_for_output = false;
     std::atomic_bool _streaming_all_states = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
@@ -571,6 +572,7 @@ protected:
 
     void _serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
     void _finalize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
+    void _prepare_agg_fns_for_output();
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
