@@ -14,7 +14,10 @@
 
 #include "udf_downloder.h"
 
+#include <fmt/format.h>
+
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 
 namespace starrocks {
@@ -46,7 +49,7 @@ Status udf_downloder::setup_local_file_path(const std::string& local_path) {
 }
 
 Status udf_downloder::do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(remotePath, options));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(remotePath, options));
     if (!fs) {
         LOG(ERROR) << fmt::format("No matching filesystem for {}", remotePath);
         return Status::NotFound(fmt::format("No matching filesystem available for {}", remotePath));
