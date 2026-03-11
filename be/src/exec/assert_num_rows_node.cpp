@@ -42,18 +42,6 @@ Status AssertNumRowsNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status AssertNumRowsNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AssertNumRowsNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void AssertNumRowsNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

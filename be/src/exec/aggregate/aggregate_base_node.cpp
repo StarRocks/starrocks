@@ -48,10 +48,6 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggregateBaseNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void AggregateBaseNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

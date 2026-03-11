@@ -41,20 +41,6 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         return Status::InternalError("param slots not set in table function node");
     }
 
-    if (tnode.table_function_node.__isset.outer_columns) {
-        _outer_slots.insert(_outer_slots.end(), tnode.table_function_node.outer_columns.begin(),
-                            tnode.table_function_node.outer_columns.end());
-    } else {
-        return Status::InternalError("outer slots not set in table function node");
-    }
-
-    if (tnode.table_function_node.__isset.fn_result_columns) {
-        _fn_result_slots.insert(_fn_result_slots.end(), tnode.table_function_node.fn_result_columns.begin(),
-                                tnode.table_function_node.fn_result_columns.end());
-    } else {
-        return Status::InternalError("fn result slots not set in table function node");
-    }
-
     //Get table function from TableFunctionResolver
     TFunction table_fn = tnode.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
@@ -79,22 +65,8 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
-    _input_chunk_seek_rows = 0;
-    _outer_column_remain_repeat_times = 0;
 
     return Status::OK();
-}
-
-Status TableFunctionNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status TableFunctionNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status TableFunctionNode::reset(RuntimeState* state) {
@@ -110,69 +82,6 @@ void TableFunctionNode::close(RuntimeState* state) {
         (void)_table_function->close(state, _table_function_state);
     }
     ExecNode::close(state);
-}
-
-Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const Columns& output_columns) {
-    *chunk = std::make_shared<Chunk>();
-
-    for (int outer_idx = 0; outer_idx < _outer_slots.size(); ++outer_idx) {
-        (*chunk)->append_column(output_columns[outer_idx], _outer_slots[outer_idx]);
-    }
-    for (int result_idx = 0; result_idx < _fn_result_slots.size(); ++result_idx) {
-        (*chunk)->append_column(output_columns[_outer_slots.size() + result_idx], _fn_result_slots[result_idx]);
-    }
-
-    _num_rows_returned += (*chunk)->num_rows();
-
-    if (reached_limit()) {
-        int64_t num_rows_over = _num_rows_returned - _limit;
-        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        return Status::OK();
-    }
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-
-    return Status::OK();
-}
-
-Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
-    if (_input_chunk_ptr != nullptr) {
-        SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(state, _table_function_state);
-        if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
-            const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
-            const std::string& fn_name = table_fn.name.function_name;
-            return Status::NotSupported(fmt::format("Only support function \"{}\" on pipeline engine", fn_name));
-        }
-        return Status::OK();
-    }
-
-    do {
-        RETURN_IF_ERROR(child(0)->get_next(state, &_input_chunk_ptr, eos));
-    } while (!*eos && _input_chunk_ptr->is_empty());
-
-    if (*eos) {
-        return Status::OK();
-    }
-
-    _input_chunk_seek_rows = 0;
-    Columns table_function_params;
-    for (SlotId slotId : _param_slots) {
-        table_function_params.emplace_back(_input_chunk_ptr->get_column_by_slot_id(slotId));
-    }
-
-    _table_function_state->set_params(table_function_params);
-    {
-        SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(state, _table_function_state);
-        if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
-            const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
-            const std::string& fn_name = table_fn.name.function_name;
-            return Status::NotSupported(fmt::format("Only support function \"{}\" on pipeline engine", fn_name));
-        }
-    }
-    return Status::OK();
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decompose_to_pipeline(

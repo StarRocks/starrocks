@@ -14,40 +14,14 @@
 
 #include "exec/aggregate/distinct_streaming_node.h"
 
-#include <variant>
-
-#include "base/simd/simd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "runtime/current_thread.h"
 
 namespace starrocks {
-
-Status DistinctStreamingNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DistinctStreamingNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
-    if (!_aggregator->it_hash().has_value()) {
-        _aggregator->hash_set_variant().visit(
-                [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-    }
-
-    _aggregator->convert_hash_set_to_chunk(runtime_state()->chunk_size(), chunk);
-}
 
 pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;

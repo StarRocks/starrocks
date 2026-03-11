@@ -56,28 +56,6 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExceptNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-// step 1:
-// Build hashset(_hash_set) for leftmost _child_expr of child(0).
-//
-// step 2:
-// for every other children of B(1~N),
-// erase the rows of child at hashset(_hash_set) througth set deleted of key.
-//
-// step 3:
-// for all undeleted keys in hashset(_hash_set),
-// construct columns as chunk as result to parent node.
-Status ExceptNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void ExceptNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

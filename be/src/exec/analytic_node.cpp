@@ -56,18 +56,6 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status AnalyticNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AnalyticNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void AnalyticNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

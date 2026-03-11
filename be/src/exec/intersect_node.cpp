@@ -61,28 +61,6 @@ Status IntersectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status IntersectNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-// step 1:
-// Build hashset(_hash_set) for leftmost _child_expr of child(0).
-//
-// step 2:
-// for every other children of B(1~N),
-// add one to the hit_times of rows of the Intersecting sets.
-//
-// step 3:
-// for all keys in hashset(_hash_set), for rows that hit_times is (children'size - 1),
-// construct columns as chunk as result to parent node.
-Status IntersectNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void IntersectNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

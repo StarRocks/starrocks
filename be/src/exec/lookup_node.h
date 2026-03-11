@@ -16,19 +16,18 @@
 
 #include "base/phmap/phmap.h"
 #include "common/global_types.h"
-#include "exec/exec_node.h"
+#include "exec/pipeline_node.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 class LookUpDispatcher;
 
-class LookUpNode final : public ExecNode {
+class LookUpNode final : public PipelineNode {
 public:
     LookUpNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~LookUpNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override { return Status::OK(); }
 
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override { return Status::OK(); }

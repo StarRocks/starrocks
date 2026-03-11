@@ -15,19 +15,18 @@
 #pragma once
 
 #include "exec/aggregator_fwd.h"
-#include "exec/exec_node.h"
+#include "exec/pipeline_node.h"
 
 namespace starrocks {
 
 class RuntimeFilterBuildDescriptor;
 class RuntimeFilterProbeCollector;
 
-class AggregateBaseNode : public ExecNode {
+class AggregateBaseNode : public PipelineNode {
 public:
     AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~AggregateBaseNode() override;
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
     void push_down_tuple_slot_mappings(RuntimeState* state,

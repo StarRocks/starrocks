@@ -73,18 +73,6 @@ void DictDecodeNode::_init_counter() {
     _decode_timer = ADD_TIMER(_runtime_profile, "DictDecodeTime");
 }
 
-Status DictDecodeNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DictDecodeNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 void DictDecodeNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;

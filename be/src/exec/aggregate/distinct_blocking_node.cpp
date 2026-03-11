@@ -37,18 +37,6 @@
 
 namespace starrocks {
 
-Status DistinctBlockingNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DistinctBlockingNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
 template <class AggFactory, class SourceFactory, class SinkFactory>
 pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
                                                                    pipeline::PipelineBuilderContext* context,

@@ -23,6 +23,7 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "exec/pipeline_node.h"
 #include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
 #include "exprs/expr_context.h"
@@ -35,7 +36,7 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
-class IntersectNode final : public ExecNode {
+class IntersectNode final : public PipelineNode {
 public:
     IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
@@ -46,9 +47,6 @@ public:
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;

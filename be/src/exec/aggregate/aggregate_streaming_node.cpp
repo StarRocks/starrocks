@@ -14,39 +14,13 @@
 
 #include "exec/aggregate/aggregate_streaming_node.h"
 
-#include <variant>
-
-#include "base/simd/simd.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "runtime/current_thread.h"
 
 namespace starrocks {
-
-Status AggregateStreamingNode::prepare(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AggregateStreamingNode::open(RuntimeState* state) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::NotSupported("non-pipeline execution is not supported");
-}
-
-Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
-    if (!_aggregator->it_hash().has_value()) {
-        _aggregator->it_hash() = _aggregator->state_allocator().begin();
-        COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-    }
-
-    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(runtime_state()->chunk_size(), chunk));
-    return Status::OK();
-}
 
 pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
