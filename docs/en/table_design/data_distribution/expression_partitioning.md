@@ -16,7 +16,7 @@ From v3.5 onwards, StarRocks supports merging expression partitions based on tim
 
 ## Partitioning based on a simple time function expression
 
-If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
+If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (`DATE` or `DATETIME`) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
@@ -40,23 +40,27 @@ expression ::=
 
 #### `expression`
 
-**Required**: YES<br/>
-**Description**: A simple time function expression that use the [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) or [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) functions. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`. <br/>
+**Required**: YES\
+**Description**: A simple time function expression that use the [`date_trunc`](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) or [`time_slice`](../../sql-reference/sql-functions/date-time-functions/time_slice.md) functions. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`.
 
 #### `time_unit`
 
-**Required**: YES<br/>
-**Description**: The partition granularity, which can be `hour`, `day`, `week`, `month`, or `year`. If partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type.
+**Required**: YES\
+**Description**: The partition granularity, which can be `hour`, `day`, `week`, `month`, or `year`. If partition granularity is `hour`, the partition column must be of the `DATETIME` data type and cannot be of the `DATE` data type.
 
 #### `partition_column` 
 
-**Required**: YES<br/>
-**Description**: The name of the partition column.<br/><ul><li>The partition column can only be of the DATE or DATETIME data type. The partition column allows `NULL` values.</li><li>The partition column can be of the DATE or DATETIME data type if the `date_trunc` function is used. The partition column must be of the DATETIME data type if the `time_slice` function is used. </li><li>If the partition column is of the DATE data type, the supported range is [0000-01-01 ~ 9999-12-31]. If the partition column is of the DATETIME data type, the supported range is [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59].</li><li>Currently, you can specify only one partition column; multiple partition columns are not supported.</li></ul> <br/>
+**Required**: YES\
+**Description**: The name of the partition column.
+- The partition column can only be of the `DATE` or `DATETIME` data type. The partition column allows `NULL` values.
+- The partition column can be of the `DATE` or `DATETIME` data type if the `date_trunc` function is used. The partition column must be of the `DATETIME` data type if the `time_slice` function is used.
+- If the partition column is of the `DATE` data type, the supported range is `[0000-01-01 ~ 9999-12-31]`. If the partition column is of the `DATETIME` data type, the supported range is `[0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]`
+- Currently, you can specify only one partition column; multiple partition columns are not supported.
 
 #### `partition_live_number` 
 
-**Required**: NO<br/>
-**Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted. <br/>
+**Required**: NO\
+**Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted.
 
 #### `partition_retention_condition`
 
@@ -166,8 +170,10 @@ partition_columns ::=
 
 #### `partition_columns`
 
-**Required**: YES<br/>
-**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
+**Required**: YES\
+**Description**: The names of partition columns.
+- The partition column values can be string (`BINARY` not supported), `date` or `datetime`, `integer`, and `boolean` values. The partition column allows `NULL` values.
+- Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).
 
 :::note
 
@@ -241,15 +247,15 @@ LastConsistencyCheckTime: NULL
 
 ## Partitioning based on a complex time function expression (since v3.4)
 
-From v3.4.0 onwards, expression partitioning supports any expressions that return DATE or DATETIME types to accommodate even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
+From v3.4.0 onwards, expression partitioning supports any expressions that return `DATE` or `DATETIME` types to accommodate even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
 
-For example, you can define a Unix timestamp column, and use from_unixtime() directly against the column in the partition expression to define the partition key, instead of define a generated DATE or DATETIME column with the function. For more about the usage, see [Examples](#examples-2).
+For example, you can define a Unix timestamp column, and use `from_unixtime()` directly against the column in the partition expression to define the partition key, instead of define a generated `DATE` or `DATETIME` column with the function. For more about the usage, see [Examples](#examples-2).
 
-From v3.4.4 onwards, partition pruning are supported for partitions based on most DATETIME-related functions.
+From v3.4.4 onwards, partition pruning are supported for partitions based on most `DATETIME`-related functions.
 
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function from_unixtime() in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function `from_unixtime()` in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -260,7 +266,7 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-Example 2: Suppose you assign an INT type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions cast() and str_to_date() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a month using date_trunc() at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 2: Suppose you assign an `INT` type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions `cast()` and `str_to_date()` in the expression to transform the timestamp into the `DATE` type, set it as the partition column, and the partition granularity to a month using `date_trunc()` at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders_new (
@@ -285,7 +291,7 @@ From v3.4.0 onwards, expression partitioning supports multiple partition columns
 
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the from_unixtime() function) and the city column as the partition columns at table creation. Data of each day in each city is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the `from_unixtime()` function) and the city column as the partition columns at table creation. Data of each day in each city is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -349,12 +355,12 @@ PARTITION BY <time_expr>
 
 ##### `PARTITION BY <time_expr>`
 
-**Required**: YES<br/>
+**Required**: YES\
 **Description**: Specifies the new time granularity for the partitioning strategy, for example, `PARTITION BY date_trunc('month', dt)`.
 
 ##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
 
-**Required**: YES<br/>
+**Required**: YES\
 **Description**: Specifies the time range of the partitions to be merged. Partitions within this range will be merged based on the rules defined in the `PARTITION BY` clause.
 
 #### Example
@@ -396,26 +402,26 @@ Expression partitioning supports the following functions:
 
 - timediff
 - datediff
-- to_days
-- years_add/sub
-- quarters_add/sub
-- months_add/sub
-- weeks_add/sub
-- date_add/sub
-- days_add/sub
-- hours_add/sub
-- minutes_add/sub
-- seconds_add/sub
-- milliseconds_add/sub
-- date_trunc
-- date_format(YmdHiSf/YmdHisf)
-- str2date(YmdHiSf/YmdHisf)
-- str_to_date(YmdHiSf/YmdHisf)
-- to_iso8601
-- to_date
-- unix_timestamp
-- from_unixtime(YmdHiSf/YmdHisf)
-- time_slice
+- `to_days`
+- `years_add`/`sub`
+- `quarters_add`/`sub`
+- `months_add`/`sub`
+- `weeks_add`/`sub`
+- `date_add`/`sub`
+- `days_add`/`sub`
+- `hours_add`/`sub`
+- `minutes_add`/`sub`
+- `seconds_add`/`sub`
+- `milliseconds_add`/`sub`
+- `date_trunc`
+- `date_format(YmdHiSf/YmdHisf)`
+- `str2date(YmdHiSf/YmdHisf)`
+- `str_to_date(YmdHiSf/YmdHisf)`
+- `to_iso8601`
+- `to_date`
+- `unix_timestamp`
+- `from_unixtime(YmdHiSf/YmdHisf)`
+- `time_slice`
 
 **Other functions**:
 
