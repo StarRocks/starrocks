@@ -1761,7 +1761,121 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が期待するクエリキャッシュサイズを提供するのに不十分な場合、BE のメモリ容量を増やすことができます。
 - 導入バージョン: -
 
+<<<<<<< HEAD
 ##### enable_json_flat
+=======
+##### query_pool_spill_mem_limit_threshold
+
+- デフォルト: 1.0
+- タイプ: Double
+- 単位: -
+- 可変: いいえ
+- 説明: 自動スピリングが有効な場合、すべてのクエリのメモリ使用量が `query_pool memory limit * query_pool_spill_mem_limit_threshold` を超えると、中間結果のスピリングがトリガーされます。
+- 導入バージョン: v3.2.7
+
+##### result_buffer_cancelled_interval_time
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: BufferControlBlock がデータを解放するまでの待機時間。
+- 導入バージョン: -
+
+##### scan_context_gc_interval_min
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: 分
+- 可変: はい
+- 説明: スキャンコンテキストをクリーンアップする時間間隔。
+- 導入バージョン: -
+
+##### scanner_row_num
+
+- デフォルト: 16384
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 各スキャンで各スキャンスレッドが返す最大行数。
+- 導入バージョン: -
+
+##### scanner_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: ストレージエンジンがサポートするスキャンタスクの数。
+- 導入バージョン: -
+
+##### scanner_thread_pool_thread_num
+
+- デフォルト: 48
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ストレージエンジンが同時ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
+- 導入バージョン: -
+
+##### string_prefix_zonemap_prefix_len
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
+- 導入バージョン: -
+
+### ロード
+
+##### clear_transaction_task_worker_count
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: トランザクションをクリアするために使用されるスレッドの数。
+- 導入バージョン: -
+
+##### column_mode_partial_update_insert_batch_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
+- 導入バージョン: v3.5.10, v4.0.2
+
+##### enable_load_spill_parallel_merge
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 単一タブレット内で並列スピルマージを有効にするかどうかを指定します。これを有効にすると、データロード中のスピルマージのパフォーマンスが向上します。
+- 導入バージョン: -
+
+##### enable_parallel_memtable_finalize
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake テーブル（ストレージとコンピューティングの分離モード）へのデータロード時に並列 MemTable Finalize を有効にするかどうかを指定します。有効にすると、MemTable の Finalize 操作（ソート/集計）が書き込みスレッドからフラッシュスレッドに移動され、前の MemTable が並列で Finalize およびフラッシュされている間、書き込みスレッドは新しい MemTable へのデータ挿入を継続できます。これにより、CPU 集約型の Finalize 操作と I/O 集約型のフラッシュ操作をオーバーラップさせることで、ロードスループットを大幅に向上させることができます。注意: 自動インクリメント列を埋める必要がある場合、自動インクリメント ID の割り当ては MemTable がフラッシュに送信される前に完了する必要があるため、この最適化は自動的に無効になります。
+- 導入バージョン: -
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15 
+
+##### enable_stream_load_verbose_log
+>>>>>>> 03736e8f6c ([Enhancement] Avoid object storage LIST in random bucketing import path (#70049))
 
 - デフォルト: false
 - タイプ: Boolean

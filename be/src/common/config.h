@@ -1565,6 +1565,10 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
+// If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
+// If set to false, skip LIST and use approximate tablet size (base_size=0).
+CONF_mBool(allow_list_object_for_random_bucketing_on_cache_miss, "true");
+
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 
