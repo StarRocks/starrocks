@@ -255,8 +255,7 @@ public:
     }
 
     // Get file cache stats, return <cached_bytes, total_bytes>.
-    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
-                                                                int64_t size) {
+    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset, int64_t size) {
         return Status::NotSupported("FileSystem::get_cache_stats");
     }
 
