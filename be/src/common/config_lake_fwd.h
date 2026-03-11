@@ -30,6 +30,19 @@ CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
+// When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
+// significantly increase the overhead of get_tablet_stats RPC.
+// When disabled, the approximate num_dels field stored in rowset metadata is used,
+// which avoids remote I/O but may slightly overcount rows that are deleted but not yet compacted.
+CONF_mBool(lake_enable_accurate_pk_row_count, "true");
+
+// Threshold in milliseconds for logging slow tablet stat collection tasks.
+// When a single tablet stat task takes longer than this threshold, a warning log is emitted
+// with diagnostic info (tablet_id, version, rowset count, accurate_mode, elapsed time).
+// Default is 5 minutes (300000 ms).
+CONF_mInt64(lake_tablet_stat_slow_log_ms, "300000");
+
 // Number of thread for flushing memtable per store in shared-data mode.
 // Default value is cpu cores * 2
 CONF_mInt32(lake_flush_thread_num_per_store, "0");
