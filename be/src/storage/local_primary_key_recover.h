@@ -21,7 +21,7 @@ namespace starrocks {
 class LocalPrimaryKeyRecover : public PrimaryKeyRecover {
 public:
     LocalPrimaryKeyRecover(Tablet* tablet, UpdateManager* update_mgr) : _tablet(tablet), _update_mgr(update_mgr) {}
-    ~LocalPrimaryKeyRecover() {}
+    ~LocalPrimaryKeyRecover() = default;
 
     Status pre_cleanup() override;
 

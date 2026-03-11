@@ -34,7 +34,7 @@ class ThreadPool;
 
 class PersistentIndexCompactionManager {
 public:
-    PersistentIndexCompactionManager() {}
+    PersistentIndexCompactionManager() = default;
     virtual ~PersistentIndexCompactionManager();
     Status init();
     virtual void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo);

@@ -20,7 +20,7 @@
 namespace starrocks::compression {
 
 struct ZSTDCompressionContext {
-    ZSTDCompressionContext() {}
+    ZSTDCompressionContext() = default;
 
     // ZSTD compression context
     ZSTD_CCtx* ctx{nullptr};
@@ -36,7 +36,7 @@ struct ZSTDCompressionContext {
 };
 
 struct ZSTDDecompressContext {
-    ZSTDDecompressContext() {}
+    ZSTDDecompressContext() = default;
 
     // ZSTD decompression context
     ZSTD_DCtx* ctx{nullptr};
@@ -45,7 +45,7 @@ struct ZSTDDecompressContext {
 };
 
 struct LZ4FCompressContext {
-    LZ4FCompressContext() {}
+    LZ4FCompressContext() = default;
 
     // LZ4F compression context
     LZ4F_compressionContext_t ctx{nullptr};
@@ -61,7 +61,7 @@ struct LZ4FCompressContext {
 };
 
 struct LZ4FDecompressContext {
-    LZ4FDecompressContext() {}
+    LZ4FDecompressContext() = default;
 
     // LZ4F decompression context
     LZ4F_decompressionContext_t ctx{nullptr};
@@ -71,7 +71,7 @@ struct LZ4FDecompressContext {
 };
 
 struct LZ4CompressContext {
-    LZ4CompressContext() {}
+    LZ4CompressContext() = default;
 
     // LZ4 compression context
     LZ4_stream_t* ctx{nullptr};

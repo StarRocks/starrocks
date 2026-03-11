@@ -27,8 +27,8 @@ class ThreadPoolToken;
 
 class LoadSpillBlockMergeExecutor {
 public:
-    LoadSpillBlockMergeExecutor() {}
-    ~LoadSpillBlockMergeExecutor() {}
+    LoadSpillBlockMergeExecutor() = default;
+    ~LoadSpillBlockMergeExecutor() = default;
     Status init();
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }

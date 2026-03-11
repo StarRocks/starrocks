@@ -307,8 +307,7 @@ public:
 
 private:
     // Invoked only by clone.
-    CastToVariantExpr(const CastToVariantExpr& rhs)
-            : Expr(rhs), _from_type(rhs._from_type), _allow_throw_exception(rhs._allow_throw_exception) {}
+    CastToVariantExpr(const CastToVariantExpr& rhs) = default;
 
     TypeDescriptor _from_type;
     bool _allow_throw_exception;
@@ -384,7 +383,7 @@ class MustNullExpr final : public Expr {
 public:
     MustNullExpr(const TExprNode& node) : Expr(node) {}
 
-    MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
+    MustNullExpr(const MustNullExpr& rhs) = default;
 
     ~MustNullExpr() override = default;
 
