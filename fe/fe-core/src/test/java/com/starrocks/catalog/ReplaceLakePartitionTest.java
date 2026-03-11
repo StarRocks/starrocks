@@ -165,6 +165,12 @@ public class ReplaceLakePartitionTest {
         }
 
         while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(id) != null) {
+            // Must call erasePartition() before eraseTable() to simulate the daemon cycle:
+            // eraseTable() converts Lake table deletion to partition-level deletion by adding
+            // partitions to idToPartition, then erasePartition() processes them asynchronously.
+            // On the next cycle, eraseTable() checks if all partitions are deleted and finalizes.
+            ExceptionChecker.expectThrowsNoException(()
+                    -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
             ExceptionChecker.expectThrowsNoException(()
                     -> GlobalStateMgr.getCurrentState().getRecycleBin().eraseTable(Long.MAX_VALUE));
             try {
