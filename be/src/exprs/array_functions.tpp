@@ -2199,7 +2199,7 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
-            result_column = NullableColumn::create(std::move(result_column), array_null_column->clone());
+            result_column = NullableColumn::create(result_column, array_null_column->clone());
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {

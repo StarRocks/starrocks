@@ -221,10 +221,10 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
 
     if (column->is_nullable() || has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
@@ -301,9 +301,9 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.

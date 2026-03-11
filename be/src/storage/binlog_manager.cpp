@@ -260,7 +260,7 @@ void BinlogManager::precommit_ingestion(int64_t version, const BinlogBuildResult
     VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
-    _build_result = std::move(result);
+    _build_result = result;
 }
 
 void BinlogManager::abort_ingestion(int64_t version, const BinlogBuildResultPtr& result) {

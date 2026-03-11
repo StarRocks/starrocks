@@ -117,7 +117,7 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
             }
 
             // VLOG_ROW << "written row:" << row_str;
-            result_rows[current_rows] = std::move(_row_str);
+            result_rows[current_rows] = _row_str;
             _row_str.clear();
 
             _row_str.reserve(len * 1.1);

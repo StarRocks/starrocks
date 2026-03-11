@@ -56,7 +56,7 @@ Status FetchTask::_submit_local_task(RuntimeState* state) {
         }
     };
     LookUpRequestContextPtr request = std::make_shared<LocalLookUpRequestContext>(_ctx);
-    return _ctx->processor->_local_dispatcher->add_request(std::move(request));
+    return _ctx->processor->_local_dispatcher->add_request(request);
 }
 
 Status FetchTask::_submit_remote_task(RuntimeState* state) {

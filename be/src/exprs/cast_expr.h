@@ -162,7 +162,7 @@ private:
 class CastJsonToMap final : public Expr {
 public:
     CastJsonToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastJsonToMap(const CastJsonToMap& rhs) : Expr(rhs) {}
 
@@ -234,7 +234,7 @@ private:
 class CastVariantToMap final : public Expr {
 public:
     CastVariantToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastVariantToMap(const CastVariantToMap& rhs) : Expr(rhs) {}
 
