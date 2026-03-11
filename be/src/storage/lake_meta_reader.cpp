@@ -165,6 +165,7 @@ Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::v
                 options.version = tablet.version();
                 options.segment_id = lake::get_segment_idx(rowset->metadata(), seg_id);
                 options.pk_rowsetid = rowset->id();
+                options.rss_id = rowset->metadata().id() + seg_id;
                 options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
             }
             options_list->emplace_back(std::move(options));

@@ -1192,6 +1192,10 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
     factory_option.tablet_id = _opts.tablet_id;
     factory_option.segment_id = segment_id();
     factory_option.num_rows = _segment->num_rows();
+    factory_option.rss_id = _opts.rowset_id + segment_id();
+    factory_option.dynamic_rss_id = _opts.dynamic_rss_id_base + segment_id();
+    auto rowsetid = _opts.rowsetid.to_string();
+    factory_option.rowset_id = rowsetid;
 
     ASSIGN_OR_RETURN(auto iterator, VirtualColumnFactory::create_virtual_column_iterator(factory_option, col_name));
     _column_iterators[cid].reset(std::move(iterator));

@@ -122,6 +122,7 @@ public:
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
     uint32_t pk_rowsetid = 0; // for pk table
     RowsetId rowsetid;        // for non-pk table
+    int64_t rss_id = 0;
 };
 
 class SegmentMetaCollecter {
@@ -171,6 +172,7 @@ private:
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     int32_t _tablet_id;
+    int32_t _rss_id;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
     std::unordered_map<std::string, SegmentSharedPtr> _dcg_segments;

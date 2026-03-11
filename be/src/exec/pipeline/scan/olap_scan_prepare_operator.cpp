@@ -46,7 +46,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
-        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(state, _morsel_queue->prepare_olap_scan_ranges()));
     }
 
     return Status::OK();

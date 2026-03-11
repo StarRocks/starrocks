@@ -15,11 +15,13 @@
 package com.starrocks.sql.optimizer.rule.tree.lazymaterialize;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
 import java.util.Map;
@@ -39,6 +41,11 @@ public class NotSupportedLazyMaterialization implements LazyMaterializationSuppo
     public List<ColumnRefOperator> addRowIdColumns(PhysicalScanOperator scanOperator,
                                                    ColumnRefFactory columnRefFactory) {
         return List.of();
+    }
+
+    @Override
+    public Pair<Integer, ColumnDict> getGlobalDict(PhysicalScanOperator scanOperator, ColumnRefOperator column) {
+        return null;
     }
 
     @Override
