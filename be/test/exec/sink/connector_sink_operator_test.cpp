@@ -140,8 +140,8 @@ class ConnectorSinkOperatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
         _fragment_context = _pool.add(new FragmentContext);
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>(
-                TUniqueId(), TUniqueId(), TQueryOptions(), TQueryGlobals(), ExecEnv::GetInstance()));
+        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>(TUniqueId(), TUniqueId(), TQueryOptions(),
+                                                                            TQueryGlobals(), ExecEnv::GetInstance()));
         _runtime_state = _fragment_context->runtime_state();
         _runtime_state->set_fragment_ctx(_fragment_context);
     }
@@ -152,7 +152,8 @@ protected:
         auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
         _query_pool_tracker =
                 std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 100, "query_pool_ut", process_tracker);
-        _query_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY, 100, "query_ut", _query_pool_tracker.get());
+        _query_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY, 100, "query_ut", _query_pool_tracker.get());
         _runtime_state->init_mem_trackers(_query_tracker);
     }
 
@@ -207,10 +208,9 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const CommitResult&) {}));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
-    auto op = std::make_shared<ConnectorSinkOperator>(nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink),
-                                                      std::make_unique<connector::AsyncFlushStreamPoller>(),
-                                                      sink_mem_mgr, op_mem_mgr, _fragment_context);
+    auto op = std::make_shared<ConnectorSinkOperator>(
+            nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
+            std::make_unique<connector::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -229,8 +229,8 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     auto stream = [&]() {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
         CurrentThread::mem_consume_without_cache(kTrackedBytes);
-        return std::make_shared<Stream>(
-                std::make_unique<ReleaseOnDestructWritableFile>("stream.out", kTrackedBytes), nullptr, _runtime_state);
+        return std::make_shared<Stream>(std::make_unique<ReleaseOnDestructWritableFile>("stream.out", kTrackedBytes),
+                                        nullptr, _runtime_state);
     }();
     ASSERT_EQ(_query_pool_tracker->consumption(), kTrackedBytes);
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);

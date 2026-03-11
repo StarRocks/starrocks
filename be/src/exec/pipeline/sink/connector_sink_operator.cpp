@@ -20,8 +20,8 @@
 #include "connector/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
-#include "runtime/exec_env.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
