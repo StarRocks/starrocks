@@ -16,8 +16,6 @@
 
 #include <memory>
 
-#include "base/concurrency/spinlock.h"
-#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"

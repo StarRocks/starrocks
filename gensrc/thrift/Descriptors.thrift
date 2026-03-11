@@ -40,6 +40,8 @@ include "Exprs.thrift"
 
 enum TRowPositionType {
     ICEBERG_V3_ROW_POSITION,
+    OLAP_ROW_POSITION,
+    LAKE_ROW_POSITION,
 }
 
 // used to describe row position for different tables
@@ -49,6 +51,7 @@ struct TRowPositionDescriptor {
     2: optional Types.TSlotId row_source_slot;
     3: optional list<Types.TSlotId> fetch_ref_slots;
     4: optional list<Types.TSlotId> lookup_ref_slots;
+    5: optional i32 scan_node_id;
 }
 
 struct TSlotDescriptor {

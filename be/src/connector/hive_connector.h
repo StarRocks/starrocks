@@ -46,7 +46,7 @@ public:
     ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
     HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    HiveDataSourceProvider(ConnectorScanNode* scan_node, const THdfsScanNode& hdfs_scan_node);
+    HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
@@ -56,6 +56,7 @@ public:
     friend class HiveDataSource;
 
 protected:
+    int32_t _plan_node_id;
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;

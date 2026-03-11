@@ -17,6 +17,7 @@
 #include <string_view>
 
 #include "common/status.h"
+#include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -30,7 +31,10 @@ class VirtualColumnFactory {
 public:
     struct Options {
         int64_t tablet_id;
+        Slice rowset_id;
         int64_t segment_id;
+        int32_t rss_id;
+        int32_t dynamic_rss_id;
         int64_t num_rows;
     };
     static StatusOr<ColumnIterator*> create_virtual_column_iterator(const Options& options,

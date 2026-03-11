@@ -45,6 +45,7 @@
 
 #include "agent/status.h"
 #include "base/concurrency/spinlock.h"
+#include "base/statusor.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -120,6 +121,8 @@ public:
                                                    std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
+
+    StatusOr<TabletSharedPtr> get_tablet_by_id(TTabletId tablet_id, bool include_deleted = false);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);

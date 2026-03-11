@@ -30,6 +30,7 @@
 #include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
@@ -486,6 +487,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto* exch_node : exch_nodes) {
         int num_senders = FindWithDefault(params.per_exch_num_senders, exch_node->id(), 0);
         down_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
+    }
+
+    std::vector<ExecNode*> lookup_nodes;
+    plan->collect_nodes(TPlanNodeType::LOOKUP_NODE, &lookup_nodes);
+    for (auto* lookup_node : lookup_nodes) {
+        int num_senders = FindWithDefault(params.per_look_up_num_fetchers, lookup_node->id(), 0);
+        down_cast<LookUpNode*>(lookup_node)->set_num_fetchers(num_senders);
     }
 
     // set scan ranges

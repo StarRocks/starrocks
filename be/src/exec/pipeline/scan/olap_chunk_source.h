@@ -63,6 +63,7 @@ private:
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
+    Status _init_glm(TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
@@ -70,8 +71,6 @@ private:
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
     Status _extend_schema_by_access_paths();
-    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
-                                          const ColumnAccessPath* path);
 
 private:
     TabletReaderParams _params{};

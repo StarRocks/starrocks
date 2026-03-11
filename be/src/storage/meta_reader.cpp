@@ -185,6 +185,7 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, cons
     }
     _params = params;
     _tablet_id = options.tablet_id;
+    _rss_id = options.rss_id;
     if (options.dcg_loader != nullptr) {
         if (options.is_primary_keys) {
             TabletSegmentId tsid;
@@ -329,6 +330,7 @@ Status SegmentMetaCollecter::_collect_virtual(const std::string& name, const std
                                               LogicalType type) {
     VirtualColumnFactory::Options options;
     options.tablet_id = _tablet_id;
+    options.rss_id = _rss_id;
     options.segment_id = _segment->id();
     if (name == META_MAX) {
         size_t num_rows = _segment->num_rows();

@@ -65,7 +65,9 @@ public:
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // rowset base segment id
     uint32_t rowset_id = 0;
+    uint32_t dynamic_rss_id_base = 0;
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;

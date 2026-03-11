@@ -434,6 +434,16 @@ TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
     return std::make_shared<TabletSchema>(tablet_schema);
 }
 
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TabletColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
+    dst_schema->_clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->_generate_sort_key_idxes();
+    return dst_schema;
+}
+
 TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
     auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();

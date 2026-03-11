@@ -1,0 +1,284 @@
+-- name: test_glm_native
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t0 values (null,null,null,null);
+-- result:
+-- !result
+CREATE TABLE `tsemi` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL COMMENT "",
+  `c2` map<int,int> NULL COMMENT "",
+  `c3` struct<k int, v int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 48
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into tsemi SELECT generate_series, [generate_series, generate_series], map(generate_series, generate_series), named_struct('k', generate_series, 'v', generate_series) FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into blackhole() select * from t0 limit 10;
+-- result:
+-- !result
+insert into blackhole() select * from t0 where c0 < 10 limit 10;
+-- result:
+-- !result
+insert into blackhole() select *,upper(c1),upper(c2) from t0 where c0 < 10 limit 10;
+-- result:
+-- !result
+INSERT into blackhole() select *,upper(c1),upper(c2) from t0 where upper(c0) < 10 limit 10;
+-- result:
+-- !result
+INSERT into blackhole() select c0 + c1,* from t0 where c0 < 10 limit 100,10;
+-- result:
+-- !result
+select * from t0 ORDER BY 1,2,3,4 limit 10;
+-- result:
+None	None	None	None
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	5	5
+6	6	6	6
+7	7	7	7
+8	8	8	8
+9	9	9	9
+-- !result
+select * from t0 where c0 < 10 ORDER BY c0 + c1 limit 10;
+-- result:
+1	1	1	1
+2	2	2	2
+3	3	3	3
+4	4	4	4
+5	5	5	5
+6	6	6	6
+7	7	7	7
+8	8	8	8
+9	9	9	9
+-- !result
+select *,upper(c1),upper(c2) from t0 where c0 < 10 ORDER BY c0 + c1 limit 10;
+-- result:
+1	1	1	1	1	1
+2	2	2	2	2	2
+3	3	3	3	3	3
+4	4	4	4	4	4
+5	5	5	5	5	5
+6	6	6	6	6	6
+7	7	7	7	7	7
+8	8	8	8	8	8
+9	9	9	9	9	9
+-- !result
+select c0 + c1,* from t0 where c0 < 10 ORDER BY c0 + c1 limit 10;
+-- result:
+2.0	1	1	1	1
+4.0	2	2	2	2
+6.0	3	3	3	3
+8.0	4	4	4	4
+10.0	5	5	5	5
+12.0	6	6	6	6
+14.0	7	7	7	7
+16.0	8	8	8	8
+18.0	9	9	9	9
+-- !result
+create table tjs1 (
+  c0 int,
+  c1 json
+) engine=olap
+duplicate key(c0)
+distributed by hash(c0) buckets 1
+properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into tjs1 values (1, '{"a": 1}');
+-- result:
+-- !result
+insert into tjs1 values (2, '{"a": 2}');
+-- result:
+-- !result
+insert into tjs1 values (3, '{"a": 3}');
+-- result:
+-- !result
+insert into blackhole() select c0,get_json_string(c1, "$.a") from tjs1 limit 1;
+-- result:
+-- !result
+select c0,get_json_string(c1, "$.a") from tjs1 order by c0 limit 1;
+-- result:
+1	1
+-- !result
+CREATE TABLE `tc1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"colocate_with" = "cg1");
+-- result:
+-- !result
+CREATE TABLE `tc2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"colocate_with" = "cg1");
+-- result:
+-- !result
+insert into tc1 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  20));
+-- result:
+-- !result
+insert into tc2 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  20));
+-- result:
+-- !result
+CREATE TABLE `tpart` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c0`) (
+  PARTITION p1 VALUES LESS THAN ("10"),
+  PARTITION p2 VALUES LESS THAN ("20"),
+  PARTITION p3 VALUES LESS THAN ("2100000000")
+)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into tpart select generate_series, cast(generate_series as varchar) from table(generate_series(1, 30));
+-- result:
+-- !result
+insert into blackhole() select t0.*,tc1.* from t0 join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select t0.*,tc1.* from t0 left join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select t0.*,tc1.* from t0 right join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 limit 1000;
+-- result:
+-- !result
+select t0.*,tc1.* from t0 join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1	1	1
+-- !result
+select t0.*,tc1.* from t0 left join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1	1	1
+-- !result
+select t0.*,tc1.* from t0 right join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1	1	1
+-- !result
+insert into blackhole() select t0.* from t0 left semi join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 limit 1000;
+-- result:
+-- !result
+select t0.* from t0 left semi join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 order by 1,2 limit 1;
+-- result:
+1	1	1	1
+-- !result
+insert into blackhole() select t0.* from t0 where t0.c0 in (select c0 from tc1 where tc1.c0 < 20) limit 1000;
+-- result:
+-- !result
+select t0.* from t0 left anti join tc1 on t0.c0 = tc1.c0 where t0.c0 < 20 order by 1,2 limit 1;
+-- result:
+-- !result
+insert into blackhole() select t0.* from t0 where t0.c0 not in (select c0 from tc1 where tc1.c0 < 20) limit 1000;
+-- result:
+-- !result
+insert into blackhole() with cte as (select * from t0 where c0 < 20) select * from cte where c0 < 10 union all select * from cte order by 1,2,3,4 limit 1000;
+-- result:
+-- !result
+with cte as (select * from t0 where c0 < 20) select * from cte where c0 < 10 union all select * from cte order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1
+-- !result
+insert into blackhole() select * from t0 where c0 < (select max(c0) from t0) limit 1000;
+-- result:
+-- !result
+select * from t0 where c0 < (select max(c0) from t0) order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1
+-- !result
+insert into blackhole() select * from t0 where c0 < 10 union all select * from t0 where c0 >= 10 limit 1000;
+-- result:
+-- !result
+select * from t0 where c0 < 10 union all select * from t0 where c0 >= 10 order by 1,2,3,4 limit 1;
+-- result:
+1	1	1	1
+-- !result
+insert into blackhole() select c0, count(*) from t0 group by c0 order by c0 limit 1000;
+-- result:
+-- !result
+select c0, count(*) from t0 group by c0 order by c0 limit 1;
+-- result:
+None	1
+-- !result
+insert into blackhole() select c0, row_number() over (order by c0) from t0 where c0 < 20 limit 1000;
+-- result:
+-- !result
+select c0, row_number() over (order by c0) from t0 where c0 < 20 order by c0 limit 1;
+-- result:
+1	1
+-- !result
+select * from (select c0, row_number() over (order by c0) rn from t0 where c0 < 20) v where rn <= 1 order by c0 limit 1;
+-- result:
+1	1
+-- !result
+insert into blackhole() select * from (select c0, row_number() over (order by c0) rn from t0 where c0 < 20) v where rn <= 1 order by c0 limit 1000;
+-- result:
+-- !result
+insert into blackhole() select * from tpart where c0 < 20 order by c0 limit 1000;
+-- result:
+-- !result
+select t0.c0 from t0 where t0.c0 in (1, 2, 3, 4) order by t0.c0 limit 3;
+-- result:
+1
+2
+3
+-- !result
+select tc1.c0, tc2.c1 from tc1 join tc2 on tc1.c0 = tc2.c0 where tc1.c0 <= 5 order by tc1.c0 limit 5;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+select c0, c1 from tpart where c0 < 5 order by c0 limit 5;
+-- result:
+1	1
+2	2
+3	3
+4	4
+-- !result
+select * from tpart where c0 < 20 order by c0 limit 1;
+-- result:
+1	1
+-- !result

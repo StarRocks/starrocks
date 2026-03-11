@@ -68,6 +68,7 @@ public class ExecutionFragment {
 
     private final List<TPlanFragmentDestination> destinations;
     private final Map<Integer, Integer> numSendersPerExchange;
+    private final Map<Integer, Integer> numFetchersPerLookUp;
 
     private final List<FragmentInstance> instances;
 
@@ -104,6 +105,7 @@ public class ExecutionFragment {
 
         this.destinations = Lists.newArrayList();
         this.numSendersPerExchange = Maps.newHashMap();
+        this.numFetchersPerLookUp = Maps.newHashMap();
 
         this.instances = Lists.newArrayList();
         this.scanRangeAssignment = new FragmentScanRangeAssignment();
@@ -288,6 +290,10 @@ public class ExecutionFragment {
 
     public Map<Integer, Integer> getNumSendersPerExchange() {
         return numSendersPerExchange;
+    }
+
+    public Map<Integer, Integer> getNumFetchersPerLookUp() {
+        return numFetchersPerLookUp;
     }
 
     public TRuntimeFilterParams getRuntimeFilterParams() {

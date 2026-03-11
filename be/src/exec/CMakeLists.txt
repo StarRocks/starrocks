@@ -323,6 +323,7 @@ set(EXEC_FILES
     pipeline/fetch_processor.cpp
     pipeline/fetch_sink_operator.cpp
     pipeline/fetch_source_operator.cpp
+    pipeline/lookup/tablet_adaptor.cpp
     pipeline/lookup_request.cpp
     pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp
