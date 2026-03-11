@@ -1234,13 +1234,15 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             }
             sb.append(")");
         } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
-            List<String> p = node.getChildren().stream().map(child -> {
-                String str = visit(child);
-                if (child instanceof SlotRef && node.getIgnoreNulls()) {
+            List<Expr> children = node.getChildren();
+            List<String> p = new ArrayList<>();
+            for (int i = 0; i < children.size(); i++) {
+                String str = visit(children.get(i));
+                if (i == 0 && node.getIgnoreNulls()) {
                     str += " ignore nulls";
                 }
-                return str;
-            }).collect(Collectors.toList());
+                p.add(str);
+            }
             sb.append(Joiner.on(", ").join(p)).append(")");
         } else {
             List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
