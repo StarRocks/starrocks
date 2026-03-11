@@ -16,6 +16,7 @@
 
 #include "agent/master_info.h"
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -281,17 +282,40 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                           << ", final size: " << final_file_size;
             }
         } else {
-            // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
-            // These files are typically small, so streaming copy is efficient and avoids an extra
-            // remote IO call to get file size (which would increase object storage IOPS cost).
+            // For non-segment files (.del, .sst, .delvec, .cols), copy with size verification and retry.
+            // Get source file size first to detect truncated copies caused by transient object storage issues.
+            ASSIGN_OR_RETURN(auto expected_size, shared_src_fs->get_file_size(src_file_location));
+
+            const size_t buff_size = std::max<size_t>(
+                    std::min<size_t>(expected_size, config::lake_replication_read_buffer_size), 1 * 1024 * 1024);
             WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             if (config::enable_transparent_data_encryption) {
-                // Apply encryption info from filename_map to ensure file content matches metadata
                 opts.encryption_info = pair.second.second.info;
             }
-            ASSIGN_OR_RETURN(final_file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                            nullptr, opts, 1024 * 1024));
-            // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
+
+            int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+            Status copy_status;
+            for (int retry = 0; retry < max_retry; ++retry) {
+                auto res =
+                        fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, opts, buff_size);
+                if (!res.ok()) {
+                    copy_status = res.status();
+                    LOG(WARNING) << "Failed to copy file " << src_file_location << " to " << target_file_location
+                                 << ", retry=" << retry << ", error: " << copy_status;
+                    continue;
+                }
+                final_file_size = *res;
+                TEST_SYNC_POINT_CALLBACK("lake_replication_non_segment_copy_size", &final_file_size);
+                if (static_cast<int64_t>(final_file_size) == static_cast<int64_t>(expected_size)) {
+                    copy_status = Status::OK();
+                    break;
+                }
+                copy_status =
+                        Status::Corruption(fmt::format("File size mismatch after copy: expected={}, actual={}, src={}",
+                                                       expected_size, final_file_size, src_file_location));
+                LOG(WARNING) << copy_status.message() << ", retry=" << retry;
+            }
+            RETURN_IF_ERROR(copy_status);
             files_to_delete.push_back(target_file_location);
         }
         total_file_size += final_file_size;
