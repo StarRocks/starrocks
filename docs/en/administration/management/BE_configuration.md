@@ -1463,7 +1463,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which Tablet Stat Cache updates.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### enable_bitmap_union_disk_format_with_set
+=======
+##### lake_enable_accurate_pk_row_count
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
+- Introduced in: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- Default: 300000
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
+- Introduced in: -
+
+##### tablet_writer_open_rpc_timeout_sec
+>>>>>>> 2536a287a8 ([Enhancement] Reduce lake pk tablet stat collection overhead in shared-data mode cluster (#69548))
 
 - Default: false
 - Type: Boolean
