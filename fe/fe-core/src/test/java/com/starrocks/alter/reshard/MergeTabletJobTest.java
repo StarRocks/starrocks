@@ -54,6 +54,7 @@ import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -68,6 +69,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class MergeTabletJobTest {
     protected static ConnectContext connectContext;
@@ -437,7 +439,45 @@ public class MergeTabletJobTest {
         };
 
         Assertions.assertThrows(TabletReshardException.class,
-                () -> Deencapsulation.invoke(mergeJob, "publishVersion", List.of(), 2L, false));
+                () -> Deencapsulation.invoke(mergeJob, "publishVersion", List.of(), 2L, false,
+                        WarehouseManager.DEFAULT_RESOURCE));
+    }
+
+    @Test
+    public void testRunRunningUsesBackgroundComputeResource() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ComputeResource expectedResource = WarehouseComputeResource.of(10010L);
+        AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                Assertions.assertEquals(table.getId(), tableId);
+                return expectedResource;
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges,
+                                       ComputeResource computeResource,
+                                       Map<Long, Long> tabletRowNums,
+                                       boolean useAggregatePublish) {
+                actualResource.set(computeResource);
+            }
+        };
+
+        try {
+            mergeJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+            Assertions.assertSame(expectedResource, actualResource.get());
+        } finally {
+            mergeJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
     }
 
     @Test
