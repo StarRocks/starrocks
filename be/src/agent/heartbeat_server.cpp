@@ -55,6 +55,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
+#include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "storage/storage_engine.h"
 

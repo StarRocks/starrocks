@@ -28,6 +28,7 @@
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/starrocks_metrics.h"

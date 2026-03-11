@@ -12,15 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/sink/blackhole_table_sink_operator.h"
+#pragma once
 
-#include "runtime/runtime_state.h"
+namespace starrocks {
 
-namespace starrocks::pipeline {
+class ExecEnv;
+class RuntimeState;
 
-Status BlackHoleTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    state->update_num_rows_load_sink(chunk->num_rows());
-    return Status::OK();
-}
-
-} // namespace starrocks::pipeline
+} // namespace starrocks

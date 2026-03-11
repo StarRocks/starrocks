@@ -36,6 +36,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/utils.h"
+#include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/priority_thread_pool.hpp"

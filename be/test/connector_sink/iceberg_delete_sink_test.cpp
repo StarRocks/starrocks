@@ -34,6 +34,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
