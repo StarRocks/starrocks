@@ -219,8 +219,7 @@ static Status build_array_readers_for_variant_node(const ColumnReaderOptions& op
 }
 
 // SCALAR typed_value is simpler than ARRAY, but still worth centralizing:
-// build the typed reader when possible, and if typed reader creation fails,
-// degrade to fallback binary only when `value_reader` already exists.
+// build the typed reader and fail immediately if reader creation fails.
 static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& opts, const ParquetField* typed_field,
                                                    const std::string& full_path, ShreddedFieldNode* node) {
     if (typed_field == nullptr || node == nullptr) {
@@ -235,13 +234,6 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
     node->typed_value_read_type = std::make_unique<TypeDescriptor>(file_type);
     auto typed_reader_or = ColumnReaderFactory::create(opts, typed_field, *node->typed_value_read_type);
     if (!typed_reader_or.ok()) {
-        if (node->value_reader != nullptr) {
-            // Typed projection is best-effort for shredded scalar paths.
-            // If typed reader creation fails, keep fallback binary reader and degrade to fallback-only.
-            node->typed_value_reader.reset();
-            node->typed_value_read_type.reset();
-            return Status::OK();
-        }
         return Status::InternalError(strings::Substitute("build variant typed reader failed, path=$0, type=$1, err=$2",
                                                          full_path, file_type.debug_string(),
                                                          typed_reader_or.status().to_string()));
@@ -509,18 +501,11 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
             auto root_reader_or = ColumnReaderFactory::create(opts, typed_value_field, *root_typed_value_type);
             if (!root_reader_or.ok()) {
-                if (value_field != nullptr) {
-                    // Root typed projection is best-effort when fallback binary exists.
-                    // Keep fallback value path and skip root typed reader on failures.
-                    root_typed_value_type.reset();
-                } else {
-                    return Status::InternalError(
-                            strings::Substitute("build root variant typed reader failed, type=$0, err=$1",
-                                                file_type.debug_string(), root_reader_or.status().to_string()));
-                }
-            } else {
-                root_typed_value_reader = std::move(root_reader_or).value();
+                return Status::InternalError(
+                        strings::Substitute("build root variant typed reader failed, type=$0, err=$1",
+                                            file_type.debug_string(), root_reader_or.status().to_string()));
             }
+            root_typed_value_reader = std::move(root_reader_or).value();
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),

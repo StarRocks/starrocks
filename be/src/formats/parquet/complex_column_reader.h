@@ -310,7 +310,7 @@ VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const Shredd
 // ShreddedFieldNode::typed_value_column are mutated per read_range() call. Concurrent
 // calls to read_range() on the same instance are not allowed.
 class VariantColumnReader final : public ColumnReader {
-public:
+private:
     // Top-level variant payload readers and batch-local typed buffer.
     // `metadata` and `value` are required for variant files.
     // `root_typed_value_*` is optional and used when top-level typed_value is non-STRUCT.
@@ -331,6 +331,7 @@ public:
         ColumnPtr root_typed_value_column;
     };
 
+public:
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).

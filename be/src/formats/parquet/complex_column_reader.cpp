@@ -1516,23 +1516,19 @@ static void build_full_row_from_shredded_fields(size_t row, std::string_view met
     out_value->assign(value_built.data(), value_built.size());
 }
 
-enum class VariantTopLevelReadMode {
-    ALL_PATHS,
-    SELECTED_PATHS,
-};
-
 class VariantReadRangeBatchContext {
 public:
-    VariantReadRangeBatchContext(const VariantColumnReader::VariantTopLevelReaders& top_level,
-                                 const std::vector<ShreddedFieldNode>& shredded_fields,
+    VariantReadRangeBatchContext(const std::vector<ShreddedFieldNode>& shredded_fields,
                                  const std::vector<TopBinding>& materialized_bindings,
-                                 VariantTopLevelReadMode read_mode, const BinaryColumn* metadata_column,
+                                 const std::vector<std::string>& shredded_paths, const Column* root_typed_value_column,
+                                 const TypeDescriptor* root_typed_value_type, const BinaryColumn* metadata_column,
                                  const BinaryColumn* value_column, ImmutableNullData metadata_nulls,
                                  ImmutableNullData value_nulls)
-            : top_level(top_level),
-              shredded_fields(shredded_fields),
+            : shredded_fields(shredded_fields),
               materialized_bindings(materialized_bindings),
-              read_mode(read_mode),
+              shredded_paths(shredded_paths),
+              root_typed_value_column(root_typed_value_column),
+              root_typed_value_type(root_typed_value_type),
               metadata_column(metadata_column),
               value_column(value_column),
               metadata_nulls(metadata_nulls),
@@ -1542,29 +1538,44 @@ public:
         if (!shredded_fields.empty()) {
             build_has_typed_value_bitmap(shredded_fields, num_rows, &has_typed_value_bitmap);
         }
-        if (top_level.root_typed_value_column != nullptr) {
+        if (root_typed_value_column != nullptr) {
             for (size_t i = 0; i < num_rows; ++i) {
                 if (has_typed_value_bitmap[i]) {
                     continue;
                 }
                 const Column* root_typed_data = nullptr;
                 size_t root_typed_row = 0;
-                if (ParquetUtils::get_non_null_data_column_and_row(top_level.root_typed_value_column.get(), i,
-                                                                   &root_typed_data, &root_typed_row)) {
+                if (ParquetUtils::get_non_null_data_column_and_row(root_typed_value_column, i, &root_typed_data,
+                                                                   &root_typed_row)) {
                     has_typed_value_bitmap[i] = true;
                 }
             }
         }
     }
 
-    const VariantColumnReader::VariantTopLevelReaders& top_level;
+    bool request_all_paths() const { return shredded_paths.empty(); }
+
+    // Full shredded tree discovered from the file schema. Used for whole-row rebuild and
+    // typed-value presence checks; this is broader than the requested output bindings.
     const std::vector<ShreddedFieldNode>& shredded_fields;
+    // Final output bindings after applying requested paths and per-batch materialization
+    // decisions. These drive typed_paths/typed_columns layout in the result VariantColumn.
     const std::vector<TopBinding>& materialized_bindings;
-    const VariantTopLevelReadMode read_mode;
+    // Original requested top-level shredded paths. Empty means "request all available paths".
+    const std::vector<std::string>& shredded_paths;
+    // Optional row-indexed top-level typed_value column for non-STRUCT root typed_value.
+    const Column* root_typed_value_column;
+    // Type descriptor paired with root_typed_value_column. Needed when encoding the root typed
+    // datum back into canonical Variant metadata/value bytes.
+    const TypeDescriptor* root_typed_value_type;
+    // Base top-level variant payload columns from the file.
     const BinaryColumn* metadata_column;
     const BinaryColumn* value_column;
+    // Null flags paired with the base payload columns above.
     ImmutableNullData metadata_nulls;
     ImmutableNullData value_nulls;
+    // Per-row "any typed payload exists" summary over shredded fields plus root typed_value.
+    // Used only for top-level row null/materialization decisions.
     std::vector<bool> has_typed_value_bitmap;
 };
 
@@ -1573,6 +1584,8 @@ public:
     VariantReadRangeRowMaterializer(const VariantReadRangeBatchContext& batch_ctx, size_t row,
                                     VariantColumn* variant_column)
             : _batch_ctx(batch_ctx), _row(row), _variant_column(variant_column) {}
+
+    void set_row(size_t row) { _row = row; }
 
     bool prepare() {
         const bool has_typed_value = _batch_ctx.has_typed_value_bitmap[_row];
@@ -1596,7 +1609,7 @@ public:
             return true;
         }
 
-        if (_batch_ctx.read_mode == VariantTopLevelReadMode::ALL_PATHS && !_try_build_full_row()) {
+        if (_batch_ctx.request_all_paths() && !_try_build_full_row()) {
             return false;
         }
         return true;
@@ -1610,38 +1623,34 @@ public:
         _variant_column->remain_value_column()->append_datum(Datum(output_value));
     }
 
-    void append_binding(size_t binding_idx) const {
-        const auto& binding = _batch_ctx.materialized_bindings[binding_idx];
-        Column* typed_col_dst = _variant_column->mutable_typed_columns()[binding_idx].get();
-        if (binding.kind == TopBinding::Kind::SCALAR) {
-            append_top_scalar_binding_value(_row, binding, typed_col_dst);
-        } else {
-            append_variant_binding_row(_row, binding, _raw_metadata, _row_metadata, _row_value, typed_col_dst);
-        }
-    }
-
     void append_bindings() const {
         for (size_t i = 0; i < _batch_ctx.materialized_bindings.size(); ++i) {
-            append_binding(i);
+            const auto& binding = _batch_ctx.materialized_bindings[i];
+            Column* typed_col_dst = _variant_column->mutable_typed_columns()[i].get();
+            if (binding.kind == TopBinding::Kind::SCALAR) {
+                append_top_scalar_binding_value(_row, binding, typed_col_dst);
+            } else {
+                append_variant_binding_row(_row, binding, _raw_metadata, _row_metadata, _row_value, typed_col_dst);
+            }
         }
     }
 
 private:
     bool _try_use_root_typed_row() {
-        if (_batch_ctx.top_level.root_typed_value_column == nullptr) {
+        if (_batch_ctx.root_typed_value_column == nullptr) {
             return false;
         }
 
         const Column* root_typed_data = nullptr;
         size_t root_typed_row = 0;
-        if (!ParquetUtils::get_non_null_data_column_and_row(_batch_ctx.top_level.root_typed_value_column.get(), _row,
-                                                            &root_typed_data, &root_typed_row)) {
+        if (!ParquetUtils::get_non_null_data_column_and_row(_batch_ctx.root_typed_value_column, _row, &root_typed_data,
+                                                            &root_typed_row)) {
             return false;
         }
 
-        DCHECK(_batch_ctx.top_level.root_typed_value_type != nullptr);
-        auto encoded = VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                    *_batch_ctx.top_level.root_typed_value_type);
+        DCHECK(_batch_ctx.root_typed_value_type != nullptr);
+        auto encoded =
+                VariantEncoder::encode_datum(root_typed_data->get(root_typed_row), *_batch_ctx.root_typed_value_type);
         if (!encoded.ok()) {
             return false;
         }
@@ -1816,8 +1825,6 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);
     std::vector<TopBinding> materialized_bindings = select_materialized_bindings(collected_bindings, num_rows);
-    const auto read_mode =
-            _shredded_paths.empty() ? VariantTopLevelReadMode::ALL_PATHS : VariantTopLevelReadMode::SELECTED_PATHS;
     std::vector<std::string> typed_paths;
     std::vector<TypeDescriptor> typed_types;
     MutableColumns typed_columns;
@@ -1837,15 +1844,17 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     auto& reconstructed_nulls = reconstructed_null_column.get_data();
     bool has_reconstructed_null = false;
 
-    VariantReadRangeBatchContext batch_ctx(_top_level, _shredded_fields, materialized_bindings, read_mode,
-                                           metadata_column, value_column, metadata_nulls, value_nulls);
+    VariantReadRangeBatchContext batch_ctx(
+            _shredded_fields, materialized_bindings, _shredded_paths, _top_level.root_typed_value_column.get(),
+            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
 
     // Materialize output columns.
     // - request-all-paths: emit rebuilt top-level metadata/value.
     // - requested-subset: keep the current row payload as-is; individual bindings are materialized
     //   from their shredded subtree or via direct raw-row seek when the path is unshredded.
+    VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
     for (size_t i = 0; i < num_rows; ++i) {
-        VariantReadRangeRowMaterializer materializer(batch_ctx, i, variant_column);
+        materializer.set_row(i);
         if (!materializer.prepare()) {
             variant_column->append_shredded_null();
             reconstructed_nulls[i] = 1;

@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <sstream>
-
-#define private public
 #include "formats/parquet/column_reader_factory.h"
-#include "formats/parquet/complex_column_reader.h"
-#undef private
 
 #include <gtest/gtest.h>
+
+#include <sstream>
+
+#include "formats/parquet/complex_column_reader.h"
 
 namespace starrocks::parquet {
 
@@ -168,14 +167,14 @@ TEST(ColumnReaderFactoryTest, VariantScalarTypeInferenceBranches) {
     auto next_idx = [&]() { return idx++; };
     std::vector<ParquetField> children;
 
-    // invalid decimal precision => variant fallback
+    // invalid decimal precision => infer TYPE_VARIANT
     auto dec_prec0 = make_shredded_scalar_node("dec_prec0", next_idx(), next_idx(), tparquet::Type::INT32);
     dec_prec0.children[1].schema_element.__set_converted_type(tparquet::ConvertedType::DECIMAL);
     dec_prec0.children[1].precision = 0;
     dec_prec0.children[1].scale = 0;
     children.emplace_back(std::move(dec_prec0));
 
-    // invalid decimal scale > precision => variant fallback
+    // invalid decimal scale > precision => infer TYPE_VARIANT
     auto dec_scale = make_shredded_scalar_node("dec_scale", next_idx(), next_idx(), tparquet::Type::INT32);
     dec_scale.children[1].schema_element.__set_converted_type(tparquet::ConvertedType::DECIMAL);
     dec_scale.children[1].precision = 5;
