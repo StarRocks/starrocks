@@ -20,25 +20,20 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// direct read flat json
-CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+#ifdef USE_STAROS
+CONF_Int32(starlet_port, "9070");
 
-// enable flat complex type (/array/object/hyper type), diables for save storage
-CONF_mBool(enable_json_flat_complex_type, "false");
+// Root dir used for cache if cache enabled.
+CONF_String(starlet_cache_dir, "");
 
-// if disable flat complex type, check complex type rate in hyper-type column
-CONF_mDouble(json_flat_complex_type_factor, "0.3");
+CONF_mBool(starlet_write_file_with_tag, "false");
 
-// extract flat json column when row_num * null_factor > null_row_num
-CONF_mDouble(json_flat_null_factor, "0.3");
+#endif
+CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 
-// extract flat json column when row_num * sparsity_factor < hit_row_num
-CONF_mDouble(json_flat_sparsity_factor, "0.3");
+CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 
-// the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "100");
-
-// for whitelist on flat json remain data, max set 1kb
-CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// clear *.data cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_data, "false");
 
 } // namespace starrocks::config

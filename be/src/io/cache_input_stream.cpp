@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "base/hash/hash_std.hpp"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"

@@ -21,7 +21,7 @@
 #include <sstream>
 
 #include "base/crypto/md5.h"
-#include "common/config.h"
+#include "common/config_object_storage_fwd.h"
 #include "fs/fs_factory.h"
 
 namespace starrocks::fs {

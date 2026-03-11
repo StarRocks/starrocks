@@ -20,8 +20,30 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Memory urged water level, if the memory usage exceeds this level,
+// be will free up some memory immediately to ensure the system runs smoothly.
+// Currently, only support to release memory of data cache and lake memtable.
+CONF_mInt64(memory_urgent_level, "85");
+
+// Memory high water level, if the memory usage exceeds this level, be will free up some memory slowly
+// Currently, only support release memory of data cache.
+CONF_mInt64(memory_high_level, "75");
+
+// The high disk usage level, which trigger to release of disk space immediately to disk_safe_level,
+// currently only support release disk space of data cache.
+CONF_mInt64(disk_high_level, "90");
+
+// The safe disk usage level.
+CONF_mInt64(disk_safe_level, "80");
+
+// The low disk usage level, which triggers increasing the quota for some components,
+// currently only supports data cache.
+CONF_mInt64(disk_low_level, "60");
+
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
+
+CONF_mString(datacache_disk_size, "100%");
 
 // Whether enable automatically adjust data cache disk space quota.
 // If true, the cache will choose an appropriate quota based on the current remaining disk space as the quota.
@@ -32,5 +54,32 @@ CONF_Bool(datacache_enable, "true");
 // which is configured by `datacache_disk_idle_seconds_for_expansion`, the cache quota will be increased to keep the
 // disk usage around the disk safe level.
 CONF_mBool(enable_datacache_disk_auto_adjust, "true");
+
+// The interval seconds to check the disk usage and trigger adjustment.
+CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
+
+// The silent period, only when the disk usage falls bellow the low level for a time longer than this period,
+// the disk expansion can be triggered
+CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
+
+// The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
+// cache quota will be reset to zero to avoid overly frequent population and eviction.
+// Default: 10G
+CONF_mInt64(datacache_min_disk_quota_for_adjustment, "10737418240");
+
+// The maximum inline cache item count in datacache.
+// When a cache item has a tiny data size, we will try to cache it inline with its metadata
+// to optimize the io performance and reduce disk waste.
+// Set the parameter to `0` will turn off this optimization.
+CONF_mBool(enable_datacache_mem_auto_adjust, "true");
+
+// Datacache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(datacache_mem_adjust_period, "20");
+
+// Sleep time in seconds between datacache adjust iterations.
+CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
+
+// Whether use an unified datacache instance.
+CONF_Bool(datacache_unified_instance_enable, "true");
 
 } // namespace starrocks::config

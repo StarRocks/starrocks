@@ -33,6 +33,8 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
+CONF_mBool(io_coalesce_adaptive_lazy_active, "true");
+
 // larger buffer size means fewer reads, but higher memory usage
 CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 

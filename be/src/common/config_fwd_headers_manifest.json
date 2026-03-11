@@ -43,8 +43,21 @@
     {
       "path": "be/src/common/config_cache_fwd.h",
       "configs": [
+        "memory_urgent_level",
+        "memory_high_level",
+        "disk_high_level",
+        "disk_safe_level",
+        "disk_low_level",
         "datacache_enable",
-        "enable_datacache_disk_auto_adjust"
+        "datacache_disk_size",
+        "enable_datacache_disk_auto_adjust",
+        "datacache_disk_adjust_interval_seconds",
+        "datacache_disk_idle_seconds_for_expansion",
+        "datacache_min_disk_quota_for_adjustment",
+        "enable_datacache_mem_auto_adjust",
+        "datacache_mem_adjust_period",
+        "datacache_mem_adjust_interval_seconds",
+        "datacache_unified_instance_enable"
       ]
     },
     {
@@ -79,7 +92,13 @@
     {
       "path": "be/src/common/config_json_flat_fwd.h",
       "configs": [
-        "enable_lazy_dynamic_flat_json"
+        "enable_lazy_dynamic_flat_json",
+        "enable_json_flat_complex_type",
+        "json_flat_complex_type_factor",
+        "json_flat_null_factor",
+        "json_flat_sparsity_factor",
+        "json_flat_column_max",
+        "json_flat_remain_filter_max_bytes"
       ]
     },
     {
@@ -162,6 +181,7 @@
     {
       "path": "be/src/common/config_rpc_client_fwd.h",
       "configs": [
+        "thrift_client_retry_interval_ms",
         "brpc_connection_type",
         "rpc_connect_timeout_ms",
         "thrift_rpc_timeout_ms",
@@ -174,10 +194,80 @@
       "configs": [
         "io_coalesce_read_max_buffer_size",
         "io_coalesce_read_max_distance_size",
+        "io_coalesce_adaptive_lazy_active",
         "max_pushdown_conditions_per_column",
         "max_scan_key_num",
         "avro_reader_buffer_size_bytes",
         "enable_check_string_lengths"
+      ]
+    },
+    {
+      "path": "be/src/common/config_network_fwd.h",
+      "configs": [
+        "be_port",
+        "brpc_port",
+        "brpc_max_connections_per_server",
+        "brpc_stub_expire_s",
+        "enable_resolve_hostname_to_ip_in_load_error_url",
+        "priority_networks",
+        "net_use_ipv6_when_priority_networks_empty",
+        "be_http_port",
+        "brpc_query_ignore_overcrowded",
+        "brpc_load_ignore_overcrowded"
+      ]
+    },
+    {
+      "path": "be/src/common/config_thrift_server_fwd.h",
+      "configs": [
+        "thrift_rpc_strict_mode",
+        "thrift_rpc_max_body_size",
+        "thrift_max_message_size",
+        "thrift_max_frame_size",
+        "thrift_max_recursion_depth"
+      ]
+    },
+    {
+      "path": "be/src/common/config_object_storage_fwd.h",
+      "configs": [
+        "object_storage_access_key_id",
+        "object_storage_secret_access_key",
+        "object_storage_endpoint",
+        "object_storage_bucket",
+        "object_storage_region",
+        "object_storage_max_connection",
+        "object_storage_endpoint_use_https",
+        "object_storage_endpoint_path_style_access",
+        "object_storage_connect_timeout_ms",
+        "object_storage_request_timeout_ms",
+        "object_storage_rename_file_request_timeout_ms",
+        "object_storage_max_retries",
+        "object_storage_retry_scale_factor",
+        "fallback_to_hadoop_fs_list",
+        "s3_compatible_fs_list",
+        "s3_use_list_objects_v1",
+        "experimental_s3_max_single_part_size",
+        "experimental_s3_min_upload_part_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_hdfs_fwd.h",
+      "configs": [
+        "hdfs_client_enable_hedged_read",
+        "hdfs_client_hedged_read_threadpool_size",
+        "hdfs_client_hedged_read_threshold_millis",
+        "hdfs_client_max_cache_size",
+        "hdfs_client_io_read_retry"
+      ]
+    },
+    {
+      "path": "be/src/common/config_starlet_fwd.h",
+      "configs": [
+        "starlet_port",
+        "starlet_cache_dir",
+        "starlet_write_file_with_tag",
+        "experimental_lake_wait_per_put_ms",
+        "experimental_lake_wait_per_get_ms",
+        "lake_clear_corrupted_cache_data"
       ]
     }
   ]

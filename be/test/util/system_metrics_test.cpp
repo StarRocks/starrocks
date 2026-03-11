@@ -39,7 +39,6 @@
 
 #include "base/concurrency/stopwatch.hpp"
 #include "base/metrics.h"
-#include "common/config.h"
 #include "util/logging.h"
 
 namespace starrocks {
