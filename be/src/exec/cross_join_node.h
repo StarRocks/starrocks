@@ -59,13 +59,6 @@ private:
     TJoinOp::type _join_op = TJoinOp::type::CROSS_JOIN;
     std::vector<ExprContext*> _join_conjuncts;
     std::string _sql_join_conjuncts;
-
-    // used as right table's chunk.
-    // _build_chunk include all rows of right table.
-    ChunkPtr _build_chunk = nullptr;
-    // used as left table's chunk.
-    // _probe_chunk about one chunk_size(maybe 4096) of left table.
-    ChunkPtr _probe_chunk = nullptr;
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
     bool _interpolate_passthrough = false;
 

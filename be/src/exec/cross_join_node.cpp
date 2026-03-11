@@ -114,13 +114,6 @@ void CrossJoinNode::close(RuntimeState* state) {
         return;
     }
 
-    if (_build_chunk != nullptr) {
-        _build_chunk->reset();
-    }
-    if (_probe_chunk != nullptr) {
-        _probe_chunk->reset();
-    }
-
     ExprExecutor::close(_join_conjuncts, state);
     ExecNode::close(state);
 }
