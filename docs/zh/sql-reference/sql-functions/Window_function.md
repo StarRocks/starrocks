@@ -890,17 +890,10 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 **参数：**
 
-<<<<<<< HEAD
-- `expr`: 需要计算的目标字段。
-- `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
-- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-- `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之前并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
-=======
 - `expr`：要计算的字段。
 - `offset`：偏移量。它必须是 **正整数**。如果未指定此参数，则默认为 1。
 - `default`：如果未找到匹配行，则返回的默认值。如果未指定此参数，则默认为 NULL。`default` 支持任何与 `expr` 类型兼容的表达式，从 4.0 版本开始，默认值不再必须是常量，它可以是列名。
 - `IGNORE NULLS` 从 v3.0 开始支持。它用于确定 `expr` 的 NULL 值是否包含在结果中。默认情况下，在计数 `offset` 行时包含 NULL 值，这意味着如果目标行的值为 NULL，则返回 NULL。请参阅示例 1。如果指定 IGNORE NULLS，则在计数 `offset` 行时忽略 NULL 值，系统会继续搜索 `offset` 个非 NULL 值。如果找不到 `offset` 个非 NULL 值，则返回 NULL 或 `default`（如果已指定）。请参阅示例 2。
->>>>>>> 399cd32c00 ([Doc] Revise Window Function Doc (#70014))
 
 **示例**
 
@@ -1065,17 +1058,10 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 **参数:**
 
-<<<<<<< HEAD
-- `expr`: 需要计算的目标字段。
-- `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
-- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-- `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之后并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
-=======
 - `expr`: 要计算的字段。
 - `offset`: 偏移量。它必须是一个正整数。如果未指定此参数，则默认为 1。
 - `default`: 如果未找到匹配的行，则返回的默认值。如果未指定此参数，则默认为 NULL。`default` 支持任何类型与 `expr` 兼容的表达式，从 4.0 版本开始，默认值不再必须是常量，它可以是列名。
 - `IGNORE NULLS` 从 v3.0 开始支持。它用于确定 `expr` 的 NULL 值是否包含在结果中。默认情况下，在计数 `offset` 行时包含 NULL 值，这意味着如果目标行的值为 NULL，则返回 NULL。请参阅示例 1。如果指定 IGNORE NULLS，则在计数 `offset` 行时忽略 NULL 值，系统继续搜索 `offset` 个非 NULL 值。如果找不到 `offset` 个非 NULL 值，则返回 NULL 或 `default`（如果已指定）。请参阅示例 2。
->>>>>>> 399cd32c00 ([Doc] Revise Window Function Doc (#70014))
 
 **示例**
 
