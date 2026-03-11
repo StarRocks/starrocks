@@ -2566,8 +2566,6 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
-<<<<<<< HEAD
-=======
 // Test that struct-to-struct cast correctly reorders fields by name when field order differs
 TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
     // Create source struct type: STRUCT<price INT, product_id VARCHAR>
@@ -2682,8 +2680,6 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
     EXPECT_EQ(indices[1], 1);
 }
 
-// Verifies primitive scalar values encode to variant JSON payloads correctly.
->>>>>>> 6f9a33610c ([Enhancement] Introduce STRUCT_CAST_BY_NAME SQL mode for name-based struct field matching (#69845))
 TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
     auto column = Int32Column::create();
     column->append(123);
