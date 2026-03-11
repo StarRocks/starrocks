@@ -302,9 +302,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                 rowset_id_to_seg_id[rowset_meta->rowset_id().to_string()] = rowset_meta->get_rowset_seg_id();
             }
 
-            RETURN_IF_ERROR(convert_dcg_snapshot_for_non_pk(
-                    dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
-                    txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+            RETURN_IF_ERROR(convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
+                                                        txn_log->mutable_op_replication()->mutable_dcg_meta(),
+                                                        &filename_map));
         } else if (!dcgs_snapshot_content_or.status().is_not_found()) {
             // NotFound means the source has no DCGs (expected for most tables).
             LOG(WARNING) << "Failed to download dcgs_snapshot file: " << remote_dcgs_snapshot_file_name
@@ -356,8 +356,8 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         }
 
         // Handle delta column groups for PK tables
-        RETURN_IF_ERROR(convert_dcg_for_pk(snapshot_meta.delta_column_groups(), request.transaction_id,
-                                           txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+        RETURN_IF_ERROR(convert_dcg_meta_for_pk(snapshot_meta.delta_column_groups(), request.transaction_id,
+                                                txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
 
         if (snapshot_meta.tablet_meta().has_schema()) {
             // Try to get source schema from tablet meta, only full snapshot has tablet meta
@@ -524,7 +524,7 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
     return Status::OK();
 }
 
-Status ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(
+Status ReplicationTxnManager::convert_dcg_meta_for_non_pk(
         const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
         const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
         DeltaColumnGroupMetadataPB* dcg_meta,
@@ -582,7 +582,7 @@ Status ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(
     return Status::OK();
 }
 
-Status ReplicationTxnManager::convert_dcg_for_pk(
+Status ReplicationTxnManager::convert_dcg_meta_for_pk(
         const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups, TTransactionId transaction_id,
         DeltaColumnGroupMetadataPB* dcg_meta,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
@@ -597,8 +597,8 @@ Status ReplicationTxnManager::convert_dcg_for_pk(
                 dcg_ver.add_column_files(new_cols_filename);
                 dcg_ver.add_versions(dcg->version());
 
+                auto* ucids = dcg_ver.add_unique_column_ids();
                 if (i < dcg->column_ids().size()) {
-                    auto* ucids = dcg_ver.add_unique_column_ids();
                     for (auto cid : dcg->column_ids()[i]) {
                         ucids->add_column_ids(cid);
                     }
