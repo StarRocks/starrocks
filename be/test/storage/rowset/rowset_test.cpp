@@ -41,6 +41,9 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/data.pb.h"

@@ -21,6 +21,7 @@
 #include <sstream>
 
 #include "base/crypto/md5.h"
+#include "common/config_object_storage_fwd.h"
 #include "fs/fs_factory.h"
 
 namespace starrocks::fs {
@@ -49,6 +50,14 @@ Status list_dirs_files(FileSystem* fs, const std::string& path, std::set<std::st
 Status list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return list_dirs_files(fs.get(), path, dirs, files);
+}
+
+bool is_fallback_to_hadoop_fs(std::string_view uri) {
+    return is_in_list(uri, config::fallback_to_hadoop_fs_list);
+}
+
+bool is_s3_uri(std::string_view uri) {
+    return is_in_list(uri, config::s3_compatible_fs_list);
 }
 
 StatusOr<std::string> md5sum(const std::string& path) {

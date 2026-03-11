@@ -14,11 +14,28 @@
 
 #include "storage/push_utils.h"
 
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "common/config_exec_fwd.h"
+#include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
+#include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
+
 namespace starrocks {
 
 PushBrokerReader::~PushBrokerReader() {
     _counter.reset();
     _scanner.reset();
+}
+
+Status PushBrokerReader::close() {
+    _scanner->close();
+    _ready = false;
+    return Status::OK();
 }
 
 Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushReq& request) {

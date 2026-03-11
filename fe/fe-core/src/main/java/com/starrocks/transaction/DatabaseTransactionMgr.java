@@ -1095,6 +1095,7 @@ public class DatabaseTransactionMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         }
+        txn.setReadyToFinishTimeIfUnset();
         return true;
     }
 
@@ -2212,13 +2213,26 @@ public class DatabaseTransactionMgr {
                 } finally {
                     writeUnlock();
                 }
-                stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
+
+                // Persist VISIBLE state to edit log BEFORE afterVisible callbacks.
+                // This ensures that even if callbacks block or fail, the VISIBLE state is already
+                // persisted. Otherwise, getMinActiveTxnId() may return a value higher than
+                // the txn id (since unprotectSetTransactionStateBatch already removed it from
+                // idToRunningTransactionState), causing autovacuum to prematurely delete the
+                // txn log. If FE restarts before the edit log is written, the txn replays as
+                // COMMITTED and re-publish fails with "NoSuchKey".
                 long start = System.currentTimeMillis();
                 editLog.logInsertTransactionStateBatch(stateBatch);
                 LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
                         stateBatch.getTxnIds(), System.currentTimeMillis() - start);
 
                 updateCatalogAfterVisibleBatch(stateBatch, db);
+
+                try {
+                    stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
+                } catch (Throwable t) {
+                    LOG.warn("afterVisible callback failed for transaction batch {}", stateBatch.getTxnIds(), t);
+                }
             } finally {
                 stateBatch.writeUnlock();
             }

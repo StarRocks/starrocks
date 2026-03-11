@@ -43,9 +43,9 @@ namespace starrocks {
         return Status::OK();                                                   \
     }
 
-class VariantConverter {
+class VariantRowConverter {
 public:
-    VariantConverter() = delete;
+    VariantRowConverter() = delete;
 
     static Status cast_to_bool(const VariantRowRef& row, ColumnBuilder<TYPE_BOOLEAN>& result);
 
@@ -142,18 +142,5 @@ public:
         return Status::OK();
     }
 };
-
-// Backward-compatible wrapper used by cast/variant function call sites.
-template <LogicalType ResultType, bool AllowThrowException>
-Status cast_variant_value_to(const VariantRowRef& row, const cctz::time_zone& zone, ColumnBuilder<ResultType>& result) {
-    return VariantConverter::cast_to<ResultType, AllowThrowException>(row, zone, result);
-}
-
-template <LogicalType ResultType, bool AllowThrowException>
-Status cast_variant_value_to(const VariantRowValue& row, const cctz::time_zone& zone,
-                             ColumnBuilder<ResultType>& result) {
-    return VariantConverter::cast_to<ResultType, AllowThrowException>(
-            VariantRowRef(row.get_metadata(), row.get_value()), zone, result);
-}
 
 } // namespace starrocks

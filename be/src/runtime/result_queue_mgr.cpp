@@ -34,7 +34,7 @@
 
 #include "runtime/result_queue_mgr.h"
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "runtime/starrocks_metrics.h"

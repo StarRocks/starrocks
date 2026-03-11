@@ -59,7 +59,9 @@ class PageBuilder;
 class WritableFile;
 
 struct IndexedColumnWriterOptions {
-    size_t index_page_size = config::data_page_size;
+    IndexedColumnWriterOptions();
+
+    size_t index_page_size = 0;
     bool write_ordinal_index = false;
     bool write_value_index = false;
     EncodingTypePB encoding = DEFAULT_ENCODING;
@@ -84,6 +86,8 @@ struct IndexedColumnWriterOptions {
 class IndexedColumnWriter {
 public:
     explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo, WritableFile* wfile);
+    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
+    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
 
     ~IndexedColumnWriter();
 
@@ -122,9 +126,6 @@ private:
     // encoder for value index's key
     const KeyCoder* _validx_key_coder;
     const BlockCompressionCodec* _compress_codec;
-
-    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
-    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
 };
 
 } // namespace starrocks

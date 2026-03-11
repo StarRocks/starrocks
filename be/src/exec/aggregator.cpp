@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -158,6 +159,13 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
 
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold;
+    }
+    return config::two_level_memory_threshold;
+}
+
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
     params->conjuncts = tnode.conjuncts;
@@ -211,6 +219,7 @@ void AggregatorParams::init() {
             bool is_nullable = desc.nodes[0].is_nullable;
             // collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -576,6 +585,7 @@ bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTyp
 Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn,
                                               bool is_result_nullable, const AggregateFunction** ret) {
     std::vector<TypeDescriptor> arg_types;
+    arg_types.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_types.push_back(TypeDescriptor::from_thrift(type));
     }

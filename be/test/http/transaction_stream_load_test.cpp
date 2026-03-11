@@ -24,6 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"

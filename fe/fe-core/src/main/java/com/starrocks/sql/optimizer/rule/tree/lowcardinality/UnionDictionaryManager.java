@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -162,6 +163,9 @@ public class UnionDictionaryManager {
             if (constantColumns.containsKey(c.getId())) {
                 constantColumns.put(key.getId(), constantColumns.get(c.getId()));
             }
+        } else if (value instanceof CastOperator && (value.getType().isStringType() || value.getType().isNull())
+                && (value.getChild(0).getType().isStringType() || value.getChild(0).getType().isNull())) {
+            recordIfConstant(key, value.getChild(0));
         }
     }
 

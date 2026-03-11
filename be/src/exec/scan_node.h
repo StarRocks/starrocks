@@ -72,7 +72,7 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
+    ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~ScanNode() override = default;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
@@ -170,7 +170,7 @@ protected:
     std::string _name;
     bool _enable_shared_scan = false;
     int64_t _mem_limit = 0;
-    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
+    int32_t _io_tasks_per_scan_operator = 0;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 

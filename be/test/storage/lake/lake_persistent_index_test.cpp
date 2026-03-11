@@ -20,6 +20,8 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/config_primary_key_fwd.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_range_helper.h"

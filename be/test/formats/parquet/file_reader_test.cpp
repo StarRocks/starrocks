@@ -25,12 +25,11 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
-#include "column/array_column.h"
-#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -4415,112 +4414,61 @@ TEST_F(FileReaderTest, test_read_variant) {
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
 }
 
-TEST_F(FileReaderTest, test_read_variant_shredding_age) {
-    const std::string shred_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
-    auto file_reader = _create_file_reader(shred_file_path);
+TEST_F(FileReaderTest, test_read_variant_shredding) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
 
-    // Read only data.typed_value.age.typed_value (INT32) from a shredded variant.
-    TypeDescriptor age_struct = TypeDescriptor::create_struct_type({"typed_value"}, {TYPE_INT_DESC});
-    TypeDescriptor typed_value_struct = TypeDescriptor::create_struct_type({"age"}, {age_struct});
-    TypeDescriptor data_struct = TypeDescriptor::create_struct_type({"typed_value"}, {typed_value_struct});
-
-    Utils::SlotDesc slot_descs[] = {{"data", data_struct}, {""}};
-    auto ctx = _create_scan_context(slot_descs, shred_file_path);
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
+    ASSERT_TRUE(status.ok()) << status.message();
     ASSERT_EQ(file_reader->row_group_size(), 1);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
-    int64_t end_offset = 0;
-    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
-    // Only the "data.typed_value.age.typed_value" leaf column should be read.
-    EXPECT_EQ(ranges.size(), 1);
-
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(data_struct, true), chunk->num_columns());
-
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
     status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
-    ASSERT_EQ(chunk->num_rows(), 5);
-    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0));
-    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
-    const Column* typed_value_col =
-            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
-    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
-    const Column* age_col = ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("age").value());
-    const auto* age_struct_col = down_cast<const StructColumn*>(age_col);
-    const Column* age_typed_col =
-            ColumnHelper::get_data_column(age_struct_col->field_column_raw_ptr("typed_value").value());
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
 
-    const auto* age_values = down_cast<const FixedLengthColumn<int32_t>*>(age_typed_col);
-    ASSERT_EQ(age_values->size(), chunk->num_rows());
-    for (size_t i = 0; i < age_values->size(); ++i) {
-        EXPECT_EQ(20 + static_cast<int32_t>(i), age_values->get_data()[i]);
-    }
-}
+    const ColumnPtr& variant_col_nullable = chunk->get_column_by_index(0);
+    ASSERT_TRUE(variant_col_nullable->is_nullable());
+    const auto* nullable = down_cast<const NullableColumn*>(variant_col_nullable.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_FALSE(variant_col->shredded_paths().empty());
+    ASSERT_NE(-1, variant_col->find_shredded_path("id"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("age"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("score"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("events"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("numbers"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("groups"));
 
-TEST_F(FileReaderTest, test_read_variant_shredding_profile_rank_partial) {
-    const std::string shred_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
-    auto file_reader = _create_file_reader(shred_file_path);
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"id\":1000") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"age\":20") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"score\":80") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"department\":\"dept_0\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"count\":2") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"numbers\":[1,2,3]") != std::string::npos);
+    // groups: array-of-objects-with-nested-array; verifies BUG-2 fix in _collect_overlays_for_array_element
+    ASSERT_TRUE(row0_json.value().find("\"groups\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[10,20,30]") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[40,50,60]") != std::string::npos);
 
-    // Read only data.typed_value.profile.typed_value.rank.typed_value (INT32).
-    TypeDescriptor rank_struct = TypeDescriptor::create_struct_type({"typed_value"}, {TYPE_INT_DESC});
-    TypeDescriptor profile_typed_struct = TypeDescriptor::create_struct_type({"rank"}, {rank_struct});
-    TypeDescriptor profile_struct = TypeDescriptor::create_struct_type({"typed_value"}, {profile_typed_struct});
-    TypeDescriptor typed_value_struct = TypeDescriptor::create_struct_type({"profile"}, {profile_struct});
-    TypeDescriptor data_struct = TypeDescriptor::create_struct_type({"typed_value"}, {typed_value_struct});
-
-    Utils::SlotDesc slot_descs[] = {{"data", data_struct}, {""}};
-    auto ctx = _create_scan_context(slot_descs, shred_file_path);
-
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
-    ASSERT_EQ(file_reader->row_group_size(), 1);
-
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
-    int64_t end_offset = 0;
-    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
-    // Only rank.typed_value should be read.
-    EXPECT_EQ(ranges.size(), 1);
-
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(data_struct, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
-    ASSERT_EQ(chunk->num_rows(), 5);
-
-    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0).get());
-    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
-    const Column* typed_value_col =
-            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
-    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
-    const Column* profile_col =
-            ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("profile").value());
-    const auto* profile_struct_col = down_cast<const StructColumn*>(profile_col);
-    const Column* profile_typed_col =
-            ColumnHelper::get_data_column(profile_struct_col->field_column_raw_ptr("typed_value").value());
-    const auto* profile_typed_struct_col = down_cast<const StructColumn*>(profile_typed_col);
-    const Column* rank_col = profile_typed_struct_col->field_column_raw_ptr("rank").value();
-    const auto* rank_struct_col = down_cast<const StructColumn*>(ColumnHelper::get_data_column(rank_col));
-
-    const Column* rank_typed_col = rank_struct_col->field_column_raw_ptr("typed_value").value();
-    ASSERT_TRUE(rank_typed_col->is_nullable());
-
-    const auto* rank_typed_nullable = down_cast<const NullableColumn*>(rank_typed_col);
-    const auto* rank_typed_data =
-            down_cast<const FixedLengthColumn<int32_t>*>(rank_typed_nullable->data_column().get());
-
-    for (size_t i = 0; i < chunk->num_rows(); ++i) {
-        int32_t expected = static_cast<int32_t>(i + 1);
-        if (i % 2 == 0) {
-            EXPECT_FALSE(rank_typed_nullable->is_null(i));
-            EXPECT_EQ(rank_typed_data->get_data()[i], expected);
-        } else {
-            EXPECT_TRUE(rank_typed_nullable->is_null(i));
-        }
-    }
+    VariantRowValue row1;
+    ASSERT_NE(variant_col->get_row_value(1, &row1), nullptr);
+    auto row1_json = row1.to_json();
+    ASSERT_TRUE(row1_json.ok());
+    ASSERT_TRUE(row1_json.value().find("\"score\":\"S81\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"rank\":\"L2\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"numbers\":[2,3,4]") != std::string::npos);
 }
 
 } // namespace starrocks::parquet

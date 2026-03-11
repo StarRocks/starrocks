@@ -26,6 +26,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_factory.h"

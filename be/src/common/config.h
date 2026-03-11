@@ -37,6 +37,13 @@
 #include "configbase.h"
 
 namespace starrocks::config {
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing
+// columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means
+// diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -747,6 +754,19 @@ CONF_mInt32(retry_apply_timeout_second, "7200");
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
+// Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
+// When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
+// significantly increase the overhead of get_tablet_stats RPC.
+// When disabled, the approximate num_dels field stored in rowset metadata is used,
+// which avoids remote I/O but may slightly overcount rows that are deleted but not yet compacted.
+CONF_mBool(lake_enable_accurate_pk_row_count, "true");
+
+// Threshold in milliseconds for logging slow tablet stat collection tasks.
+// When a single tablet stat task takes longer than this threshold, a warning log is emitted
+// with diagnostic info (tablet_id, version, rowset count, accurate_mode, elapsed time).
+// Default is 5 minutes (300000 ms).
+CONF_mInt64(lake_tablet_stat_slow_log_ms, "300000");
+
 // Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
@@ -1353,6 +1373,15 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+// Maximum lifetime of a connection in the JDBC connection pool (ms).
+// Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes).
+CONF_Int64(jdbc_connection_max_lifetime_ms, "300000");
+// Keepalive interval for idle JDBC connections (ms).
+// Idle connections are tested at this interval to detect stale connections proactively.
+// Set to 0 to disable keepalive probing.
+// When enabled, must be >= 30000 and < jdbc_connection_max_lifetime_ms.
+// Invalid enabled values are silently disabled (reset to 0). Default: 30000 (30 seconds).
+CONF_Int64(jdbc_connection_keepalive_time_ms, "30000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
@@ -1488,12 +1517,15 @@ CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
 CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
-// max wal file size in l0
-CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
-CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
+// max wal file size in l0, 200MB
+CONF_mInt64(l0_max_file_size, "209715200");
+// 2MB
+CONF_mInt64(l0_min_mem_usage, "2097152");
+// 100MB
+CONF_mInt64(l0_max_mem_usage, "104857600");
 // if l0_mem_size exceeds this value, l0 need snapshot
-CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
+// 16MB
+CONF_mInt64(l0_snapshot_size, "16777216");
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
 // Control if using the minor compaction strategy
@@ -1660,6 +1692,10 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
+// If set to false, skip LIST and use approximate tablet size (base_size=0).
+CONF_mBool(allow_list_object_for_random_bucketing_on_cache_miss, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
@@ -1927,11 +1963,6 @@ CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
-
-// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
-CONF_mBool(enable_cow_optimization, "true");
-// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
-CONF_Int32(cow_optimization_diagnose_level, "0");
 
 // If the first predicate column's selectivity is higher than this threshold, trigger sampling
 // to potentially find a better predicate order. When selectivity is already good (low), sampling

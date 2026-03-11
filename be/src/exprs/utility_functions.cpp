@@ -40,7 +40,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"
@@ -335,6 +335,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     TGetProfileRequest req;
 
     std::vector<std::string> query_ids;
+    query_ids.reserve(columns[0]->size());
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         query_ids.emplace_back(viewer.value(i));
     }

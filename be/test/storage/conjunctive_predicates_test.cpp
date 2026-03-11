@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "common/config_exec_fwd.h"
 #include "exec/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
@@ -29,9 +30,11 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter/runtime_filter_probe.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"

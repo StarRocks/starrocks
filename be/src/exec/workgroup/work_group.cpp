@@ -19,7 +19,7 @@
 
 #include "base/metrics.h"
 #include "base/time/time.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/mem_tracker_manager.h"

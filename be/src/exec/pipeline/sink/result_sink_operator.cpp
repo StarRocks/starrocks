@@ -16,6 +16,7 @@
 
 #include <arrow/type.h>
 
+#include "common/config_exec_flow_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"

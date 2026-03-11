@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 
+#include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
 
 namespace starrocks {
@@ -38,7 +39,7 @@ public:
         _allocator.reset();
     }
 
-private:
+protected:
     FunctionUtils* utils{};
     FunctionContext* ctx{};
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
@@ -1076,7 +1077,7 @@ TEST_F(AggregateTest, test_group_concat) {
     auto result_column = BinaryColumn::create();
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
-    ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
+    ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_slice(0));
 }
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {
@@ -1121,7 +1122,7 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     auto result_column = BinaryColumn::create();
     group_concat_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
 
-    ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
+    ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_slice(0));
 }
 
 TEST_F(AggregateTest, test_percentile_cont) {
@@ -1671,7 +1672,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     func->finalize_to_column(ctx, state->state(), result_column1.get());
 
     const auto& expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
-    ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
+    ASSERT_EQ(expected_column1.immutable_data()[0], result_column1->immutable_data()[0]);
 
     // update input column 2
     ResultColumnPtr result_column2 = ResultColumn::create();
@@ -1682,7 +1683,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     func->finalize_to_column(ctx, state2->state(), result_column2.get());
 
     const auto& expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
-    ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
+    ASSERT_EQ(expected_column2.immutable_data()[0], result_column2->immutable_data()[0]);
 
     // merge column 1 and column 2
     auto final_result_column = ResultColumn::create();
@@ -1690,7 +1691,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     func->merge(ctx, final_result_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), final_result_column.get());
 
-    ASSERT_EQ(final_result_column->get_data()[0], result_column1->get_data()[0]);
+    ASSERT_EQ(final_result_column->immutable_data()[0], result_column1->immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_any_value) {

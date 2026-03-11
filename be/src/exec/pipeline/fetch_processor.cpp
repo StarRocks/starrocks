@@ -20,26 +20,19 @@
 #include <vector>
 
 #include "agent/master_info.h"
-#include "base/utility/defer_op.h"
-#include "base/uuid/uuid_generator.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
-#include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/sorting/sorting.h"
 #include "exec/tablet_info.h"
-#include "fmt/format.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/lookup_stream_mgr.h"
 #include "serde/column_array_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/disposable_closure.h"
 
 namespace starrocks::pipeline {
 
@@ -173,8 +166,7 @@ StatusOr<ChunkPtr> FetchProcessor::_build_request_chunk(RuntimeState* state, con
 
     auto position_column = UInt32Column::create();
     size_t total_rows = 0;
-    std::for_each(input_chunks.begin(), input_chunks.end(),
-                  [&total_rows](const ChunkPtr& chunk) { total_rows += chunk->num_rows(); });
+    std::ranges::for_each(input_chunks, [&total_rows](const ChunkPtr& chunk) { total_rows += chunk->num_rows(); });
 
     position_column->resize_uninitialized(total_rows);
     auto& position_data = position_column->get_data();
@@ -214,15 +206,23 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
                                                           const RowPositionDescriptor* row_pos_desc, BatchUnitPtr unit,
                                                           int32_t source_id, const ChunkPtr& request_chunk) {
     auto row_position_type = row_pos_desc->type();
+    auto task_ctx = std::make_shared<FetchTaskContext>();
+    task_ctx->processor = shared_from_this();
+    task_ctx->unit = std::move(unit);
+    task_ctx->request_tuple_id = request_tuple_id;
+    task_ctx->source_node_id = source_id;
+    task_ctx->request_chunk = std::move(request_chunk);
+    task_ctx->scan_node_id = row_pos_desc->get_scan_node_id();
+
     switch (row_position_type) {
     case RowPositionDescriptor::ICEBERG_V3: {
-        auto task_ctx = std::make_shared<FetchTaskContext>();
-        task_ctx->processor = this;
-        task_ctx->unit = std::move(unit);
-        task_ctx->request_tuple_id = request_tuple_id;
-        task_ctx->source_node_id = source_id;
-        task_ctx->request_chunk = std::move(request_chunk);
-        return std::make_shared<IcebergFetchTask>(std::move(task_ctx));
+        return std::make_shared<FetchTask>(std::move(task_ctx));
+    }
+    case RowPositionDescriptor::OLAP_SCAN: {
+        return std::make_shared<FetchTask>(std::move(task_ctx));
+    }
+    case RowPositionDescriptor::LAKE_SCAN: {
+        return std::make_shared<FetchTask>(std::move(task_ctx));
     }
     default:
         return Status::InternalError(fmt::format("Unknown row position type: {}", row_position_type));
@@ -430,16 +430,20 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
         MutableColumnPtr position_column = UInt32Column::create();
         std::vector<SlotDescriptor*> slots;
         {
-            for (const auto& slot : tuple_desc->slots()) {
-                bool ignore = std::any_of(row_pos_desc->get_lookup_ref_slot_ids().begin(),
-                                          row_pos_desc->get_lookup_ref_slot_ids().end(),
-                                          [slot](SlotId slot_id) { return slot_id == slot->id(); }) ||
-                              std::any_of(row_pos_desc->get_fetch_ref_slot_ids().begin(),
-                                          row_pos_desc->get_fetch_ref_slot_ids().end(),
-                                          [slot](SlotId slot_id) { return slot_id == slot->id(); });
-                if (!ignore) {
-                    slots.emplace_back(slot);
-                }
+            const auto& lookup = row_pos_desc->get_lookup_ref_slot_ids();
+            const auto& fetch = row_pos_desc->get_fetch_ref_slot_ids();
+
+            auto not_in_lookup = [&](SlotDescriptor* slot) {
+                return !std::ranges::any_of(lookup, [&](int id) { return id == slot->id(); });
+            };
+
+            auto not_in_fetch = [&](SlotDescriptor* slot) {
+                return !std::ranges::any_of(fetch, [&](int id) { return id == slot->id(); });
+            };
+
+            for (auto* slot :
+                 tuple_desc->slots() | std::views::filter(not_in_lookup) | std::views::filter(not_in_fetch)) {
+                slots.push_back(slot);
             }
         }
 
@@ -512,7 +516,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
             for (const auto& input_chunk : input_chunks) {
                 size_t num_rows = input_chunk->num_rows();
                 auto dst_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-                dst_column->append_nulls(num_rows);
+                dst_column->append_default(num_rows);
                 input_chunk->append_column(std::move(dst_column), slot);
                 input_chunk->check_or_die();
             }
@@ -526,20 +530,25 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
 FetchProcessorFactory::FetchProcessorFactory(int32_t target_node_id,
                                              phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs,
                                              phmap::flat_hash_map<SlotId, SlotDescriptor*> slot_id_to_desc,
-                                             std::shared_ptr<StarRocksNodesInfo> nodes_info,
-                                             std::shared_ptr<LookUpDispatcher> local_dispatcher)
+                                             std::shared_ptr<StarRocksNodesInfo> nodes_info)
         : _target_node_id(target_node_id),
           _row_pos_descs(std::move(row_pos_descs)),
           _slot_id_to_desc(std::move(slot_id_to_desc)),
-          _nodes_info(std::move(nodes_info)),
-          _local_dispatcher(std::move(local_dispatcher)) {}
+          _nodes_info(std::move(nodes_info)) {}
 
 FetchProcessorPtr FetchProcessorFactory::get_or_create(int32_t driver_sequence) {
     if (!_processor_map.contains(driver_sequence)) {
-        _processor_map.try_emplace(driver_sequence,
-                                   std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs, _slot_id_to_desc,
-                                                                    _nodes_info, _local_dispatcher));
+        _processor_map.try_emplace(driver_sequence, std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs,
+                                                                                     _slot_id_to_desc, _nodes_info));
     }
     return _processor_map.at(driver_sequence);
 }
+
+void FetchProcessorFactory::close_context(RuntimeState* state) {
+    for (auto& [id, node_info] : _nodes_info->get_nodes()) {
+        LookUpCloseTask close_task(_target_node_id, node_info.host, node_info.brpc_port);
+        close_task.submit(state);
+    }
+}
+
 } // namespace starrocks::pipeline

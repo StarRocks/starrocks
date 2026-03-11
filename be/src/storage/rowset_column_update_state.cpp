@@ -17,6 +17,9 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -97,6 +100,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     OlapReaderStatistics stats;
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -551,6 +555,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
                                                       PrimaryIndex& index) {
     // 1. build pk column
     vector<uint32_t> pk_column_ids;
+    pk_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.push_back((uint32_t)i);
     }

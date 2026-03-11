@@ -43,19 +43,21 @@
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
-#include "common/config.h"
-#include "common/configbase.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -67,6 +69,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -100,6 +103,7 @@
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
@@ -114,6 +118,10 @@
 #endif
 
 namespace starrocks {
+
+int64_t GlobalEnv::process_mem_limit() const {
+    return _process_mem_tracker->limit();
+}
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -286,6 +294,7 @@ Status GlobalEnv::_init_mem_tracker() {
 
 std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
     std::vector<std::shared_ptr<MemTracker>> mem_trackers;
+    mem_trackers.reserve(_mem_tracker_map.size());
     for (auto& item : _mem_tracker_map) {
         mem_trackers.emplace_back(item.second);
     }

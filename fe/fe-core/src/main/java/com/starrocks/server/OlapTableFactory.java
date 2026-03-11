@@ -77,6 +77,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -373,6 +374,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("In-Memory index is not supported, please create table with persistent index");
                 } else {
                     table.setEnablePersistentIndex(enablePersistentIndex);
+                }
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    table.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+                } else {
+                    table.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1);
                 }
             }
             if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {

@@ -42,7 +42,8 @@
 #include <memory>
 
 #include "base/path/path_util.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -543,6 +544,18 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
 
     return Status::OK();
+}
+
+StatusOr<TabletSharedPtr> TabletManager::get_tablet_by_id(TTabletId tablet_id, bool include_deleted) {
+    std::string err;
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, include_deleted, &err);
+    if (!tablet) {
+        std::stringstream ss;
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+    return tablet;
 }
 
 TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {

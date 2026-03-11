@@ -71,6 +71,20 @@ class ValidatePlanTest extends PlanTestBase {
         sqlList.add("select * from test_all_type where id_date > '2021-11-30' or id_date < " +
                 "cast(str_to_date('2021-11-31', 'yyyy-MM-dd') as int)");
         sqlList.add("select *, cast(20211131 as date) from t1 union all select *, cast(20211130 as date) from t2");
+
+        // insert values with invalid date
+        sqlList.add("insert into test_all_type(id_date) values (date('2025-11-35'))");
+        sqlList.add("insert into test_all_type(id_date) values (to_date('2025-11-35'))");
+        sqlList.add("insert into test_all_type(id_date) values (cast('2025-11-35' as date))");
+        sqlList.add("insert into test_all_type(id_date) values (str_to_date('2025-11-35', '%Y-%m-%d'))");
+        sqlList.add("insert into test_all_type(id_date) values (str2date('2025-11-35', '%Y-%m-%d'))");
+
+        // insert select with invalid date
+        sqlList.add("insert into test_all_type(id_date) select date('2025-11-35')");
+        sqlList.add("insert into test_all_type(id_date) select to_date('2025-11-35')");
+        sqlList.add("insert into test_all_type(id_date) select cast('2025-11-35' as date)");
+        sqlList.add("insert into test_all_type(id_date) select str_to_date('2025-11-35', '%Y-%m-%d')");
+        sqlList.add("insert into test_all_type(id_date) select str2date('2025-11-35', '%Y-%m-%d')");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 

@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "adaptive/event.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
@@ -39,6 +39,7 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

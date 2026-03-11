@@ -26,6 +26,57 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.14
+
+发布日期：2026 年 3 月 5 日
+
+### 功能优化
+
+- 为 Lake 表中的 Primary Key 索引新增 SST 读写失败指标。[#69513](https://github.com/StarRocks/starrocks/pull/69513)
+- 新增 “segment file not found” 错误计数指标。[#69543](https://github.com/StarRocks/starrocks/pull/69543)
+- 从包含 `convert_tz` 的标量子查询中提取范围谓词。[#69055](https://github.com/StarRocks/starrocks/pull/69055)
+- Paimon 表支持复杂类型。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
+- 延迟远程 Load 的 Spill Directory 删除。[#68803](https://github.com/StarRocks/starrocks/pull/68803)
+- 支持修复云原生表。[#67108](https://github.com/StarRocks/starrocks/pull/67108)
+- 支持向 CSV 格式的 Hive 表插入 ARRAY 类型数据。[#67355](https://github.com/StarRocks/starrocks/pull/67355)
+
+### 问题修复
+
+已修复以下问题：
+
+- `RowGroupWriter` 异常导致的异常行为问题。[#69568](https://github.com/StarRocks/starrocks/pull/69568)
+- 聚合表/更新表在执行 Schema Change 后，排序键未包含新添加的 Key 列。[#69529](https://github.com/StarRocks/starrocks/pull/69529)
+- 指标值 `g_publish_version_failed_tasks` 在 `resource_busy` 状态下无法反映真实情况。[#69526](https://github.com/StarRocks/starrocks/pull/69526)
+- 在将主键表 Tablet 移动到回收站时，Rowset 文件被误删除。[#69438](https://github.com/StarRocks/starrocks/pull/69438)
+- 并发执行 SWAP 后，基于名称查找表导致 `addPartitions` 出现锁泄漏。[#69284](https://github.com/StarRocks/starrocks/pull/69284)
+- `isInternalCancelError` 使用了 `equals` 而非 `startsWith`。[#69523](https://github.com/StarRocks/starrocks/pull/69523)
+- 当 `_writer->Close()` 抛出除 `ParquetStatusException` 以外的异常时，Pipeline 可能阻塞或崩溃。[#69492](https://github.com/StarRocks/starrocks/pull/69492)
+- Hadoop-client 库缺陷。[#69503](https://github.com/StarRocks/starrocks/pull/69503)
+- 写入操作失败时错误地返回成功。[#69473](https://github.com/StarRocks/starrocks/pull/69473)
+- CVE-2025-67721 漏洞。[#69138](https://github.com/StarRocks/starrocks/pull/69138)
+- 存算分离集群中低基数优化下 RuntimeFilter 问题。[#64669](https://github.com/StarRocks/starrocks/pull/64669)
+- 物化视图 Tablet 元数据在 FE Leader 与 Follower 之间不一致。[#69428](https://github.com/StarRocks/starrocks/pull/69428)
+- Rollup 处理器在 `computeMinActiveTxnId` 中未考虑活跃事务 ID。[#69285](https://github.com/StarRocks/starrocks/pull/69285)
+- 多 FE 场景下的 Arrow Flight Proxy 问题。[#68300](https://github.com/StarRocks/starrocks/pull/68300)
+- 函数字段的并发问题。[#69315](https://github.com/StarRocks/starrocks/pull/69315)
+- `DROP FUNCTION IF EXISTS` 忽略了 `ifExists` 标志。[#69216](https://github.com/StarRocks/starrocks/pull/69216)
+- LDAP 认证中缺少对用户名的大小写不敏感标准化处理。[#67966](https://github.com/StarRocks/starrocks/pull/67966)
+- 某些类型的分区无法写入。[#68221](https://github.com/StarRocks/starrocks/pull/68221)
+- 由于共享可变状态导致物化视图重写时 Projection 丢失。[#69063](https://github.com/StarRocks/starrocks/pull/69063)
+- 查询表副本时分区大小写不敏感查找问题。[#69173](https://github.com/StarRocks/starrocks/pull/69173)
+- 同步物化视图在全 NULL 值处理上的问题。[#69136](https://github.com/StarRocks/starrocks/pull/69136)
+- 访问外部 Catalog 时 `mv onReload` 相关问题。[#68926](https://github.com/StarRocks/starrocks/pull/68926)
+- 重复常量场景下 DISTINCT ORDER BY 别名问题。[#69014](https://github.com/StarRocks/starrocks/pull/69014)
+- 存算分离集群中修改 CHAR 列长度后查询结果错误。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
+- Azure ABFS/WASB FileSystem 缓存键问题。[#68901](https://github.com/StarRocks/starrocks/pull/68901)
+- 常量侧列引用的 OUTER JOIN 谓词重写错误。[#67072](https://github.com/StarRocks/starrocks/pull/67072)
+- `IllegalArgumentException` 比较器传递性违规问题。[#68743](https://github.com/StarRocks/starrocks/pull/68743)
+- 在 `report_fragment` 中，查询生命周期短于 Fragment 导致的问题。[#67219](https://github.com/StarRocks/starrocks/pull/67219)
+- 共享 `DecodeInfo` 导致的低基数重写空指针异常（NPE）。[#68799](https://github.com/StarRocks/starrocks/pull/68799)
+- 缺少 `pcu_upt_cnt` 指标。[#68845](https://github.com/StarRocks/starrocks/pull/68845)
+- JSON flatten 在相同路径下数组与对象冲突问题。[#68804](https://github.com/StarRocks/starrocks/pull/68804)
+- `ClonExpr` 的 nullable 相关缺陷。[#68800](https://github.com/StarRocks/starrocks/pull/68800)
+
 ## 3.5.13
 
 发布日期：2026 年 2 月 13 日
@@ -92,6 +143,7 @@ displayed_sidebar: docs
 - 空 Parquet 或 ORC 文件场景下，`files()` schema 检测存在的问题。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
 - 在 Hive 表上执行 UNION ALL 时，Profile 中的指标值不准确的问题。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
 - FE 查询场景下，缺乏通过 Arrow Flight 代理获取数据的支持。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- 由于 `OlapTableSink::is_full()` 中的竞争条件导致在自动创建分区时 SIGSEGV 崩溃。[#67566](https://github.com/StarRocks/starrocks/pull/67566)
 
 ## 3.5.11
 

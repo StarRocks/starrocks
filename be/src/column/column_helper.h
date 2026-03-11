@@ -87,8 +87,10 @@ public:
         // @FIXME: BinaryColumn get_data() will call build_slice() to modify the column's memory data,
         // but the operator is thread-unsafe, it's will cause crash in multi-thread(OLAP_SCANNER) when
         // OLAP_SCANNER call expression.
-        // Call the get_data() when create ConstColumn is a short-term solution
-        ptr->get_data();
+        // Call the raw_data() when create ConstColumn is a short-term solution
+        if constexpr (!lt_is_object_family<Type>) {
+            ptr->raw_data();
+        }
         return ConstColumn::create(std::move(ptr), chunk_size);
     }
 
@@ -534,13 +536,13 @@ public:
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->immutable_data()[0];
     }
 
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->immutable_data()[0];
     }
 
     static Column* get_data_column(Column* column) {
@@ -568,6 +570,10 @@ public:
             return reinterpret_cast<const ColumnType*>(column);
         }
     }
+    template <LogicalType LT>
+    static const RunTimeColumnType<LT>* get_data_column_by_type(const ColumnPtr& column) {
+        return get_data_column_by_type<LT>(column.get());
+    }
 
     static const NullColumn* get_null_column(const Column* column) {
         if (column->only_null()) {
@@ -577,6 +583,19 @@ public:
         } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
             return nullable_column->null_column_raw_ptr();
+        } else {
+            return nullptr;
+        }
+    }
+
+    static const uint8_t* get_null_data_ptr(const Column* column) {
+        if (column->only_null()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
+            return nullable_column->null_column_data().data();
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<const NullableColumn*>(column);
+            return nullable_column->null_column_data().data();
         } else {
             return nullptr;
         }
@@ -593,12 +612,17 @@ public:
             return column;
         }
     }
+    static const Column* get_data_column(const ColumnPtr& column) { return get_data_column(column.get()); }
 
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static const BinaryColumn* get_binary_column(const Column* column) {
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
+
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
 
     static bool is_all_const(const Columns& columns);
 

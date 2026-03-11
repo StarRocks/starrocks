@@ -17,6 +17,7 @@
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
@@ -368,24 +369,13 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ltype) {
-        case TYPE_UNKNOWN:
-        case TYPE_NULL:
-        case TYPE_BINARY:
-        case TYPE_DECIMAL:
-        case TYPE_STRUCT:
-        case TYPE_ARRAY:
-        case TYPE_MAP:
+        if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
+                      lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
-        case TYPE_DECIMAL32:
-            return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL64:
-            return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL128:
-            return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL256:
-            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
-        default:
+            return nullptr;
+        } else if constexpr (lt_is_decimal<ltype>) {
+            return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
+        } else {
             return RunTimeColumnType<ltype>::create(size);
         }
     }
@@ -542,4 +532,21 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
 }
+
+bool ColumnHelper::get_binary_slice_at(const Column* column, size_t row, Slice* out) {
+    if (column == nullptr || out == nullptr) return false;
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nc = down_cast<const NullableColumn*>(column);
+        if (nc->is_null(row)) return false;
+        column = nc->data_column().get();
+    }
+    if (!column->is_binary()) return false;
+    *out = down_cast<const BinaryColumn*>(column)->get_slice(row);
+    return true;
+}
+
 } // namespace starrocks

@@ -14,11 +14,14 @@
 
 #pragma once
 
+#include <memory>
+
 #include "exec/pipeline/source_operator.h"
 #include "exec/sorting/merge_path.h"
 
 namespace starrocks {
 class SortExecExprs;
+class DataStreamRecvr;
 namespace pipeline {
 
 // The number of sender may not equal to the degree of parallelism at the receiver side.

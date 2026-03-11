@@ -39,6 +39,7 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TSocket.h>
 
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
@@ -47,6 +48,9 @@
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
 #include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"

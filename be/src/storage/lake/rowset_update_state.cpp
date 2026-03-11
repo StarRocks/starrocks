@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"
@@ -317,6 +318,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
     TRACE_COUNTER_SCOPE_LATENCY_US("do_load_upserts_us");
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(params.tablet_schema->num_key_columns());
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -845,6 +847,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
         return Status::OK();
     }
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(params.tablet_schema->num_key_columns());
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

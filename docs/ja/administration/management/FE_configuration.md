@@ -1681,6 +1681,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 非アクティブなマテリアライズドビューをアクティブ化するときに、データ型の長さの一貫性を厳密にチェックするかどうか。この項目が `false` に設定されている場合、基底テーブルでデータ型の長さが変更されても、マテリアライズドビューのアクティブ化は影響を受けません。
 - Introduced in: v3.3.4
 
+##### `mv_fast_schema_change_mode`
+
+- デフォルト: strict
+- タイプ: String
+- 単位: -
+- 可変: はい
+- 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
+- 導入バージョン: v3.4.0
+
 ##### `enable_auto_collect_array_ndv`
 
 - Default: false
@@ -2864,6 +2873,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: データベース、テーブル、またはパーティションが削除された後にメタデータが保持される最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドで回復することはできません。
 - Introduced in: -
 
+##### `catalog_recycle_bin_erase_min_latency_ms`
+
+- Default: 600000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: データベース、テーブル、またはパーティションが削除された際にメタデータが消去されるまでの最小遅延時間（ミリ秒単位）。これにより、削除ログよりも先に消去ログが書き込まれることを回避します。
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_max_operations_per_cycle`
+
+- Default: 500
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: リサイクルビンからデータベース、テーブル、またはパーティションを実際に削除する操作における、1 サイクルあたりの最大消去回数。消去操作はロックを保持するため、1 バッチのサイズが大きくなりすぎないようにしてください。
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_fail_retry_interval_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: リサイクルビン内の削除操作が失敗した場合の再試行間隔（ミリ秒単位）。
+- Introduced in: -
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600
@@ -2944,13 +2980,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks クラスター内のすべてのテーブルで高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
+- Description: StarRocks クラスター内のすべてのテーブルでFast Schema Evolutionを有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。Fast Schema Evolutionを有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
 > - StarRocks Shared-data クラスターは v3.3.0 以降でこのパラメーターをサポートしています。
-> - 特定のテーブルの高速スキーマ進化を設定する必要がある場合 (特定のテーブルの高速スキーマ進化を無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
+> - 特定のテーブルのFast Schema Evolutionを設定する必要がある場合 (特定のテーブルのFast Schema Evolutionを無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
 
 ##### `enable_online_optimize_table`
 
@@ -3604,6 +3640,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 共有データクラスターのリーダー FE ノードのメモリに保持される最近の成功したコンパクションタスクレコードの数。`SHOW PROC '/compactions'` コマンドを使用して、最近の成功したコンパクションタスクレコードを表示できます。コンパクション履歴は FE プロセスメモリに格納され、FE プロセスが再起動されると失われることに注意してください。
 - Introduced in: v3.1.0
 
+##### `lake_compaction_max_parallel_default`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当建表时未指定 `lake_compaction_max_parallel` 表属性时，每个 tablet 的默认最大并行 Compaction 子任务数。`0` 表示禁用并行 Compaction。此配置作为表属性 `lake_compaction_max_parallel` 的默认值。
+
 ##### `lake_compaction_max_tasks`
 
 - Default: -1
@@ -3766,6 +3810,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: ブローカーを使用しない HDFS またはオブジェクトストレージへの直接書き込みに使用される HDFS 書き込みバッファサイズ (KB 単位) を設定します。FE はこの値をバイト (`<< 10`) に変換し、`HdfsFsManager` でローカル書き込みバッファを初期化します。また、Thrift リクエスト (例: TUploadReq、TExportSink、シンクオプション) に伝播され、バックエンド/エージェントが同じバッファサイズを使用するようにします。この値を増やすと、大きなシーケンシャル書き込みのスループットが向上しますが、ライターごとのメモリが増加します。減らすと、ストリームごとのメモリ使用量が減少し、小さな書き込みのレイテンシーが低下する可能性があります。`hdfs_read_buffer_size_kb` と並行して調整し、利用可能なメモリと同時ライターを考慮してください。
 - Introduced in: v3.2.0
+
+
+##### `lake_enable_drop_tablet_cache`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: shared-data モードで、実データが削除される前に BE/CN 上のキャッシュをクリーンアップします。
+- 導入バージョン: v4.0
+
 
 
 ##### `lake_enable_drop_tablet_cache`
@@ -4103,6 +4158,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: JDBC ネットワーク操作 (ソケット読み取り) のタイムアウト (ミリ秒単位)。このタイムアウトは、外部データベースが応答しない場合に無期限のブロッキングを防ぐために、データベースメタデータ呼び出し (getSchemas()、getTables()、getColumns() など) に適用されます。
 - Introduced in: v3.5.13
+
+##### `jdbc_connection_max_lifetime_ms`
+
+- デフォルト: 300000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続プール内の接続の最大寿命。このタイムアウト前に接続はリサイクルされ、古い接続を防ぎます。外部データベースの接続タイムアウトよりも短くする必要があります。許可される最小値は30000（30秒）です。
+- 導入バージョン: -
+
+##### `jdbc_connection_keepalive_time_ms`
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: アイドル状態のJDBC接続のキープアライブ間隔。アイドル状態の接続はこの間隔でテストされ、古い接続を積極的に検出します。0に設定するとキープアライブプロービングを無効にします。有効な場合、>= 30000かつ`jdbc_connection_max_lifetime_ms`より小さい必要があります。無効な有効値はサイレントに無効化されます（0にリセット）。
+- 導入バージョン: -
+
+##### `jdbc_connection_leak_detection_threshold_ms`
+
+- デフォルト: 0
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続リーク検出のしきい値。この値よりも長く接続が保持された場合、警告がログに記録されます。無効にするには0に設定します。これは、接続を長時間保持するコードパスを特定するためのデバッグ支援です。
+- 導入バージョン: -
+
 
 ##### `jdbc_connection_pool_size`
 

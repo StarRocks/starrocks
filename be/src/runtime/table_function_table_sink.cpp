@@ -25,6 +25,7 @@
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
 #include "glog/logging.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -81,6 +82,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     DCHECK(target_table.columns.size() == output_exprs.size());
 
     std::vector<std::string> column_names;
+    column_names.reserve(target_table.columns.size());
     for (const auto& column : target_table.columns) {
         column_names.push_back(column.column_name);
     }
@@ -136,6 +138,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
 
     } else {
         std::vector<TExpr> partition_exprs;
+        partition_exprs.reserve(target_table.partition_column_ids.size());
         for (auto id : target_table.partition_column_ids) {
             partition_exprs.push_back(output_exprs[id]);
         }

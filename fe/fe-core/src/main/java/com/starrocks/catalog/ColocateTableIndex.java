@@ -210,7 +210,6 @@ public class ColocateTableIndex implements Writable {
                 "colocate not supported");
         writeLock();
         try {
-            boolean groupAlreadyExist = true;
             GroupId groupId;
             String fullGroupName = dbId + "_" + groupName;
 
@@ -223,7 +222,6 @@ public class ColocateTableIndex implements Writable {
                 } else {
                     // generate a new one
                     groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
-                    groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
                 if (!(tbl instanceof ExternalOlapTable)) {
@@ -244,6 +242,8 @@ public class ColocateTableIndex implements Writable {
             if (tbl.isCloudNativeTableOrMaterializedView()) {
                 if (!isReplay) { // leader create or update meta group
                     List<Long> shardGroupIds = tbl.getShardGroupIds();
+                    // check the group existence in lakeGroups
+                    boolean groupAlreadyExist = lakeGroups.stream().anyMatch(gid -> Objects.equals(gid.grpId, groupId.grpId));
                     if (!groupAlreadyExist) {
                         GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {

@@ -173,6 +173,7 @@ std::vector<int32_t> IcebergTableDescriptor::partition_source_index_in_schema() 
 
 const std::vector<std::string> IcebergTableDescriptor::full_column_names() {
     std::vector<std::string> full_column_names;
+    full_column_names.reserve(_columns.size());
     for (const auto& column : _columns) {
         full_column_names.emplace_back(column.column_name);
     }
@@ -529,7 +530,8 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_SNAPSHOTS_TABLE:
         case TTableType::ICEBERG_MANIFESTS_TABLE:
         case TTableType::ICEBERG_FILES_TABLE:
-        case TTableType::ICEBERG_PARTITIONS_TABLE: {
+        case TTableType::ICEBERG_PARTITIONS_TABLE:
+        case TTableType::ICEBERG_PROPERTIES_TABLE: {
             desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
             break;
         }

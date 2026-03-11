@@ -26,6 +26,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/runtime_state.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {
@@ -37,6 +38,7 @@ class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
 class RuntimeFilterProbeCollector;
+class OlapScanLazyMaterializationContext;
 
 namespace pipeline {
 
@@ -118,13 +120,16 @@ public:
     bool has_active_input() const;
     BalancedChunkBuffer& get_shared_buffer();
 
-    Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
+    Status capture_tablet_rowsets(RuntimeState* state, const std::vector<TInternalScanRange*>& olap_scan_ranges);
+
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const {
         return _rowset_release_guard.tablet_rowsets();
     };
 
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
+
+    const OlapScanLazyMaterializationContext* glm_ctx() const { return _glm_ctx; }
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
 
@@ -144,6 +149,7 @@ private:
     int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
+    OlapScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;

@@ -14,14 +14,19 @@
 
 #include "storage/lake/update_manager.h"
 
+#include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -83,6 +88,10 @@ UpdateManager::~UpdateManager() {
     _index_cache.clear();
     _update_state_cache.clear();
     _compaction_cache.clear();
+}
+
+UpdateManager::PkIndexShard& UpdateManager::_get_pk_index_shard(int64_t tabletId) {
+    return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
 }
 
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
@@ -603,6 +612,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 
     auto tschema = std::make_shared<TabletSchema>(metadata->schema());
     std::vector<uint32_t> pk_cids;
+    pk_cids.reserve(tschema->num_key_columns());
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
 
@@ -928,6 +938,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // STEP 2: Read condition column values from new rows (from SST files)
         std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
         std::vector<uint32_t> rowids;
+        rowids.reserve(pk_column->size());
         for (int j = 0; j < pk_column->size(); ++j) {
             // Build absolute rowids: current.second is the base offset for this chunk
             rowids.push_back(j + current.second);
@@ -1087,6 +1098,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
         std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
         std::vector<uint32_t> rowids;
+        rowids.reserve(upsert->size());
         for (int j = 0; j < upsert->size(); ++j) {
             rowids.push_back(j);
         }
@@ -1763,6 +1775,13 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
         return version;
     }
     return 0;
+}
+
+Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    return Status::OK();
 }
 
 void UpdateManager::_print_memory_stats() {

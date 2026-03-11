@@ -37,18 +37,15 @@
 #include <atomic>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
-#include "exec/query_cache/cache_manager.h"
-#include "exec/spill/query_spill_manager.h"
+#include "exec/query_cache/cache_manager_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/base_load_path_mgr.h"
-#include "runtime/lookup_stream_mgr.h"
-#include "runtime/mem_tracker.h"
-#include "storage/options.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "storage/options_fwd.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
 // So please consider use forward declaration as much as possible.
@@ -61,6 +58,7 @@ class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
 class FragmentMgr;
+class BaseLoadPathMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
@@ -108,7 +106,8 @@ class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
-}
+class GlobalSpillManager;
+} // namespace spill
 
 namespace connector {
 class ConnectorSinkSpillExecutor;
@@ -172,7 +171,7 @@ public:
 
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
 
-    int64_t process_mem_limit() const { return _process_mem_tracker->limit(); }
+    int64_t process_mem_limit() const;
 
 private:
     static bool _is_init;

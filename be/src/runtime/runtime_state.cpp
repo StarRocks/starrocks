@@ -34,6 +34,7 @@
 
 #include "runtime/runtime_state.h"
 
+#include <algorithm>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -42,10 +43,15 @@
 #include "base/time/timezone_utils.h"
 #include "base/uid_util.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/constexpr.h"
 #include "common/logging.h"
+#include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "types/datetime_value.h"
 
@@ -237,6 +243,13 @@ bool RuntimeState::use_page_cache() {
         return _query_options.use_page_cache;
     }
     return true;
+}
+
+int RuntimeState::spill_partitionwise_agg_partition_num() const {
+    if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
+        return config::spill_init_partition;
+    }
+    return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
 }
 
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {

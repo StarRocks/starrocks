@@ -41,14 +41,15 @@ public:
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     struct ImmContainer {
-        ImmContainer(const BinaryColumnBase& column) : _column(column) {}
+        ImmContainer() = default;
+        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
 
-        Slice operator[](size_t index) const { return _column.get_slice(index); }
+        Slice operator[](size_t index) const { return _column->get_slice(index); }
 
-        size_t size() const { return _column.size(); }
+        size_t size() const { return _column->size(); }
 
     private:
-        const BinaryColumnBase& _column;
+        const BinaryColumnBase* _column = nullptr;
     };
 
     using Container = Buffer<Slice>;
@@ -65,15 +66,7 @@ public:
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
-        if (_offsets.empty()) {
-            _offsets.emplace_back(0);
-        }
-        if (!config::enable_zero_copy_from_page_cache) {
-            _ensure_materialized();
-        }
-    }
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
@@ -312,19 +305,6 @@ public:
         }
     }
 
-    Container& get_data() {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-    const Container& get_data() const {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-
     GermanStringContainer& get_german_strings() {
         if (!_german_strings_cache) {
             _build_german_strings();
@@ -339,7 +319,7 @@ public:
         return _german_strings;
     }
 
-    const ImmContainer immutable_data() const { return ImmContainer(*this); }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Bytes& get_bytes() {
         _ensure_materialized();
@@ -412,6 +392,8 @@ public:
     }
 
     Status capacity_limit_reached() const override;
+
+    void build_slices(Container& slices) const;
 
 private:
     void _build_slices() const;

@@ -107,6 +107,7 @@ Usage: $0 <options>
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
+     --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
@@ -115,6 +116,8 @@ Usage: $0 <options>
                         Turning this option on automatically disables ccache.
      --without-tenann
                         build without vector index tenann library
+     --configure-only   run CMake configure only for Backend/Format Lib and skip compilation
+                        (used by ci-tool changed-file clang-tidy mode)
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
@@ -174,12 +177,14 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
+  -l 'without-pch' \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -l 'without-tenann' \
+  -l 'configure-only' \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
@@ -206,10 +211,12 @@ WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
 WITH_STARCACHE=ON
+WITH_PCH=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
+CONFIGURE_ONLY=OFF
 WITH_RELATIVE_SRC_PATH=ON
 ENABLE_MULTI_DYNAMIC_LIBS=OFF
 BUILD_BE_MODULE=all
@@ -318,9 +325,11 @@ else
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
+            --configure-only) CONFIGURE_ONLY=ON; shift ;;
             --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
@@ -373,6 +382,7 @@ echo "Get params:
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
@@ -491,6 +501,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         # this option cannot work with clang-14
         WITH_COMPRESS=OFF
     fi
+    if [ "${CONFIGURE_ONLY}" == "ON" ]; then
+        # Configure-only mode does not build targets, so no .pch artifacts are generated.
+        # Disable PCH to avoid compile_commands.json referencing missing cmake_pch.hxx.pch files.
+        WITH_PCH=OFF
+    fi
 
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
@@ -508,6 +523,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DBUILD_BE=${BUILD_BE}                                \
@@ -517,6 +533,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   ${STARROCKS_HOME}/be
+
+    if [ "${CONFIGURE_ONLY}" == "ON" ]; then
+        echo "Configure only mode: skip Backend build."
+        exit 0
+    fi
 
     if [ "${BUILD_BE_MODULE}" != "all" ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"

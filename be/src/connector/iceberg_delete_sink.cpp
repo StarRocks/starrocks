@@ -22,6 +22,7 @@
 
 #include "base/url_coding.h"
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/sink_memory_manager.h"

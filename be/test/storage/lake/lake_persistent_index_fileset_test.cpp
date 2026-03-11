@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"

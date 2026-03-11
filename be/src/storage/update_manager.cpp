@@ -21,10 +21,12 @@
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_factory.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -56,6 +58,13 @@ Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, u
         return Status::OK();
     }
     return StorageEngine::instance()->get_delta_column_group(_meta, tablet_id, rowsetid, segment_id, INT64_MAX, pdcgs);
+}
+
+Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    return Status::OK();
 }
 
 UpdateManager::UpdateManager(MemTracker* mem_tracker)

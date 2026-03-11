@@ -20,7 +20,7 @@
 
 #include "ColumnWriter.hh"
 #include "Timezone.hh"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "orc/Common.hh"
 #include "orc/OrcFile.hh"
 

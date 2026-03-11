@@ -17,6 +17,7 @@
 #include <cstring>
 
 #include "base/container/raw_container.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"

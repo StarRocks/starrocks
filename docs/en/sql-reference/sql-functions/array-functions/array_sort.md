@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 
 
-Sorts the elements of an array in ascending order.
+Sorts the elements of an array in ascending order. From v4.0, `array_sort` supports Lambda Comparator.
 
 ## Syntax
 
 ```Haskell
+-- Without Lambda Comparator
 array_sort(array)
-```
 
-```Haskell
+-- With Lambda Comparator
 array_sort(array, (x,y)->expr(x,y))
 ```
 
@@ -50,7 +50,10 @@ Returns an array.
   - **Irreflexivity**: For all `x`, `expr(x, x)` must return false (boolean) or non-negative (numeric)
   - **Asymmetry**: If `expr(x, y)` holds, then `expr(y, x)` must not hold
   - **Transitivity**: If `expr(x, y)` and `expr(y, z)` hold, then `expr(x, z)` must hold
-  - **Connectedness**: For all `x` and `y`, either `expr(x, y)` or `expr(y, x)` or `x = y` must be true
+  - **Connectedness**: For all `x` and `y`, one of the following must be true:
+    - `expr(x, y)`
+    - `expr(y, x)`
+    - `x = y`
 
 - The lambda comparator expression must:
   - Only depend on parameters `x` and `y`
@@ -60,29 +63,23 @@ Returns an array.
 
 ### Descending Order
 
-- If you want to sort the elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
+If you want to sort the elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
 
 ## Examples
+
+### Basic Examples
 
 The following table is used as an example:
 
 ```plaintext
 mysql> select * from test;
-
 +------+--------------+
-
 | c1   | c2           |
-
 +------+--------------+
-
 |    1 | [4,3,null,1] |
-
 |    2 | NULL         |
-
 |    3 | [null]       |
-
 |    4 | [8,5,1,4]    |
-
 +------+--------------+
 ```
 
@@ -90,21 +87,13 @@ Sort the values of column `c2` in ascending order.
 
 ```plaintext
 mysql> select c1, array_sort(c2) from test;
-
 +------+------------------+
-
 | c1   | array_sort(`c2`) |
-
 +------+------------------+
-
 |    1 | [null,1,3,4]     |
-
 |    2 | NULL             |
-
 |    3 | [null]           |
-
 |    4 | [1,4,5,8]        |
-
 +------+------------------+
 ```
 
@@ -114,44 +103,44 @@ Sort an array of integers in descending order using a lambda comparator:
 
 ```plaintext
 mysql> select array_sort([3,1,4,2], (x,y) -> x > y);
-+-----------------------------------------+
++-------------------------------------------+
 | array_sort([3, 1, 4, 2], (x, y) -> x > y) |
-+-----------------------------------------+
-| [4, 3, 2, 1]                             |
-+-----------------------------------------+
++-------------------------------------------+
+| [4, 3, 2, 1]                              |
++-------------------------------------------+
 ```
 
 Sort an array of integers using numeric return values:
 
 ```plaintext
 mysql> select array_sort([3,1,4,2], (x,y) -> x - y);
-+----------------------------------------+
++-------------------------------------------+
 | array_sort([3, 1, 4, 2], (x, y) -> x - y) |
-+----------------------------------------+
-| [1, 2, 3, 4]                           |
-+----------------------------------------+
++-------------------------------------------+
+| [1, 2, 3, 4]                              |
++-------------------------------------------+
 ```
 
 Sort an array of strings by length:
 
 ```plaintext
 mysql> select array_sort(['apple', 'banana', 'cherry', 'date'], (x,y) -> length(x) - length(y));
-+----------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
 | array_sort(['apple', 'banana', 'cherry', 'date'], (x, y) -> length(x) - length(y)) |
-+----------------------------------------------------------------------------+
-| ['date', 'apple', 'banana', 'cherry']                                      |
-+----------------------------------------------------------------------------+
++------------------------------------------------------------------------------------+
+| ['date', 'apple', 'banana', 'cherry']                                              |
++------------------------------------------------------------------------------------+
 ```
 
 Sort an array of strings alphabetically using boolean return:
 
 ```plaintext
 mysql> select array_sort(['banana', 'apple', 'cherry'], (x,y) -> x > y);
-+--------------------------------------------------------+
++------------------------------------------------------------+
 | array_sort(['banana', 'apple', 'cherry'], (x, y) -> x > y) |
-+--------------------------------------------------------+
-| ['apple', 'banana', 'cherry']                           |
-+--------------------------------------------------------+
++------------------------------------------------------------+
+| ['apple', 'banana', 'cherry']                              |
++------------------------------------------------------------+
 ```
 
 Sort an array with custom business logic (sort even numbers first, then odd numbers):
@@ -165,7 +154,7 @@ mysql> select array_sort([5,2,8,1,9,4], (x,y) ->
 +--------------------------------------------------------------------------------------------------------------------+
 | array_sort([5, 2, 8, 1, 9, 4], (x, y) -> case when x % 2 = 0 and y % 2 = 0 then x - y when x % 2 = 0 and y % 2 = 1 then -1 when x % 2 = 1 and y % 2 = 0 then 1 else x - y end) |
 +--------------------------------------------------------------------------------------------------------------------+
-| [2, 4, 8, 1, 5, 9]                                                                                                |
+| [2, 4, 8, 1, 5, 9]                                                                                                 |
 +--------------------------------------------------------------------------------------------------------------------+
 ```
 
@@ -174,8 +163,8 @@ Sort an array of decimals with custom precision comparison:
 ```plaintext
 mysql> select array_sort([3.141, 2.718, 1.414, 2.236], (x,y) -> round(x, 2) - round(y, 2));
 +----------------------------------------------------------------------------------------+
-| array_sort([3.141, 2.718, 1.414, 2.236], (x, y) -> round(x, 2) - round(y, 2))         |
+| array_sort([3.141, 2.718, 1.414, 2.236], (x, y) -> round(x, 2) - round(y, 2))          |
 +----------------------------------------------------------------------------------------+
-| [1.414, 2.236, 2.718, 3.141]                                                          |
+| [1.414, 2.236, 2.718, 3.141]                                                           |
 +----------------------------------------------------------------------------------------+
 ```

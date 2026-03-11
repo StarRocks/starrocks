@@ -22,7 +22,7 @@
 
 #include "base/network/cidr.h"
 #include "base/network/network_util.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"

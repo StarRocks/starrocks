@@ -189,7 +189,7 @@ public:
 
         // input data
         auto lhs_data = lhs->is_constant() ? ColumnHelper::as_raw_column<ConstColumn>(lhs)->data_column() : lhs;
-        auto data = ColumnHelper::cast_to_raw<Type>(lhs_data)->get_data().data();
+        const auto& data = ColumnHelper::cast_to_raw<Type>(lhs_data)->immutable_data();
 
         // output data
         auto result = RunTimeColumnType<TYPE_BOOLEAN>::create();
@@ -434,8 +434,7 @@ public:
     VectorizedInConstPredicateGeneric(const TExprNode& node)
             : Predicate(node), _is_not_in(node.in_predicate.is_not_in) {}
 
-    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other)
-            : Predicate(other), _is_not_in(other._is_not_in), _const_input(other._const_input) {}
+    VectorizedInConstPredicateGeneric(const VectorizedInConstPredicateGeneric& other) = default;
 
     ~VectorizedInConstPredicateGeneric() override = default;
 

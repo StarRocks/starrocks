@@ -21,6 +21,31 @@ displayed_sidebar: docs
 | `partitions`           | テーブル内のパーティションの詳細を表示します。               |
 | `files`                | テーブルの現在のスナップショット内のデータファイルと削除ファイルの詳細を表示します。 |
 | `refs`                 | Iceberg の参照に関する詳細を表示し、ブランチやタグを含みます。 |
+| `properties`           | テーブルプロパティをキーと値のペアで表示します。             |
+
+## Iceberg v3 Row Lineage メタデータ列
+
+バージョン v4.1 以降、Iceberg v3 テーブル（format-version = 3）の場合、StarRocks は以下の Row Lineage メタデータ列のクエリをサポートしています：
+
+| メタデータ列                      | 説明                                                                                           |
+| :-------------------------------- | :--------------------------------------------------------------------------------------------- |
+| `_row_id`                         | テーブル内で一意の行識別子（BIGINT）。形式：`firstRowId + row_position`。                       |
+| `_last_updated_sequence_number`   | 行が最後に更新されたコミットシーケンス番号（BIGINT）。                                          |
+
+使用法：
+
+```SQL
+SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]table;
+```
+
+:::note
+
+- `_row_id` 列には、データファイルに `firstRowId` メタデータが必要です。データファイルに `firstRowId` がない場合、クエリはエラーで失敗します。
+- 新規挿入データの場合、`_row_id` は `firstRowId + row_position` で計算され、`_last_updated_sequence_number` はファイルレベルの `dataSequenceNumber` になります。
+- コンパクション（Iceberg OPTIMIZE / rewrite-data-files など）後、コンパクターが Iceberg v3 仕様に従って `_row_id` と `_last_updated_sequence_number` をデータファイルの物理列として書き込んだ場合、StarRocks は各行の物理列値を読み取り、コンパクション後も行リネージ情報を保持します。
+- これらのメタデータ列は Iceberg v3 テーブル（format-version = 3）でのみ使用可能です。
+
+:::
 
 ## `history` テーブル
 
@@ -170,3 +195,26 @@ SELECT * FROM [<catalog>.][<database>.]table$refs;
 | max_reference_age_in_ms | 参照が期限切れになるまでの最大年齢。                         |
 | min_snapshots_to_keep   | ブランチのみ、ブランチ内で保持する最小スナップショット数。   |
 | max_snapshot_age_in_ms  | ブランチのみ、ブランチ内で許可される最大スナップショット年齢。ブランチ内の古いスナップショットは期限切れになります。 |
+
+## `properties` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+出力:
+
+| フィールド | 説明                       |
+| :-------- | :------------------------- |
+| key       | テーブルプロパティの名前。 |
+| value     | テーブルプロパティの値。   |
+
+出力例:
+
+| key                             | value                              |
+| :------------------------------ | :--------------------------------- |
+| location                        | s3://bucket/warehouse/db/my_table  |
+| write.format.default            | parquet                            |
+| write.parquet.compression-codec | zstd                               |

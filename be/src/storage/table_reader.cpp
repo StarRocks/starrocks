@@ -20,6 +20,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
@@ -156,6 +157,7 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
         multi_get->add(keys, key_index, key_index);
     }
     vector<TabletMultiGet*> multi_gets;
+    multi_gets.reserve(multi_gets_by_tablet.size());
     for (auto& iter : multi_gets_by_tablet) {
         multi_gets.push_back(iter.second.get());
     }

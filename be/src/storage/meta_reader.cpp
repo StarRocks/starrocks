@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"
@@ -57,6 +58,8 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
     }
     return Status::InvalidArgument("cannot find column: " + item);
 }
+
+MetaReaderParams::MetaReaderParams() : chunk_size(config::vector_chunk_size) {}
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 
@@ -182,6 +185,7 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, cons
     }
     _params = params;
     _tablet_id = options.tablet_id;
+    _rss_id = options.rss_id;
     if (options.dcg_loader != nullptr) {
         if (options.is_primary_keys) {
             TabletSegmentId tsid;
@@ -326,6 +330,7 @@ Status SegmentMetaCollecter::_collect_virtual(const std::string& name, const std
                                               LogicalType type) {
     VirtualColumnFactory::Options options;
     options.tablet_id = _tablet_id;
+    options.rss_id = _rss_id;
     options.segment_id = _segment->id();
     if (name == META_MAX) {
         size_t num_rows = _segment->num_rows();

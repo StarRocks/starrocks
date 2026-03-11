@@ -269,6 +269,11 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxIndexId")
     protected long maxIndexId = -1;
 
+    // Persisted primary key encoding type. null means the table was created before this field was introduced,
+    // in which case we fall back to the legacy computed logic in getPrimaryKeyEncodingType().
+    @SerializedName(value = "primaryKeyEncodingType")
+    private TPrimaryKeyEncodingType primaryKeyEncodingType = null;
+
     // the id of the session that created this table, only used in temporary table
     @SerializedName(value = "sessionId")
     protected UUID sessionId = null;
@@ -431,6 +436,7 @@ public class OlapTable extends Table {
         // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.sessionId = this.sessionId;
+        olapTable.primaryKeyEncodingType = this.primaryKeyEncodingType;
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
@@ -1507,7 +1513,9 @@ public class OlapTable extends Table {
     }
 
     public List<Partition> getNonEmptyPartitions() {
-        return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
+        return idToPartition.values().stream().filter(
+                        p -> !p.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .filter(Partition::hasData).collect(Collectors.toList());
     }
 
     public int getNumberOfPartitions() {
@@ -1725,7 +1733,7 @@ public class OlapTable extends Table {
         }
 
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(nameToColumn);
+            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(idToColumn);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ((ListPartitionInfo) partitionInfo).updateLiteralExprValues(idToColumn);
         }
@@ -3002,6 +3010,15 @@ public class OlapTable extends Table {
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
         }
 
+        // lake_compaction_max_parallel (only for cloud native table, only show when not default)
+        if (isCloudNativeTable()) {
+            int lakeCompactionMaxParallel = getLakeCompactionMaxParallel();
+            if (lakeCompactionMaxParallel != Config.lake_compaction_max_parallel_default) {
+                properties.put(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL,
+                        String.valueOf(lakeCompactionMaxParallel));
+            }
+        }
+
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
         // table query timeout (only show if explicitly set, not default)
@@ -3381,11 +3398,21 @@ public class OlapTable extends Table {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
     }
 
+    public void setPrimaryKeyEncodingType(TPrimaryKeyEncodingType type) {
+        this.primaryKeyEncodingType = type;
+    }
+
     public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
         if (getKeysType() != KeysType.PRIMARY_KEYS) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
         }
 
+        // Use persisted value if available (new tables created after this field was introduced)
+        if (primaryKeyEncodingType != null) {
+            return primaryKeyEncodingType;
+        }
+
+        // Legacy fallback for tables created before primaryKeyEncodingType was persisted
         if (!isCloudNativeTableOrMaterializedView()) {
             return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
         }

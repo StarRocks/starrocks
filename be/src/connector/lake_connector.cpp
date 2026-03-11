@@ -18,13 +18,18 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column_access_path.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/starrocks_metrics.h"
@@ -33,7 +38,6 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
@@ -395,6 +399,23 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+
+    bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
+                      thrift_lake_scan_node.enable_global_late_materialization;
+    if (enable_glm) {
+        int32_t scan_node_id = _provider->_scan_node->id();
+        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = runtime_state->query_ctx()->object_pool();
+        auto creator = [&]() {
+            auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
+            return ctx;
+        };
+        auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
+        glm_ctx->set_scan_node(thrift_lake_scan_node);
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+    }
+
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
@@ -1127,19 +1148,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         }
     }
 
-    return DataSourceProvider::convert_scan_range_to_morsel_queue(
-            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges, (size_t)lake_scan_parallelism);
+    ASSIGN_OR_RETURN(auto morsel_queue,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue(
+                             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
+                             tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    if (_could_split) {
+        morsel_queue->set_has_more_from_split(true);
+    }
+    return morsel_queue;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
-    //if (_t_lake_scan_node.use_pk_index) {
-    //    return false;
-    //}
-
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {
@@ -1176,6 +1198,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 
     bool could =
             *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
+    // if don't use tablet internal parallel scan, we choose the number of tablets as the dop of scan node
+    // which is the same as olap scan
+    if (!could) {
+        *scan_parallelism = scan_ranges.size();
+    }
+
     return could;
 }
 

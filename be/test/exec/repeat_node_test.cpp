@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "exec/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"

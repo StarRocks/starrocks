@@ -40,6 +40,8 @@
 #include <string>
 #include <vector>
 
+#include "common/config_memory_allocator_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/mem_info.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"

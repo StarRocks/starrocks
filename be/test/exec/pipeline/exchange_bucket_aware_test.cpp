@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"

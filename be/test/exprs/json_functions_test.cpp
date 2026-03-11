@@ -31,7 +31,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -121,7 +121,7 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
                                     R"({"k11": "v11"})",
                                     R"({"k11": "v11"})"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+    for (int j = 0; j < std::size(values); ++j) {
         strings->append(values[j]);
         strings2->append(strs[j]);
     }
@@ -137,13 +137,70 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(values); ++j) {
+        ASSERT_EQ(length_strings[j], v->get_slice(j).to_string());
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_scalar) {
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+        auto strings = BinaryColumn::create();
+        auto strings2 = BinaryColumn::create();
+
+        std::string values[] = {
+                R"({"k1":    1})",          // int, 1 key
+                R"({"k1":    1, "k2": 2})", // 2 keys, get the former
+                R"({"k0":    0, "k1": 1})", // 2 keys, get  the latter
+
+                R"({"k1":    3.14159})",                    // double, 1 key
+                R"({"k0":    2.71828, "k1":  3.14159})",    // 2 keys, get  the former
+                R"({"k1":    3.14159, "k2":  2.71828})",    // 2 keys, get  the latter
+                R"({"k1":    "{\"k11\":       \"v11\"}"})", // string, 1 key
+                R"({"k0":    "{\"k01\":       \"v01\"}",  "k1":     "{\"k11\":       \"v11\"}"})", // 2 keys, get  the former
+                R"({"k1":    "{\"k11\":       \"v11\"}",  "k2":     "{\"k21\": \"v21\"}"})"}; // 2 keys, get  the latter
+
+        std::string strs[] = {"$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1"};
+        std::string length_strings[] = {"1",
+                                        "1",
+                                        "1",
+                                        "3.14159",
+                                        "3.14159",
+                                        "3.14159",
+                                        R"({"k11":       "v11"})",
+                                        R"({"k11":       "v11"})",
+                                        R"({"k11":       "v11"})"};
+
+        for (int j = 0; j < std::size(values); ++j) {
+            strings->append(values[j]);
+            strings2->append(strs[j]);
+        }
+
+        columns.emplace_back(strings);
+        columns.emplace_back(strings2);
+
+        ctx.get()->set_constant_columns(columns);
+        ASSERT_TRUE(
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        ColumnPtr result = JsonFunctions::get_json_scalar_string(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+        for (int j = 0; j < std::size(values); ++j) {
+            ASSERT_EQ(length_strings[j], v->get_slice(j).to_string());
+        }
+
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
 }
 
 TEST_F(JsonFunctionsTest, get_json_string_array) {
@@ -157,7 +214,7 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     std::string strs[] = {"$[*].key", "$.[*].key"};
     std::string length_strings[] = {"[1, 2]", "[1, 2]"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+    for (int j = 0; j < std::size(values); ++j) {
         strings->append(values[j]);
         strings2->append(strs[j]);
     }
@@ -173,8 +230,8 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(values); ++j) {
+        ASSERT_EQ(length_strings[j], v->get_slice(j).to_string());
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
@@ -192,7 +249,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             doubles->append(values[j]);
             doubles2->append(strs[j]);
         }
@@ -209,7 +266,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 
@@ -227,7 +284,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             str_values->append(values[j]);
             str_values2->append(strs[j]);
         }
@@ -244,7 +301,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 
@@ -262,7 +319,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ints->append(values[j]);
             ints2->append(strs[j]);
         }
@@ -279,7 +336,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 
@@ -297,7 +354,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"$.k3", "$.k4"};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ints->append(values[j]);
             ints2->append(strs[j]);
         }
@@ -314,7 +371,46 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+        auto strings = BinaryColumn::create();
+        auto strings2 = BinaryColumn::create();
+
+        std::string values[] = {
+                R"({"k1":    {"k11":       "v11"}})",                             //object, 1 key
+                R"({"k0":    {"k01":       "v01"},  "k1":     {"k11": "v11"}})",  // 2 keys, get  the former
+                R"({"k1":    {"k11":       "v11"},  "k2":     {"k21": "v21"}})"}; // 2 keys, get  the latter
+
+        std::string strs[] = {"$.k1", "$.k1", "$.k1"};
+
+        for (int j = 0; j < std::size(values); ++j) {
+            strings->append(values[j]);
+            strings2->append(strs[j]);
+        }
+
+        columns.emplace_back(strings);
+        columns.emplace_back(strings2);
+
+        ctx.get()->set_constant_columns(columns);
+        ASSERT_TRUE(
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        ColumnPtr result = JsonFunctions::get_json_scalar_string(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::as_column<NullableColumn>(result);
+
+        for (int j = 0; j < std::size(values); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 
@@ -1131,7 +1227,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 using JsonObjectTestParam = std::tuple<std::vector<std::string>, std::string>;
 
-class JsonObjectTestFixture : public ::testing::TestWithParam<JsonObjectTestParam> {};
+class JsonObjectTestFixture : public ::testing::TestWithParam<JsonObjectTestParam> {
+public:
+    ~JsonObjectTestFixture() override = default;
+};
 
 TEST_P(JsonObjectTestFixture, json_object) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -2122,7 +2221,7 @@ TEST_P(JsonPrettyTestFixture, json_pretty) {
     } else {
         ASSERT_FALSE(res_col->is_null(0));
         auto v_col = ColumnHelper::cast_to<TYPE_VARCHAR>(res_col);
-        std::string actual = v_col->get_data()[0].to_string();
+        std::string actual = v_col->get_slice(0).to_string();
 
         ASSERT_EQ(param.expected_output, actual) << "Test Description: " << param.description << "\nExpected:\n"
                                                  << param.expected_output << "\nActual:\n"

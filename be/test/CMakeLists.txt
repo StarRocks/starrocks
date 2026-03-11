@@ -71,6 +71,7 @@ set(EXEC_FILES
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+        ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
         ./exec/query_spill_manager_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -226,6 +227,7 @@ set(EXEC_FILES
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
+        ./formats/parquet/column_reader_factory_test.cpp
         ./formats/parquet/parquet_file_writer_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
@@ -233,6 +235,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/parquet_variant_test.cpp
         ./formats/parquet/parquet_pos_reader_test.cpp
+        ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp
@@ -487,6 +490,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/column_iterator_decorator_test.cpp
     ./storage/rowset_column_partial_update_test.cpp
     ./storage/rowset/column_reader_writer_test.cpp
+    ./storage/rowset/object_column_writer_test.cpp
     ./storage/rowset_column_update_state_test.cpp
     ./storage/rowset/data_sample_test.cpp
     ./storage/rowset/default_value_column_iterator_test.cpp

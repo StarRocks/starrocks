@@ -21,7 +21,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -32,8 +32,10 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
@@ -55,6 +57,12 @@
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context);
+
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
@@ -114,6 +122,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         }
         _is_unbounded_preceding = !window.__isset.window_start;
     }
+}
+
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
 }
 
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
@@ -213,6 +225,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }

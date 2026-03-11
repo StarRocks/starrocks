@@ -450,7 +450,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& element_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
@@ -464,7 +464,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
             }
         } else {
             const auto* data_column = down_cast<const ArrayColumn*>(column.get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& child_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
@@ -628,7 +628,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const MapColumn* data_column = down_cast<const MapColumn*>(nullable_column->data_column().get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
             ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
@@ -645,7 +645,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
             }
         } else {
             const MapColumn* data_column = down_cast<const MapColumn*>(column.get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
             ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));

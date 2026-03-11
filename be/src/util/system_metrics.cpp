@@ -35,6 +35,7 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#include <runtime/mem_tracker.h>
 #ifdef WITH_TENANN
 #include <tenann/index/index_cache.h>
 #endif
@@ -48,6 +49,8 @@
 #endif
 #include "base/metrics.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config_cache_fwd.h"
+#include "exec/query_cache/cache_manager.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"

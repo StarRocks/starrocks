@@ -20,145 +20,153 @@
 #include <cstring>
 
 #include "base/hash/hash_std.hpp"
+#include "base/simd/simd.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "formats/parquet/schema.h"
+#include "gutil/casts.h"
 
 namespace starrocks::parquet {
 
-static TypeDescriptor _decimal_type_from_field(const ParquetField& field) {
-    const int precision = field.precision > 0 ? field.precision : TypeDescriptor::MAX_DECIMAL8_PRECISION;
-    const int scale = field.scale >= 0 ? field.scale : 0;
-    if (precision <= TypeDescriptor::MAX_DECIMAL4_PRECISION) {
-        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
-    }
-    if (precision <= TypeDescriptor::MAX_DECIMAL8_PRECISION) {
-        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
-    }
-    return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
+namespace {
+
+const TypeDescriptor& variant_type_desc() {
+    static const TypeDescriptor k_variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    return k_variant_type;
 }
 
-static LogicalType _logical_type_from_integer(const tparquet::IntType& int_type) {
-    const int bit_width = int_type.bitWidth;
-    if (!int_type.isSigned) {
-        if (bit_width <= 8) {
-            return TYPE_SMALLINT;
-        }
-        if (bit_width <= 16) {
-            return TYPE_INT;
-        }
-        return TYPE_BIGINT;
+TypeDescriptor variant_decimal_desc_from_schema(const ParquetField* field) {
+    const int precision = field->precision;
+    const int scale = field->scale;
+    if (precision <= 0 || scale < 0 || scale > precision) {
+        return variant_type_desc();
     }
-    if (bit_width <= 8) {
-        return TYPE_TINYINT;
+    TypeDescriptor desc = TypeDescriptor::promote_decimal_type(precision, scale);
+    if (!desc.is_decimal_type()) {
+        return variant_type_desc();
     }
-    if (bit_width <= 16) {
-        return TYPE_SMALLINT;
-    }
-    if (bit_width <= 32) {
-        return TYPE_INT;
-    }
-    return TYPE_BIGINT;
+    return desc;
 }
 
-static TypeDescriptor _primitive_type_from_field(const ParquetField& field) {
-    const auto& schema_element = field.schema_element;
+TypeDescriptor variant_integer_desc_from_bitwidth(int bit_width, bool is_signed) {
+    if (is_signed) {
+        switch (bit_width) {
+        case 8:
+            return TYPE_TINYINT_DESC;
+        case 16:
+            return TYPE_SMALLINT_DESC;
+        case 32:
+            return TYPE_INT_DESC;
+        case 64:
+            return TYPE_BIGINT_DESC;
+        default:
+            return variant_type_desc();
+        }
+    }
+    // StarRocks has no native UINT types, widen to a safe signed type where possible.
+    switch (bit_width) {
+    case 8:
+        return TYPE_SMALLINT_DESC;
+    case 16:
+        return TYPE_INT_DESC;
+    case 32:
+        return TYPE_BIGINT_DESC;
+    case 64:
+    default:
+        // UINT64 cannot be losslessly represented by BIGINT.
+        return variant_type_desc();
+    }
+}
 
-    if (schema_element.__isset.logicalType) {
-        const auto& logical_type = schema_element.logicalType;
-        if (logical_type.__isset.STRING) {
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        }
-        if (logical_type.__isset.JSON) {
-            return TypeDescriptor::create_json_type();
-        }
-        if (logical_type.__isset.BSON) {
-            return TypeDescriptor::create_json_type();
+TypeDescriptor variant_scalar_typed_desc_from_parquet_field(const ParquetField* field) {
+    DCHECK(field != nullptr);
+    const auto& schema = field->schema_element;
+
+    if (schema.__isset.logicalType) {
+        const auto& logical_type = schema.logicalType;
+        if (logical_type.__isset.DECIMAL) {
+            return variant_decimal_desc_from_schema(field);
         }
         if (logical_type.__isset.DATE) {
-            return TypeDescriptor(TYPE_DATE);
+            return TYPE_DATE_DESC;
         }
         if (logical_type.__isset.TIME) {
-            return TypeDescriptor(TYPE_TIME);
+            return TYPE_TIME_DESC;
         }
         if (logical_type.__isset.TIMESTAMP) {
-            return TypeDescriptor(TYPE_DATETIME);
+            return TYPE_DATETIME_DESC;
         }
         if (logical_type.__isset.INTEGER) {
-            return TypeDescriptor(_logical_type_from_integer(logical_type.INTEGER));
+            return variant_integer_desc_from_bitwidth(logical_type.INTEGER.bitWidth, logical_type.INTEGER.isSigned);
         }
-        if (logical_type.__isset.DECIMAL) {
-            return _decimal_type_from_field(field);
+        if (logical_type.__isset.STRING || logical_type.__isset.ENUM || logical_type.__isset.JSON) {
+            return TYPE_VARCHAR_DESC;
         }
-        if (logical_type.__isset.UUID) {
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        if (logical_type.__isset.BSON || logical_type.__isset.UUID) {
+            return TYPE_VARBINARY_DESC;
         }
-    } else if (schema_element.__isset.converted_type) {
-        switch (schema_element.converted_type) {
+    }
+
+    if (schema.__isset.converted_type) {
+        switch (schema.converted_type) {
         case tparquet::ConvertedType::UTF8:
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        case tparquet::ConvertedType::ENUM:
         case tparquet::ConvertedType::JSON:
-            return TypeDescriptor::create_json_type();
+            return TYPE_VARCHAR_DESC;
+        case tparquet::ConvertedType::BSON:
+        case tparquet::ConvertedType::INTERVAL:
+            return TYPE_VARBINARY_DESC;
+        case tparquet::ConvertedType::DECIMAL:
+            return variant_decimal_desc_from_schema(field);
         case tparquet::ConvertedType::DATE:
-            return TypeDescriptor(TYPE_DATE);
+            return TYPE_DATE_DESC;
         case tparquet::ConvertedType::TIME_MILLIS:
         case tparquet::ConvertedType::TIME_MICROS:
-            return TypeDescriptor(TYPE_TIME);
+            return TYPE_TIME_DESC;
         case tparquet::ConvertedType::TIMESTAMP_MILLIS:
         case tparquet::ConvertedType::TIMESTAMP_MICROS:
-            return TypeDescriptor(TYPE_DATETIME);
-        case tparquet::ConvertedType::DECIMAL:
-            return _decimal_type_from_field(field);
+            return TYPE_DATETIME_DESC;
+        case tparquet::ConvertedType::INT_8:
+            return TYPE_TINYINT_DESC;
+        case tparquet::ConvertedType::INT_16:
+            return TYPE_SMALLINT_DESC;
+        case tparquet::ConvertedType::INT_32:
+            return TYPE_INT_DESC;
+        case tparquet::ConvertedType::INT_64:
+            return TYPE_BIGINT_DESC;
+        case tparquet::ConvertedType::UINT_8:
+            return TYPE_SMALLINT_DESC;
+        case tparquet::ConvertedType::UINT_16:
+            return TYPE_INT_DESC;
+        case tparquet::ConvertedType::UINT_32:
+            return TYPE_BIGINT_DESC;
+        case tparquet::ConvertedType::UINT_64:
+            return variant_type_desc();
         default:
             break;
         }
     }
 
-    switch (field.physical_type) {
+    switch (field->physical_type) {
     case tparquet::Type::BOOLEAN:
-        return TypeDescriptor(TYPE_BOOLEAN);
+        return TYPE_BOOLEAN_DESC;
     case tparquet::Type::INT32:
-        return TypeDescriptor(TYPE_INT);
+        return TYPE_INT_DESC;
     case tparquet::Type::INT64:
-        return TypeDescriptor(TYPE_BIGINT);
-    case tparquet::Type::INT96:
-        return TypeDescriptor(TYPE_DATETIME);
+        return TYPE_BIGINT_DESC;
     case tparquet::Type::FLOAT:
-        return TypeDescriptor(TYPE_FLOAT);
+        return TYPE_FLOAT_DESC;
     case tparquet::Type::DOUBLE:
-        return TypeDescriptor(TYPE_DOUBLE);
+        return TYPE_DOUBLE_DESC;
     case tparquet::Type::BYTE_ARRAY:
     case tparquet::Type::FIXED_LEN_BYTE_ARRAY:
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARBINARY_DESC;
     default:
-        return TypeDescriptor(TYPE_UNKNOWN);
+        return variant_type_desc();
     }
 }
 
-TypeDescriptor ParquetUtils::to_type_desc(const ParquetField& field) {
-    if (field.type == ColumnType::STRUCT) {
-        std::vector<std::string> field_names;
-        std::vector<TypeDescriptor> children;
-        field_names.reserve(field.children.size());
-        children.reserve(field.children.size());
-        for (const auto& child : field.children) {
-            field_names.emplace_back(child.name);
-            children.emplace_back(to_type_desc(child));
-        }
-        return TypeDescriptor::create_struct_type(field_names, children);
-    }
-    if (field.type == ColumnType::ARRAY) {
-        if (field.children.empty()) {
-            return TypeDescriptor::create_array_type(TypeDescriptor(TYPE_UNKNOWN));
-        }
-        return TypeDescriptor::create_array_type(to_type_desc(field.children[0]));
-    }
-    if (field.type == ColumnType::MAP) {
-        if (field.children.size() < 2) {
-            return TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN));
-        }
-        return TypeDescriptor::create_map_type(to_type_desc(field.children[0]), to_type_desc(field.children[1]));
-    }
-    return _primitive_type_from_field(field);
-}
+} // namespace
 
 CompressionTypePB ParquetUtils::convert_compression_codec(tparquet::CompressionCodec::type codec) {
     switch (codec) {
@@ -302,6 +310,105 @@ std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& 
         memcpy(data + 10, &size, sizeof(size));
     }
     return key;
+}
+
+bool ParquetUtils::get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                    size_t* out_row) {
+    if (column == nullptr || out_column == nullptr || out_row == nullptr) {
+        return false;
+    }
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        if (nullable->is_null(row)) {
+            return false;
+        }
+        column = nullable->data_column().get();
+    }
+    *out_column = column;
+    *out_row = row;
+    return true;
+}
+
+bool ParquetUtils::has_non_null_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return true;
+}
+
+bool ParquetUtils::has_non_null_binary_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const Column* data = nullable->data_column().get();
+        if (!data->is_binary()) {
+            return false;
+        }
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return column->is_binary();
+}
+
+TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field) {
+    DCHECK(field != nullptr);
+    const TypeDescriptor& k_variant_type = variant_type_desc();
+    switch (field->type) {
+    case ColumnType::ARRAY:
+        if (field->children.empty()) {
+            return TypeDescriptor::create_array_type(k_variant_type);
+        }
+        return TypeDescriptor::create_array_type(variant_typed_desc_from_parquet_field(&field->children[0]));
+    case ColumnType::MAP:
+        if (field->children.size() < 2) {
+            return k_variant_type;
+        }
+        return TypeDescriptor::create_map_type(variant_typed_desc_from_parquet_field(&field->children[0]),
+                                               variant_typed_desc_from_parquet_field(&field->children[1]));
+    case ColumnType::STRUCT: {
+        std::vector<std::string> field_names;
+        std::vector<TypeDescriptor> children;
+        field_names.reserve(field->children.size());
+        children.reserve(field->children.size());
+        for (const auto& child : field->children) {
+            field_names.emplace_back(child.name);
+            children.emplace_back(variant_typed_desc_from_parquet_field(&child));
+        }
+        return TypeDescriptor::create_struct_type(std::move(field_names), std::move(children));
+    }
+    case ColumnType::SCALAR:
+        return variant_scalar_typed_desc_from_parquet_field(field);
+    }
+    return k_variant_type;
 }
 
 } // namespace starrocks::parquet

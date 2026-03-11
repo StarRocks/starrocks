@@ -17,6 +17,7 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -24,6 +25,7 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "utils.h"
 

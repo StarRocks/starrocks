@@ -16,10 +16,15 @@
 
 #include <vector>
 
+#include "common/config_merge_commit_fwd.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
 
 namespace starrocks {
+
+bool batch_write_trace_log_enabled() {
+    return config::merge_commit_trace_log_enable;
+}
 
 const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
                                                        HTTP_COLUMNS,

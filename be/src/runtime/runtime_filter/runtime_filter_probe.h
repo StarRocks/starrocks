@@ -34,7 +34,7 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_layout.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -50,7 +50,7 @@ class PipelineObserver;
 
 class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
 public:
-    RuntimeFilterProbeDescriptor() = default;
+    RuntimeFilterProbeDescriptor();
     ~RuntimeFilterProbeDescriptor();
 
     Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, RuntimeState* state);

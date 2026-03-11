@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "common/config_ingest_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"

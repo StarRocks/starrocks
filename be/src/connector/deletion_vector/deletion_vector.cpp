@@ -18,6 +18,7 @@
 
 #include "base/string/base85.h"
 #include "base/uuid/uuid_generator.h"
+#include "common/config_scan_io_fwd.h"
 #include "deletion_bitmap.h"
 
 namespace starrocks {

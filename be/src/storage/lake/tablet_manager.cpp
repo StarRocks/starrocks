@@ -27,7 +27,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
@@ -1252,7 +1252,18 @@ int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size)
         }
     }
 
-    int64_t base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    // Immutable check for random bucketing is best-effort.
+    // On cache hit, compute base_size directly from the cached metadata to avoid any remote I/O.
+    // On cache miss, whether to fallback LIST metadata files is controlled by
+    // `allow_list_object_for_random_bucketing_on_cache_miss`.
+    int64_t base_size = 0;
+    if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
+        for (const auto& rowset : metadata->rowsets()) {
+            base_size += rowset.data_size();
+        }
+    } else if (config::allow_list_object_for_random_bucketing_on_cache_miss) {
+        base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    }
 
     std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
