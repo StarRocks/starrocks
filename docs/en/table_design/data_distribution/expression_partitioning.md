@@ -21,7 +21,7 @@ If you frequently query and manage data based on continuous time ranges, you onl
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
 :::note
-Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the `ALTER TABLE ... ADD PARTITION` statement for range partitions to add new partitions to tables using such partitioning strategies.
+`PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the `ALTER TABLE ... ADD PARTITION` statement for range partitions to add new partitions to tables using such partitioning strategies.
 :::
 
 ### Syntax
@@ -46,7 +46,7 @@ expression ::=
 #### `time_unit`
 
 **Required**: YES<br/>
-**Description**: The partition granularity, which can be `hour`, `day`, `week`, `month`, or `year`. If partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type. <br/>
+**Description**: The partition granularity, which can be `hour`, `day`, `week`, `month`, or `year`. If partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type.
 
 #### `partition_column` 
 
@@ -128,7 +128,7 @@ PROPERTIES(
 );
 ```
 
-Example 3: Suppose you frequently query data by week. You can use the partition expression `time_slice()` and set the partition column as `event_day` and the partition granularity to one week at table creation. Data of one week is stored in one partition and partition pruning can be used to significantly improve query efficiency.
+Example 3: Suppose you frequently query data by week. You can use the partition expression `time_slice()` and set the partition column as `event_day` and the partition granularity to one week at table creation. Data for one week is stored in one partition and partition pruning can be used to significantly improve query efficiency.
 
 ```SQL
 CREATE TABLE site_access(
