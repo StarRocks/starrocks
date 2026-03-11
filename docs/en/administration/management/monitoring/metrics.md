@@ -573,7 +573,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Instantaneous value of resource group memory quota.
 
-### starrocks_be_resource_group_mem_allocated_bytes
+### starrocks_be_resource_group_mem_inuse_bytes
 
 - Unit: Bytes
 - Type: Instantaneous
