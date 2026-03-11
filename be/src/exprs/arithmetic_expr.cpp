@@ -16,6 +16,9 @@
 
 #include <optional>
 
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -26,6 +29,8 @@
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
+#include "gutil/casts.h"
+#include "runtime/decimalv2_value.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -43,6 +48,39 @@ namespace starrocks {
     virtual ~CLASS_NAME() {}                          \
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
+
+// Check if there exists a row where divisor is zero and dividend is not null.
+// When error_for_division_by_zero is set, we report error only for such rows (consistent with FE: NULL/0 -> NULL).
+template <LogicalType Type>
+bool divisor_contains_zero(const ColumnPtr& dividend, const ColumnPtr& divisor) {
+    if (dividend->only_null() || divisor->only_null() || divisor->empty()) {
+        return false;
+    }
+
+    const Column* divisor_data_col = ColumnHelper::get_data_column(divisor.get());
+    const auto* divisor_data = ColumnHelper::template cast_to_raw<Type>(divisor_data_col);
+    const auto* divisor_values = divisor_data->get_data().data();
+
+    const auto num_rows = divisor->size();
+
+    constexpr auto zero = RunTimeCppType<Type>{};
+    for (size_t i = 0; i < num_rows; i++) {
+        // Skip rows where divisor is NULL.
+        if (divisor->is_null(i)) {
+            continue;
+        }
+        // Skip rows where dividend is NULL (NULL / 0 -> NULL, no error).
+        if (dividend->is_null(i)) {
+            continue;
+        }
+        // For const columns, logical row i maps to physical row 0.
+        const size_t data_row = divisor->is_constant() ? 0 : i;
+        if (divisor_values[data_row] == zero) {
+            return true;
+        }
+    }
+    return false;
+}
 
 static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH
@@ -204,6 +242,11 @@ public:
 #ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
+        // When error_for_division_by_zero is set, we must use the non-JIT path which checks divisor for zero.
+        // JIT-generated code does not include this check.
+        if (state->error_for_division_by_zero()) {
+            return false;
+        }
         return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
@@ -258,6 +301,9 @@ private:
     StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, Chunk* ptr) {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
+        if (context != nullptr && context->error_for_division_by_zero() && divisor_contains_zero<LType>(l, r)) {
+            return Status::InvalidArgument("Division by zero");
+        }
         if constexpr (lt_is_decimal<LType>) {
             if (context != nullptr && context->error_if_overflow()) {
                 using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, OverflowMode::REPORT_ERROR>;
@@ -282,7 +328,9 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
-
+        if (context != nullptr && context->error_for_division_by_zero() && divisor_contains_zero<Type>(l, r)) {
+            return Status::InvalidArgument("Division by zero");
+        }
         if constexpr (lt_is_decimal<Type>) {
             if (context != nullptr && context->error_if_overflow()) {
                 using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, OverflowMode::REPORT_ERROR>;
@@ -301,6 +349,11 @@ public:
 #ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
+        // When error_for_division_by_zero is set, we must use the non-JIT path which checks divisor for zero.
+        // JIT-generated code does not include this check.
+        if (state->error_for_division_by_zero()) {
+            return false;
+        }
         return state->can_jit_expr(CompilableExprType::MOD) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
