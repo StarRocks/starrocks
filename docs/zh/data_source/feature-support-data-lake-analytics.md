@@ -296,7 +296,7 @@ Iceberg Catalog 支持 HMS、Glue 和 Tabular 作为其元数据服务。大多�
   - **优点**：查询性能最佳
   - **缺点**：延迟引起的数据不一致
 - **数据导入（产生新文件）立即可见，或者分区增减立即可见，不依赖手动 Refresh**
-  - **设置**：通过将 Catalog 属性 `iceberg_table_cache_ttl_sec` 设置为 `0``，使 StarRocks 每次查询都去获取新的 snapshot。
+  - **设置**：通过将 Catalog 属性 `iceberg_meta_cache_ttl_sec` 设置为 `0`，使 StarRocks 每次查询都去获取新的 snapshot。
   - **优点**：文件和分区变更无延迟可见
   - **缺点**：由于每次查询必须查找新的 snapshot，导致性能较低。
 
