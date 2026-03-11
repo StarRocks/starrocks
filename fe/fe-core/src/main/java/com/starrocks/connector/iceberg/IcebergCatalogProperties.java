@@ -46,7 +46,6 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
 
     // internal config
-    public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
     public static final String ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES = "iceberg_local_planning_max_slot_bytes";
     public static final String ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE =
