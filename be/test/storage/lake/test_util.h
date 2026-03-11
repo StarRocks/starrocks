@@ -25,6 +25,7 @@
 #include "connector/connector.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "runtime/descriptors.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"

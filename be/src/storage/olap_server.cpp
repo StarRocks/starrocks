@@ -51,6 +51,7 @@
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/local_pk_index_manager.h"

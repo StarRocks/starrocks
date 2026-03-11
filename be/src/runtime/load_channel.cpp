@@ -45,6 +45,7 @@
 #include "common/util/thrift_util.h"
 #include "fmt/format.h"
 #include "runtime/closure_guard.h"
+#include "runtime/descriptors.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"

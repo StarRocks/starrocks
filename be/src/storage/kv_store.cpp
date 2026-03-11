@@ -49,8 +49,11 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
+#include "storage/options.h"
+#include "storage/store_path.h"
 #include "storage/rocksdb_status_adapter.h"
 
 using rocksdb::DB;

@@ -30,6 +30,7 @@
 #include "fs/fs_factory.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/util.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
