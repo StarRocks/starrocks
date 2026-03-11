@@ -1301,7 +1301,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(leftRowCount);
-                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftStatistics, rightStatistics,
+                        joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -1429,13 +1430,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,
                                                  Statistics outerSideStatistics, Statistics innerSideStatistics,
                                                  Statistics.Builder builder) {
-        // Restore the original null fractions for the outer (preserved) side's columns
+        // Restore the original null fractions for the outer (preserved) side's columns.
+        // When outerTableRowCount < innerJoinRowCount (e.g. one-to-many matches), the output
+        // has more rows than the original outer table.
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : outerSideStatistics.getColumnStatistics().entrySet()) {
             ColumnStatistic originalStat = entry.getValue();
             ColumnStatistic currentStat = builder.getColumnStatistics(entry.getKey());
             if (currentStat != null) {
+                double adjustedNullFraction = (outerTableRowCount < innerJoinRowCount)
+                        ? originalStat.getNullsFraction() * outerTableRowCount / Math.max(1, innerJoinRowCount)
+                        : originalStat.getNullsFraction();
                 builder.addColumnStatistic(entry.getKey(), buildFrom(currentStat) //
-                        .setNullsFraction(originalStat.getNullsFraction()) //
+                        .setNullsFraction(adjustedNullFraction) //
                         .build());
             }
         }
