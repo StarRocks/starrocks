@@ -220,19 +220,6 @@ StatusOr<DiskCacheOptions> DataCache::_init_disk_cache_options() {
 
         ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
                                                     datacache_path, config::datacache_disk_size, -1));
-#ifdef USE_STAROS
-        // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
-        // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
-        // and then automatically adjusted based on the current avalible disk space.
-        if (config::datacache_unified_instance_enable &&
-            (!config::enable_datacache_disk_auto_adjust || disk_size > 0)) {
-            ASSIGN_OR_RETURN(
-                    int64_t starlet_cache_size,
-                    DataCacheUtils::parse_conf_datacache_disk_size(
-                            datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1));
-            disk_size = std::max(disk_size, starlet_cache_size);
-        }
-#endif
         cache_options.dir_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
     }
 
