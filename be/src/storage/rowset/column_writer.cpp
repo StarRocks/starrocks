@@ -39,6 +39,7 @@
 
 #include "base/simd/simd.h"
 #include "column/nullable_column.h"
+#include "column_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
@@ -705,7 +706,14 @@ Status ScalarColumnWriter::append(const Column& column) {
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
             is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    return append(ptr, null, column.size(), column.has_null());
+    return _append(ptr, null, column.size(), column.has_null());
+}
+
+Status ScalarColumnWriter::append(const Column& column, const Buffer<Slice>& data) {
+    _total_mem_footprint += column.byte_size();
+    const auto* null = ColumnHelper::get_null_data_ptr(&column);
+    const auto* ptr = reinterpret_cast<const uint8_t*>(data.data());
+    return _append(ptr, null, column.size(), column.has_null());
 }
 
 Status ScalarColumnWriter::append_array_offsets(const Column& column) {
@@ -749,6 +757,9 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
 }
 
 Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
+}
+
+Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
     while (remaining > 0) {

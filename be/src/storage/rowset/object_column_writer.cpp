@@ -20,13 +20,11 @@
 namespace starrocks {
 Status ObjectColumnWriter::append(const Column& column) {
     switch (type_info()->type()) {
-#define M(TYPE)                                                                                                      \
-    case TYPE: {                                                                                                     \
-        const auto* null = ColumnHelper::get_null_data_ptr(&column);                                                 \
-        const auto* object_column = ColumnHelper::get_data_column_by_type<TYPE>(&column);                            \
-        object_column->build_slices(_serialize_buf, _slices);                                                        \
-        return _scalar_column_writer->append(reinterpret_cast<const uint8_t*>(_slices.data()), null, _slices.size(), \
-                                             column.has_null());                                                     \
+#define M(TYPE)                                                                           \
+    case TYPE: {                                                                          \
+        const auto* object_column = ColumnHelper::get_data_column_by_type<TYPE>(&column); \
+        object_column->build_slices(_serialize_buf, _slices);                             \
+        return _scalar_column_writer->append(column, _slices);                            \
     }
         APPLY_FOR_ALL_OBJECT_TYPE(M)
 #undef M
