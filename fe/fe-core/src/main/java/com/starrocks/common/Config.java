@@ -3760,6 +3760,14 @@ public class Config extends ConfigBase {
     public static boolean enable_show_external_catalog_privilege = true;
 
     /**
+     * Whether getBasicTable() for external catalogs is allowed to access external
+     * metadata service when explicitly requested (for example, when filling
+     * information_schema.tables).
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_external_catalog_basic_table_full_metadata = false;
+
+    /**
      * Loading or compaction must be stopped for primary_key_disk_schedule_time
      * seconds before it can be scheduled
      */

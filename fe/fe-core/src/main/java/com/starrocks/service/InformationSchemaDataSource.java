@@ -551,7 +551,10 @@ public class InformationSchemaDataSource {
 
                 BasicTable table = null;
                 try {
-                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                    // For information_schema.tables, we may need full metadata (including comment)
+                    // for external catalog tables. Use getBasicTable with fetchExternalMetadata=true,
+                    // which is further guarded by FE config.
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName, true);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
