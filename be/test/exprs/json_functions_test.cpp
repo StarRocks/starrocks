@@ -176,7 +176,7 @@ TEST_F(JsonFunctionsTest, get_json_string_scalar) {
                                         R"({"k11":       "v11"})",
                                         R"({"k11":       "v11"})"};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             strings->append(values[j]);
             strings2->append(strs[j]);
         }
@@ -193,8 +193,8 @@ TEST_F(JsonFunctionsTest, get_json_string_scalar) {
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-            ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+        for (int j = 0; j < std::size(values); ++j) {
+            ASSERT_EQ(length_strings[j], v->get_slice(j).to_string());
         }
 
         ASSERT_TRUE(JsonFunctions::native_json_path_close(
@@ -393,7 +393,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         std::string strs[] = {"$.k1", "$.k1", "$.k1"};
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             strings->append(values[j]);
             strings2->append(strs[j]);
         }
@@ -410,7 +410,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
-        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        for (int j = 0; j < std::size(values); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 
