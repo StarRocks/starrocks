@@ -16,8 +16,8 @@
 
 #include <map>
 
-#include "object_column_writer.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/rowset/object_column_writer.h"
 
 namespace starrocks {
 class BloomFilter;
