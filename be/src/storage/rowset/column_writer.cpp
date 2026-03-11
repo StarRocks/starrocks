@@ -756,8 +756,6 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {}
-
 Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
