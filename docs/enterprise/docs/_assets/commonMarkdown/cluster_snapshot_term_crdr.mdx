@@ -1,0 +1,10 @@
+- **Cross-region disaster recovery**
+
+  In the event of a disaster affecting the primary cluster, such as hardware failure, data center power outage, or regional catastrophe, your services can be rapidly restored to a secondary cluster at a specified point in time, thereby minimizing data loss and service interruption.
+
+  From v4.1 onwards, StarRocks supports cross-region disaster recovery via Cluster Snapshot. The key functionalities include:
+  - **Cross-region data synchronization**: Synchronizes data across regions to ensure data consistency.
+  - **Incremental data synchronization**: Synchronizes only newly added or modified data each time, eliminating the need for full replication, while automatically backing up the latest data.
+  - **Data recovery**: Enables restoring data to a specified point in time during failures or disasters.
+
+  When Cluster Snapshot is enabled for cross-region disaster recovery, the system performs incremental data synchronization periodically, creating an external cluster snapshot for cross-region recovery. This cluster snapshot contains the FE metadata image file the data files within the cluster. Each time a new cluster snapshot is created, a new FE metadata image is generated in full, while the cluster's data files undergo incremental synchronization. Once both data files and the metadata image are fully synchronized, expired data and metadata files are purged. When creating a new cluster snapshot, only data files in the visible state are synchronized each time.
