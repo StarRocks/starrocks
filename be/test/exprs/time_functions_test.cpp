@@ -1608,6 +1608,37 @@ TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
     }
 }
 
+TEST_F(TimeFunctionsTest, str_to_date_microsecond) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* fmt = "%Y-%m-%dT%H:%i:%s.%f";
+    const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    // const fmt <=> non-const input (simulates Routine Load / Stream Load column mapping)
+    {
+        auto str_col = ColumnHelper::create_column(varchar_type_desc, true);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1);
+        (void)str_col->append_nulls(1);
+        str_col->append_datum(Slice("2026-02-09T00:15:01.535569"));
+        str_col->append_datum(Slice("2026-02-09T12:30:45.123"));
+        str_col->append_datum(Slice("2026-02-09T12:30:45.000000"));
+
+        Columns columns;
+        columns.emplace_back(str_col);
+        columns.emplace_back(fmt_col);
+
+        ColumnPtr result = TimeFunctions::str_to_date(ctx, columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(4, nullable_col->size());
+        ASSERT_TRUE(nullable_col->is_null(0));
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 0, 15, 1, 535569), nullable_col->get(1).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 12, 30, 45, 123000), nullable_col->get(2).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2026, 2, 9, 12, 30, 45, 0), nullable_col->get(3).get_timestamp());
+    }
+}
+
 TEST_F(TimeFunctionsTest, date_format) {
     FunctionContext* ctx = FunctionContext::create_test_context();
     auto ptr = std::unique_ptr<FunctionContext>(ctx);
