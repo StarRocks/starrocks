@@ -51,8 +51,7 @@ Status LookUpNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status LookUpNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void LookUpNode::close(RuntimeState* state) {

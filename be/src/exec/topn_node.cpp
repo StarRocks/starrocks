@@ -151,64 +151,15 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status TopNNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor));
-
-    _abort_on_default_limit_exceeded = _abort_on_default_limit_exceeded && state->abort_on_default_limit_exceeded();
-
-    _sort_timer = ADD_TIMER(runtime_profile(), "ChunksSorter");
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status TopNNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Top n, before open."));
-    RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-
-    // sort all input chunk in turn, keep top N rows.
-    ExecNode* data_source = child(0);
-    RETURN_IF_ERROR(data_source->open(state));
-    Status status = _consume_chunks(state, data_source);
-    data_source->close(state);
-
-    _mem_tracker->set(_chunks_sorter->mem_usage());
-
-    return status;
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Top n, before moving result to chunk."));
-
-    if (_chunks_sorter == nullptr) {
-        *eos = true;
-        *chunk = nullptr;
-        return Status::OK();
-    }
-
-    {
-        SCOPED_TIMER(_sort_timer);
-        RETURN_IF_ERROR(_chunks_sorter->get_next(chunk, eos));
-    }
-    if (*eos) {
-        _chunks_sorter = nullptr;
-    } else {
-        _num_rows_returned += (*chunk)->num_rows();
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
-    if (_limit > 0 && reached_limit()) {
-        _chunks_sorter = nullptr;
-    }
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void TopNNode::close(RuntimeState* state) {

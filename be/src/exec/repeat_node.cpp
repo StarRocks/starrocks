@@ -65,25 +65,11 @@ RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const Descripto
 }
 
 Status RepeatNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-
-    if (_tuple_desc == nullptr) {
-        return Status::InternalError("Failed to get tuple descriptor.");
-    }
-
-    _extend_column_timer = ADD_TIMER(runtime_profile(), "ExtendColumnTime");
-    _copy_column_timer = ADD_TIMER(runtime_profile(), "CopyColumnTime");
-    _update_column_timer = ADD_TIMER(runtime_profile(), "UpdateColumnTime");
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status RepeatNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 /*
@@ -112,60 +98,7 @@ Status RepeatNode::open(RuntimeState* state) {
  *
  */
 Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    DCHECK_EQ(_children.size(), 1);
-
-    for (;;) {
-        // if _repeat_times_last < _repeat_times_required
-        // continue access old chunk.
-        if (_repeat_times_last < _repeat_times_required) {
-            ChunkPtr curr_chunk = _curr_chunk->clone_empty(_curr_chunk->num_rows());
-            {
-                SCOPED_TIMER(_copy_column_timer);
-                curr_chunk->append_safe(*_curr_chunk, 0, _curr_chunk->num_rows());
-            }
-
-            extend_and_update_columns(&curr_chunk, chunk);
-
-            ++_repeat_times_last;
-            break;
-        } else {
-            _curr_chunk.reset();
-            // get a new chunk.
-            RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
-
-            // check for over.
-            if (*eos || (*chunk) == nullptr) {
-                break;
-            } else if ((*chunk)->num_rows() == 0) {
-                continue;
-            } else {
-                // got a new chunk.
-                _repeat_times_last = 0;
-                auto curr_chunk = std::move(*chunk);
-
-                {
-                    SCOPED_TIMER(_copy_column_timer);
-                    // Used for next time.
-                    _curr_chunk = curr_chunk->clone_empty(curr_chunk->num_rows());
-                    _curr_chunk->append_safe(*curr_chunk, 0, curr_chunk->num_rows());
-                }
-
-                extend_and_update_columns(&curr_chunk, chunk);
-
-                ++_repeat_times_last;
-                break;
-            }
-        }
-    }
-
-    if ((*chunk) != nullptr) {
-        ExecNode::eval_join_runtime_filters(chunk);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-        _num_rows_returned += (*chunk)->num_rows();
-    }
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void RepeatNode::extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk) {

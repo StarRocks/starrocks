@@ -78,29 +78,11 @@ Status ExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status ExchangeNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    // TODO: figure out appropriate buffer size
-    DCHECK_GT(_num_senders, 0);
-    _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
-    _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
-            state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
-            config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
-    _stream_recvr->bind_profile(0, _runtime_profile);
-    if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
-    }
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status ExchangeNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-        RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(), &_sort_exec_exprs, &_is_asc_order,
-                                                     &_nulls_first));
-    }
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {
@@ -124,116 +106,11 @@ void ExchangeNode::close(RuntimeState* state) {
 }
 
 Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    if (_is_finished || reached_limit()) {
-        *eos = true;
-        *chunk = nullptr;
-        return Status::OK();
-    }
-
-    if (_is_merging) {
-        RETURN_IF_ERROR(get_next_merging(state, chunk, eos));
-        eval_join_runtime_filters(chunk);
-        return Status::OK();
-    }
-
-    do {
-        RETURN_IF_ERROR(_stream_recvr->get_chunk(&_input_chunk));
-        *eos = (_input_chunk == nullptr);
-        if (*eos) {
-            *chunk = nullptr;
-            return Status::OK();
-        }
-        eval_join_runtime_filters(_input_chunk.get());
-    } while (_input_chunk->num_rows() <= 0);
-
-    _num_rows_returned += _input_chunk->num_rows();
-    if (reached_limit()) {
-        int64_t num_rows_over = _num_rows_returned - _limit;
-        _input_chunk->set_num_rows(_input_chunk->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        *chunk = std::move(_input_chunk);
-        _is_finished = true;
-
-        DCHECK_CHUNK(*chunk);
-        return Status::OK();
-    }
-
-    *chunk = std::move(_input_chunk);
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status ExchangeNode::get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Exchange, while merging next."));
-
-    *chunk = nullptr;
-    if (_is_finished || reached_limit()) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    if (_num_rows_skipped < _offset) {
-        ChunkPtr tmp_chunk;
-        do {
-            RETURN_IF_ERROR(_stream_recvr->get_next(&tmp_chunk, &_is_finished));
-            if (tmp_chunk != nullptr) {
-                _num_rows_skipped += tmp_chunk->num_rows();
-            }
-        } while (_num_rows_skipped < _offset && !_is_finished);
-        *eos = _is_finished;
-
-        if (_num_rows_skipped > _offset) {
-            int64_t size = _num_rows_skipped - _offset;
-            int64_t offset_in_chunk = tmp_chunk->num_rows() - size;
-            if (_limit > 0 && size > _limit) {
-                size = _limit;
-            }
-            *chunk = tmp_chunk->clone_empty_with_slot(size);
-            for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
-                const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
-                auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);
-                dest->append(*src, offset_in_chunk, size);
-                // resize constant column as same as other non-constant columns, so Chunk::num_rows()
-                // can return a right number if this ConstColumn is the first column of the chunk.
-                if (dest->is_constant()) {
-                    dest->resize(size);
-                }
-            }
-            _num_rows_skipped = _offset;
-            _num_rows_returned += size;
-            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-            // the first Chunk will have a size less than chunk_size.
-            return Status::OK();
-        }
-
-        if (_is_finished) {
-            // check EOS after (_num_rows_skipped < _offset), so the only one chunk can be returned.
-            return Status::OK();
-        }
-    }
-
-    do {
-        RETURN_IF_ERROR(_stream_recvr->get_next(chunk, &_is_finished));
-        if ((*chunk) != nullptr) {
-            size_t size_in_chunk = (*chunk)->num_rows();
-            if (_limit > 0 && size_in_chunk + _num_rows_returned > _limit) {
-                size_in_chunk -= (size_in_chunk + _num_rows_returned - _limit);
-                (*chunk)->set_num_rows(size_in_chunk);
-            }
-            _num_rows_returned += size_in_chunk;
-            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-            break;
-        }
-    } while (!_is_finished);
-    *eos = _is_finished;
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) const {

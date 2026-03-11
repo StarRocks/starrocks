@@ -38,97 +38,15 @@
 namespace starrocks {
 
 Status DistinctBlockingNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
-    _aggregator->set_aggr_phase(AggrPhase2);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status DistinctBlockingNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(_aggregator->open(state));
-    RETURN_IF_ERROR(_children[0]->open(state));
-
-    ChunkPtr chunk;
-    bool limit_with_no_agg = limit() != -1;
-    VLOG_ROW << "group_by_expr_ctxs size " << _aggregator->group_by_expr_ctxs().size() << " _needs_finalize "
-             << _aggregator->needs_finalize();
-
-    while (true) {
-        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
-
-        bool eos = false;
-        RETURN_IF_CANCELLED(state);
-        RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
-
-        if (eos) {
-            break;
-        }
-        if (chunk->is_empty()) {
-            continue;
-        }
-        DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
-
-        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-
-        {
-            SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
-            TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
-
-            _aggregator->update_num_input_rows(chunk->num_rows());
-            if (limit_with_no_agg) {
-                auto size = _aggregator->hash_set_variant().size();
-                if (size >= limit()) {
-                    break;
-                }
-            }
-        }
-    }
-
-    COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-
-    // If hash set is empty, we don't need to return value
-    if (_aggregator->hash_set_variant().size() == 0) {
-        _aggregator->set_ht_eos();
-    }
-    _aggregator->hash_set_variant().visit(
-            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
-
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
-    _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-    *eos = false;
-
-    if (_aggregator->is_ht_eos()) {
-        COUNTER_SET(_aggregator->rows_returned_counter(), _aggregator->num_rows_returned());
-        *eos = true;
-        return Status::OK();
-    }
-    const auto chunk_size = runtime_state()->chunk_size();
-
-    _aggregator->convert_hash_set_to_chunk(chunk_size, chunk);
-
-    const int64_t old_size = (*chunk)->num_rows();
-    eval_join_runtime_filters(chunk->get());
-
-    // For having
-    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
-
-    _aggregator->process_limit(chunk);
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 template <class AggFactory, class SourceFactory, class SinkFactory>

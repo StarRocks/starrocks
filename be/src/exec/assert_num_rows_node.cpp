@@ -43,114 +43,15 @@ Status AssertNumRowsNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status AssertNumRowsNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status AssertNumRowsNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-
-    assert(_children.size() == 1);
-    ChunkPtr chunk = nullptr;
-    bool eos = false;
-    RETURN_IF_ERROR(child(0)->open(state));
-    while (true) {
-        RETURN_IF_CANCELLED(state);
-        RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
-        if (eos || chunk == nullptr) {
-            break;
-        } else if (chunk->num_rows() == 0) {
-            continue;
-        } else {
-            _num_rows_returned += chunk->num_rows();
-            _input_chunks.emplace_back(std::move(chunk));
-        }
-    }
-
-    // assert num rows node only use for un-correlate scalar subquery, return empty chunk is error, least fill one rows
-    if (_assertion == TAssertion::LE && _num_rows_returned == 0) {
-        _input_chunks.clear();
-
-        chunk = std::make_shared<Chunk>();
-        for (const auto& desc : row_desc().tuple_descriptors()) {
-            for (const auto& slot : desc->slots()) {
-                auto column = ColumnHelper::create_column(slot->type(), true);
-                column->append_nulls(_desired_num_rows);
-                chunk->append_column(std::move(column), slot->id());
-            }
-        }
-
-        _input_chunks.emplace_back(std::move(chunk));
-    }
-
-    int64_t usage = 0;
-    for (auto& item : _input_chunks) {
-        usage += item->memory_usage();
-    }
-    _mem_tracker->set(usage);
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    if (!_has_assert) {
-        _has_assert = true;
-        bool assert_res = false;
-        switch (_assertion) {
-        case TAssertion::EQ:
-            assert_res = _num_rows_returned == _desired_num_rows;
-            break;
-        case TAssertion::NE:
-            assert_res = _num_rows_returned != _desired_num_rows;
-            break;
-        case TAssertion::LT:
-            assert_res = _num_rows_returned < _desired_num_rows;
-            break;
-        case TAssertion::LE:
-            assert_res = _num_rows_returned <= _desired_num_rows;
-            break;
-        case TAssertion::GT:
-            assert_res = _num_rows_returned > _desired_num_rows;
-            break;
-        case TAssertion::GE:
-            assert_res = _num_rows_returned >= _desired_num_rows;
-            break;
-        default:
-            break;
-        }
-
-        if (!assert_res) {
-            auto to_string_lamba = [](TAssertion::type assertion) {
-                auto it = _TAssertion_VALUES_TO_NAMES.find(assertion);
-
-                if (it == _TAggregationOp_VALUES_TO_NAMES.end()) {
-                    return "NULL";
-                } else {
-                    return it->second;
-                }
-            };
-            LOG(INFO) << "Expected " << to_string_lamba(_assertion) << " " << _desired_num_rows
-                      << " to be returned by expression " << _subquery_string;
-            return Status::Cancelled(strings::Substitute("Expected $0 $1 to be returned by expression $2",
-                                                         to_string_lamba(_assertion), _desired_num_rows,
-                                                         _subquery_string));
-        }
-    }
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-
-    if (_input_chunks.size() > 0) {
-        *chunk = _input_chunks.front();
-        _input_chunks.pop_front();
-        DCHECK_CHUNK(*chunk);
-    } else {
-        *eos = true;
-    }
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void AssertNumRowsNode::close(RuntimeState* state) {

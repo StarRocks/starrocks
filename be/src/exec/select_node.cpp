@@ -66,48 +66,15 @@ Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status SelectNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    _conjunct_evaluate_timer = ADD_TIMER(_runtime_profile, "ConjunctEvaluateTime");
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status SelectNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(child(0)->open(state));
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    RETURN_IF_CANCELLED(state);
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    if (reached_limit()) {
-        *eos = true;
-        return Status::OK();
-    }
-
-    *eos = false;
-    RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
-    if (*eos) {
-        return Status::OK();
-    }
-    {
-        SCOPED_TIMER(_conjunct_evaluate_timer);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    }
-    _num_rows_returned += (*chunk)->num_rows();
-
-    if (reached_limit()) {
-        int64_t num_rows_over = _num_rows_returned - _limit;
-        (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        return Status::OK();
-    }
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void SelectNode::close(RuntimeState* state) {

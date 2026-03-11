@@ -112,32 +112,11 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status CrossJoinNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
-
-    _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
-    _probe_timer = ADD_TIMER(runtime_profile(), "ProbeTime");
-    _build_rows_counter = ADD_COUNTER(runtime_profile(), "BuildRows", TUnit::UNIT);
-    _probe_rows_counter = ADD_COUNTER(runtime_profile(), "ProbeRows", TUnit::UNIT);
-
-    _init_row_desc();
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status CrossJoinNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
-
-    RETURN_IF_ERROR(_build(state));
-
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    if (_build_chunk != nullptr) {
-        _mem_tracker->set(_build_chunk->memory_usage());
-    }
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status CrossJoinNode::_get_next_probe_chunk(RuntimeState* state) {
@@ -461,13 +440,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
 }
 
 Status CrossJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    ScopedTimer<MonotonicStopWatch> probe_timer(_probe_timer);
-    return ExecNode::get_next_big_chunk(
-            state, chunk, eos, _pre_output_chunk,
-            [this, &probe_timer](RuntimeState* inner_state, ChunkPtr* inner_chunk, bool* inner_eos) -> Status {
-                return this->get_next_internal(inner_state, inner_chunk, inner_eos, probe_timer);
-            });
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void CrossJoinNode::close(RuntimeState* state) {

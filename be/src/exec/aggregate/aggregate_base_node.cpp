@@ -49,14 +49,7 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status AggregateBaseNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    auto params = convert_to_aggregator_params(_tnode);
-
-    // Avoid partial-prepared Aggregator, which is dangerous to close
-    auto aggregator = std::make_shared<Aggregator>(std::move(params));
-    RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
-    _aggregator = std::move(aggregator);
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void AggregateBaseNode::close(RuntimeState* state) {

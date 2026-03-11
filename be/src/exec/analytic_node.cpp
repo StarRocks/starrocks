@@ -57,27 +57,15 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status AnalyticNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status AnalyticNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    return _analytor->open(state);
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::InternalError("should not call get_next() in AnalyticNode");
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void AnalyticNode::close(RuntimeState* state) {

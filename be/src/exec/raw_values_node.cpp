@@ -53,19 +53,11 @@ Status RawValuesNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status RawValuesNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-
-    _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-    if (_tuple_desc == nullptr) {
-        return Status::InternalError("RawValuesNode: failed to get tuple descriptor");
-    }
-
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 Status RawValuesNode::open(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::open(state));
-    return Status::OK();
+    return Status::NotSupported("non-pipeline execution is not supported");
 }
 
 void RawValuesNode::close(RuntimeState* state) {
