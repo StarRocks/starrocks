@@ -431,15 +431,6 @@ struct StatusInstance {
 
 #define SET_STATUS_AND_RETURN_IF_ERROR(err_status, stmt) SET_STATUS_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)
 
-#define SET_STATUS_AND_RETURN_IF_ERROR(err_status, stmt)                                                      \
-    do {                                                                                                      \
-        auto&& status__ = (stmt);                                                                             \
-        if (UNLIKELY(!status__.ok())) {                                                                       \
-            err_status = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt));   \
-            return err_status;                                                                                \
-        }                                                                                                     \
-    } while (false)
-
 #define EXIT_IF_ERROR(stmt)                   \
     do {                                      \
         auto&& status__ = (stmt);             \
