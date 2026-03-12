@@ -144,7 +144,6 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     std::string pattern = "_package_.*";
     state->pattern = pattern;
     state->use_hyperscan = false;
-    state->global_mode = true; // Pattern doesn't start with ^ or end with $
     state->size_of_pattern = int(pattern.size());
 
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
