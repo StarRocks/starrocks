@@ -226,6 +226,8 @@ public:
     void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
 
     const std::vector<ExecNode*>& children() const { return _children; }
+    void reserve_children(size_t n) { _children.reserve(n); }
+    void add_child(ExecNode* child) { _children.emplace_back(child); }
 
 protected:
     friend class DataSink;
