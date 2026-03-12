@@ -14,17 +14,22 @@
 
 #pragma once
 
-#include "exec/aggregate/aggregate_base_node.h"
+#include "exec/exec_node.h"
 
-// Distinct means this node handle distinct or group by no aggregate function query.
-// Streaming means this node will handle input in get_next phase, and maybe directly
-// ouput child chunk.
 namespace starrocks {
-class DistinctStreamingNode final : public AggregateBaseNode {
-public:
-    DistinctStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : AggregateBaseNode(pool, tnode, descs) {}
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+// Base class for exec nodes that are pipeline-engine-only.
+// The non-pipeline entry points (prepare / open / get_next) are
+// intentionally unsupported and will return Status::NotSupported.
+// Subclasses must implement decompose_to_pipeline() to participate
+// in the pipeline execution engine.
+class PipelineNode : public ExecNode {
+public:
+    using ExecNode::ExecNode;
+
+    Status prepare(RuntimeState* state) override;
+    Status open(RuntimeState* state) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 };
+
 } // namespace starrocks

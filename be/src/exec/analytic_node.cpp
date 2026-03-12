@@ -37,7 +37,7 @@
 namespace starrocks {
 
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
 
@@ -54,30 +54,6 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     DCHECK(_conjunct_ctxs.empty());
 
     return Status::OK();
-}
-
-Status AnalyticNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
-
-    return Status::OK();
-}
-
-Status AnalyticNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    return _analytor->open(state);
-}
-
-Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::InternalError("should not call get_next() in AnalyticNode");
 }
 
 void AnalyticNode::close(RuntimeState* state) {

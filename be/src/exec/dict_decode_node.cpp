@@ -33,7 +33,7 @@
 namespace starrocks {
 
 DictDecodeNode::DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 
 Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -71,110 +71,6 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 void DictDecodeNode::_init_counter() {
     _decode_timer = ADD_TIMER(_runtime_profile, "DictDecodeTime");
-}
-
-Status DictDecodeNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
-    return Status::OK();
-}
-
-Status DictDecodeNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(_children[0]->open(state));
-
-    auto* fragment_dict_state = state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict = fragment_dict_state->query_global_dicts();
-    auto* dict_optimize_parser = fragment_dict_state->mutable_dict_optimize_parser();
-
-    for (auto& [slot_id, v] : _string_functions) {
-        auto dict_iter = global_dict.find(slot_id);
-        auto dict_not_contains_cid = dict_iter == global_dict.end();
-        if (dict_not_contains_cid) {
-            auto& [expr_ctx, dict_ctx] = v;
-            dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
-            if (!dict_ctx.could_apply_dict_optimize) {
-                return Status::InternalError(fmt::format(
-                        "Not found dict for function-called cid:{} it may cause by unsupported function", slot_id));
-            }
-
-            RETURN_IF_ERROR(dict_optimize_parser->eval_expression(state, expr_ctx, &dict_ctx, slot_id));
-            auto dict_iter = global_dict.find(slot_id);
-            DCHECK(dict_iter != global_dict.end());
-            if (dict_iter == global_dict.end()) {
-                return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", slot_id));
-            }
-        }
-    }
-
-    DCHECK_EQ(_encode_column_cids.size(), _decode_column_cids.size());
-    int need_decode_size = _decode_column_cids.size();
-    for (int i = 0; i < need_decode_size; ++i) {
-        int need_encode_cid = _encode_column_cids[i];
-        auto dict_iter = global_dict.find(need_encode_cid);
-        auto dict_not_contains_cid = dict_iter == global_dict.end();
-
-        if (dict_not_contains_cid) {
-            if (dict_optimize_parser->eval_dict_expr(state, need_encode_cid).ok()) {
-                dict_iter = global_dict.find(need_encode_cid);
-                dict_not_contains_cid = dict_iter == global_dict.end();
-            }
-        }
-
-        if (dict_not_contains_cid) {
-            return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
-        }
-        // TODO : avoid copy dict
-        GlobalDictDecoderPtr decoder = create_global_dict_decoder(dict_iter->second.second);
-
-        _decoders.emplace_back(std::move(decoder));
-    }
-
-    return Status::OK();
-}
-
-Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_CANCELLED(state);
-    *eos = false;
-    do {
-        RETURN_IF_ERROR(_children[0]->get_next(state, chunk, eos));
-    } while (!(*eos) && (*chunk)->num_rows() == 0);
-
-    if (*eos) {
-        *chunk = nullptr;
-        return Status::OK();
-    }
-
-    MutableColumns decode_columns(_encode_column_cids.size());
-    for (size_t i = 0; i < _encode_column_cids.size(); i++) {
-        ColumnPtr& encode_column = (*chunk)->get_column_by_slot_id(_encode_column_cids[i]);
-        TypeDescriptor desc;
-        desc.type = TYPE_VARCHAR;
-
-        decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
-        RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
-    }
-
-    ChunkPtr nchunk = std::make_shared<Chunk>();
-    for (const auto& [k, v] : (*chunk)->get_slot_id_to_index_map()) {
-        if (std::find(_encode_column_cids.begin(), _encode_column_cids.end(), k) == _encode_column_cids.end()) {
-            auto& col = (*chunk)->get_column_by_slot_id(k);
-            nchunk->append_column(col, k);
-        }
-    }
-    for (size_t i = 0; i < decode_columns.size(); i++) {
-        nchunk->append_column(decode_columns[i], _decode_column_cids[i]);
-    }
-    *chunk = nchunk;
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
 }
 
 void DictDecodeNode::close(RuntimeState* state) {
