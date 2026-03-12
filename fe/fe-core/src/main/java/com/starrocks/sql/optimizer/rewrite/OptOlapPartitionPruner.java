@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -247,20 +248,26 @@ public class OptOlapPartitionPruner {
             if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
-                int cmp = minRange.compareTo(min);
-                if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
-                    lowerBind = true;
+                if (lowerBound instanceof MaxLiteral || minRange.getKeys().get(0) instanceof MaxLiteral ||
+                        lowerBound.getType().matchesType(minRange.getKeys().get(0).getType())) {
+                    min.pushColumn(lowerBound, lowerBound.getType().getPrimitiveType());
+                    int cmp = minRange.compareTo(min);
+                    if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
+                        lowerBind = true;
+                    }
                 }
             }
 
             if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                max.pushColumn(upperBound, column.getPrimitiveType());
-                int cmp = maxRange.compareTo(max);
-                if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
-                    upperBind = true;
+                if (upperBound instanceof MaxLiteral || maxRange.getKeys().get(0) instanceof MaxLiteral ||
+                        upperBound.getType().matchesType(maxRange.getKeys().get(0).getType())) {
+                    max.pushColumn(upperBound, upperBound.getType().getPrimitiveType());
+                    int cmp = maxRange.compareTo(max);
+                    if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
+                        upperBind = true;
+                    }
                 }
             }
 
