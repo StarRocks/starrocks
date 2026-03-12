@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
@@ -25,7 +26,6 @@ import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
@@ -108,7 +108,7 @@ public class StarMgrServer {
     }
 
     // for checkpoint thread only
-    public StarMgrServer(BDBJEJournal journal) {
+    public StarMgrServer(com.starrocks.journal.Journal journal) {
         journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
@@ -125,8 +125,21 @@ public class StarMgrServer {
         return execution;
     }
 
+    /**
+     * NOTE: Only used by UtFrameUtils to construct a StarMgrServer with MockedJournal for testing.
+     */
+    @VisibleForTesting
+    public void initializeForTest(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new StarOSBDBJEJournalSystem(environment);
+        StarOSBDBJEJournalSystem bdbJournalSystem = new StarOSBDBJEJournalSystem(environment);
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
+    private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        this.journalSystem = bdbJournalSystem;
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
