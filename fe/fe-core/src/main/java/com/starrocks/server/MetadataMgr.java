@@ -647,7 +647,7 @@ public class MetadataMgr {
         }
 
         // for external catalog, optionally reach external metadata service
-        if (fetchExternalMetadata && Config.enable_external_catalog_basic_table_full_metadata) {
+        if (fetchExternalMetadata) {
             return getTable(context, catalogName, dbName, tblName);
         }
 
