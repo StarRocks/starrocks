@@ -30,138 +30,137 @@
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 
-namespace starrocks::connector {
+        namespace starrocks::connector {
 
-static ConnectorManager _global_default_instance;
+    static ConnectorManager _global_default_instance;
 
-const Connector* ConnectorManager::get(const std::string& name) {
-    auto it = _connectors.find(name);
-    if (it == _connectors.end()) return nullptr;
-    return it->second.get();
-}
+    const Connector* ConnectorManager::get(const std::string& name) {
+        auto it = _connectors.find(name);
+        if (it == _connectors.end()) return nullptr;
+        return it->second.get();
+    }
 
-void ConnectorManager::put(const std::string& name, std::unique_ptr<Connector> connector) {
-    _connectors.emplace(name, std::move(connector));
-}
+    void ConnectorManager::put(const std::string& name, std::unique_ptr<Connector> connector) {
+        _connectors.emplace(name, std::move(connector));
+    }
 
-ConnectorManager* ConnectorManager::default_instance() {
-    return &_global_default_instance;
-}
+    ConnectorManager* ConnectorManager::default_instance() { return &_global_default_instance; }
 
-const std::string Connector::HIVE = "hive";
-const std::string Connector::ES = "es";
-const std::string Connector::JDBC = "jdbc";
-const std::string Connector::MYSQL = "mysql";
-const std::string Connector::FILE = "file";
-const std::string Connector::LAKE = "lake";
-const std::string Connector::BINLOG = "binlog";
-const std::string Connector::ICEBERG = "iceberg";
+    const std::string Connector::HIVE = "hive";
+    const std::string Connector::ES = "es";
+    const std::string Connector::JDBC = "jdbc";
+    const std::string Connector::MYSQL = "mysql";
+    const std::string Connector::FILE = "file";
+    const std::string Connector::LAKE = "lake";
+    const std::string Connector::BINLOG = "binlog";
+    const std::string Connector::ICEBERG = "iceberg";
 <<<<<<< HEAD
 =======
-const std::string Connector::BENCHMARK = "benchmark";
-const std::string Connector::CACHE_STATS = "cache_stats";
+    const std::string Connector::BENCHMARK = "benchmark";
+    const std::string Connector::CACHE_STATS = "cache_stats";
 >>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
-class ConnectorManagerInit {
-public:
-    ConnectorManagerInit() {
-        ConnectorManager* cm = ConnectorManager::default_instance();
-        cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
-        cm->put(Connector::ES, std::make_unique<ESConnector>());
-        cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
-        cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
+    class ConnectorManagerInit {
+    public:
+        ConnectorManagerInit() {
+            ConnectorManager* cm = ConnectorManager::default_instance();
+            cm->put(Connector::HIVE, std::make_unique<HiveConnector>());
+            cm->put(Connector::ES, std::make_unique<ESConnector>());
+            cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
+            cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
 <<<<<<< HEAD
 =======
-        cm->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
-        cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
+            cm->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
+            cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
 >>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
-        cm->put(Connector::FILE, std::make_unique<FileConnector>());
-        cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
-        cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
+            cm->put(Connector::FILE, std::make_unique<FileConnector>());
+            cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
+            cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
 #ifndef __APPLE__
-        cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+            cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
 #endif
-    }
-};
-
-static ConnectorManagerInit _init;
-
-const std::string DataSource::PROFILE_NAME = "DataSource";
-
-void DataSource::update_has_any_predicate() {
-    auto f = [&]() {
-        if (_conjunct_ctxs.size() > 0) return true;
-        if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
-        return false;
-    };
-    _has_any_predicate = f();
-    return;
-}
-
-Status DataSource::parse_runtime_filters(RuntimeState* state) {
-    if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
-    for (const auto& item : _runtime_filters->descriptors()) {
-        RuntimeFilterProbeDescriptor* probe = item.second;
-        DCHECK(runtime_membership_filter_eval_context.driver_sequence != -1);
-        const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
-        if (filter == nullptr) continue;
-        SlotId slot_id;
-        if (!probe->is_probe_slot_ref(&slot_id)) continue;
-        LogicalType slot_type = probe->probe_expr_type();
-        Expr* min_max_predicate = nullptr;
-        RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
-                                                            &min_max_predicate);
-        if (min_max_predicate != nullptr) {
-            ExprContext* ctx = state->obj_pool()->add(new ExprContext(min_max_predicate));
-            RETURN_IF_ERROR(ctx->prepare(state));
-            RETURN_IF_ERROR(ctx->open(state));
-            _conjunct_ctxs.insert(_conjunct_ctxs.begin(), ctx);
         }
+    };
+
+    static ConnectorManagerInit _init;
+
+    const std::string DataSource::PROFILE_NAME = "DataSource";
+
+    void DataSource::update_has_any_predicate() {
+        auto f = [&]() {
+            if (_conjunct_ctxs.size() > 0) return true;
+            if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
+            return false;
+        };
+        _has_any_predicate = f();
+        return;
     }
-    return Status::OK();
-}
 
-void DataSource::update_profile(const Profile& profile) {
-    RuntimeProfile::Counter* mem_alloc_failed_counter = ADD_COUNTER(_runtime_profile, "MemAllocFailed", TUnit::UNIT);
-    COUNTER_UPDATE(mem_alloc_failed_counter, profile.mem_alloc_failed_count);
-}
-
-StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-        size_t num_total_scan_ranges, size_t scan_parallelism) {
-    peek_scan_ranges(scan_ranges);
-
-    pipeline::Morsels morsels;
-    bool has_more_morsel = false;
-    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
-                                             &has_more_morsel);
-
-    if (partition_order_hint().has_value()) {
-        bool asc = partition_order_hint().value();
-        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
-            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
-            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
-            if (asc) {
-                return std::less()(l_partition_id, r_partition_id);
-            } else {
-                return std::greater()(l_partition_id, r_partition_id);
+    Status DataSource::parse_runtime_filters(RuntimeState * state) {
+        if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
+        for (const auto& item : _runtime_filters->descriptors()) {
+            RuntimeFilterProbeDescriptor* probe = item.second;
+            DCHECK(runtime_membership_filter_eval_context.driver_sequence != -1);
+            const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
+            if (filter == nullptr) continue;
+            SlotId slot_id;
+            if (!probe->is_probe_slot_ref(&slot_id)) continue;
+            LogicalType slot_type = probe->probe_expr_type();
+            Expr* min_max_predicate = nullptr;
+            RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
+                                                                &min_max_predicate);
+            if (min_max_predicate != nullptr) {
+                ExprContext* ctx = state->obj_pool()->add(new ExprContext(min_max_predicate));
+                RETURN_IF_ERROR(ctx->prepare(state));
+                RETURN_IF_ERROR(ctx->open(state));
+                _conjunct_ctxs.insert(_conjunct_ctxs.begin(), ctx);
             }
-        });
+        }
+        return Status::OK();
     }
 
-    if (output_chunk_by_bucket()) {
-        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
-            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
-                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
-        });
+    void DataSource::update_profile(const Profile& profile) {
+        RuntimeProfile::Counter* mem_alloc_failed_counter =
+                ADD_COUNTER(_runtime_profile, "MemAllocFailed", TUnit::UNIT);
+        COUNTER_UPDATE(mem_alloc_failed_counter, profile.mem_alloc_failed_count);
     }
 
-    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), has_more_morsel);
-    if (scan_parallelism > 0) {
-        morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
+    StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges, size_t scan_parallelism) {
+        peek_scan_ranges(scan_ranges);
+
+        pipeline::Morsels morsels;
+        bool has_more_morsel = false;
+        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                                 &has_more_morsel);
+
+        if (partition_order_hint().has_value()) {
+            bool asc = partition_order_hint().value();
+            std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+                auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+                auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+                if (asc) {
+                    return std::less()(l_partition_id, r_partition_id);
+                } else {
+                    return std::greater()(l_partition_id, r_partition_id);
+                }
+            });
+        }
+
+        if (output_chunk_by_bucket()) {
+            std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+                return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                       down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+            });
+        }
+
+        auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), has_more_morsel);
+        if (scan_parallelism > 0) {
+            morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
+        }
+        return morsel_queue;
     }
-    return morsel_queue;
-}
 
 } // namespace starrocks::connector
