@@ -40,7 +40,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"

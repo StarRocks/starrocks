@@ -20,31 +20,28 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-#ifdef USE_STAROS
-CONF_Int32(starlet_port, "9070");
+// NOTE: it will be deleted.
+CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// Root dir used for cache if cache enabled.
-CONF_String(starlet_cache_dir, "");
+// The bitmap serialize version.
+CONF_Int16(bitmap_serialize_version, "1");
 
-// Cache will start evict cache files if free space belows this value(percentage)
-CONF_mDouble(starlet_cache_evict_low_water, "0.1");
+// Used by to_base64
+CONF_mInt64(max_length_for_to_base64, "200000");
 
-// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
-// Only support in S3/HDFS currently.
-CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
+// Used by bitmap functions
+CONF_mInt64(max_length_for_bitmap_function, "1000000");
 
-CONF_mBool(starlet_use_star_cache, "true");
+// jit LRU object cache size for total 32 shards, it will be an auto value if it < 0
+// mem_limit = system memory or process memory limit if set.
+// if mem_limit < 16 GB, disable JIT.
+// else it  = min(mem_limit*0.01, 4MB);
+CONF_mInt64(jit_lru_object_cache_size, "0");
 
-CONF_Int32(starlet_star_cache_disk_size_percent, "80");
-
-CONF_mBool(starlet_write_file_with_tag, "false");
-
-#endif
-CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
-
-CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
-
-// clear *.data cache for lake table
-CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// jit LRU cache size for total 32 shards, it will be an auto value if it <=0:
+// mem_limit = system memory or process memory limit if set.
+// if mem_limit < 16 GB, disable JIT.
+// else it = min(mem_limit*0.01, 4MB)
+CONF_mInt64(jit_lru_cache_size, "0");
 
 } // namespace starrocks::config

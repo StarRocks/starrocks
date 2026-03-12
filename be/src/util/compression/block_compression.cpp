@@ -34,7 +34,7 @@
 
 #include "util/compression/block_compression.h"
 
-#include "common/config.h"
+#include "common/config_compression_fwd.h"
 
 #ifdef __x86_64__
 #include <libdeflate.h>

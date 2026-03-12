@@ -14,7 +14,7 @@
 
 #include "util/time_guard.h"
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 
 namespace starrocks {
 

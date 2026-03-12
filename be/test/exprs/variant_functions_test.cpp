@@ -28,7 +28,6 @@
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"

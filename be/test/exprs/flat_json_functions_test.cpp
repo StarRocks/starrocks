@@ -28,7 +28,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/json_functions.h"

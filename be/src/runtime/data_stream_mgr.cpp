@@ -37,7 +37,7 @@
 #include <iostream>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"

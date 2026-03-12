@@ -43,7 +43,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/util/thrift_server.h"

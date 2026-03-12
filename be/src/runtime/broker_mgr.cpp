@@ -36,7 +36,7 @@
 
 #include <sstream>
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"

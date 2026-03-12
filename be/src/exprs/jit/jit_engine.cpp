@@ -60,7 +60,7 @@
 
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "common/status.h"
 #include "common/system/mem_info.h"
 #include "exprs/expr.h"

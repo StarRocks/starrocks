@@ -23,8 +23,22 @@ namespace starrocks::config {
 // The port on which ImpalaInternalService is exported.
 CONF_Int32(be_port, "9060");
 
+CONF_Int32(thrift_port, "0");
+
 // The port for brpc.
 CONF_Int32(brpc_port, "8060");
+
+// The number of bthreads for brpc, the default value is set to -1, which means the number of bthreads is #cpu-cores.
+CONF_Int32(brpc_num_threads, "-1");
+
+// https enable flag
+CONF_Bool(enable_https, "false");
+
+// path of certificate
+CONF_String(ssl_certificate_path, "");
+
+// path of private key
+CONF_String(ssl_private_key_path, "");
 
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
@@ -52,10 +66,27 @@ CONF_String(priority_networks, "");
 
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
+// The port heartbeat service used.
+CONF_Int32(heartbeat_service_port, "9050");
+
+// The count of heart beat service.
+CONF_Int32(heartbeat_service_thread_count, "1");
+
+// The number of threads available to serve backend execution requests.
+CONF_Int32(be_service_threads, "64");
+
 // Port to start debug http server in BE
 CONF_Int32(be_http_port, "8040");
 
 CONF_Alias(be_http_port, webserver_port);
+
+CONF_Int32(arrow_flight_port, "-1");
+
+// Maximum size of a single message body in all protocols.
+CONF_Int64(brpc_max_body_size, "2147483648");
+
+// Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
+CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
@@ -64,5 +95,8 @@ CONF_Alias(be_http_port, webserver_port);
 CONF_mBool(brpc_query_ignore_overcrowded, "false");
 
 CONF_mBool(brpc_load_ignore_overcrowded, "true");
+
+// Set to true to enable socket_keepalive option in brpc
+CONF_mBool(brpc_socket_keepalive, "false");
 
 } // namespace starrocks::config

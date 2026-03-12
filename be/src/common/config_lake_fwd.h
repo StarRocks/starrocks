@@ -40,6 +40,8 @@ CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
+CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+
 CONF_mBool(lake_print_delete_log, "false");
 
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
@@ -48,6 +50,8 @@ CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+
+CONF_mBool(lake_enable_publish_version_trace_log, "false");
 
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 
@@ -62,9 +66,16 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 
+// if set to true, CACHE SELECT will only read file, save CPU time
+// if set to false, CACHE SELECT will behave like SELECT
+CONF_mBool(lake_cache_select_in_physical_way, "true");
+
 // Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
 // This config is temporary and may be removed after the related lake capture implementation is fixed.
 CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
+
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
 

@@ -41,7 +41,7 @@
 
 #include "base/hash/hash_std.hpp"
 #include "base/network/network_util.h"
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
 #include "gen_cpp/FrontendService.h"
 

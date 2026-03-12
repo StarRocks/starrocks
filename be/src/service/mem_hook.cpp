@@ -18,7 +18,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"

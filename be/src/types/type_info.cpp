@@ -53,7 +53,7 @@
 #include "base/utility/guard.h"
 #include "base/utility/mem_util.hpp"
 #include "base/utility/mysql_global.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "gutil/casts.h"
 #include "gutil/strings/numbers.h"
 #include "types/date_value.h"

@@ -25,7 +25,7 @@
 #include <cstring>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/logging.h"
 #include "runtime/starrocks_metrics.h"
 

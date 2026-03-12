@@ -39,7 +39,7 @@
 #include <sstream>
 
 #include "base/bit/bit_util.h"
-#include "common/config.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/starrocks_metrics.h"

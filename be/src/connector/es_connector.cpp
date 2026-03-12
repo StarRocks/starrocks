@@ -14,7 +14,7 @@
 
 #include "connector/es_connector.h"
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"

@@ -23,4 +23,15 @@ namespace starrocks::config {
 // If true, clear udf cache every time be starts
 CONF_Bool(clear_udf_cache_when_start, "false");
 
+// python envs config
+// create time worker timeout
+CONF_mInt32(create_child_worker_timeout_ms, "1000");
+
+// report python worker STDERR to client
+CONF_Bool(report_python_worker_error, "true");
+
+CONF_Bool(python_worker_reuse, "true");
+
+CONF_Int32(python_worker_expire_time_sec, "300");
+
 } // namespace starrocks::config
