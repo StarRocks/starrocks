@@ -104,6 +104,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
+        ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
