@@ -1374,6 +1374,23 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Tablet Stat Cache 的更新间隔。
 - 引入版本：-
 
+##### lake_enable_accurate_pk_row_count
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为存算分离（Lake）主键表 tablet 使用精确行数统计。开启后会读取每个 rowset 在对象存储中的 delete vector 来扣减删除行，统计更准确，但会显著增加 `get_tablet_stats` RPC 的开销；关闭后使用 rowset 元数据中的近似 `num_dels`，可避免远端 I/O，但对“已删除但尚未 compaction”的行可能略有高估。
+- 引入版本：-
+##### lake_tablet_stat_slow_log_ms
+
+- 默认值：300000
+- 类型：Int64
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Tablet 统计采集慢日志阈值（毫秒）。单次 tablet 统计任务耗时超过该阈值时，会输出告警日志，附带 `tablet_id`、版本、rowset 数、是否精确模式和耗时等诊断信息。
+- 引入版本：-
+
 ##### enable_bitmap_union_disk_format_with_set
 
 - 默认值：false

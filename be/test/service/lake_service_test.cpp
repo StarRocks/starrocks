@@ -19,6 +19,7 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -1606,6 +1607,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
+    // Prune the metacache so we can verify that get_tablet_stats() itself does not refill it.
+    // publish_version() above may have cached v3 metadata.
+    _tablet_mgr->metacache()->prune();
+
     { // get the tablet stat again
         TabletStatRequest request;
         TabletStatResponse response;
@@ -1619,9 +1624,12 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
         EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
     }
 
-    // get_tablet_stats() should not fill metadata cache
-    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
+    // get_tablet_stats() should not fill the metadata cache (fill_cache=false) to avoid polluting
+    // the precious LRU metacache with stat-collection workloads.
+    auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -1637,6 +1645,195 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
 
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.tablet_stats_size());
+}
+
+// Verify that DUP_KEYS tablet stats are computed correctly without involving
+// get_rowset_num_deletes() (which is only meaningful for PK tablets).
+TEST_F(LakeServiceTest, test_get_tablet_stats_dup_keys_no_delvec) {
+    // Create a DUP_KEYS tablet (the default fixture tablet type)
+    size_t expected_num_rows = 500;
+    size_t expected_data_size = 8192;
+    auto txn_log = generate_write_txn_log(1, expected_num_rows, expected_data_size);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(_tablet_id);
+        req.add_txn_ids(txn_log.txn_id());
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    // For DUP_KEYS tablets num_dels in rowset metadata is always 0, so num_rows == expected
+    EXPECT_EQ(expected_num_rows, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(expected_data_size, response.tablet_stats(0).data_size());
+}
+
+// Verify that in approximate mode (default), num_dels from rowset metadata is used for PK tablets
+// instead of calling get_rowset_num_deletes() which reads delete vectors from object storage.
+TEST_F(LakeServiceTest, test_get_tablet_stats_pk_approximate_mode) {
+    // Re-create the test tablet as a PRIMARY_KEYS tablet
+    auto pk_metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+    int64_t pk_tablet_id = pk_metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
+
+    // Simulate a rowset with num_rows=100 and num_dels=20 (80 live rows)
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(100);
+    rowset->set_data_size(4096);
+    rowset->set_num_dels(20); // 20 rows deleted but not yet compacted
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    // Force approximate mode for this case, independent of global default value.
+    bool old_value = config::lake_enable_accurate_pk_row_count;
+    config::lake_enable_accurate_pk_row_count = false;
+    DeferOp restore_config([old_value] { config::lake_enable_accurate_pk_row_count = old_value; });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(pk_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(pk_tablet_id, response.tablet_stats(0).tablet_id());
+    // Approximate mode: num_rows - num_dels = 100 - 20 = 80
+    EXPECT_EQ(80, response.tablet_stats(0).num_rows());
+}
+
+// Verify that in accurate mode, get_rowset_num_deletes() is used for PK tablets
+// to get precise row counts by reading delete vectors from object storage.
+TEST_F(LakeServiceTest, test_get_tablet_stats_pk_accurate_mode) {
+    // Re-create the test tablet as a PRIMARY_KEYS tablet
+    auto pk_metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
+    int64_t pk_tablet_id = pk_metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(pk_metadata));
+
+    // Simulate a rowset with num_rows=200 and num_dels=50
+    auto txn_id = next_id();
+    TxnLog txn_log;
+    txn_log.set_tablet_id(pk_tablet_id);
+    txn_log.set_partition_id(_partition_id);
+    txn_log.set_txn_id(txn_id);
+    auto* rowset = txn_log.mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(200);
+    rowset->set_data_size(8192);
+    rowset->set_num_dels(50);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    { // Publish version
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(pk_tablet_id);
+        req.add_txn_ids(txn_id);
+        PublishVersionResponse resp;
+        _lake_service.publish_version(nullptr, &req, &resp, nullptr);
+        ASSERT_EQ(0, resp.failed_tablets_size());
+    }
+
+    // Enable accurate mode
+    bool old_value = config::lake_enable_accurate_pk_row_count;
+    config::lake_enable_accurate_pk_row_count = true;
+    DeferOp restore_config([old_value] { config::lake_enable_accurate_pk_row_count = old_value; });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(pk_tablet_id);
+    info->set_version(2);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(pk_tablet_id, response.tablet_stats(0).tablet_id());
+    // In accurate mode, get_rowset_num_deletes() reads actual delete vectors.
+    // Without actual delete vectors written, no deletes should be deducted.
+    EXPECT_EQ(200, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(8192, response.tablet_stats(0).data_size());
+}
+
+// Verify that tablet stat collection logs a slow warning when elapsed time exceeds
+// the configured threshold (lake_tablet_stat_slow_log_ms).
+TEST_F(LakeServiceTest, test_get_tablet_stats_slow_log) {
+    // Set a very low threshold so that even a fast task triggers the slow log
+    int64_t old_threshold = config::lake_tablet_stat_slow_log_ms;
+    config::lake_tablet_stat_slow_log_ms = 0; // 0 ms: any task should be logged as slow
+    DeferOp restore_config([old_threshold] { config::lake_tablet_stat_slow_log_ms = old_threshold; });
+    std::atomic<bool> slow_log_triggered = false;
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:slow_log",
+                                          [&](void* /*arg*/) { slow_log_triggered.store(true); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:slow_log");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(slow_log_triggered.load());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+    EXPECT_EQ(0, response.tablet_stats(0).num_rows());
+    EXPECT_EQ(0, response.tablet_stats(0).data_size());
+}
+
+// Verify that get_tablet_stats() does NOT fill the metadata cache (fill_cache=false) so that
+// stat-collection workloads do not evict hot metadata entries from the precious LRU metacache.
+TEST_F(LakeServiceTest, test_get_tablet_stats_does_not_pollute_metacache) {
+    _tablet_mgr->metacache()->prune();
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
+
+    // Metadata must NOT be in the metacache after a stat request
+    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr)
+            << "get_tablet_stats should not fill the metacache (fill_cache=false)";
 }
 
 TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
