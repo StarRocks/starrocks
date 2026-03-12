@@ -48,8 +48,7 @@ public class SqlBlackList {
     private static final Logger LOG = LogManager.getLogger(SqlBlackList.class);
 
     public void verifying(String sql) throws AnalysisException {
-        String formatSql = sql.replace("", " ").replace("
-", " ").replaceAll("\s+", " ");
+        String formatSql = sql.replace("\r", " ").replace("\n", " ").replaceAll("\\s+", " ");
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             for (BlackListSql patternAndId : sqlBlackListMap.values()) {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
