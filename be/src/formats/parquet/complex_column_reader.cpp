@@ -995,7 +995,7 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
                 "variant shredded array element nesting depth exceeded limit ($0)", kMaxShreddedArrayNestingDepth));
     }
     for (const auto& node : nodes) {
-        if (node.typed_kind == ShreddedTypedKind::SCALAR && node.typed_value_column != nullptr) {
+        if (node.kind == ShreddedFieldNode::Kind::SCALAR && node.typed_value_column != nullptr) {
             const Column* typed_col = nullptr;
             size_t typed_row = 0;
             if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), element_row, &typed_col,
@@ -1011,7 +1011,7 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
             }
         }
 
-        if (node.typed_kind == ShreddedTypedKind::ARRAY && node.typed_value_column != nullptr) {
+        if (node.kind == ShreddedFieldNode::Kind::ARRAY && node.typed_value_column != nullptr) {
             // Nested array sub-field within an array element (e.g., array-of-objects where
             // one field is itself a shredded array). Reconstruct recursively.
             Slice fallback_slice;
@@ -1052,7 +1052,7 @@ static Status _collect_overlays_for_row(size_t row, std::string_view metadata_ra
     if (overlays == nullptr) {
         return Status::InvalidArgument("variant row overlays output is null");
     }
-    if (node.typed_kind == ShreddedTypedKind::SCALAR && node.typed_value_column != nullptr) {
+    if (node.kind == ShreddedFieldNode::Kind::SCALAR && node.typed_value_column != nullptr) {
         const Column* typed_col = nullptr;
         size_t typed_row = 0;
         if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_col,
@@ -1078,7 +1078,7 @@ static Status _collect_overlays_for_row(size_t row, std::string_view metadata_ra
         return Status::OK();
     }
 
-    if (node.typed_kind == ShreddedTypedKind::ARRAY && node.typed_value_column != nullptr) {
+    if (node.kind == ShreddedFieldNode::Kind::ARRAY && node.typed_value_column != nullptr) {
         Slice fallback_slice;
         std::string_view base_array_raw = VariantValue::kEmptyValue;
         if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
@@ -1122,14 +1122,6 @@ static Status _collect_overlays_for_row(size_t row, std::string_view metadata_ra
     return Status::OK();
 }
 
-struct TopBinding {
-    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1 };
-    Kind kind = Kind::SCALAR;
-    std::string path;
-    TypeDescriptor type;
-    const ShreddedFieldNode* node = nullptr;
-};
-
 static const ShreddedFieldNode* find_node_by_path(const std::vector<ShreddedFieldNode>& nodes,
                                                   const std::string& target_path) {
     for (const auto& node : nodes) {
@@ -1148,7 +1140,7 @@ static const ShreddedFieldNode* find_node_by_path(const std::vector<ShreddedFiel
 static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes,
                                           std::vector<std::string>* paths) {
     for (const auto& node : nodes) {
-        if (node.typed_kind != ShreddedTypedKind::NONE) {
+        if (node.kind != ShreddedFieldNode::Kind::NONE) {
             // SCALAR leaf or ARRAY boundary — emit and stop recursing.
             paths->push_back(node.full_path);
         } else if (!node.children.empty()) {
@@ -1183,7 +1175,7 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
                     {.kind = TopBinding::Kind::VARIANT, .path = path, .type = variant_type_desc(), .node = nullptr});
             continue;
         }
-        if (node->typed_kind == ShreddedTypedKind::SCALAR && node->typed_value_column != nullptr) {
+        if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
             out->push_back({.kind = TopBinding::Kind::SCALAR,
                             .path = path,
                             .type = *node->typed_value_read_type,
@@ -1212,7 +1204,8 @@ static std::vector<TopBinding> select_materialized_bindings(const std::vector<To
             if (binding.node == nullptr) {
                 continue;
             }
-            VariantScalarMaterializeMode mode = decide_variant_scalar_materialize_mode(binding.node, num_rows);
+            VariantScalarMaterializeMode mode =
+                    VariantColumnReader::decide_variant_scalar_materialize_mode(binding.node, num_rows);
             if (mode == VariantScalarMaterializeMode::KEEP_SCALAR) {
                 // Fully-typed path: keep scalar materialization.
                 output.push_back(binding);
@@ -1233,7 +1226,8 @@ static std::vector<TopBinding> select_materialized_bindings(const std::vector<To
     return output;
 }
 
-VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows) {
+VariantScalarMaterializeMode VariantColumnReader::decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node,
+                                                                                         size_t num_rows) {
     if (node == nullptr) {
         return VariantScalarMaterializeMode::DROP;
     }
@@ -1276,8 +1270,9 @@ static StatusOr<VariantPath> make_relative_variant_path(const VariantPath& full_
     return VariantPath(std::move(relative_segments));
 }
 
-static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, const ShreddedFieldNode& node,
-                                                                 std::string_view metadata_raw) {
+StatusOr<VariantRowValue> VariantColumnReader::build_variant_binding_from_node(size_t row,
+                                                                               const ShreddedFieldNode& node,
+                                                                               std::string_view metadata_raw) {
     std::optional<VariantRowRef> base;
     if (node.value_column != nullptr) {
         Slice fallback_slice;
@@ -1317,17 +1312,13 @@ static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, con
     return built;
 }
 
-StatusOr<VariantRowValue> build_variant_binding_from_node_for_test(size_t row, const ShreddedFieldNode& node,
-                                                                   std::string_view metadata_raw) {
-    return build_variant_binding_from_node(row, node, metadata_raw);
-}
-
 // Append one row of a VARIANT binding to dst (a NullableColumn<VariantColumn>).
 // For shredded bindings, materializes the requested subtree directly from that node.
 // For non-shredded bindings (node == nullptr), seeks the requested path from the current row payload.
 // dst is kept in object mode (VariantRowValue per entry); no nested typed_columns inside.
-static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
-                                         const VariantRowRef& full_row, Column* dst) {
+Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBinding& binding,
+                                                       std::string_view raw_metadata, const VariantRowRef& full_row,
+                                                       Column* dst) {
     if (dst == nullptr) return Status::OK();
     auto* nullable = down_cast<NullableColumn*>(dst);
     auto* inner_variant = down_cast<VariantColumn*>(nullable->data_column()->as_mutable_raw_ptr());
@@ -1348,7 +1339,7 @@ static Status append_variant_binding_row(size_t row, const TopBinding& binding, 
 
     // For scalar paths materialized as VARIANT (typed+fallback heterogeneous),
     // build the field value directly from this node to avoid parsing rebuilt row metadata.
-    if (binding.node != nullptr && binding.node->typed_kind == ShreddedTypedKind::SCALAR) {
+    if (binding.node != nullptr && binding.node->kind == ShreddedFieldNode::Kind::SCALAR) {
         const Column* typed_col = nullptr;
         size_t typed_row = 0;
         if (binding.node->typed_value_column != nullptr &&
@@ -1377,7 +1368,7 @@ static Status append_variant_binding_row(size_t row, const TopBinding& binding, 
         return Status::OK();
     }
 
-    if (binding.node != nullptr && binding.node->typed_kind == ShreddedTypedKind::ARRAY &&
+    if (binding.node != nullptr && binding.node->kind == ShreddedFieldNode::Kind::ARRAY &&
         binding.node->typed_value_column != nullptr) {
         std::string_view base_array_raw = VariantValue::kEmptyValue;
         if (binding.node->value_column != nullptr) {
@@ -1435,7 +1426,7 @@ static void collect_row_typed_value_columns(const std::vector<ShreddedFieldNode>
             out->push_back(node.typed_value_column.get());
         }
         // Do not recurse into ARRAY children: they use element-level indices, not row indices.
-        if (node.typed_kind != ShreddedTypedKind::ARRAY) {
+        if (node.kind != ShreddedFieldNode::Kind::ARRAY) {
             collect_row_typed_value_columns(node.children, out);
         }
     }
@@ -1624,8 +1615,8 @@ public:
             if (binding.kind == TopBinding::Kind::SCALAR) {
                 append_top_scalar_binding_value(_row, binding, typed_col_dst);
             } else {
-                RETURN_IF_ERROR(append_variant_binding_row(_row, binding, _raw_metadata,
-                                                           VariantRowRef(_row_metadata, _row_value), typed_col_dst));
+                RETURN_IF_ERROR(VariantColumnReader::append_variant_binding_row(
+                        _row, binding, _raw_metadata, VariantRowRef(_row_metadata, _row_value), typed_col_dst));
             }
         }
         return Status::OK();

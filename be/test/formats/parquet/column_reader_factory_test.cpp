@@ -151,7 +151,7 @@ TEST(ColumnReaderFactoryTest, VariantObjectArrayRewritesToElementValueReader) {
     ASSERT_EQ(1, reader->_shredded_fields.size());
 
     const ShreddedFieldNode& node = reader->_shredded_fields[0];
-    ASSERT_EQ(ShreddedTypedKind::ARRAY, node.typed_kind);
+    ASSERT_EQ(ShreddedFieldNode::Kind::ARRAY, node.kind);
     ASSERT_FALSE(node.scalar_array_layout);
     ASSERT_FALSE(node.children.empty());
     ASSERT_NE(node.typed_value_reader, nullptr);

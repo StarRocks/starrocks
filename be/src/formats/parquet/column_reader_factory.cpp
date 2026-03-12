@@ -227,7 +227,7 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
     }
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
-    node->typed_kind = ShreddedTypedKind::SCALAR;
+    node->kind = ShreddedFieldNode::Kind::SCALAR;
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
     // a raw pointer to TypeDescriptor, so a stack-local cannot be referenced.
@@ -308,7 +308,7 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         } else if (typed_field->type == ColumnType::STRUCT) {
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, &node.children));
         } else if (typed_field->type == ColumnType::ARRAY) {
-            node.typed_kind = ShreddedTypedKind::ARRAY;
+            node.kind = ShreddedFieldNode::Kind::ARRAY;
             RETURN_IF_ERROR(
                     build_array_readers_for_variant_node(opts, column_chunks, typed_field, node.full_path, &node));
         }

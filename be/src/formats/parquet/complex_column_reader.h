@@ -253,13 +253,11 @@ private:
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 
-enum class ShreddedTypedKind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
-
 // ShreddedFieldNode holds both schema-time reader setup and batch-local column data.
 //
 // Schema-time fields (set once at construction, never modified):
 //   full_path, parsed_full_path, value_reader, typed_value_reader, typed_value_read_type,
-//   scalar_array_layout, array_element_value_reader, typed_kind, children
+//   scalar_array_layout, array_element_value_reader, kind, children
 //
 // Batch-local fields (reset per read_range call):
 //   value_column, typed_value_column, array_element_value_column
@@ -272,6 +270,8 @@ enum class ShreddedTypedKind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 //   be resized after any reader is constructed. Fill the vector fully before calling
 //   any reader construction that captures these addresses.
 struct ShreddedFieldNode {
+    enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
+
     std::string name;
     std::string full_path;
     VariantPath parsed_full_path;
@@ -279,7 +279,7 @@ struct ShreddedFieldNode {
     std::unique_ptr<ColumnReader> typed_value_reader;
     // Heap-allocated to keep a stable address for reader-side pointer capture (ScalarColumnReader holds const TypeDescriptor*).
     std::unique_ptr<TypeDescriptor> typed_value_read_type;
-    ShreddedTypedKind typed_kind = ShreddedTypedKind::NONE;
+    Kind kind = Kind::NONE;
     std::vector<ShreddedFieldNode> children;
     // ARRAY scalar layout: list.element has both {value, typed_value(scalar)}.
     // In this mode, we read element.value as an additional per-element fallback source.
@@ -298,14 +298,13 @@ enum class VariantScalarMaterializeMode : uint8_t {
     DROP = 2,
 };
 
-// Decide how to materialize a scalar shredded binding for the current batch.
-// Exposed for unit tests and reused by VariantColumnReader internal binding selection.
-VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows);
-
-// Rebuild one VARIANT subtree binding directly from a shredded node.
-// Exposed for unit tests that need to cover object/subtree binding materialization.
-StatusOr<VariantRowValue> build_variant_binding_from_node_for_test(size_t row, const ShreddedFieldNode& node,
-                                                                   std::string_view metadata_raw);
+struct TopBinding {
+    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1 };
+    Kind kind = Kind::SCALAR;
+    std::string path;
+    TypeDescriptor type;
+    const ShreddedFieldNode* node = nullptr;
+};
 
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
 // It uses two ScalarColumnReader instances: one for reading metadata (type information)
@@ -337,6 +336,15 @@ private:
     };
 
 public:
+    static VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node,
+                                                                               size_t num_rows);
+
+    static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, const ShreddedFieldNode& node,
+                                                                     std::string_view metadata_raw);
+
+    static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
+                                             const VariantRowRef& full_row, Column* dst);
+
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
