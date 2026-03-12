@@ -119,7 +119,7 @@ Status AggregateStreamingSinkOperator::_build_topn_runtime_filter(RuntimeState* 
 
     std::list<RuntimeFilterBuildDescriptor*> build_descs(rf_build_descs.begin(), rf_build_descs.end());
     for (size_t i = 0; i < rf_build_descs.size(); ++i) {
-        auto rf = _aggregator->build_topn_filters(state, rf_build_descs[i]);
+        auto rf = _aggregator->build_runtime_filter(state, rf_build_descs[i]);
         if (rf == nullptr) {
             continue;
         }

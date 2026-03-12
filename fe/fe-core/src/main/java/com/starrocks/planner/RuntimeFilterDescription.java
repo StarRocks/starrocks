@@ -54,7 +54,8 @@ public class RuntimeFilterDescription {
     public enum RuntimeFilterType {
         TOPN_FILTER,
         JOIN_FILTER,
-        AGG_IN_FILTER;
+        AGG_IN_FILTER,
+        MIN_MAX_FILTER;
 
         public boolean isTopNFilter() {
             return TOPN_FILTER.equals(this);
@@ -62,6 +63,10 @@ public class RuntimeFilterDescription {
 
         public boolean isAggInFilter() {
             return AGG_IN_FILTER.equals(this);
+        }
+
+        public boolean isMinMaxFilter() {
+            return MIN_MAX_FILTER.equals(this);
         }
     }
 
@@ -114,6 +119,10 @@ public class RuntimeFilterDescription {
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
 
     private SortInfo sortInfo;
+    
+    // For MIN_MAX_FILTER: store the min/max values for generating filter expressions
+    private String minValue;
+    private String maxValue;
 
     public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
@@ -166,6 +175,22 @@ public class RuntimeFilterDescription {
 
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
+    }
+    
+    public void setMinValue(String minValue) {
+        this.minValue = minValue;
+    }
+    
+    public String getMinValue() {
+        return minValue;
+    }
+    
+    public void setMaxValue(String maxValue) {
+        this.maxValue = maxValue;
+    }
+    
+    public String getMaxValue() {
+        return maxValue;
     }
 
     public void setTopN(long value) {
@@ -269,7 +294,8 @@ public class RuntimeFilterDescription {
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
         // TODO: Support TopN runtime filter for other nodes
-        if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
+        if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter() ||
+                runtimeFilterType().isMinMaxFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
                 return scanNode.supportTopNRuntimeFilter();
@@ -514,6 +540,23 @@ public class RuntimeFilterDescription {
         } else {
             sb.append(", build_expr = (").append(ExprToSql.toSql(buildExpr)).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
+            
+            // For MIN_MAX_FILTER, show the filter range
+            if (runtimeFilterType().isMinMaxFilter() && (minValue != null || maxValue != null)) {
+                sb.append(", filter_range = [");
+                if (minValue != null) {
+                    sb.append(minValue);
+                } else {
+                    sb.append("-inf");
+                }
+                sb.append(", ");
+                if (maxValue != null) {
+                    sb.append(maxValue);
+                } else {
+                    sb.append("+inf");
+                }
+                sb.append("]");
+            }
         }
         return sb.toString();
     }
@@ -654,6 +697,8 @@ public class RuntimeFilterDescription {
             t.setLimit(topn);
         } else if (runtimeFilterType().isAggInFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
+        } else if (runtimeFilterType().isMinMaxFilter()) {
+            t.setFilter_type(TRuntimeFilterBuildType.MIN_MAX_FILTER);
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }

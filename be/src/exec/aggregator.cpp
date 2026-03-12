@@ -982,6 +982,31 @@ RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilter
     }
 }
 
+RuntimeFilter* Aggregator::build_min_max_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
+                                                 const Column* agg_result_column) {
+    if (desc->type() != TRuntimeFilterBuildType::MIN_MAX_FILTER) {
+        return nullptr;
+    }
+    // Get the type from the descriptor (build expression type)
+    LogicalType agg_type = desc->build_expr_type();
+    AggMinMaxRuntimeFilterBuilder builder(desc, agg_type);
+    return builder.build(state->obj_pool(), agg_result_column);
+}
+
+RuntimeFilter* Aggregator::build_runtime_filter(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
+                                                const Column* agg_result_column) {
+    switch (desc->type()) {
+    case TRuntimeFilterBuildType::AGG_FILTER:
+        return build_in_filters(state, desc);
+    case TRuntimeFilterBuildType::TOPN_FILTER:
+        return build_topn_filters(state, desc);
+    case TRuntimeFilterBuildType::MIN_MAX_FILTER:
+        return build_min_max_filters(state, desc, agg_result_column);
+    default:
+        return nullptr;
+    }
+}
+
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     Columns const_columns;

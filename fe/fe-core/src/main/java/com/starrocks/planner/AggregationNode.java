@@ -38,6 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
@@ -596,7 +597,121 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             Expr topnExpr = topNSortInfo.getOrderingExprs().get(0);
             pushDownUnaryTopNRuntimeFilter(generator, topnExpr, descTbl, execGroupSets, 0);
         }
+        // generate min/max runtime filter for MIN/MAX aggregate functions
+        if (sv.getEnableMinMaxRuntimeFilter()) {
+            buildMinMaxRuntimeFilters(generator, descTbl, execGroupSets);
+        }
         withRuntimeFilters = !buildRuntimeFilters.isEmpty();
+    }
+
+    private void buildMinMaxRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                           ExecGroupSets execGroupSets) {
+        // MIN/MAX runtime filters only work for aggregations without GROUP BY
+        if (!aggInfo.getGroupingExprs().isEmpty()) {
+            return;
+        }
+        // Only build MIN/MAX RF at the first (local) stage for early scan reduction.
+        // Skip the finalize/merge stage in multi-phase aggregation.
+        if (needsFinalize && aggInfo.isMerge()) {
+            return;
+        }
+        buildMinMaxRuntimeFiltersNoGroupBy(generator, descTbl, execGroupSets);
+    }
+
+    private void buildMinMaxRuntimeFiltersNoGroupBy(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                                    ExecGroupSets execGroupSets) {
+        // Process each aggregate expression
+        List<FunctionCallExpr> aggExprs = aggInfo.getMaterializedAggregateExprs();
+        for (int i = 0; i < aggExprs.size(); i++) {
+            FunctionCallExpr aggExpr = aggExprs.get(i);
+            if (!isValidMinMaxFunction(aggExpr)) {
+                continue;
+            }
+            Expr minMaxInputExpr = aggExpr.getChild(0);
+            // Push down the min/max runtime filter
+            pushDownMinMaxRuntimeFilter(generator, minMaxInputExpr, descTbl, execGroupSets, i,
+                    aggExpr.getFunctionName());
+        }
+    }
+
+    /**
+     * Check if the aggregate function is a valid MIN/MAX function for runtime filter push down.
+     * Valid cases:
+     * - MIN(column_ref) or MAX(column_ref)
+     * Invalid cases:
+     * - MIN(expr) where expr is not a simple column reference
+     * - MIN(DISTINCT column) - distinct is not applicable for MIN/MAX
+     * - MIN(column1, column2) - MIN/MAX should have exactly one argument
+     */
+    private boolean isValidMinMaxFunction(FunctionCallExpr aggExpr) {
+        String fnName = aggExpr.getFunctionName();
+        
+        // Check if this is a MIN or MAX function
+        if (!FunctionSet.MIN.equalsIgnoreCase(fnName) && !FunctionSet.MAX.equalsIgnoreCase(fnName)) {
+            return false;
+        }
+        
+        // MIN/MAX should have exactly one argument
+        if (aggExpr.getChildren().size() != 1) {
+            return false;
+        }
+        
+        // Check if it's a distinct aggregation (MIN DISTINCT is not applicable)
+        if (aggExpr.isDistinct()) {
+            return false;
+        }
+        
+        // Get the input expression to the MIN/MAX function
+        Expr minMaxInputExpr = aggExpr.getChild(0);
+        
+        // Only support SlotRef (simple column reference) for now
+        // This ensures we can push down the filter to the scan node
+        if (!(minMaxInputExpr instanceof SlotRef)) {
+            return false;
+        }
+        
+        // Check if the column type is supported for runtime filter
+        Type colType = minMaxInputExpr.getType();
+        if (!isSupportedTypeForMinMaxFilter(colType)) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Check if the data type is supported for MIN/MAX runtime filter.
+     * Supported types: numeric types, date types, string types
+     * Unsupported types: complex types (ARRAY, MAP, STRUCT), JSON, etc.
+     */
+    private boolean isSupportedTypeForMinMaxFilter(Type type) {
+        // Support all primitive types that support comparison
+        if (type.isNumericType() || type.isDateType() || type.isStringType()) {
+            return true;
+        }
+        // TODO: Add support for more types if needed
+        return false;
+    }
+
+    private void pushDownMinMaxRuntimeFilter(IdGenerator<RuntimeFilterId> generator, Expr expr,
+                                             DescriptorTable descTbl, ExecGroupSets execGroupSets,
+                                             int exprOrder, String aggFuncName) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
+        rf.setFilterId(generator.getNextId().asInt());
+        rf.setBuildPlanNodeId(getId().asInt());
+        rf.setExprOrder(exprOrder);
+        rf.setJoinMode(JoinNode.DistributionMode.BROADCAST);
+        rf.setBuildExpr(expr);
+        rf.setRuntimeFilterType(RuntimeFilterDescription.RuntimeFilterType.MIN_MAX_FILTER);
+        rf.setEqualCount(1);
+        rf.setOnlyLocal(true);
+        RuntimeFilterPushDownContext rfPushDownCtx = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+        for (PlanNode child : children) {
+            if (child.pushDownRuntimeFilters(rfPushDownCtx, expr, Lists.newArrayList())) {
+                this.buildRuntimeFilters.add(rf);
+            }
+        }
     }
 
     private int getProbeExprOrder(List<Expr> exprs, Expr probeExpr) {
