@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
+#include "types/variant.h"
 
 namespace starrocks::parquet {
 
@@ -300,6 +303,132 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeInvalidPath) {
     // Bracket syntax that VariantPathParser rejects as invalid
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
                        .path = "[invalid",
+                       .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
+                       .node = nullptr};
+
+    auto st = VariantColumnReader::append_variant_binding_row(
+            0, binding, full_row.get_metadata().raw(),
+            VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
+    EXPECT_FALSE(st.ok());
+}
+
+// ─── encode_datum error paths ───────────────────────────────────────────────
+
+// Helper: TYPE_DECIMAL32 with scale=-1, which encode_datum rejects.
+static TypeDescriptor invalid_decimal32_type() {
+    TypeDescriptor t;
+    t.type = TYPE_DECIMAL32;
+    t.scale = -1;
+    return t;
+}
+
+// Helper: NullableColumn<ArrayColumn> wrapping one row of a given DatumArray.
+static ColumnPtr make_typed_array_column(const DatumArray& elems) {
+    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    auto array_col = ArrayColumn::create(std::move(elements), std::move(offsets));
+    array_col->append_datum(elems);
+    auto nullable = NullableColumn::create(std::move(array_col), NullColumn::create());
+    nullable->null_column_data().push_back(0);
+    return nullable;
+}
+
+// SCALAR node: encode_datum fails (invalid decimal type) → error returned  (lines 1069-1070)
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingScalarEncodeFail) {
+    ShreddedFieldNode node = make_node("x", ShreddedFieldNode::Kind::SCALAR);
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(invalid_decimal32_type());
+    node.typed_value_column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    node.typed_value_column->as_mutable_ptr()->append_datum(Datum(int64_t{1}));
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, "");
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+// append_variant_binding_row: node causes encode error → error propagated  (lines 1305-1306)
+TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNodeEncodeFail) {
+    ShreddedFieldNode node = make_node("x", ShreddedFieldNode::Kind::SCALAR);
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(invalid_decimal32_type());
+    node.typed_value_column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    node.typed_value_column->as_mutable_ptr()->append_datum(Datum(int64_t{1}));
+
+    auto full_row = parse_variant_json(R"({"x":1})");
+    auto dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    TopBinding binding{.kind = TopBinding::Kind::VARIANT,
+                       .path = "x",
+                       .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
+                       .node = &node};
+
+    auto st = VariantColumnReader::append_variant_binding_row(
+            0, binding, full_row.get_metadata().raw(),
+            VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
+    EXPECT_FALSE(st.ok());
+}
+
+// ARRAY node Path 2 (scalar array): element type is invalid → encode fails  (lines 951-952, 1087-1089)
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayPathTwoEncodeFail) {
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    TypeDescriptor arr_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    arr_type.children.push_back(invalid_decimal32_type());
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(arr_type);
+    node.typed_value_column = make_typed_array_column(DatumArray{Datum(int32_t(1))});
+    // no children → Path 2
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, VariantMetadata::kEmptyMetadata);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+// ARRAY node Path 1: SCALAR child has encode error  (lines 1005-1006, 1087-1089)
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayScalarChildEncodeFail) {
+    ShreddedFieldNode scalar_child = make_node("arr.item.x", ShreddedFieldNode::Kind::SCALAR);
+    scalar_child.typed_value_read_type = std::make_unique<TypeDescriptor>(invalid_decimal32_type());
+    scalar_child.typed_value_column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    scalar_child.typed_value_column->as_mutable_ptr()->append_datum(Datum(int64_t{42}));
+
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    TypeDescriptor arr_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    arr_type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(arr_type);
+    node.typed_value_column = make_typed_array_column(DatumArray{Datum(int32_t(1))});
+    node.children.emplace_back(std::move(scalar_child));
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, VariantMetadata::kEmptyMetadata);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+// ARRAY node Path 1: NONE child has its own children → grandchild recursion  (line 1043)
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNoneChildWithGrandchildren) {
+    // Grandchild: SCALAR, typed_value_column is null → produces no overlay
+    ShreddedFieldNode grandchild = make_node("arr.item.sub.leaf", ShreddedFieldNode::Kind::SCALAR);
+    grandchild.typed_value_read_type = std::make_unique<TypeDescriptor>(TYPE_BIGINT_DESC);
+    // no typed_value_column → get_non_null_data returns false
+
+    // Child: NONE with grandchild
+    ShreddedFieldNode child = make_node("arr.item.sub");
+    child.children.emplace_back(std::move(grandchild));
+
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    TypeDescriptor arr_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
+    arr_type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(arr_type);
+    node.typed_value_column = make_typed_array_column(DatumArray{Datum(int32_t(1))});
+    node.children.emplace_back(std::move(child));
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, VariantMetadata::kEmptyMetadata);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    // One null element in the array (no overlays produced)
+    ASSERT_TRUE(result->has_value());
+}
+
+// node == nullptr, seek on primitive variant (non-object) with key path → seek fails  (lines 1324-1325)
+TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
+    // A primitive integer row, not an object; seeking key "name" should fail.
+    auto full_row = parse_variant_json("42");
+    auto dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    TopBinding binding{.kind = TopBinding::Kind::VARIANT,
+                       .path = "name",
                        .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
                        .node = nullptr};
 
