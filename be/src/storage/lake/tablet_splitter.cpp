@@ -239,7 +239,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
         size_t boundary_idx = 0;
         for (const auto* range : candidate_ranges) {
             while (boundary_idx < result.boundaries.size() &&
-                   range->max.compare(result.boundaries[boundary_idx]) >= 0) {
+                   range->max.compare(result.boundaries[boundary_idx]) > 0) {
                 boundary_idx++;
             }
             int32_t group_idx = std::min(static_cast<int32_t>(boundary_idx), num_splits - 1);
