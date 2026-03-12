@@ -256,7 +256,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                         " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                         " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
-                        " where t1.d < '20230802';";
+                        " where t1.d < '2023-08-02';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv1\n" +
@@ -323,7 +323,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                         " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                         " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
-                        " where t1.d < '20230802';";
+                        " where t1.d < '2023-08-02';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "12:OlapScanNode\n" +
@@ -395,7 +395,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                         " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                         " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
-                        " where t1.d < '20230802';";
+                        " where t1.d < '2023-08-02';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv1\n" +
@@ -462,7 +462,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
                         " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                         " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
-                        " where t1.d < '20230802';";
+                        " where t1.d < '2023-08-02';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "12:OlapScanNode\n" +
