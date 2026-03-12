@@ -34,7 +34,8 @@ namespace starrocks::lake {
 
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
-                                                            bool use_num_rows, bool track_sources) {
+                                                            bool use_num_rows, bool track_sources,
+                                                            const TabletRange* tablet_range) {
     RangeSplitResult result;
 
     if (segments.empty() || target_split_count <= 1) {
@@ -135,15 +136,26 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     }
 
     // Step 4: Calculate split boundaries using a greedy algorithm.
-    int32_t actual_split_count = std::min(target_split_count, static_cast<int32_t>(ordered_ranges.size()));
+    // If tablet_range is provided, only consider ranges that overlap with it.
+    std::vector<const RangeInfo*> candidate_ranges;
+    candidate_ranges.reserve(ordered_ranges.size());
+    for (const auto& r : ordered_ranges) {
+        if (tablet_range != nullptr &&
+            (tablet_range->less_than(r.min) || tablet_range->greater_than(r.max))) {
+            continue;
+        }
+        candidate_ranges.push_back(&r);
+    }
+
+    int32_t actual_split_count = std::min(target_split_count, static_cast<int32_t>(candidate_ranges.size()));
     if (actual_split_count <= 1) {
         return result;
     }
 
     int64_t total_value = 0;
     size_t non_empty_ranges = 0;
-    for (const auto& r : ordered_ranges) {
-        int64_t val = use_num_rows ? r.num_rows : r.data_size;
+    for (const auto* r : candidate_ranges) {
+        int64_t val = use_num_rows ? r->num_rows : r->data_size;
         total_value += val;
         if (val > 0) {
             non_empty_ranges++;
@@ -161,37 +173,45 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     actual_target = std::max<int64_t>(1, actual_target);
 
     // Pre-compute a suffix count of non-empty ranges starting at each index.
-    std::vector<size_t> remaining_non_empty_at(ordered_ranges.size() + 1, 0);
-    for (int64_t k = static_cast<int64_t>(ordered_ranges.size()) - 1; k >= 0; k--) {
-        int64_t val_k = use_num_rows ? ordered_ranges[k].num_rows : ordered_ranges[k].data_size;
+    std::vector<size_t> remaining_non_empty_at(candidate_ranges.size() + 1, 0);
+    for (int64_t k = static_cast<int64_t>(candidate_ranges.size()) - 1; k >= 0; k--) {
+        int64_t val_k = use_num_rows ? candidate_ranges[k]->num_rows : candidate_ranges[k]->data_size;
         remaining_non_empty_at[k] = remaining_non_empty_at[k + 1] + (val_k > 0 ? 1 : 0);
     }
 
     std::vector<VariantTuple> boundaries;
     int64_t accumulated = 0;
 
-    for (size_t i = 0; i < ordered_ranges.size(); i++) {
-        const auto& range = ordered_ranges[i];
-        int64_t val = use_num_rows ? range.num_rows : range.data_size;
+    for (size_t i = 0; i < candidate_ranges.size(); i++) {
+        const auto* range = candidate_ranges[i];
+        int64_t val = use_num_rows ? range->num_rows : range->data_size;
         bool is_non_empty = val > 0;
 
         accumulated += val;
 
-        bool is_last_range = (i == ordered_ranges.size() - 1);
+        bool is_last_range = (i == candidate_ranges.size() - 1);
         int32_t remaining_splits = actual_split_count - 1 - static_cast<int32_t>(boundaries.size());
-        size_t remaining_non_empty_after = (i + 1 < ordered_ranges.size()) ? remaining_non_empty_at[i + 1] : 0;
+        size_t remaining_non_empty_after = (i + 1 < candidate_ranges.size()) ? remaining_non_empty_at[i + 1] : 0;
 
         if (!is_last_range && remaining_splits > 0 && is_non_empty &&
             (accumulated >= actual_target || remaining_non_empty_after < static_cast<size_t>(remaining_splits))) {
             // Advance boundary across trailing empty ranges to maximize natural gaps.
-            const VariantTuple* boundary = &range.max;
-            for (size_t j = i + 1; j < ordered_ranges.size(); j++) {
-                int64_t next_val = use_num_rows ? ordered_ranges[j].num_rows : ordered_ranges[j].data_size;
-                if (next_val > 0 || j == ordered_ranges.size() - 1) {
+            const VariantTuple* boundary = &range->max;
+            for (size_t j = i + 1; j < candidate_ranges.size(); j++) {
+                int64_t next_val = use_num_rows ? candidate_ranges[j]->num_rows : candidate_ranges[j]->data_size;
+                if (next_val > 0 || j == candidate_ranges.size() - 1) {
                     break;
                 }
-                boundary = &ordered_ranges[j].max;
+                if (tablet_range != nullptr && !tablet_range->strictly_contains(candidate_ranges[j]->max)) {
+                    break;
+                }
+                boundary = &candidate_ranges[j]->max;
                 i = j;
+            }
+
+            if (tablet_range != nullptr && !tablet_range->strictly_contains(*boundary)) {
+                // Cannot place boundary outside tablet range, keep accumulating.
+                continue;
             }
 
             boundaries.push_back(*boundary);
@@ -207,7 +227,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
         return result;
     }
 
-    // Step 5: Estimate per-range data sizes by walking ordered ranges against boundaries.
+    // Step 5: Estimate per-range data sizes by walking candidate ranges against boundaries.
     int32_t num_splits = static_cast<int32_t>(boundaries.size()) + 1;
     result.boundaries = std::move(boundaries);
     result.range_data_sizes.resize(num_splits, 0);
@@ -218,16 +238,17 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
 
     {
         size_t boundary_idx = 0;
-        for (const auto& range : ordered_ranges) {
-            while (boundary_idx < result.boundaries.size() && range.max.compare(result.boundaries[boundary_idx]) >= 0) {
+        for (const auto* range : candidate_ranges) {
+            while (boundary_idx < result.boundaries.size() &&
+                   range->max.compare(result.boundaries[boundary_idx]) >= 0) {
                 boundary_idx++;
             }
             int32_t group_idx = std::min(static_cast<int32_t>(boundary_idx), num_splits - 1);
-            result.range_data_sizes[group_idx] += range.data_size;
-            result.range_num_rows[group_idx] += range.num_rows;
+            result.range_data_sizes[group_idx] += range->data_size;
+            result.range_num_rows[group_idx] += range->num_rows;
 
             if (track_sources) {
-                for (const auto& [source_id, stats_pair] : range.source_stats) {
+                for (const auto& [source_id, stats_pair] : range->source_stats) {
                     auto& dest = result.range_source_stats[group_idx][source_id];
                     dest.first += stats_pair.first;
                     dest.second += stats_pair.second;
@@ -303,7 +324,10 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
         return Status::InvalidArgument("No segments found in tablet metadata");
     }
 
-    // Step 2: Calculate split boundaries using row-based splitting with per-source tracking.
+    // Step 2: Calculate split boundaries with tablet range filtering.
+    TabletRange tablet_range;
+    RETURN_IF_ERROR(tablet_range.from_proto(tablet_metadata->range()));
+
     int64_t total_num_rows = 0;
     for (const auto& seg : segments) {
         total_num_rows += seg.num_rows;
@@ -312,68 +336,29 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
 
     ASSIGN_OR_RETURN(auto split_result, calculate_range_split_boundaries(segments, split_count, avg_num_rows,
                                                                          /*use_num_rows=*/true,
-                                                                         /*track_sources=*/true));
+                                                                         /*track_sources=*/true, &tablet_range));
 
     if (split_result.boundaries.empty()) {
         return Status::InvalidArgument("Not enough split ranges available");
     }
 
-    // Step 3: Filter boundaries by tablet range - only keep those strictly within tablet bounds.
-    TabletRange tablet_range;
-    RETURN_IF_ERROR(tablet_range.from_proto(tablet_metadata->range()));
-
-    std::vector<size_t> valid_boundary_indices;
-    for (size_t i = 0; i < split_result.boundaries.size(); i++) {
-        if (tablet_range.strictly_contains(split_result.boundaries[i])) {
-            valid_boundary_indices.push_back(i);
-        }
-    }
-
-    if (valid_boundary_indices.empty()) {
-        return Status::InvalidArgument("Not enough split ranges available");
-    }
-
-    // Step 4: Build TabletRangeInfo from valid boundaries.
-    // We need to re-aggregate per-source stats across the original ranges to match valid boundaries.
-    int32_t num_valid_splits = static_cast<int32_t>(valid_boundary_indices.size()) + 1;
+    // Step 3: Build TabletRangeInfo directly from result.
+    int32_t num_splits = static_cast<int32_t>(split_result.boundaries.size()) + 1;
 
     DCHECK(split_ranges->empty());
-    split_ranges->reserve(num_valid_splits);
+    split_ranges->reserve(num_splits);
 
-    // Map original split indices to valid split indices.
-    // Original split_result has (boundaries.size() + 1) ranges.
-    // We need to merge the ranges whose boundaries were filtered out.
-    int32_t orig_num_splits = static_cast<int32_t>(split_result.boundaries.size()) + 1;
-    std::vector<int32_t> orig_to_valid(orig_num_splits, -1);
-
-    {
-        int32_t valid_idx = 0;
-        size_t next_valid = 0;
-        for (int32_t orig_idx = 0; orig_idx < orig_num_splits; orig_idx++) {
-            orig_to_valid[orig_idx] = valid_idx;
-            // Check if the boundary after this range is a valid boundary.
-            if (orig_idx < orig_num_splits - 1) {
-                if (next_valid < valid_boundary_indices.size() &&
-                    valid_boundary_indices[next_valid] == static_cast<size_t>(orig_idx)) {
-                    valid_idx++;
-                    next_valid++;
-                }
-            }
-        }
-    }
-
-    // Initialize split ranges.
-    for (int32_t i = 0; i < num_valid_splits; i++) {
+    for (int32_t i = 0; i < num_splits; i++) {
         auto& sr = split_ranges->emplace_back();
         if (i == 0) {
             sr.range = tablet_metadata->range();
         } else {
-            split_result.boundaries[valid_boundary_indices[i - 1]].to_proto(sr.range.mutable_lower_bound());
+            split_result.boundaries[i - 1].to_proto(sr.range.mutable_lower_bound());
             sr.range.set_lower_bound_included(true);
         }
 
-        if (i < num_valid_splits - 1) {
-            split_result.boundaries[valid_boundary_indices[i]].to_proto(sr.range.mutable_upper_bound());
+        if (i < num_splits - 1) {
+            split_result.boundaries[i].to_proto(sr.range.mutable_upper_bound());
             sr.range.set_upper_bound_included(false);
         } else {
             if (tablet_metadata->range().has_upper_bound()) {
@@ -384,18 +369,12 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                 sr.range.clear_upper_bound_included();
             }
         }
-    }
 
-    // Aggregate per-source stats into valid split ranges.
-    for (int32_t orig_idx = 0; orig_idx < orig_num_splits; orig_idx++) {
-        int32_t valid_idx = orig_to_valid[orig_idx];
-        if (valid_idx < 0 || valid_idx >= num_valid_splits) continue;
-
-        if (orig_idx < static_cast<int32_t>(split_result.range_source_stats.size())) {
-            for (const auto& [source_id, stats_pair] : split_result.range_source_stats[orig_idx]) {
-                auto& rowset_stat = (*split_ranges)[valid_idx].rowset_stats[source_id];
-                rowset_stat.num_rows += stats_pair.first;
-                rowset_stat.data_size += stats_pair.second;
+        if (i < static_cast<int32_t>(split_result.range_source_stats.size())) {
+            for (const auto& [source_id, stats_pair] : split_result.range_source_stats[i]) {
+                auto& rowset_stat = sr.rowset_stats[source_id];
+                rowset_stat.num_rows = stats_pair.first;
+                rowset_stat.data_size = stats_pair.second;
             }
         }
     }

@@ -22,6 +22,10 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/variant_tuple.h"
 
+namespace starrocks {
+class TabletRange;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 class TabletManager;
@@ -62,12 +66,16 @@ struct RangeSplitResult {
 //   target_value_per_split: target data size (or row count) per split
 //   use_num_rows: if true, use num_rows for balancing; otherwise use data_size
 //   track_sources: if true, track per-source (e.g., per-rowset) statistics in the result
+//   tablet_range: if non-null, only consider ranges overlapping the tablet range for the
+//                 greedy algorithm, and only place boundaries that strictly_contains returns
+//                 true for. This filters out-of-range boundaries inside the core algorithm.
 //
 // Returns RangeSplitResult with boundaries and per-range estimates, or empty boundaries if
 // splitting is not possible (e.g., not enough data or segments).
 StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<SegmentSplitInfo>& segments,
                                                             int32_t target_split_count, int64_t target_value_per_split,
-                                                            bool use_num_rows, bool track_sources = false);
+                                                            bool use_num_rows, bool track_sources = false,
+                                                            const TabletRange* tablet_range = nullptr);
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
