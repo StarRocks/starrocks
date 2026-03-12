@@ -102,12 +102,12 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     auto row_offset = state->get_offset();
     auto offsets = UInt32Column::create();
     MutableColumns result;
-    result.push_back(Int64Column::create());                                     // id
-    result.push_back(Int64Column::create());                                     // segments
-    result.push_back(Int64Column::create());                                     // rows
-    result.push_back(Int64Column::create());                                     // size
-    result.push_back(BooleanColumn::create());                                   // overlapped
-    result.push_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
+    result.emplace_back(Int64Column::create());                                     // id
+    result.emplace_back(Int64Column::create());                                     // segments
+    result.emplace_back(Int64Column::create());                                     // rows
+    result.emplace_back(Int64Column::create());                                     // size
+    result.emplace_back(BooleanColumn::create());                                   // overlapped
+    result.emplace_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));

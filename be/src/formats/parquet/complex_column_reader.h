@@ -322,10 +322,10 @@ public:
                                  ColumnReaderPtr&& root_typed_value_reader = nullptr,
                                  std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr)
             : ColumnReader(parquet_field),
-              _shredded_fields(std::move(shredded_fields)),
-              _shredded_paths(std::move(shredded_paths)),
               _top_level(std::move(metadata_reader), std::move(value_reader), std::move(root_typed_value_reader),
-                         std::move(root_typed_value_type)) {
+                         std::move(root_typed_value_type)),
+              _shredded_fields(std::move(shredded_fields)),
+              _shredded_paths(std::move(shredded_paths)) {
         // Both readers must be non-null for VariantColumnReader to function correctly
         DCHECK(_top_level.metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
         DCHECK(_top_level.value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";

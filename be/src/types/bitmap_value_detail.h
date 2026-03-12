@@ -921,7 +921,7 @@ private:
     }
     // this is needed to tolerate gcc's C++11 libstdc++ lacking emplace
     // prior to version 4.8
-    void emplace(const uint32_t key, const Roaring& value) { roarings.emplace(std::make_pair(key, value)); }
+    void emplace(const uint32_t key, const Roaring& value) { roarings.emplace(key, value); }
 
     void emplace(const uint32_t key, Roaring&& value) { roarings.emplace(key, std::move(value)); }
 };
