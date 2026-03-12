@@ -114,24 +114,34 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
     RETURN_IF_ERROR(check_tuple_ids_in_descs(descs, tnode));
     RETURN_IF_ERROR(ExecFactory::create_vectorized_node(state, pool, tnode, descs, &node));
 
-    std::vector<ExecNode*> children;
-    children.reserve(tnode.num_children);
+    Status st = Status::OK();
+    DeferOp defer([&] {
+        if (!st.ok()) {
+            // Both the Node and ExprContext are allocated from the pool. If they are both allocated successfully
+            // but Node::init() fails, and *root is not set, the FragmentContext's plan will be nullptr, so the
+            // ExprContext will not be explicitly closed. During pool destruction, the ExprContext is destroyed
+            // before the Node (LIFO order). The Node's destructor then tries to close the already-destroyed
+            // ExprContext, causing a use-after-free.
+            node->close(state);
+        }
+    });
+
+    node->reserve_children(tnode.num_children);
     for (int i = 0; i < tnode.num_children; i++) {
         ++*node_idx;
         ExecNode* child = nullptr;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node_idx, &child));
-        children.emplace_back(child);
+        SET_AND_RETURN_STATUS_IF_ERROR(st, create_tree_helper(state, pool, tnodes, descs, node_idx, &child));
+        node->add_child(child);
 
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= tnodes.size()) {
             // TODO: print thrift msg
-            return Status::InternalError("Failed to reconstruct plan tree from thrift.");
+            SET_AND_RETURN_STATUS_IF_ERROR(st, Status::InternalError("Failed to reconstruct plan tree from thrift."));
         }
     }
-    node->set_children(std::move(children));
 
-    RETURN_IF_ERROR(node->init(tnode, state));
+    SET_AND_RETURN_STATUS_IF_ERROR(st, node->init(tnode, state));
 
     // build up tree of profiles; add children >0 first, so that when we print
     // the profile, child 0 is printed last (makes the output more readable)
@@ -143,7 +153,6 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
     if (!node_children.empty()) {
         node->runtime_profile()->add_child(node_children[0]->runtime_profile(), true, nullptr);
     }
-
     *root = node;
     return Status::OK();
 }
