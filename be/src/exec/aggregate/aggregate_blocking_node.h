@@ -15,7 +15,6 @@
 #pragma once
 
 #include "exec/aggregate/aggregate_base_node.h"
-#include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 
 // Aggregate means this node handle query with aggregate functions.
@@ -25,10 +24,6 @@ class AggregateBlockingNode final : public AggregateBaseNode {
 public:
     AggregateBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
-
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
