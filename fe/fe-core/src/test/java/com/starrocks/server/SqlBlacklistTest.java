@@ -75,7 +75,7 @@ public class SqlBlacklistTest {
         ArgumentCaptor<SqlBlackListPersistInfo> addBlacklistEditLogArgument = ArgumentCaptor
                 .forClass(SqlBlackListPersistInfo.class);
 
-        AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST ".+";");
+        AddSqlBlackListStmt addStatement = (AddSqlBlackListStmt) parseSql("ADD SQLBLACKLIST \".+\";");
         Assertions.assertEquals(addStatement.getSql(), ".+");
 
         StmtExecutor addStatementExecutor = new StmtExecutor(connectContext, addStatement);
@@ -140,7 +140,7 @@ public class SqlBlacklistTest {
     @Test
     public void testRedirectStatus() {
         Assertions.assertEquals(
-                new AddSqlBlackListStmt("ADD SQLBLACKLIST ".+";").getRedirectStatus(),
+                new AddSqlBlackListStmt("ADD SQLBLACKLIST \".+\";").getRedirectStatus(),
                 RedirectStatus.FORWARD_NO_SYNC
         );
         Assertions.assertEquals(
