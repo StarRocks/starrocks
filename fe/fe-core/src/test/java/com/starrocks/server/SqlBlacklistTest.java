@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
@@ -232,7 +233,7 @@ public class SqlBlacklistTest {
     public void testVerifyingSQLExistsInBlackList() {
         Pattern p = Pattern.compile("qwert");
         sqlBlackList.put(p);
-        AnalysisException exception = assertThrows(AnalysisException.class, () -> sqlBlackList.verifying("qwert"));
+        AnalysisException exception = assertThrows(SqlBlacklistedException.class, () -> sqlBlackList.verifying("qwert"));
         Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin",
                 exception.getMessage());
     }
