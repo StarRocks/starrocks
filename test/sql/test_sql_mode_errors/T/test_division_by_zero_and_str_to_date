@@ -1,0 +1,45 @@
+-- name: test_division_by_zero_and_str_to_date
+set sql_mode = 'ERROR_FOR_DIVISION_BY_ZERO';
+select 1/0;
+select 1%0;
+select 1.0/0.0;
+select NULL/0;
+
+create table t_div (k1 int, k2 int) duplicate key(k1) distributed by hash(k1) buckets 1 properties('replication_num' = '1');
+insert into t_div values (1, 1), (2, 0), (3, 1);
+select k1/k2 from t_div order by k1;
+select k1%k2 from t_div order by k1;
+drop table if exists t_div;
+
+create table t_div_src (k1 int, k2 int)properties('replication_num' = '1');
+create table t_div_dst (k1 int, k2 double)properties('replication_num' = '1');
+insert into t_div_src values (1, 1), (2, 0), (3, 1);
+insert into t_div_dst select k1, k1/k2 as k2 from t_div_src;
+drop table if exists t_div_src;
+drop table if exists t_div_dst;
+
+set sql_mode = '';
+select 1/0;
+select 1%0;
+
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+select str_to_date('invalid', '%Y-%m-%d');
+select str2date('invalid', '%Y-%m-%d');
+select str_to_date(NULL, '%Y-%m-%d');
+
+create table t_str_date (c1 varchar(100), c2 varchar(100)) properties('replication_num' = '1');
+insert into t_str_date values ('valid', '%Y-%m-%d'), ('invalid', '%Y-%m-%d'), ('2024-01-01', '%Y-%m-%d');
+select str_to_date(c1, c2) from t_str_date order by c1;
+select str2date(c1, c2) from t_str_date order by c1;
+drop table if exists t_str_date;
+
+create table t_str_date_src (c1 varchar(100), c2 varchar(100)) properties('replication_num' = '1');
+create table t_str_date_dst (c1 datetime) duplicate key(c1)  properties('replication_num' = '1');
+insert into t_str_date_src values ('valid', '%Y-%m-%d'), ('invalid', '%Y-%m-%d'), ('2024-01-01', '%Y-%m-%d');
+insert into t_str_date_dst select str_to_date(c1, c2) from t_str_date_src;
+drop table if exists t_str_date_src;
+drop table if exists t_str_date_dst;
+
+set sql_mode = '';
+select str_to_date('invalid', '%Y-%m-%d');
+select str2date('invalid', '%Y-%m-%d');
