@@ -16,6 +16,7 @@
 
 #include "connector/connector.h"
 #include "exec/cache_stats_scanner.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
