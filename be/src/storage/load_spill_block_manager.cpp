@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/config_ingest_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exec/spill/file_block_manager.h"
