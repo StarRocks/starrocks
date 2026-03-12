@@ -64,6 +64,8 @@ jobs:
           filters: |
             thirdparty:
             - 'thirdparty/**'
+            - '!thirdparty/build-thirdparty-darwin.sh'
+            - '!thirdparty/vars-darwin-aarch64.sh'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: update image - ubuntu
