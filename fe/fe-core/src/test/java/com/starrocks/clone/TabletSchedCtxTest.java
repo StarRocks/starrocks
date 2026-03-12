@@ -348,6 +348,36 @@ public class TabletSchedCtxTest {
     }
 
     @Test
+    public void testGetHealthyReplicasExcludesErrorState() {
+        Replica healthyReplica = new Replica(70010L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        healthyReplica.setPathHash(2001L);
+        healthyReplica.updateVersionInfo(100L, 100L, 0L);
+
+        Replica errorReplica = new Replica(70011L, be2.getId(), 0, Replica.ReplicaState.NORMAL);
+        errorReplica.setPathHash(2002L);
+        errorReplica.updateVersionInfo(100L, 100L, 0L);
+        errorReplica.setIsErrorState(true);
+
+        LocalTablet tablet = new LocalTablet(30002L, Lists.newArrayList(healthyReplica, errorReplica));
+
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                30002L, System.currentTimeMillis(),
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(tablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(100L, 100L, 0L, 0L);
+
+        List<Replica> healthy = ctx.getHealthyReplicas(false);
+        Assertions.assertEquals(1, healthy.size());
+        Assertions.assertEquals(healthyReplica.getId(), healthy.get(0).getId());
+
+        // Also verify error-state replicas are excluded even when includeDecommissioned is true
+        List<Replica> healthyWithDecomm = ctx.getHealthyReplicas(true);
+        Assertions.assertEquals(1, healthyWithDecomm.size());
+        Assertions.assertEquals(healthyReplica.getId(), healthyWithDecomm.get(0).getId());
+    }
+
+    @Test
     public void testChooseSrcReplica() {
         Replica replicaNormalIncomplete = new Replica(70001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
         replicaNormalIncomplete.setPathHash(2001L);

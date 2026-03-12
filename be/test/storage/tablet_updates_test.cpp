@@ -621,6 +621,85 @@ TEST_F(TabletUpdatesTest, test_rowset_file_existence) {
     ASSERT_FALSE(_tablet->updates()->rowset_check_file_existence());
 }
 
+TEST_F(TabletUpdatesTest, test_pk_tablet_init_corruption_sets_error_state) {
+    srand(GetCurrentTimeMicros());
+    auto tablet_id = rand();
+    auto schema_hash = rand();
+    _tablet = create_tablet(tablet_id, schema_hash);
+
+    // Write some data so the tablet has at least one rowset whose metadata we can corrupt.
+    std::vector<int64_t> keys = {0, 1, 2, 3, 4};
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto data_dir = _tablet->data_dir();
+    std::string meta_str;
+    ASSERT_TRUE(_tablet->tablet_meta()->serialize(&meta_str).ok());
+
+    // Pick the rowset that the apply version references and delete its metadata from
+    // the local kv store. This is the meta-level corruption that TabletUpdates::init
+    // cannot auto-purge (the apply version's own rowset is missing), so init returns
+    // Status::Corruption and we exercise the corruption branch in Tablet::_init_once_action.
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    EditVersion full_edit_version;
+    ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(2, &applied_rowsets, &full_edit_version).ok());
+    ASSERT_FALSE(applied_rowsets.empty());
+    RowsetSharedPtr applied_rowset = applied_rowsets.back();
+    uint32_t rowset_seg_id = applied_rowset->rowset_meta()->get_rowset_seg_id();
+    uint32_t num_segments = static_cast<uint32_t>(applied_rowset->num_segments());
+    ASSERT_TRUE(TabletMetaManager::rowset_delete(data_dir, tablet_id, rowset_seg_id, num_segments).ok());
+
+    // Drop the in-memory tablet so reload re-reads everything from disk.
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(tablet_id);
+    _tablet.reset();
+
+    // Reload. Init must not propagate a hard failure; the corruption branch in
+    // Tablet::_init_once_action sets the tablet to error state and returns OK so the
+    // tablet is still loaded and reportable to FE for repair.
+    auto st = StorageEngine::instance()->tablet_manager()->load_tablet_from_meta(data_dir, tablet_id, schema_hash,
+                                                                                 meta_str, true);
+    ASSERT_TRUE(st.ok()) << st;
+
+    auto reloaded = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    ASSERT_NE(nullptr, reloaded);
+    ASSERT_NE(nullptr, reloaded->updates());
+    ASSERT_TRUE(reloaded->updates()->is_error());
+    _tablet = reloaded;
+}
+
+// Covers the non-corruption branch in Tablet::_init_once_action: when TabletUpdates::init
+// returns a non-corruption error (here, the tablet meta has no updates_pb because we
+// already released it), _init_once_action must propagate the error rather than silently
+// flipping the tablet to error state.
+TEST_F(TabletUpdatesTest, test_pk_tablet_init_non_corruption_error_propagates) {
+    srand(GetCurrentTimeMicros());
+    auto tablet_id = rand();
+    auto schema_hash = rand();
+    _tablet = create_tablet(tablet_id, schema_hash);
+
+    auto data_dir = _tablet->data_dir();
+    std::string meta_str;
+    ASSERT_TRUE(_tablet->tablet_meta()->serialize(&meta_str).ok());
+
+    // Build a fresh TabletMeta from the serialized bytes, then release the updates_pb
+    // out of it. After this, when Tablet::_init_once_action runs, TabletUpdates::init
+    // will see a null updates_pb and return Status::InternalError - the non-corruption
+    // path under test.
+    auto fresh_meta = std::make_shared<TabletMeta>();
+    ASSERT_TRUE(fresh_meta->deserialize(meta_str).ok());
+    std::unique_ptr<TabletUpdatesPB> released(fresh_meta->release_updates(nullptr));
+    ASSERT_NE(nullptr, released);
+
+    auto fresh_tablet = Tablet::create_tablet_from_meta(fresh_meta, data_dir);
+    ASSERT_NE(nullptr, fresh_tablet);
+
+    auto init_st = fresh_tablet->init();
+    ASSERT_FALSE(init_st.ok());
+    ASSERT_FALSE(init_st.is_corruption());
+    // The original tablet (still in the manager) is unaffected - we only mutated a
+    // freshly-deserialized copy of its meta.
+}
+
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
     _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
     // write

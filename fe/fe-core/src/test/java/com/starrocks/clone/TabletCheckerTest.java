@@ -16,6 +16,10 @@ package com.starrocks.clone;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
+import com.starrocks.catalog.Replica;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.junit.jupiter.api.Assertions;
@@ -23,10 +27,14 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 public class TabletCheckerTest {
@@ -128,6 +136,61 @@ public class TabletCheckerTest {
         requiredLocation.put("*", "");
         Assertions.assertTrue(TabletChecker.shouldEnsureReplicaHA(3, requiredLocation, systemInfoService));
         requiredLocation.clear();
+    }
+
+    @Test
+    public void testIsReplicaStateAbnormal() throws Exception {
+        Method method = TabletChecker.class.getDeclaredMethod(
+                "isReplicaStateAbnormal", Replica.class, Backend.class, Set.class);
+        method.setAccessible(true);
+
+        Backend backend = Mockito.mock(Backend.class);
+        Mockito.when(backend.getHost()).thenReturn("host1");
+
+        // Normal replica is not abnormal
+        Replica normalReplica = new Replica(1L, 10001L, 0, Replica.ReplicaState.NORMAL);
+        Set<String> hosts = new HashSet<>();
+        Assertions.assertFalse((Boolean) method.invoke(null, normalReplica, backend, hosts));
+
+        // Error-state replica is abnormal
+        Replica errorReplica = new Replica(2L, 10002L, 0, Replica.ReplicaState.NORMAL);
+        errorReplica.setIsErrorState(true);
+        hosts = new HashSet<>();
+        Assertions.assertTrue((Boolean) method.invoke(null, errorReplica, backend, hosts));
+
+        // Bad replica is abnormal
+        Replica badReplica = new Replica(3L, 10003L, 0, Replica.ReplicaState.NORMAL);
+        badReplica.setBad(true);
+        hosts = new HashSet<>();
+        Assertions.assertTrue((Boolean) method.invoke(null, badReplica, backend, hosts));
+
+        // CLONE state replica is abnormal
+        Replica cloneReplica = new Replica(4L, 10004L, 0, Replica.ReplicaState.CLONE);
+        hosts = new HashSet<>();
+        Assertions.assertTrue((Boolean) method.invoke(null, cloneReplica, backend, hosts));
+
+        // DECOMMISSION state replica is abnormal
+        Replica decommissionReplica = new Replica(5L, 10005L, 0, Replica.ReplicaState.DECOMMISSION);
+        hosts = new HashSet<>();
+        Assertions.assertTrue((Boolean) method.invoke(null, decommissionReplica, backend, hosts));
+    }
+
+    @Test
+    public void testColocateTabletHealthStatusDetectsErrorStateReplica() {
+        long visibleVersion = 10L;
+        // Replica on backend 20001 is in error state; the error-state check must run before
+        // the disk-decommission check so we do not depend on SystemInfoService being populated.
+        Replica errorReplica = new Replica(10001L, 20001L, Replica.ReplicaState.NORMAL, visibleVersion, -1);
+        errorReplica.setIsErrorState(true);
+        Replica healthyReplica1 = new Replica(10002L, 20002L, Replica.ReplicaState.NORMAL, visibleVersion, -1);
+        Replica healthyReplica2 = new Replica(10003L, 20003L, Replica.ReplicaState.NORMAL, visibleVersion, -1);
+
+        LocalTablet tablet = new LocalTablet(10004L,
+                new ArrayList<>(Arrays.asList(errorReplica, healthyReplica1, healthyReplica2)));
+        Set<Long> backendsSet = Sets.newHashSet(20001L, 20002L, 20003L);
+
+        Assertions.assertEquals(TabletHealthStatus.COLOCATE_REDUNDANT,
+                TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion, 3, backendsSet));
     }
 
     private static SystemInfoService systemInfoService;

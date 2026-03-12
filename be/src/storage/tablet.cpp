@@ -118,7 +118,16 @@ Status Tablet::_init_once_action() {
     if (keys_type() == PRIMARY_KEYS) {
         _updates = std::make_unique<TabletUpdates>(*this);
         Status st = _updates->init();
-        LOG_IF(WARNING, !st.ok()) << "Fail to init updates: " << st;
+        if (!st.ok()) {
+            if (st.is_corruption()) {
+                LOG(ERROR) << "Tablet " << tablet_id() << " init failed with corruption: " << st
+                           << ", setting to error state for FE-driven repair";
+                _updates->set_error(std::string(st.message()));
+                return Status::OK();
+            }
+            LOG(WARNING) << "Tablet " << tablet_id() << " fail to init updates: " << st;
+            return st;
+        }
         return st;
     }
     for (const auto& rs_meta : _tablet_meta->all_rs_metas()) {

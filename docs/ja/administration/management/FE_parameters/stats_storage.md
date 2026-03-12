@@ -399,6 +399,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：スケジューラが BE ノードを非アクティブのままにする最大期間。この時間しきい値に達すると、その BE ノード上のタブレットは他のアクティブな BE ノードに移行されます。
 - 導入時期：v2.5.7
 
+### `tablet_sched_delete_error_state_replica_permits_per_second`
+
+- デフォルト：10.0
+- タイプ：Double
+- 単位：Permits per second
+- 変更可能：Yes
+- 説明：タブレットスケジューラが 1 秒あたりに削除できる error-state レプリカの最大数。このレートを超える削除はスキップされ、以降のスケジューリングラウンドで再試行されます。変更は再起動なしで次のスケジューリングラウンドから反映されます。
+- 導入時期：v3.5.18、v4.0.11、v4.1.2
+
 ### `tablet_sched_disable_balance`
 
 - デフォルト：false

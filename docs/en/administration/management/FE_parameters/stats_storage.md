@@ -399,6 +399,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum duration the scheduler allows for a BE node to remain inactive. After the time threshold is reached, tablets on that BE node will be migrated to other active BE nodes.
 - Introduced in: v2.5.7
 
+### `tablet_sched_delete_error_state_replica_permits_per_second`
+
+- Default: 10.0
+- Type: Double
+- Unit: Permits per second
+- Is mutable: Yes
+- Description: The maximum number of error-state replicas the tablet scheduler is allowed to delete per second. Deletions exceeding this rate are skipped and retried in later scheduling rounds. Changes take effect on the next scheduling round without a restart.
+- Introduced in: v3.5.18, v4.0.11, v4.1.2
+
 ### `tablet_sched_disable_balance`
 
 - Default: false

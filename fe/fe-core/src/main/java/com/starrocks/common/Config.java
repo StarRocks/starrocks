@@ -1867,6 +1867,18 @@ public class Config extends ConfigBase {
     public static boolean tablet_sched_always_force_decommission_replica = false;
 
     /**
+     * Rate limit (permits per second) for deleting error-state replicas in the tablet scheduler.
+     * A Guava RateLimiter with this rate guards deleteErrorStateReplica(); if tryAcquire() fails,
+     * the deletion is skipped in the current scheduling round. The RateLimiter is re-synced to
+     * this value at the start of each tablet scheduler check loop, so config changes take effect
+     * on the next loop without requiring a restart.
+     * Default: 10 deletions per second.
+     */
+    @ConfField(mutable = true,
+            comment = "Rate limit (permits/sec) for deleting error-state replicas in the tablet scheduler")
+    public static double tablet_sched_delete_error_state_replica_permits_per_second = 10.0;
+
+    /**
      * For certain deployment, like k8s pods + pvc, the replica is not lost even the
      * corresponding backend is detected as dead, because the replica data is persisted
      * on a pvc which is backed by a remote storage service, such as AWS EBS. And later,

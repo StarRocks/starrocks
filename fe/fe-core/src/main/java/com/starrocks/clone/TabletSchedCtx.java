@@ -574,7 +574,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public List<Replica> getHealthyReplicas(boolean includeDecommissioned) {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad() || replica.getState() == ReplicaState.RECOVER ||
+            if (replica.isBad() || replica.isErrorState() || replica.getState() == ReplicaState.RECOVER ||
                     (!includeDecommissioned && replica.getState() == ReplicaState.DECOMMISSION)) {
                 continue;
             }

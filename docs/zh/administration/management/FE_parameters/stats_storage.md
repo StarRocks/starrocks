@@ -399,6 +399,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 调度器允许 BE 节点保持非活动状态的最大持续时间。达到时间阈值后，该 BE 节点上的 tablet 将迁移到其他活动 BE 节点。
 - 引入版本: v2.5.7
 
+### `tablet_sched_delete_error_state_replica_permits_per_second`
+
+- 默认值: 10.0
+- 类型: Double
+- 单位: 每秒许可数
+- 是否可变: Yes
+- 描述: tablet 调度器每秒最多删除 error-state 副本的数量。超过该速率的删除会被跳过，留到后续调度轮次重试。修改后无需重启，在下一轮调度时生效。
+- 引入版本: v3.5.18、v4.0.11、v4.1.2
+
 ### `tablet_sched_disable_balance`
 
 - 默认值: false
