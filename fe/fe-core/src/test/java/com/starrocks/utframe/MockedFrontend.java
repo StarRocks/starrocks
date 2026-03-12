@@ -52,9 +52,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.staros.StarOSBDBJEJournalSystem;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.junit.jupiter.api.Assertions;
 
@@ -99,6 +101,8 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  */
 public class MockedFrontend {
+    private static final Logger LOG = LogManager.getLogger(MockedFrontend.class);
+
     public static final String FE_PROCESS = "fe";
 
     // the running dir of this mocked frontend.
@@ -266,12 +270,18 @@ public class MockedFrontend {
                 GlobalStateMgr.getCurrentState().initialize(args);
 
                 if (RunMode.isSharedDataMode()) {
-                    // setup and start StarManager service
-                    Journal journal = GlobalStateMgr.getCurrentState().getJournal();
-                    // TODO: support MockJournal in StarMgrServer
-                    Preconditions.checkState(journal instanceof BDBJEJournal);
-                    BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
+                    if (startBDB) {
+                        // setup and start StarManager service
+                        Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+                        Preconditions.checkState(journal instanceof BDBJEJournal);
+                        BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                        StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
+                    } else {
+                        // setup mock journal and start StarManager service
+                        Journal journal = new MockJournal();
+                        StarOSBDBJEJournalSystem journalSystem = StarOSBDBJEJournalSystem.forTest(journal);
+                        StarMgrServer.getCurrentState().initializeForTest(journalSystem, GlobalStateMgr.getImageDirPath());
+                    }
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }
@@ -314,15 +324,22 @@ public class MockedFrontend {
         while (!fe.isReady() && tryCount < 600) {
             try {
                 tryCount++;
+<<<<<<< HEAD
                 Thread.sleep(1000);
                 System.out.println("globalStateMgr is not ready, wait for 1 second");
+=======
+                Thread.sleep(100);
+                if (tryCount % 10 == 0) {
+                    LOG.warn("globalStateMgr is not ready, wait for 1 second");
+                }
+>>>>>>> 94e76c4cd7 ([UT] Support mock journal for shared-data mock cluster (#70153))
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
         if (!GlobalStateMgr.getCurrentState().isReady()) {
-            System.err.println("globalStateMgr is not ready");
+            LOG.error("globalStateMgr is not ready");
             throw new FeStartException("fe start failed");
         }
     }
