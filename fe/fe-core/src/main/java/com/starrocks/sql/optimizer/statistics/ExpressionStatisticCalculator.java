@@ -119,7 +119,7 @@ public class ExpressionStatisticCalculator {
                 // A missing ELSE is an implicit ELSE that returns NULL.
                 childrenColumnStatistics.add(ColumnStatistic.builder() //
                         .setNullsFraction(1.0) //
-                        .setDistinctValuesCount(1) //
+                        .setDistinctValuesCount(0) //
                         .build());
             }
             // 2. use sum of then clause and else clause's distinct values as column distinctValues

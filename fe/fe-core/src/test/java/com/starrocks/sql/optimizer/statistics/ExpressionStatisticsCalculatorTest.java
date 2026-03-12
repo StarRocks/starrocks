@@ -636,6 +636,58 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCaseWhenOperatorNullFractionWithoutElse() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' END  (no ELSE)
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var constantOperator1 = ConstantOperator.createChar("1");
+        final var whenOperator2 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(2));
+        final var constantOperator2 = ConstantOperator.createChar("2");
+
+        // No ELSE clause: elseClause = null
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null, null,
+                ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        Assertions.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        // The implicit ELSE NULL branch has nullsFraction=1.0, the two THEN constant branches have nullsFraction=0.0.
+        Assertions.assertEquals(1.0 / 3.0, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCaseWhenOperatorNullFractionWithElse() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' ELSE 'others' END
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var constantOperator1 = ConstantOperator.createChar("1");
+        final var whenOperator2 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(2));
+        final var constantOperator2 = ConstantOperator.createChar("2");
+
+        final var caseWhenOperator =
+                new CaseWhenOperator(VarcharType.VARCHAR, null, ConstantOperator.createChar("others", VarcharType.VARCHAR),
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        // All 3 branches (2 THEN + 1 ELSE) are non-null constants => average nullFraction = 0.0
+        Assertions.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(3, columnStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
     public void testFromDays() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, FloatType.DOUBLE,
