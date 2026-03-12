@@ -91,12 +91,60 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 #### column_definition
 
 ```SQL
-col_name col_type [COMMENT 'comment']
+col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 ```
 
 :::note
 非パーティション列にはすべて `NULL` をデフォルト値として使用する必要があります。パーティション列は非パーティション列の後に定義する必要があり、`NULL` をデフォルト値として使用することはできません。
 :::
+
+##### デフォルト値
+
+v4.1以降、StarRocksはIcebergテーブルの列にデフォルト値を設定することをサポートしています。この機能には、Icebergフォーマットバージョン3（`"format-version" = "3"`）が必要です。
+
+**用途：**
+
+- **書き込み時の補完**: INSERT文を実行する際、列に値が指定されていない場合、システムは自動的にその列のデフォルト値を使用します。
+- **スキーマ進化時の補完**: 既存のテーブルに新しい列を追加した後、古いデータファイル（新しい列を含まない）を読み取る際、システムは新しい列のデフォルト値を使用します。
+
+**構文:**
+
+```SQL
+col_name col_type DEFAULT default_value
+```
+
+**要件:**
+
+- テーブルはIcebergフォーマットバージョン3（`"format-version" = "3"`）を使用する必要があります。
+- 数値型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、DATE/TIMESTAMP型のデフォルト値は二重引用符で囲む必要があります。例：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
+- 数値型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、STRING、DATE/TIMESTAMP型のデフォルト値は引用符で囲む必要があります。例：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
+
+**例:**
+
+- **デフォルト値を持つテーブルを作成する:**
+
+```SQL
+CREATE TABLE user_info (
+    id INT,
+    name STRING,
+    age INT DEFAULT "18",
+    score DOUBLE DEFAULT "100.0",
+    status STRING DEFAULT 'active',
+    is_active BOOLEAN DEFAULT "true"
+) PROPERTIES ("format-version" = "3");
+```
+
+- **デフォルト値を持つ列を追加する:**
+
+```SQL
+ALTER TABLE user_info ADD COLUMN bonus DOUBLE DEFAULT "50.5";
+```
+
+- **列のデフォルト値を変更する:**
+
+```SQL
+ALTER TABLE user_info MODIFY COLUMN status STRING DEFAULT "inactive";
+```
 
 #### partition_desc
 

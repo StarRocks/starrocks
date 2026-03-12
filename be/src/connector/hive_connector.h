@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
@@ -155,6 +157,9 @@ private:
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
     std::vector<int> _materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> _materialize_slot_default_values;
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;

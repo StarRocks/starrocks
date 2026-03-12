@@ -21,6 +21,7 @@ set(EXEC_FILES
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
+        ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
