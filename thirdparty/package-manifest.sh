@@ -13,6 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+starrocks_filter_default_packages() {
+    local unsupported_packages="$1"
+    local package
+    local unsupported_package
+    local filtered_packages=()
+    local skip_package
+
+    [[ -n "${unsupported_packages}" ]] || return 0
+
+    for package in "${STARROCKS_THIRDPARTY_ALL_PACKAGES[@]}"; do
+        skip_package=0
+        for unsupported_package in ${unsupported_packages}; do
+            if [[ "${package}" == "${unsupported_package}" ]]; then
+                skip_package=1
+                break
+            fi
+        done
+        if [[ "${skip_package}" -eq 0 ]]; then
+            filtered_packages+=("${package}")
+        fi
+    done
+
+    STARROCKS_THIRDPARTY_ALL_PACKAGES=("${filtered_packages[@]}")
+}
+
 starrocks_set_default_packages() {
     local machine_type="$1"
 
@@ -93,5 +118,9 @@ starrocks_set_default_packages() {
 
     if [[ "${machine_type}" != "aarch64" ]]; then
         STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad libdeflate)
+    fi
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        starrocks_filter_default_packages "${DARWIN_UNSUPPORTED_PACKAGES:-}"
     fi
 }

@@ -1108,24 +1108,43 @@ unsupported_package() {
     local package="$1"
     case "${package}" in
         starcache)
-            echo "UNSUPPORTED[darwin] starcache: only Linux prebuilt archives are available"
+            echo "UNSUPPORTED[darwin] starcache: only Linux prebuilt archives are available" >&2
             ;;
         tenann)
-            echo "UNSUPPORTED[darwin] tenann: only Linux prebuilt archives are available"
+            echo "UNSUPPORTED[darwin] tenann: only Linux prebuilt archives are available" >&2
             ;;
         pprof)
-            echo "UNSUPPORTED[darwin] pprof: only Linux binaries are available"
+            echo "UNSUPPORTED[darwin] pprof: only Linux binaries are available" >&2
             ;;
         breakpad)
-            echo "UNSUPPORTED[darwin] breakpad: no Darwin package implementation is provided"
-            ;;
-        clucene)
-            echo "UNSUPPORTED[darwin] clucene: skip the macOS build for now"
+            echo "UNSUPPORTED[darwin] breakpad: no Darwin package implementation is provided" >&2
             ;;
         *)
-            echo "UNSUPPORTED[darwin] ${package}: no Darwin package implementation is provided"
+            echo "UNSUPPORTED[darwin] ${package}: no Darwin package implementation is provided" >&2
             ;;
     esac
+}
+
+is_darwin_unsupported_package() {
+    local package="$1"
+    local unsupported
+
+    for unsupported in ${DARWIN_UNSUPPORTED_PACKAGES:-}; do
+        if [[ "${package}" == "${unsupported}" ]]; then
+            return 0
+        fi
+    done
+    [[ "${package}" == "breakpad" ]]
+}
+
+validate_requested_package() {
+    local package="$1"
+
+    if is_darwin_unsupported_package "${package}"; then
+        unsupported_package "${package}"
+        echo "Darwin build cannot satisfy requested package '${package}'." >&2
+        exit 1
+    fi
 }
 
 build_formula_gtest() {
@@ -1808,6 +1827,17 @@ if [[ "${CONTINUE}" -eq 1 ]] && ([[ -z "${start_package}" ]] || [[ "${#packages[
     usage
     exit 1
 fi
+if [[ "${CONTINUE}" -eq 1 ]]; then
+    validate_requested_package "${start_package}"
+fi
+
+if [[ "${#packages[@]}" -eq 0 ]]; then
+    packages=("${STARROCKS_THIRDPARTY_ALL_PACKAGES[@]}")
+else
+    for package in "${packages[@]}"; do
+        validate_requested_package "${package}"
+    done
+fi
 
 setup_build_environment
 ensure_java_home
@@ -1819,10 +1849,6 @@ fi
 mkdir -p "${TP_INSTALL_DIR}/lib" "${TP_INSTALL_DIR}/lib64" "${TP_INSTALL_DIR}/include" "${TP_INSTALL_DIR}/bin"
 
 "${TP_DIR}/download-thirdparty.sh"
-
-if [[ "${#packages[@]}" -eq 0 ]]; then
-    packages=("${STARROCKS_THIRDPARTY_ALL_PACKAGES[@]}")
-fi
 
 PACKAGE_FOUND=0
 for package in "${packages[@]}"; do
@@ -2004,6 +2030,7 @@ for package in "${packages[@]}"; do
             ;;
         starcache|tenann|pprof|breakpad)
             unsupported_package "${package}"
+            exit 1
             ;;
         streamvbyte)
             build_formula_streamvbyte

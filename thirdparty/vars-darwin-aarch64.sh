@@ -36,14 +36,25 @@ HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
 
 DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof clucene"
 
+darwin_is_unsupported_package() {
+    local package_name
+    local unsupported_package
+
+    package_name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+
+    for unsupported_package in ${DARWIN_UNSUPPORTED_PACKAGES}; do
+        if [[ "${package_name}" == "${unsupported_package}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 filtered_tp_archives=""
 for archive in ${TP_ARCHIVES}; do
-    case "${archive}" in
-        STARCACHE|TENANN|PPROF|CLUCENE)
-            ;;
-        *)
-            filtered_tp_archives="${filtered_tp_archives} ${archive}"
-            ;;
-    esac
+    if darwin_is_unsupported_package "${archive}"; then
+        continue
+    fi
+    filtered_tp_archives="${filtered_tp_archives} ${archive}"
 done
 TP_ARCHIVES="${filtered_tp_archives# }"
