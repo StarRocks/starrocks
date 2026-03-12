@@ -32,7 +32,12 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+<<<<<<< HEAD
         ./common/cow_test.cpp
+=======
+        ./connector/benchmark_connector_test.cpp
+        ./connector/hive_connector_test.cpp
+>>>>>>> 0f0b7ef8db ([Feature] Support Iceberg v3 default value feature (#69525))
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
