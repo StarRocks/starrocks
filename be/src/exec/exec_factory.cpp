@@ -128,6 +128,7 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
             if (child != nullptr) {
                 child->close(state);
             }
+            return st;
         }
         node->add_child(child);
 
