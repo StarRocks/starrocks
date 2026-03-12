@@ -46,6 +46,31 @@ ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
+is_darwin() {
+    [[ "$OSTYPE" == darwin* ]]
+}
+
+is_aarch64_host() {
+    [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]
+}
+
+resolve_java_home() {
+    local java_home_candidate="$1"
+
+    if [[ -z "${java_home_candidate}" ]]; then
+        return 1
+    fi
+    if [[ -f "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home/include/jni.h" ]]; then
+        echo "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home"
+        return 0
+    fi
+    if [[ -f "${java_home_candidate}/include/jni.h" ]]; then
+        echo "${java_home_candidate}"
+        return 0
+    fi
+    echo "${java_home_candidate}"
+}
+
 export STARROCKS_HOME=${ROOT}
 
 if [ -z $BUILD_TYPE ]; then
@@ -75,10 +100,13 @@ fi
 
 set -eo pipefail
 . ${STARROCKS_HOME}/env.sh
+if is_darwin && [[ -n "${JAVA_HOME:-}" ]]; then
+    export JAVA_HOME="$(resolve_java_home "${JAVA_HOME}")"
+fi
 
 if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
-    # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
+    # Darwin thirdparty is prepared separately and validated before BE configure.
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
@@ -86,6 +114,75 @@ else
     fi
     PARALLEL=$[$(nproc)/4+1]
 fi
+
+validate_darwin_thirdparty() {
+    local tp_root="${STARROCKS_THIRDPARTY}"
+    local tp_installed="${tp_root}/installed"
+
+    if [[ ! -d "${tp_installed}" ]]; then
+        if [[ -d "${tp_root}/bin" || -d "${tp_root}/lib" || -d "${tp_root}/lib64" ]]; then
+            echo "Error: STARROCKS_THIRDPARTY must point to the thirdparty root, not the installed directory: ${tp_root}"
+        else
+            echo "Error: macOS BE build requires STARROCKS_THIRDPARTY to point to a prepared Darwin thirdparty root."
+            echo "Expected directory: ${tp_installed}"
+        fi
+        exit 1
+    fi
+
+    local required_paths=(
+        "${tp_installed}/bin/protoc"
+        "${tp_installed}/bin/thrift"
+    )
+    local required_path
+    for required_path in "${required_paths[@]}"; do
+        if [[ ! -e "${required_path}" ]]; then
+            echo "Error: missing macOS thirdparty artifact: ${required_path}"
+            exit 1
+        fi
+    done
+
+    local required_libs=(
+        "libprotobuf.a"
+        "librocksdb.a"
+        "libglog.a"
+        "libbrpc.a"
+    )
+    local required_lib
+    for required_lib in "${required_libs[@]}"; do
+        if [[ ! -e "${tp_installed}/lib/${required_lib}" && ! -e "${tp_installed}/lib64/${required_lib}" ]]; then
+            echo "Error: missing macOS thirdparty artifact: ${required_lib} under ${tp_installed}/lib or ${tp_installed}/lib64"
+            exit 1
+        fi
+    done
+
+    local bundled_java_home="${tp_installed}/open_jdk"
+    local resolved_java_home=""
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        resolved_java_home="$(resolve_java_home "${JAVA_HOME}")"
+    fi
+    local bundled_jni_header="${bundled_java_home}/include/jni.h"
+    local java_home_jni_header=""
+    if [[ -n "${resolved_java_home}" ]]; then
+        java_home_jni_header="${resolved_java_home}/include/jni.h"
+    fi
+    if [[ ! -f "${bundled_jni_header}" && ! -f "${java_home_jni_header}" ]]; then
+        echo "Error: missing JNI headers. Expected ${bundled_jni_header} or ${resolved_java_home}/include/jni.h"
+        exit 1
+    fi
+
+    local bundled_libjvm=""
+    local java_home_libjvm=""
+    if [[ -d "${bundled_java_home}/lib" ]]; then
+        bundled_libjvm=$(find "${bundled_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
+    fi
+    if [[ -n "${resolved_java_home}" && -d "${resolved_java_home}/lib" ]]; then
+        java_home_libjvm=$(find "${resolved_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
+    fi
+    if [[ -z "${bundled_libjvm}" && -z "${java_home_libjvm}" ]]; then
+        echo "Error: missing libjvm.dylib under ${bundled_java_home} and ${resolved_java_home:-${JAVA_HOME:-JAVA_HOME}}"
+        exit 1
+    fi
+}
 
 # Check args
 usage() {
@@ -210,12 +307,20 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
-WITH_STARCACHE=ON
+if is_darwin; then
+    WITH_STARCACHE=OFF
+else
+    WITH_STARCACHE=ON
+fi
 WITH_PCH=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=ON
+if is_darwin; then
+    WITH_TENANN=OFF
+else
+    WITH_TENANN=ON
+fi
 CONFIGURE_ONLY=OFF
 WITH_RELATIVE_SRC_PATH=ON
 ENABLE_MULTI_DYNAMIC_LIBS=OFF
@@ -249,7 +354,11 @@ if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
-    ENABLE_JIT=ON
+    if is_darwin; then
+        ENABLE_JIT=OFF
+    else
+        ENABLE_JIT=ON
+    fi
 fi
 if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
     DISABLE_JAVA_CHECK_STYLE=OFF
@@ -368,6 +477,10 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     BUILD_JAVA_EXT=OFF
 fi
 
+if is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
+    validate_darwin_thirdparty
+fi
+
 echo "Get params:
     BUILD_BE                    -- $BUILD_BE
     BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
@@ -433,10 +546,18 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
 fi
 cd ${STARROCKS_HOME}
 
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+JAVA_LIBRARY_PATH=""
+if is_darwin; then
+    if [[ -d "${JAVA_HOME}/lib/server" ]]; then
+        JAVA_LIBRARY_PATH="${JAVA_HOME}/lib/server:${JAVA_HOME}/lib"
+    fi
+elif is_aarch64_host; then
+    JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
 else
-    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+    JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+fi
+if [[ -n "${JAVA_LIBRARY_PATH}" ]]; then
+    export LIBRARY_PATH="${JAVA_LIBRARY_PATH}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 fi
 
 addon_mvn_opts=""
@@ -648,7 +769,7 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] ; then
+    if [ "${ibuildtype}" == "release" ] && ! is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
         FORMAT_LIB=libstarrocks_format.so
         FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
@@ -687,13 +808,41 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
-    mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    shopt -s nullglob
+    be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
+    if is_darwin; then
+        be_shared_libs+=(${STARROCKS_HOME}/be/output/lib/*.dylib ${STARROCKS_HOME}/be/output/lib/*.dylib.*)
+    fi
+    if (( ${#be_shared_libs[@]} > 0 )); then
+        cp -r -p "${be_shared_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/
+    fi
+    if is_darwin; then
+        if [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib && ! -e ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib ]]; then
+            cp -p ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib
+        fi
+    elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
+        mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    fi
+    if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    fi
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
-    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+    if is_darwin; then
+        jemalloc_release_libs=(${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib.*)
+        if (( ${#jemalloc_release_libs[@]} > 0 )); then
+            cp -r -p "${jemalloc_release_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/jemalloc/
+        fi
+        jemalloc_debug_libs=(${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc*.dylib ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc*.dylib.*)
+        if (( ${#jemalloc_debug_libs[@]} > 0 )); then
+            mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+            cp -r -p "${jemalloc_debug_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/
+        fi
+    else
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+    fi
+    shopt -u nullglob
 
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
@@ -703,7 +852,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] ; then
+    if [ "${ibuildtype}" == "release" ] && ! is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
         BE_BIN=starrocks_be
         BE_BIN_DEBUGINFO=starrocks_be.debuginfo

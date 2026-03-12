@@ -17,6 +17,28 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/geo")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/geo")
 
+find_program(FLEX_EXECUTABLE NAMES flex REQUIRED)
+if (APPLE)
+    find_program(BISON_EXECUTABLE NAMES bison PATHS /opt/homebrew/opt/bison/bin /usr/local/opt/bison/bin NO_DEFAULT_PATH)
+    if (NOT BISON_EXECUTABLE)
+        find_program(BISON_EXECUTABLE NAMES bison)
+    endif()
+else()
+    find_program(BISON_EXECUTABLE NAMES bison REQUIRED)
+endif()
+
+if (NOT BISON_EXECUTABLE)
+    message(FATAL_ERROR "bison is required to generate BE geo parser sources")
+endif()
+
+execute_process(COMMAND ${BISON_EXECUTABLE} --version
+                OUTPUT_VARIABLE BISON_VERSION_OUTPUT
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+string(REGEX MATCH "[0-9]+(\\.[0-9]+)+" BISON_VERSION "${BISON_VERSION_OUTPUT}")
+if (APPLE AND BISON_VERSION VERSION_LESS "3.0.0")
+    message(FATAL_ERROR "macOS BE build requires bison >= 3.0. Install Homebrew bison so ./build.sh --be can generate geo parser sources.")
+endif()
+
 ADD_BE_LIB(Geo
     geo_common.cpp
     geo_types.cpp
@@ -35,7 +57,7 @@ endif()
 add_custom_command(
     OUTPUT ${GENSRC_DIR}/geo/wkt_lex.l.cpp ${GENSRC_DIR}/geo/wkt_lex.l.h
     COMMAND mkdir -p ${GENSRC_DIR}/geo
-    COMMAND flex --header-file=${GENSRC_DIR}/geo/wkt_lex.l.h --outfile=${GENSRC_DIR}/geo/wkt_lex.l.cpp
+    COMMAND ${FLEX_EXECUTABLE} --header-file=${GENSRC_DIR}/geo/wkt_lex.l.h --outfile=${GENSRC_DIR}/geo/wkt_lex.l.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/wkt_lex.l
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/wkt_lex.l)
 set_source_files_properties(${GENSRC_DIR}/geo/wkt_lex.l.cpp PROPERTIES GENERATED TRUE)
@@ -43,7 +65,6 @@ set_source_files_properties(${GENSRC_DIR}/geo/wkt_lex.l.cpp PROPERTIES GENERATED
 add_custom_command(
     OUTPUT ${GENSRC_DIR}/geo/wkt_yacc.y.cpp  ${GENSRC_DIR}/geo/wkt_yacc.y.hpp
     COMMAND mkdir -p ${GENSRC_DIR}/geo
-    COMMAND bison --output=${GENSRC_DIR}/geo/wkt_yacc.y.cpp ${CMAKE_CURRENT_SOURCE_DIR}/wkt_yacc.y
+    COMMAND ${BISON_EXECUTABLE} --output=${GENSRC_DIR}/geo/wkt_yacc.y.cpp ${CMAKE_CURRENT_SOURCE_DIR}/wkt_yacc.y
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/wkt_yacc.y)
 set_source_files_properties(${GENSRC_DIR}/geo/wkt_yacc.y.cpp PROPERTIES GENERATED TRUE)
-
