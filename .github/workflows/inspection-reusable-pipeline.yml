@@ -28,6 +28,11 @@ on:
         required: true
         type: string
         default: "centos7"
+      SYSTEM_TEST_MODE:
+        description: "SYSTEM TEST MODE"
+        required: false
+        type: string
+        default: "native"
       CLUSTER_NAME:
         description: "CLUSTER NAME"
         required: false
@@ -78,7 +83,8 @@ env:
   FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
-  CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
+  SYSTEM_TEST_MODE: ${{ inputs.SYSTEM_TEST_MODE }}
+  CLUSTER_NAME: ${{ inputs.SYSTEM_TEST_MODE == 'cloud' && (inputs.CLUSTER_NAME == 'ci-admit' && 'ci-admit-cloud' || inputs.CLUSTER_NAME) || inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
   WITH_FEATURE_COV: ${{ inputs.WITH_FEATURE_COV }}
@@ -102,8 +108,8 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
-          conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-starrocks_deploy.conf
+          ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ${LINUX_DISTRO} ${arm_arg}
+          conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-${SYSTEM_TEST_MODE}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
 
@@ -114,6 +120,7 @@ jobs:
           cd ci-tool && source lib/init.sh
           echo "##### Package(BE): ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          echo "##### System Test Mode: ${SYSTEM_TEST_MODE}" >> $GITHUB_STEP_SUMMARY
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --with-coverage ${arm_arg}
 
@@ -165,7 +172,7 @@ jobs:
         uses: ./.actions/nose-report-action
         if: always() && steps.prepare-tools.outcome == 'success'
         with:
-          check_name: SQL-Tester Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          check_name: SQL-Tester Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }} ${{ env.SYSTEM_TEST_MODE }})
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -175,7 +182,7 @@ jobs:
         uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }} ${{ env.SYSTEM_TEST_MODE }})
           path: |
             test/log/
             test/crash_logs/
@@ -275,7 +282,7 @@ jobs:
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull
 
           cd ${{ github.workspace }}/ci-tool
-          cluster_type=native
+          cluster_type=${SYSTEM_TEST_MODE}
           ./bin/run-admit-single.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --cluster ${cluster_type}
 
       - name: Prepare Tools
@@ -290,7 +297,7 @@ jobs:
         uses: ./.actions/nose-report-action
         if: always() && steps.prepare-tools.outcome == 'success'
         with:
-          check_name: Admit Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
+          check_name: Admit Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }} ${{ env.SYSTEM_TEST_MODE }})
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
