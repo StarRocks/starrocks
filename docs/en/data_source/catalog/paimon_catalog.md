@@ -126,9 +126,13 @@ The following table describes the parameter you need to configure in `CatalogPar
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| paimon.catalog.type      | Yes      | The type of metastore that you use for your Paimon cluster. Set this parameter to `filesystem` or `hive`. |
-| paimon.catalog.warehouse | Yes      | The warehouse storage path of your Paimon data. |
-| hive.metastore.uris      | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| paimon.catalog.type      | Yes      | The type of metastore that you use for your Paimon cluster. Valid values: `filesystem`, `hive`, `jdbc`. |
+| paimon.catalog.warehouse | Yes      | The warehouse storage path of your Paimon data.                 |
+| uri                    | No       | The JDBC connection URI for the metastore database. Required if `paimon.catalog.type` is set to `jdbc`. Example: `jdbc:mysql://host:3306/paimon_metastore`. |
+| jdbc.user               | No       | The JDBC username for connecting to the metastore database. Used when `paimon.catalog.type` is `jdbc`. |
+| jdbc.password           | No       | The JDBC password for connecting to the metastore database. Used when `paimon.catalog.type` is `jdbc`. |
+| catalog-key             | No       | The catalog key used to isolate multiple Paimon catalogs sharing the same JDBC metastore database. Default value: `jdbc`. |
+| hive.metastore.uris      | No       | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. Required if `paimon.catalog.type` is set to `hive`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 > **NOTE**
 >
@@ -628,6 +632,32 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
+#### JDBC Metastore
+
+If you choose JDBC metastore for your Paimon cluster, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG paimon_catalog_jdbc
+PROPERTIES
+(
+    "type" = "paimon",
+    "paimon.catalog.type" = "jdbc",
+    "uri" = "jdbc:mysql://<host>:<port>/<database_name>",
+    "jdbc.user" = "<username>",
+    "jdbc.password" = "<password>",
+    "paimon.catalog.warehouse" = "hdfs://<host>:<port>/<warehouse_path>"
+);
+```
+
+The following table describes the parameters for JDBC metastore.
+
+| Parameter                | Required | Description                                                  |
+| ------------------------ | -------- | ------------------------------------------------------------ |
+| uri                      | Yes      | The JDBC connection URI for the metastore database. Example: `jdbc:mysql://host:3306/paimon_metastore`. |
+| jdbc.user                | No       | The JDBC username for connecting to the metastore database.  |
+| jdbc.password            | No       | The JDBC password for connecting to the metastore database.  |
+| catalog-key              | No       | The catalog key used to isolate multiple Paimon catalogs sharing the same JDBC metastore database. Default value: `jdbc`. |
 
 ## View Paimon catalogs
 
