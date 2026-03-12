@@ -1,0 +1,39 @@
+-- name: test_topn_with_agg_tbl
+CREATE TABLE IF NOT EXISTS invalid_plan (
+    `time` DATETIME NOT NULL,
+    `country` STRING NOT NULL,
+    `spend` DOUBLE SUM DEFAULT "0",
+    `revenue` DOUBLE SUM DEFAULT "0"
+)
+ENGINE=OLAP
+AGGREGATE KEY(`time`, `country`)
+PARTITION BY date_trunc('day', `time`)
+DISTRIBUTED BY HASH(`country`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1" 
+);
+-- result:
+-- !result
+INSERT INTO invalid_plan VALUES ('2020-01-01', 'US', 100, 1000);
+-- result:
+-- !result
+SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE time >= '2000-01-01'  ORDER BY spend DESC LIMIT 200;
+-- result:
+100.0	1000.0
+-- !result
+SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE country != 'X'  ORDER BY spend DESC LIMIT 200;
+-- result:
+100.0	1000.0
+-- !result
+SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE time >= '2000-01-01' and country != 'X' ORDER BY spend DESC LIMIT 200;
+-- result:
+100.0	1000.0
+-- !result
+SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE time >= '2000-01-01' ORDER BY revenue DESC LIMIT 200;
+-- result:
+100.0	1000.0
+-- !result
+SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE time >= '2020-01-01' AND time < '2021-01-01' ORDER BY spend DESC LIMIT 200;
+-- result:
+100.0	1000.0
+-- !result
