@@ -147,6 +147,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/st1/s1, /st1/s2]");
+<<<<<<< HEAD
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
@@ -155,6 +156,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  3 <-> [3: v1, BIGINT, true]\n"
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     @Test
@@ -165,6 +176,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 " select v1, st1, st2, st3 from sc0 x2) x3";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "[/st1/s1]");
+<<<<<<< HEAD
         assertContains(plan, "  5:Project\n" +
                 "  |  output columns:\n" +
                 "  |  22 <-> 9: st1.s1[false]\n" +
@@ -177,6 +189,20 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
+=======
+        assertContains(plan, "  5:Project\n"
+                + "  |  output columns:\n"
+                + "  |  22 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  4:OlapScanNode");
+        assertContains(plan, "  2:Project\n"
+                + "  |  output columns:\n"
+                + "  |  21 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  1:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     @Test
@@ -184,6 +210,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql =
                 "with t1 as (select * from sc0) select x1.st1.s1, x2.st2.s2 from t1 x1 join t1 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
@@ -192,6 +219,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: v1, BIGINT, true]\n"
+                + "  |  26 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  27 <-> [3: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st1/s1, /st2/s2]");
     }
 
@@ -411,6 +448,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         } finally {
             connectContext.getSessionVariable().setCboCTERuseRatio(1.15);
         }
+<<<<<<< HEAD
         assertContains(plan, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
@@ -425,6 +463,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  4:Project\n"
+                + "  |  output columns:\n"
+                + "  |  15 <-> [15: v1, BIGINT, true]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  3:OlapScanNode");
+        assertContains(plan, "1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  8 <-> [8: v1, BIGINT, true]\n"
+                + "  |  24 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st1/s1]");
         assertContains(plan, "ColumnAccessPath: [/st2/s2]");
     }
@@ -436,6 +490,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "union all " +
                 "select * from sc0) x1 join sc0 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  22 <-> [22: v1, BIGINT, true]\n" +
@@ -443,16 +498,26 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  8:OlapScanNode");
+=======
+        assertContains(plan, "  9:Project\n"
+                + "  |  output columns:\n"
+                + "  |  22 <-> [22: v1, BIGINT, true]\n"
+                + "  |  33 <-> [24: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].sm3[true][1]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  8:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st2/sm3/INDEX]");
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [15, BIGINT, true] | [34, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [15, BIGINT, true] | [34, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[32, ARRAY<INT>, true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [1: v1, BIGINT, true] | [35: expr, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [1: v1, BIGINT, true] | [35: expr, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[36: expr, ARRAY<INT>, true]\n" +
-                "  |      [8: v1, BIGINT, true] | [37: expr, struct<s31 int(11), s32 int(11)>, true] | " +
+                "  |      [8: v1, BIGINT, true] | [37: expr, struct<`s31` int(11), `s32` int(11)>, true] | " +
                 "[38: expr, ARRAY<INT>, true]");
+<<<<<<< HEAD
         assertContains(plan, "  5:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: v1, BIGINT, true]\n" +
@@ -468,6 +533,25 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  35 <-> 5: st4.ss3[false]\n" +
                 "  |  36 <-> 4: st3.sa3[false]\n" +
                 "  |  cardinality: 1");
+=======
+        assertContains(plan, "  5:Project\n"
+                + "  |  output columns:\n"
+                + "  |  8 <-> [8: v1, BIGINT, true]\n"
+                + "  |  37 <-> [12: st4, struct<`s1` int(11), `s2` int(11), `ss3` struct<`s31` int(11), "
+                + "`s32` int(11)>>, true].ss3[false]\n"
+                + "  |  38 <-> [11: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  4:OlapScanNode");
+        assertContains(plan, "ColumnAccessPath: [/st3/sa3, /st4/ss3]");
+        assertContains(plan, "  2:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: v1, BIGINT, true]\n"
+                + "  |  35 <-> [5: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
+                + "  |  36 <-> [4: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  cardinality: 1");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st3/sa3, /st4/ss3]");
     }
 
@@ -478,16 +562,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "union all " +
                 "select v1, st1, st3, st4 from sc0 group by v1, st1, st3, st4) x1 join sc0 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "30 <-> 21: st2.sm3[true][1]");
+=======
+        assertContains(plan, "30 <-> [21: st2, struct<`s1` int(11), `s2` int(11), "
+                + "`sm3` map<int(11),int(11)>>, true].sm3[true][1]");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st2/sm3/INDEX]");
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [15, BIGINT, true] | [29, ARRAY<INT>, true] | " +
-                "[31, struct<s31 int(11), s32 int(11)>, true]\n" +
+                "[31, struct<`s31` int(11), `s32` int(11)>, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: v1, BIGINT, true] | [32: expr, ARRAY<INT>, true] | " +
-                "[33: expr, struct<s31 int(11), s32 int(11)>, true]\n" +
+                "[33: expr, struct<`s31` int(11), `s32` int(11)>, true]\n" +
                 "  |      [8: v1, BIGINT, true] | [34: expr, ARRAY<INT>, true] | " +
+<<<<<<< HEAD
                 "[35: expr, struct<s31 int(11), s32 int(11)>, true]");
         assertContains(plan, "  6:Project\n" +
                 "  |  output columns:\n" +
@@ -505,6 +595,27 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
+=======
+                "[35: expr, struct<`s31` int(11), `s32` int(11)>, true]");
+        assertContains(plan, "  6:Project\n"
+                + "  |  output columns:\n"
+                + "  |  8 <-> [8: v1, BIGINT, true]\n"
+                + "  |  34 <-> [11: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  35 <-> [12: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  5:AGGREGATE");
+        assertContains(plan, "  2:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: v1, BIGINT, true]\n"
+                + "  |  32 <-> [4: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true].sa3[false]\n"
+                + "  |  33 <-> [5: st4, struct<`s1` int(11), `s2` int(11), "
+                + "`ss3` struct<`s31` int(11), `s32` int(11)>>, true].ss3[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  1:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st3/sa3, /st4/ss3]");
     }
 
@@ -515,11 +626,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "x on x.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
+<<<<<<< HEAD
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
                 "  |  12 <-> 4: st1.s1[false]\n" +
                 "  |  13 <-> 4: st1.s2[false]");
+=======
+        assertContains(plan, "  2:Project\n"
+                + "  |  output columns:\n"
+                + "  |  3 <-> [3: v1, BIGINT, true]\n"
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]\n");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     @Test
@@ -529,6 +648,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "x on x.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
+<<<<<<< HEAD
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
@@ -539,6 +659,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
                 "  |  13 <-> 4: st1.s1[false]\n" +
                 "  |  14 <-> 4: st1.s2[false]");
+=======
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  3 <-> [3: v1, BIGINT, true]\n"
+                + "  |  4 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true]\n"
+                + "  |  10 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[true]");
+        assertContains(plan, "  3:Project\n"
+                + "  |  output columns:\n"
+                + "  |  3 <-> [3: v1, BIGINT, true]\n"
+                + "  |  13 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  14 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s2[false]");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     @Test
@@ -561,6 +693,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         } finally {
             connectContext.getSessionVariable().setCboCTERuseRatio(1.15);
         }
+<<<<<<< HEAD
         assertContains(plan, "  7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
@@ -575,6 +708,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  7:Project\n"
+                + "  |  output columns:\n"
+                + "  |  15 <-> [15: v1, BIGINT, true]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  6:AGGREGATE");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  8 <-> [8: v1, BIGINT, true]\n"
+                + "  |  24 <-> [9: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st1/s1]");
         assertNotContains(plan, "ColumnAccessPath: [/st2/s2]");
     }
@@ -586,6 +735,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "(select v1, st1, st2 from t1 group by v1, st1,st2) x2 on x1.v1 = x2.v1";
         String plan;
         plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  12:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
@@ -605,6 +755,27 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  12:Project\n"
+                + "  |  output columns:\n"
+                + "  |  15 <-> [15: v1, BIGINT, true]\n"
+                + "  |  25 <-> [17: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true].s2[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  11:AGGREGATE");
+        assertContains(plan, "  Output Exprs:1: v1 | 2: st1 | 3: st2 | 26: expr\n" +
+                "  Input Partition: RANDOM\n" +
+                "  MultiCastDataSinks:");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  1 <-> [1: v1, BIGINT, true]\n"
+                + "  |  2 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true]\n"
+                + "  |  3 <-> [3: st2, struct<`s1` int(11), `s2` int(11), `sm3` map<int(11),int(11)>>, true]\n"
+                + "  |  26 <-> [2: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[true]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertNotContains(plan, "ColumnAccessPath:");
     }
 
@@ -614,6 +785,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 " left join " +
                 "sc0 x on x.v1 = t0.v1";
         String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "  6:Project\n" +
                 "  |  output columns:\n" +
                 "  |  10 <-> [12: expr, INT, true]\n" +
@@ -630,6 +802,24 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+=======
+        assertContains(plan, "  6:Project\n"
+                + "  |  output columns:\n"
+                + "  |  10 <-> [12: expr, INT, true]\n"
+                + "  |  11 <-> [6: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true] IS NULL\n"
+                + "  |  hasNullableGenerateChild: true\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  5:HASH JOIN");
+        assertContains(plan, "  1:Project\n"
+                + "  |  output columns:\n"
+                + "  |  3 <-> [3: v1, BIGINT, true]\n"
+                + "  |  6 <-> [6: st3, struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>, true]\n"
+                + "  |  12 <-> [4: st1, struct<`s1` int(11), `s2` int(11)>, true].s1[false]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  0:OlapScanNode");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
         assertContains(plan, "ColumnAccessPath: [/st1/s1]");
     }
 
@@ -695,7 +885,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     + "     partitionsRatio=0/1, tabletsRatio=0/0\n"
                     + "     tabletList=\n"
                     + "     actualRows=0, avgRowSize=3.0\n"
-                    + "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n"
+                    + "     Pruned type: 4 <-> [struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>]\n"
                     + "     ColumnAccessPath: [/st3/sa3]\n"
                     + "     cardinality: 1");
         }
@@ -719,6 +909,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         {
             String sql = "select st3.sa3[0], array_length(st3.sa3) from sc0 where (([1,2,3]) is NOT NULL)";
             String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: sc0, rollup: sc0\n" +
                     "     preAggregation: on\n" +
@@ -726,6 +917,9 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
                     "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
+=======
+            assertContains(plan, "     Pruned type: 4 <-> [struct<`s1` int(11), `s2` int(11), `sa3` array<int(11)>>]\n" +
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
                     "     ColumnAccessPath: [/st3/sa3/ALL]\n" +
                     "     cardinality: 1\n");
         }

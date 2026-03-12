@@ -29,8 +29,13 @@ public class StructTypeTest {
 
     @Test
     public void testUnnamedStruct() {
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/StructTypeTest.java
         StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
         Assertions.assertEquals("struct<col1 int(11), col2 datetime>", type.toSql());
+=======
+        StructType type = new StructType(Lists.newArrayList(IntegerType.INT, DateType.DATETIME));
+        Assertions.assertEquals("struct<`col1` int(11), `col2` datetime>", type.toSql());
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967)):fe/fe-type/src/test/java/com/starrocks/type/StructTypeTest.java
     }
 
     @Test

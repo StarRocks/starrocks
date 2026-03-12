@@ -205,6 +205,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
         {
             String sql = "select k from complex_t where array_length(array_map(x->x+10, v5.b.a)) > 10";
             String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
             assertContains(plan, "  2:SELECT\n" +
                     "  |  predicates: array_length(array_map(<slot 11> -> <slot 11> + 10, 12: subfield)) > 10\n" +
                     "  |  cardinality: 1\n" +
@@ -214,6 +215,17 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     "  |  1 <-> [1: k, BIGINT, false]\n" +
                     "  |  12 <-> 6: v5.b.a[false]\n" +
                     "  |  cardinality: 1");
+=======
+            assertContains(plan, "2:SELECT\n"
+                    + "  |  predicates: array_length(array_map(<slot 11> -> <slot 11> + 10, 12: subfield)) > 10\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  12 <-> [6: v5, struct<`a` int(11), `b` struct<`a` array<bigint(20)>>>, true].b.a[false]\n"
+                    + "  |  cardinality: 1");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
             assertContains(plan, "ColumnAccessPath: [/v5/b/a]");
         }
         {
@@ -292,6 +304,7 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
             String sql = "select k from complex_t where cardinality(v1) + cardinality(v5.b.a) > 3 and " +
                     "cardinality(v1) + cardinality(v5.b.a) + cardinality(v6) >5";
             String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
             assertContains(plan, "  2:SELECT\n" +
                     "  |  predicates: 16: add > 3, 16: add + CAST(13: cardinality AS BIGINT) > 5\n" +
                     "  |    common sub expr:\n" +
@@ -310,8 +323,29 @@ public class ScanPredicateExprReuseTest extends PlanTestBase {
                     "  |  13 <-> cardinality[([7: v6, MAP<INT,INT>, true]); args: INVALID_TYPE; " +
                     "result: INT; args nullable: true; result nullable: true]\n" +
                     "  |  cardinality: 1");
+=======
+            assertContains(plan, "  2:SELECT\n"
+                    + "  |  predicates: 16: add > 3, 16: add + CAST(13: cardinality AS BIGINT) > 5\n"
+                    + "  |    common sub expr:\n"
+                    + "  |    <slot 16> : 14: cast + 15: cast\n"
+                    + "  |    <slot 14> : CAST(11: cardinality AS BIGINT)\n"
+                    + "  |    <slot 15> : CAST(12: cardinality AS BIGINT)\n"
+                    + "  |  cardinality: 1\n"
+                    + "  |  \n"
+                    + "  1:Project\n"
+                    + "  |  output columns:\n"
+                    + "  |  1 <-> [1: k, BIGINT, false]\n"
+                    + "  |  11 <-> cardinality[([2: v1, ARRAY<BIGINT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                    + "true; result nullable: true]\n"
+                    + "  |  12 <-> cardinality[([6: v5, struct<`a` int(11), `b` "
+                    + "struct<`a` array<bigint(20)>>>, true].b.a[true]); "
+                    + "args: INVALID_TYPE; result: INT; args nullable: true; result nullable: true]\n"
+                    + "  |  13 <-> cardinality[([7: v6, MAP<INT,INT>, true]); args: INVALID_TYPE; result: INT; args nullable: "
+                    + "true; result nullable: true]\n"
+                    + "  |  cardinality: 1");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
             assertContains(plan, "     Pruned type: 2 <-> [ARRAY<BIGINT>]\n" +
-                    "     Pruned type: 6 <-> [struct<a int(11), b struct<a array<bigint(20)>>>]\n" +
+                    "     Pruned type: 6 <-> [struct<`a` int(11), `b` struct<`a` array<bigint(20)>>>]\n" +
                     "     Pruned type: 7 <-> [MAP<INT,INT>]\n" +
                     "     ColumnAccessPath: [/v1/OFFSET, /v5/b/a/OFFSET, /v6/OFFSET]");
         }

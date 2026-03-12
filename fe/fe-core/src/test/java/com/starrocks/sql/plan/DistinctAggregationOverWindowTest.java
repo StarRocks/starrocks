@@ -417,7 +417,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
 
         assertCContains(plan, "  3:ANALYTIC\n" +
                 "  |  functions: [, fused_multi_distinct_count_sum_avg[([7: cast, DECIMAL128(19,2), true]); args: " +
-                "DECIMAL128; result: struct<count bigint(20), sum decimal(38, 2), avg decimal(38, 8)>; " +
+                "DECIMAL128; result: struct<`count` bigint(20), `sum` decimal(38, 2), `avg` decimal(38, 8)>; " +
                 "args nullable: true; result nullable: true], ]\n" +
                 "  |  partition by: [1: v1, BIGINT, true]\n" +
                 "  |  order by: [2: v2, BIGINT, true] ASC\n" +
@@ -428,9 +428,18 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
                 "  |  2 <-> [2: v2, BIGINT, true]\n" +
                 "  |  3 <-> [3: v3, BIGINT, true]\n" +
+<<<<<<< HEAD
                 "  |  4 <-> 8: fused_multi_distinct_count_sum_avg.count[false]\n" +
                 "  |  5 <-> 8: fused_multi_distinct_count_sum_avg.sum[false]\n" +
                 "  |  6 <-> 8: fused_multi_distinct_count_sum_avg.avg[false]");
+=======
+                "  |  4 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
+                "`avg` decimal(38, 8)>, true].count[false]\n" +
+                "  |  5 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
+                "`avg` decimal(38, 8)>, true].sum[false]\n" +
+                "  |  6 <-> [8: fused_multi_distinct_count_sum_avg, struct<`count` bigint(20), `sum` decimal(38, 2), " +
+                "`avg` decimal(38, 8)>, true].avg[false]");
+>>>>>>> 766a8e1a32 ([BugFix] Fix struct field names not being escaped (#68967))
     }
 
     private Type getAggregateFunctionReturnType(String sql, String... functionNames) throws Exception {
