@@ -91,12 +91,59 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 #### column_definition
 
 ```SQL
-col_name col_type [COMMENT 'comment']
+col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 ```
 
 :::note
 所有非分区列必须使用 `NULL` 作为默认值。分区列必须在非分区列之后定义，且不能使用 `NULL` 作为默认值。
 :::
+
+##### 默认值
+
+从 v4.1 开始，StarRocks 支持为 Iceberg 表的列设置默认值。此功能需要 Iceberg 格式版本 3（`"format-version" = "3"`）。
+
+**用途：**
+
+- **写入时填充**：当执行 INSERT 语句时，如果未为某列指定值，系统将自动使用该列的默认值填充。
+- **Schema Evolution 填充**：当为已存在的表添加新列后，读取旧数据文件（不包含新列）时，系统将使用新列的默认值进行填充。
+
+**语法：**
+
+```SQL
+col_name col_type DEFAULT default_value
+```
+
+**要求：**
+
+- 表必须使用 Iceberg 格式版本 3（`"format-version" = "3"`）。
+- 数值类型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、STRING 和 DATE/TIMESTAMP 类型的默认值必须使用引号包裹。例如：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
+
+**示例：**
+
+- **创建带有默认值的表：**
+
+```SQL
+CREATE TABLE user_info (
+    id INT,
+    name STRING,
+    age INT DEFAULT "18",
+    score DOUBLE DEFAULT "100.0",
+    status STRING DEFAULT 'active',
+    is_active BOOLEAN DEFAULT "true"
+) PROPERTIES ("format-version" = "3");
+```
+
+- **添加带有默认值的列：**
+
+```SQL
+ALTER TABLE user_info ADD COLUMN bonus DOUBLE DEFAULT "50.5";
+```
+
+- **修改列的默认值：**
+
+```SQL
+ALTER TABLE user_info MODIFY COLUMN status STRING DEFAULT "inactive";
+```
 
 #### partition_desc
 

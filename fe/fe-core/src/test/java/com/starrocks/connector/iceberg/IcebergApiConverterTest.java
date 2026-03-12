@@ -52,6 +52,7 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.StructProjection;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +75,9 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -632,6 +637,304 @@ public class IcebergApiConverterTest {
             assertTrue(true);
         }
         assertEquals(sortOrder, null);
+    }
+
+    @Test
+    public void testToFullSchemasWithInitialDefaultValue() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("c_bool").withId(1)
+                .ofType(Types.BooleanType.get()).withInitialDefault(true).build());
+        fields.add(Types.NestedField.optional("c_int").withId(2)
+                .ofType(Types.IntegerType.get()).withInitialDefault(7).build());
+        fields.add(Types.NestedField.optional("c_date").withId(3)
+                .ofType(Types.DateType.get()).withInitialDefault(2).build());
+        long tsMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
+        fields.add(Types.NestedField.optional("c_ts").withId(4)
+                .ofType(Types.TimestampType.withoutZone()).withInitialDefault(tsMicros).build());
+        fields.add(Types.NestedField.optional("c_no_default").withId(5)
+                .ofType(Types.StringType.get()).build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+
+        assertEquals("1", columns.get(0).getDefaultValue());
+        assertEquals("7", columns.get(1).getDefaultValue());
+        assertEquals("1970-01-03", columns.get(2).getDefaultValue());
+        assertEquals("2024-01-02 03:04:05", columns.get(3).getDefaultValue());
+        Assertions.assertNull(columns.get(4).getDefaultValue());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithColumnDefaultValue() {
+        Column boolCol = new Column("c_bool", BooleanType.BOOLEAN, true);
+        boolCol.setDefaultValue("1");
+        Column intCol = new Column("c_int", IntegerType.INT, true);
+        intCol.setDefaultValue("7");
+        Column tsCol = new Column("c_ts", DateType.DATETIME, true);
+        tsCol.setDefaultValue("2024-01-02 03:04:05");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(boolCol, intCol, tsCol));
+        Types.NestedField boolField = schema.findField("c_bool");
+        Types.NestedField intField = schema.findField("c_int");
+        Types.NestedField tsField = schema.findField("c_ts");
+
+        assertTrue((Boolean) boolField.initialDefault());
+        assertTrue((Boolean) boolField.writeDefault());
+        assertEquals(7, intField.initialDefault());
+        assertEquals(7, intField.writeDefault());
+        long expectedMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
+        assertEquals(expectedMicros, ((Number) tsField.initialDefault()).longValue());
+        assertEquals(expectedMicros, ((Number) tsField.writeDefault()).longValue());
+    }
+
+    @Test
+    public void testToFullSchemasUsesIcebergNullabilityAndWriteDefaultLookup() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.required("c_required").withId(1).ofType(Types.IntegerType.get()).build());
+        fields.add(Types.NestedField.optional("c_optional").withId(2)
+                .ofType(Types.IntegerType.get()).withWriteDefault(9).build());
+        Schema schema = new Schema(fields);
+
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertFalse(columns.get(0).isAllowNull());
+        assertTrue(columns.get(1).isAllowNull());
+        assertEquals("9", IcebergApiConverter.getWriteDefaultValue(schema, "c_optional"));
+    }
+
+    @Test
+    public void testToDefaultValueStringWithWriteDefault() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        // Boolean with write default
+        fields.add(Types.NestedField.optional("c_bool").withId(1)
+                .ofType(Types.BooleanType.get()).withWriteDefault(false).build());
+        // Long with write default
+        fields.add(Types.NestedField.optional("c_long").withId(2)
+                .ofType(Types.LongType.get()).withWriteDefault(100L).build());
+        // Float with write default
+        fields.add(Types.NestedField.optional("c_float").withId(3)
+                .ofType(Types.FloatType.get()).withWriteDefault(1.5f).build());
+        // Double with write default
+        fields.add(Types.NestedField.optional("c_double").withId(4)
+                .ofType(Types.DoubleType.get()).withWriteDefault(3.14159).build());
+        // Decimal with write default
+        fields.add(Types.NestedField.optional("c_decimal").withId(5)
+                .ofType(Types.DecimalType.of(10, 2)).withWriteDefault(new java.math.BigDecimal("99.99")).build());
+        // String with write default
+        fields.add(Types.NestedField.optional("c_string").withId(6)
+                .ofType(Types.StringType.get()).withWriteDefault("default_value").build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+
+        assertEquals("0", columns.get(0).getDefaultValue()); // false -> "0"
+        assertEquals("100", columns.get(1).getDefaultValue());
+        assertEquals("1.5", columns.get(2).getDefaultValue());
+        assertEquals("3.14159", columns.get(3).getDefaultValue());
+        assertEquals("99.99", columns.get(4).getDefaultValue());
+        assertEquals("default_value", columns.get(5).getDefaultValue());
+    }
+
+    @Test
+    public void testToDefaultValueStringWithTime() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        // Time type
+        long timeMicros = 3661000000L; // 01:01:01.000000
+        fields.add(Types.NestedField.optional("c_time").withId(1)
+                .ofType(Types.TimeType.get()).withInitialDefault(timeMicros).build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertNotNull(columns.get(0).getDefaultValue());
+    }
+
+    @Test
+    public void testToDefaultValueStringWithTimestampTz() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        // Timestamp with timezone
+        long tsMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 6, 15, 10, 30, 45));
+        fields.add(Types.NestedField.optional("c_ts_tz").withId(1)
+                .ofType(Types.TimestampType.withZone()).withInitialDefault(tsMicros).build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertNotNull(columns.get(0).getDefaultValue());
+        assertTrue(columns.get(0).getDefaultValue().contains("2024"));
+    }
+
+    @Test
+    public void testToIcebergDefaultLiteralWithVariousTypes() {
+        // Test TINYINT
+        Column tinyIntCol = new Column("c_tinyint", IntegerType.TINYINT, true);
+        tinyIntCol.setDefaultValue("10");
+        Schema schema1 = IcebergApiConverter.toIcebergApiSchema(List.of(tinyIntCol));
+        Types.NestedField tinyIntField = schema1.findField("c_tinyint");
+        assertNotNull(tinyIntField.initialDefault());
+        assertEquals(10, tinyIntField.initialDefault());
+
+        // Test SMALLINT
+        Column smallIntCol = new Column("c_smallint", IntegerType.SMALLINT, true);
+        smallIntCol.setDefaultValue("100");
+        Schema schema2 = IcebergApiConverter.toIcebergApiSchema(List.of(smallIntCol));
+        Types.NestedField smallIntField = schema2.findField("c_smallint");
+        assertEquals(100, smallIntField.initialDefault());
+
+        // Test BIGINT
+        Column bigIntCol = new Column("c_bigint", IntegerType.BIGINT, true);
+        bigIntCol.setDefaultValue("1000000");
+        Schema schema3 = IcebergApiConverter.toIcebergApiSchema(List.of(bigIntCol));
+        Types.NestedField bigIntField = schema3.findField("c_bigint");
+        assertEquals(1000000L, bigIntField.initialDefault());
+
+        // Test FLOAT
+        Column floatCol = new Column("c_float", FloatType.FLOAT, true);
+        floatCol.setDefaultValue("3.14");
+        Schema schema4 = IcebergApiConverter.toIcebergApiSchema(List.of(floatCol));
+        Types.NestedField floatField = schema4.findField("c_float");
+        assertEquals(3.14f, floatField.initialDefault());
+
+        // Test CHAR
+        Column charCol = new Column("c_char", new CharType(10), true);
+        charCol.setDefaultValue("abc");
+        Schema schema5 = IcebergApiConverter.toIcebergApiSchema(List.of(charCol));
+        Types.NestedField charField = schema5.findField("c_char");
+        assertEquals("abc", charField.initialDefault());
+    }
+
+    @Test
+    public void testToIcebergDefaultLiteralBooleanFormats() {
+        // Test "1" for true
+        Column col1 = new Column("c1", BooleanType.BOOLEAN, true);
+        col1.setDefaultValue("1");
+        Schema schema1 = IcebergApiConverter.toIcebergApiSchema(List.of(col1));
+        assertTrue((Boolean) schema1.findField("c1").initialDefault());
+
+        // Test "true" for true
+        Column col2 = new Column("c2", BooleanType.BOOLEAN, true);
+        col2.setDefaultValue("true");
+        Schema schema2 = IcebergApiConverter.toIcebergApiSchema(List.of(col2));
+        assertTrue((Boolean) schema2.findField("c2").initialDefault());
+
+        // Test "TRUE" for true
+        Column col3 = new Column("c3", BooleanType.BOOLEAN, true);
+        col3.setDefaultValue("TRUE");
+        Schema schema3 = IcebergApiConverter.toIcebergApiSchema(List.of(col3));
+        assertTrue((Boolean) schema3.findField("c3").initialDefault());
+
+        // Test "0" for false
+        Column col4 = new Column("c4", BooleanType.BOOLEAN, true);
+        col4.setDefaultValue("0");
+        Schema schema4 = IcebergApiConverter.toIcebergApiSchema(List.of(col4));
+        assertFalse((Boolean) schema4.findField("c4").initialDefault());
+
+        // Test "false" for false
+        Column col5 = new Column("c5", BooleanType.BOOLEAN, true);
+        col5.setDefaultValue("false");
+        Schema schema5 = IcebergApiConverter.toIcebergApiSchema(List.of(col5));
+        assertFalse((Boolean) schema5.findField("c5").initialDefault());
+
+        // Test "FALSE" for false
+        Column col6 = new Column("c6", BooleanType.BOOLEAN, true);
+        col6.setDefaultValue("FALSE");
+        Schema schema6 = IcebergApiConverter.toIcebergApiSchema(List.of(col6));
+        assertFalse((Boolean) schema6.findField("c6").initialDefault());
+    }
+
+    @Test
+    public void testToIcebergDefaultLiteralInvalidBoolean() {
+        Column col = new Column("c_bool", BooleanType.BOOLEAN, true);
+        col.setDefaultValue("invalid");
+        assertThrows(StarRocksConnectorException.class, () -> {
+            IcebergApiConverter.toIcebergApiSchema(List.of(col));
+        });
+    }
+
+    @Test
+    public void testGetWriteDefaultValueCaseInsensitive() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("MyColumn").withId(1)
+                .ofType(Types.IntegerType.get()).withWriteDefault(42).build());
+        Schema schema = new Schema(fields);
+
+        // Test case insensitive lookup
+        assertEquals("42", IcebergApiConverter.getWriteDefaultValue(schema, "MyColumn"));
+        assertEquals("42", IcebergApiConverter.getWriteDefaultValue(schema, "mycolumn"));
+        assertEquals("42", IcebergApiConverter.getWriteDefaultValue(schema, "MYCOLUMN"));
+    }
+
+    @Test
+    public void testGetWriteDefaultValueNotFound() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("col1").withId(1)
+                .ofType(Types.IntegerType.get()).build());
+        Schema schema = new Schema(fields);
+
+        assertNull(IcebergApiConverter.getWriteDefaultValue(schema, "nonexistent"));
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithNullDefaultValue() {
+        Column col1 = new Column("c1", IntegerType.INT, true);
+        // No default value set
+        col1.setDefaultValue(null);
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(col1));
+        Types.NestedField field = schema.findField("c1");
+
+        // Should not have default value
+        assertNull(field.initialDefaultLiteral());
+        assertNull(field.writeDefaultLiteral());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithDecimalTypes() {
+        Column decimal32Col = new Column("c_d32", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2), true);
+        decimal32Col.setDefaultValue("123.45");
+
+        Column decimal64Col = new Column("c_d64", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4), true);
+        decimal64Col.setDefaultValue("123456.7890");
+
+        Column decimal128Col = new Column("c_d128", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 28, 8), true);
+        decimal128Col.setDefaultValue("123456789.12345678");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(decimal32Col, decimal64Col, decimal128Col));
+
+        assertNotNull(schema.findField("c_d32").initialDefault());
+        assertNotNull(schema.findField("c_d64").initialDefault());
+        assertNotNull(schema.findField("c_d128").initialDefault());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithDateDefault() {
+        Column dateCol = new Column("c_date", DateType.DATE, true);
+        dateCol.setDefaultValue("2024-06-15");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(dateCol));
+        Types.NestedField field = schema.findField("c_date");
+
+        assertNotNull(field.initialDefault());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithDatetimeDefault() {
+        Column datetimeCol = new Column("c_datetime", DateType.DATETIME, true);
+        datetimeCol.setDefaultValue("2024-06-15 10:30:45");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(datetimeCol));
+        Types.NestedField field = schema.findField("c_datetime");
+
+        assertNotNull(field.initialDefault());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithDatetimeDefaultWithT() {
+        // Test datetime with 'T' separator
+        Column datetimeCol = new Column("c_datetime", DateType.DATETIME, true);
+        datetimeCol.setDefaultValue("2024-06-15T10:30:45");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(datetimeCol));
+        Types.NestedField field = schema.findField("c_datetime");
+
+        assertNotNull(field.initialDefault());
     }
 
 }
