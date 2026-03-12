@@ -75,6 +75,38 @@ import java.util.concurrent.Future;
 public class BackendServiceClient {
     private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
 
+    // Check if the exception is a connection pool exception (NoSuchElementException),
+    // either thrown directly or wrapped in a RuntimeException.
+    //
+    // Call chain: BackendServiceClient → service.execPlanFragmentAsync(pRequest)
+    //   → ProtobufRpcProxy.invoke()          // JDK dynamic proxy (InvocationHandler)
+    //     → RpcChannel.getConnection()        // RpcChannel.java line 73
+    //       → ChannelPool.getChannel()        // ChannelPool.java line 77
+    //         → GenericObjectPool.borrowObject()  // throws NoSuchElementException
+    //
+    // ChannelPool.getChannel() catches all Exceptions and re-throws as RuntimeException:
+    //   } catch (Exception e) {
+    //       LOGGER.log(Level.SEVERE, e.getMessage(), e);
+    //       throw new RuntimeException(e.getMessage(), e);  // wraps NoSuchElementException
+    //   }
+    //
+    // ProtobufRpcProxy.invoke() does NOT catch or re-wrap this RuntimeException,
+    // so it propagates directly to BackendServiceClient.
+    //
+    // Source: https://github.com/baidu/Jprotobuf-rpc-socket (jprotobuf-rpc-core-4.2.1)
+    //   - ChannelPool.java: com.baidu.jprotobuf.pbrpc.transport.ChannelPool.getChannel()
+    //   - RpcChannel.java: com.baidu.jprotobuf.pbrpc.transport.RpcChannel.getConnection()
+    //   - ProtobufRpcProxy.java: com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy.invoke()
+    static boolean isConnectionPoolException(Throwable e) {
+        if (e instanceof NoSuchElementException) {
+            return true;
+        }
+        if (e instanceof RuntimeException && e.getCause() instanceof NoSuchElementException) {
+            return true;
+        }
+        return false;
+    }
+
     private BackendServiceClient() {
     }
 
@@ -91,22 +123,23 @@ public class BackendServiceClient {
             final PBackendService service = BrpcProxy.getBackendService(address);
             TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
             return serviceCall.apply(service);
-        } catch (NoSuchElementException e) {
-            try {
-                // retry
+        } catch (Throwable e) {
+            if (isConnectionPoolException(e)) {
+                // retry once for transient connection pool failures
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return serviceCall.apply(service);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Execute plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
+                try {
+                    final PBackendService service = BrpcProxy.getBackendService(address);
+                    return serviceCall.apply(service);
+                } catch (Throwable retryException) {
+                    LOG.warn("Execute plan fragment retry failed, address={}:{}",
+                            address.getHostname(), address.getPort(), retryException);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
             }
-        } catch (Throwable e) {
             LOG.warn("Execute plan fragment catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -176,22 +209,23 @@ public class BackendServiceClient {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.cancelPlanFragmentAsync(pRequest);
-        } catch (NoSuchElementException e) {
-            // retry
-            try {
+        } catch (Throwable e) {
+            if (isConnectionPoolException(e)) {
+                // retry once for transient connection pool failures
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.cancelPlanFragmentAsync(pRequest);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Cancel plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
+                try {
+                    final PBackendService service = BrpcProxy.getBackendService(address);
+                    return service.cancelPlanFragmentAsync(pRequest);
+                } catch (Throwable retryException) {
+                    LOG.warn("Cancel plan fragment retry failed, address={}:{}",
+                            address.getHostname(), address.getPort(), retryException);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
             }
-        } catch (Throwable e) {
             LOG.warn("Cancel plan fragment catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
