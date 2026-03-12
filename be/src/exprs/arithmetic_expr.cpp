@@ -30,8 +30,8 @@
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
+#include "runtime/decimalv2_value.h"
 #include "runtime/runtime_state.h"
-#include "types/decimalv2_value.h"
 #include "types/logical_type.h"
 
 #ifdef STARROCKS_JIT_ENABLE

@@ -20,10 +20,10 @@
 #include <unordered_set>
 #include <vector>
 
-#include "base/testutil/sync_point.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
