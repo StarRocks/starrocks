@@ -145,7 +145,11 @@ public class ADBCMetadata implements ConnectorMetadata {
         try {
             return driver.open(params);
         } catch (AdbcException e) {
-            throw new StarRocksConnectorException("Failed to open ADBC database: " + e.getMessage(), e);
+            throw new StarRocksConnectorException(
+                    "Failed to connect to ADBC catalog '" + properties.getOrDefault("catalog_name", "unknown")
+                            + "' at " + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
+                            + ". Check that the server is running and the URL is correct. Detail: "
+                            + e.getMessage(), e);
         }
     }
 
@@ -189,7 +193,10 @@ public class ADBCMetadata implements ConnectorMetadata {
                 }
             } catch (Exception e) {
                 throw new StarRocksConnectorException(
-                        "ADBC listDbNames failed: " + e.getMessage(), e);
+                        "Failed to list databases from ADBC catalog '" + catalogName
+                                + "'. Check that the remote server at "
+                                + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
+                                + " is reachable. Detail: " + e.getMessage(), e);
             }
         });
     }
@@ -219,7 +226,10 @@ public class ADBCMetadata implements ConnectorMetadata {
                 }
             } catch (Exception e) {
                 throw new StarRocksConnectorException(
-                        "ADBC listTableNames failed for db " + dbName + ": " + e.getMessage(), e);
+                        "Failed to list tables from ADBC catalog '" + catalogName
+                                + "', database '" + dbName + "'. Check that the remote server at "
+                                + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
+                                + " is reachable. Detail: " + e.getMessage(), e);
             }
         });
     }
@@ -247,7 +257,10 @@ public class ADBCMetadata implements ConnectorMetadata {
                     throw e;
                 } catch (Exception e) {
                     throw new StarRocksConnectorException(
-                            "ADBC getTable failed for " + dbName + "." + tblName + ": " + e.getMessage(), e);
+                            "Failed to get table '" + dbName + "." + tblName
+                                    + "' from ADBC catalog '" + catalogName
+                                    + "'. Check that the remote server is reachable. Detail: "
+                                    + e.getMessage(), e);
                 }
             });
         } catch (StarRocksConnectorException e) {

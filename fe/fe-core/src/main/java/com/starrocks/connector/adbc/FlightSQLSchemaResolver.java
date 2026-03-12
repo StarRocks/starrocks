@@ -65,10 +65,20 @@ public class FlightSQLSchemaResolver extends ADBCSchemaResolver {
             return new VarcharType(StringType.DEFAULT_STRING_LENGTH);
         } else if (arrowType instanceof ArrowType.LargeUtf8) {
             return new VarcharType(StringType.DEFAULT_STRING_LENGTH);
+        } else if (arrowType instanceof ArrowType.Utf8View) {
+            // TODO: add BE arrow converter support for STRING_VIEW, then map to VarcharType here
+            LOG.warn("Unsupported Arrow type: Utf8View for column '{}'. "
+                    + "Column will be excluded from schema.", field.getName());
+            return null;
         } else if (arrowType instanceof ArrowType.Binary) {
             return VarbinaryType.VARBINARY;
         } else if (arrowType instanceof ArrowType.LargeBinary) {
             return VarbinaryType.VARBINARY;
+        } else if (arrowType instanceof ArrowType.BinaryView) {
+            // TODO: add BE arrow converter support for BINARY_VIEW, then map to VarbinaryType here
+            LOG.warn("Unsupported Arrow type: BinaryView for column '{}'. "
+                    + "Column will be excluded from schema.", field.getName());
+            return null;
         } else if (arrowType instanceof ArrowType.Date) {
             return DateType.DATE;
         } else if (arrowType instanceof ArrowType.Timestamp) {
