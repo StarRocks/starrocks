@@ -27,7 +27,6 @@
 #include "common/runtime_profile.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

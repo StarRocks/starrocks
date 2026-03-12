@@ -25,7 +25,6 @@
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

@@ -31,7 +31,7 @@
 #include "formats/parquet/file_writer.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 

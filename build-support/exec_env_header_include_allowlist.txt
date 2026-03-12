@@ -1,0 +1,3 @@
+# Headers that still require a complete ExecEnv or GlobalEnv definition.
+src/testutil/init_test_env.h
+test/storage/lake/test_util.h
