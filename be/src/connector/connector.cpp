@@ -21,6 +21,11 @@
 #ifndef __APPLE__
 #include "connector/iceberg_connector.h"
 #endif
+<<<<<<< HEAD
+=======
+#include "connector/benchmark_connector.h"
+#include "connector/cache_stats_connector.h"
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
@@ -51,6 +56,11 @@ const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
 const std::string Connector::BINLOG = "binlog";
 const std::string Connector::ICEBERG = "iceberg";
+<<<<<<< HEAD
+=======
+const std::string Connector::BENCHMARK = "benchmark";
+const std::string Connector::CACHE_STATS = "cache_stats";
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
 class ConnectorManagerInit {
 public:
@@ -60,6 +70,11 @@ public:
         cm->put(Connector::ES, std::make_unique<ESConnector>());
         cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
         cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
+<<<<<<< HEAD
+=======
+        cm->put(Connector::BENCHMARK, std::make_unique<BenchmarkConnector>());
+        cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());

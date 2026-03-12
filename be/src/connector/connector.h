@@ -199,6 +199,11 @@ enum ConnectorType {
     LAKE = 5,
     BINLOG = 6,
     ICEBERG = 7,
+<<<<<<< HEAD
+=======
+    BENCHMARK = 8,
+    CACHE_STATS = 9,
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 };
 
 class Connector {
@@ -212,6 +217,11 @@ public:
     static const std::string LAKE;
     static const std::string BINLOG;
     static const std::string ICEBERG;
+<<<<<<< HEAD
+=======
+    static const std::string BENCHMARK;
+    static const std::string CACHE_STATS;
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

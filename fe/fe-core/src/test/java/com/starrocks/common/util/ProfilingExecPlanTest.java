@@ -73,8 +73,14 @@ public class ProfilingExecPlanTest {
                         "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
+<<<<<<< HEAD
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN", "CAPTURE_VERSION",
                         "ICEBERG_EQUALITY_DELETE_SCAN", "RAW_VALUES", "FETCH", "LOOK_UP", "ICEBERG_METADATA_DELETE");
+=======
+                        "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN",
+                        "CAPTURE_VERSION", "ICEBERG_EQUALITY_DELETE_SCAN", "RAW_VALUES", "FETCH", "LOOK_UP",
+                        "BENCHMARK_SCAN", "ICEBERG_METADATA_DELETE", "CACHE_STATS_SCAN");
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);

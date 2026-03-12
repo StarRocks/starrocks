@@ -63,6 +63,11 @@ public enum OperatorType {
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
     LOGICAL_SPJG_PIECES,
+<<<<<<< HEAD
+=======
+    LOGICAL_BENCHMARK_SCAN,
+    LOGICAL_CACHE_STATS_SCAN,
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
     /**
      * Physical operator
@@ -91,6 +96,11 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+<<<<<<< HEAD
+=======
+    PHYSICAL_BENCHMARK_SCAN,
+    PHYSICAL_CACHE_STATS_SCAN,
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,

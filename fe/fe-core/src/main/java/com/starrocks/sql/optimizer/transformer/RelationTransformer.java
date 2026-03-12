@@ -105,6 +105,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -561,9 +562,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             List<Column> distributedColumns = MetaUtils.getColumnsByColumnIds(olapTable,
                     hashDistributionInfo.getDistributionColumns());
 
-            // NOTE: sync mv output columns may not contain the distribution columns,
+            // NOTE: sync mv & cache stats output columns may not contain the distribution columns,
             // set it as random distribution.
-            if (node.isSyncMVQuery() &&
+            if ((node.isSyncMVQuery() || node.isCacheStatsQuery()) &&
                     distributedColumns.stream().anyMatch(x -> !columnMetaToColRefMap.containsKey(x))) {
                 return DistributionSpec.createAnyDistributionSpec();
             }
@@ -648,6 +649,17 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexMetaId())
                         .setHintsTabletIds(node.getTabletIds())
+                        .build();
+            } else if (node.isCacheStatsQuery()) {
+                if (!node.getTable().isCloudNativeTableOrMaterializedView()) {
+                    throw new SemanticException("_CACHE_STATS_ hint is only supported for Lake Table");
+                }
+                scanOperator = LogicalCacheStatsScanOperator.builder()
+                        .setTable(node.getTable())
+                        .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                        .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
+                                node.getPartitionNames().getPartitionNames())
+                        .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()

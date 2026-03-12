@@ -88,6 +88,11 @@ enum TPlanNodeType {
   RAW_VALUES_NODE,
   FETCH_NODE,
   LOOKUP_NODE,
+<<<<<<< HEAD
+=======
+  BENCHMARK_SCAN_NODE,
+  LAKE_CACHE_STATS_SCAN_NODE
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 }
 
 // phases of an execution node
@@ -1330,8 +1335,31 @@ const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 
+<<<<<<< HEAD
+=======
+// virtual column names
+const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
+const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+const string RSS_ID_COLUMN_NAME = "_rss_id_";
+const string SOURCE_ID_COLUMN_NAME = "_source_id_";
+const string ROW_ID_COLUMN_NAME = "_row_id_";
+const string ROWSET_ID_COLUMN_NAME = "_rowset_id_";
+const string DYNAMIC_RSS_ID_COLUMN_NAME = "_dynamic_rssid_";
+
+const string CACHE_STATS_TABLET_ID_COLUMN_NAME = "tablet_id";
+const string CACHE_STATS_CACHED_BYTES_COLUMN_NAME = "cached_bytes";
+const string CACHE_STATS_TOTAL_BYTES_COLUMN_NAME = "total_bytes";
+
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
+}
+
+struct TCacheStatsScanNode {
+    1: optional Types.TTupleId tuple_id
+    2: optional map<i32, string> id_to_names
+    3: optional i64 table_id
+    4: optional string table_name
 }
 
 // Union of all stream source nodes, distinguished by type
@@ -1478,6 +1506,13 @@ struct TPlanNode {
   81: optional TSelectNode select_node; 
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
+<<<<<<< HEAD
+=======
+  // Scan node for benchmark
+  84: optional TBenchmarkScanNode benchmark_scan_node;
+
+  85: optional TCacheStatsScanNode cache_stats_scan_node;
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

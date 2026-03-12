@@ -43,6 +43,11 @@ set(EXEC_FILES
     write_combined_txn_log.cpp
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
+<<<<<<< HEAD
+=======
+    benchmark_scanner.cpp
+    cache_stats_scanner.cpp
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp

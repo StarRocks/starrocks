@@ -186,6 +186,17 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitPhysicalBenchmarkScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalCacheStatsScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
     public R visitPhysicalProject(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }

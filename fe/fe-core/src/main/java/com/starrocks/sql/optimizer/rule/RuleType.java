@@ -282,6 +282,7 @@ public enum RuleType {
     IMP_STREAM_AGG,
     IMP_STREAM_JOIN,
     IMP_BINLOG_SCAN,
+    IMP_CACHE_STATS_LSCAN_TO_PSCAN,
 
     // The following are combination rules:
     GROUP_RULES,

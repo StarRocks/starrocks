@@ -127,6 +127,9 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_CACHED_BYTES_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
     private final ConnectContext session;
@@ -804,6 +807,29 @@ public class QueryAnalyzer {
                     columns.put(field, column);
                     fields.add(field);
                 }
+<<<<<<< HEAD
+=======
+                // Add virtual columns for sync MV queries as well
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
+            } else if (node.isCacheStatsQuery()) {
+                if (!table.isCloudNativeTableOrMaterializedView()) {
+                    throw new SemanticException("_CACHE_STATS_ hint is only supported for Lake Table");
+                }
+
+                for (Column column : getCacheStatsColumns()) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
             } else {
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
@@ -892,6 +918,27 @@ public class QueryAnalyzer {
             return columns;
         }
 
+<<<<<<< HEAD
+=======
+        private List<Column> getVirtualColumns(Table table) {
+            List<Column> columns = new ArrayList<>();
+            // Add _tablet_id_ virtual column for OLAP tables
+            if (table.isNativeTableOrMaterializedView() && Config.enable_virtual_columns) {
+                OlapTable olapTable = (OlapTable) table;
+                columns.addAll(olapTable.getVirtualColumns());
+            }
+            return columns;
+        }
+
+        private List<Column> getCacheStatsColumns() {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column(CACHE_STATS_TABLET_ID_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(CACHE_STATS_CACHED_BYTES_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(CACHE_STATS_TOTAL_BYTES_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+>>>>>>> 0ddf62a267 ([Enhancement] support dummy select _CACHE_STATS_ in shared-data cluster (#70006))
         @Override
         public Scope visitFileTableFunction(FileTableFunctionRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
