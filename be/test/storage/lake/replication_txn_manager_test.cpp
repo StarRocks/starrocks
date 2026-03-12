@@ -1389,6 +1389,142 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_dcg_apply_incremental_n
     EXPECT_EQ(7, result.unique_column_ids(0).column_ids(0));
 }
 
+// Test end-to-end non-PK DCG replication for generated columns produced by linked schema change.
+// Simulates: source non-PK table had linked schema change adding generated columns, which produced
+// .cols files (DCGs) at multiple schema versions. The replication must:
+// 1. Convert DeltaColumnGroupSnapshotPB -> DeltaColumnGroupMetadataPB (with rssid mapping)
+// 2. Remap column unique IDs from source schema to target schema
+// 3. Apply the DCG metadata during publish with correct rssid remapping
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_non_pk_generated_column_dcg_replication_e2e) {
+    // --- Step 1: Build DeltaColumnGroupSnapshotPB simulating generated columns ---
+    // Scenario: source non-PK table (e.g., DUP_KEYS) had two linked schema changes:
+    //   - Version 3: added generated column gc1 (unique_id=10, stored in .cols file)
+    //   - Version 5: added generated column gc2 (unique_id=11, stored in another .cols file)
+    // The table has one rowset "rs_100" with 2 segments.
+    DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+
+    // Segment 0 of rs_100: has DCGs from both schema changes
+    dcg_snapshot_pb.add_tablet_id(500);
+    dcg_snapshot_pb.add_rowset_id("rs_100");
+    dcg_snapshot_pb.add_segment_id(0);
+
+    auto* dcg_list_seg0 = dcg_snapshot_pb.add_dcg_lists();
+    // DCG at version 3: generated column gc1
+    dcg_list_seg0->add_versions(3);
+    auto* dcg_v3_seg0 = dcg_list_seg0->add_dcgs();
+    dcg_v3_seg0->add_column_files("rs_100_0_3_0.cols");
+    auto* col_ids_v3_seg0 = dcg_v3_seg0->add_column_ids();
+    col_ids_v3_seg0->add_column_ids(10); // source unique_id for gc1
+
+    // DCG at version 5: generated column gc2
+    dcg_list_seg0->add_versions(5);
+    auto* dcg_v5_seg0 = dcg_list_seg0->add_dcgs();
+    dcg_v5_seg0->add_column_files("rs_100_0_5_0.cols");
+    auto* col_ids_v5_seg0 = dcg_v5_seg0->add_column_ids();
+    col_ids_v5_seg0->add_column_ids(11); // source unique_id for gc2
+
+    // Segment 1 of rs_100: also has DCGs from both schema changes
+    dcg_snapshot_pb.add_tablet_id(500);
+    dcg_snapshot_pb.add_rowset_id("rs_100");
+    dcg_snapshot_pb.add_segment_id(1);
+
+    auto* dcg_list_seg1 = dcg_snapshot_pb.add_dcg_lists();
+    dcg_list_seg1->add_versions(3);
+    auto* dcg_v3_seg1 = dcg_list_seg1->add_dcgs();
+    dcg_v3_seg1->add_column_files("rs_100_1_3_0.cols");
+    auto* col_ids_v3_seg1 = dcg_v3_seg1->add_column_ids();
+    col_ids_v3_seg1->add_column_ids(10);
+
+    dcg_list_seg1->add_versions(5);
+    auto* dcg_v5_seg1 = dcg_list_seg1->add_dcgs();
+    dcg_v5_seg1->add_column_files("rs_100_1_5_0.cols");
+    auto* col_ids_v5_seg1 = dcg_v5_seg1->add_column_ids();
+    col_ids_v5_seg1->add_column_ids(11);
+
+    // --- Step 2: Convert snapshot to DCG metadata (simulates convert_dcg_meta_for_non_pk) ---
+    std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
+    rowset_id_to_seg_id["rs_100"] = 20; // source rowset_seg_id
+
+    DeltaColumnGroupMetadataPB dcg_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+
+    ASSERT_OK(lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, 9999,
+                                                                       &dcg_meta, &filename_map));
+
+    // Verify: rssid 20 (seg_id=20 + segment_id=0) and rssid 21 (20+1)
+    EXPECT_EQ(2, dcg_meta.dcgs_size());
+    EXPECT_TRUE(dcg_meta.dcgs().count(20));
+    EXPECT_TRUE(dcg_meta.dcgs().count(21));
+    EXPECT_EQ(4, filename_map.size()); // 4 .cols files total
+
+    // Each segment has 2 DCGs (version 3 and 5)
+    EXPECT_EQ(2, dcg_meta.dcgs().at(20).versions_size());
+    EXPECT_EQ(3, dcg_meta.dcgs().at(20).versions(0));
+    EXPECT_EQ(5, dcg_meta.dcgs().at(20).versions(1));
+    EXPECT_EQ(2, dcg_meta.dcgs().at(21).versions_size());
+
+    // Column IDs are still source IDs at this point
+    EXPECT_EQ(10, dcg_meta.dcgs().at(20).unique_column_ids(0).column_ids(0));
+    EXPECT_EQ(11, dcg_meta.dcgs().at(20).unique_column_ids(1).column_ids(0));
+
+    // --- Step 3: Remap column unique IDs (simulates convert_dcg_column_unique_ids) ---
+    // In target cluster, gc1 has unique_id=100, gc2 has unique_id=101
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    column_unique_id_map[10] = 100; // source gc1(10) -> target gc1(100)
+    column_unique_id_map[11] = 101; // source gc2(11) -> target gc2(101)
+
+    ASSERT_OK(lake::ReplicationTxnManager::convert_dcg_column_unique_ids(&dcg_meta, column_unique_id_map));
+
+    // Verify column IDs are now target IDs
+    EXPECT_EQ(100, dcg_meta.dcgs().at(20).unique_column_ids(0).column_ids(0));
+    EXPECT_EQ(101, dcg_meta.dcgs().at(20).unique_column_ids(1).column_ids(0));
+    EXPECT_EQ(100, dcg_meta.dcgs().at(21).unique_column_ids(0).column_ids(0));
+    EXPECT_EQ(101, dcg_meta.dcgs().at(21).unique_column_ids(1).column_ids(0));
+
+    // --- Step 4: Apply DCG during publish with rssid remapping ---
+    // Simulate non-PK full replication apply: source rssid + offset
+    TabletMetadataPB metadata;
+    metadata.set_id(600);
+    metadata.set_version(1);
+    metadata.set_next_rowset_id(50);
+
+    // Build rssid_remap: source 20->50, 21->51
+    std::unordered_map<uint32_t, uint32_t> rssid_remap;
+    rssid_remap[20] = 50;
+    rssid_remap[21] = 51;
+
+    for (const auto& [src_rssid, src_dcg_ver] : dcg_meta.dcgs()) {
+        auto it = rssid_remap.find(src_rssid);
+        uint32_t target_rssid = (it != rssid_remap.end()) ? it->second : src_rssid;
+        (*metadata.mutable_dcg_meta()->mutable_dcgs())[target_rssid].CopyFrom(src_dcg_ver);
+    }
+
+    // Verify final result: target rssids 50 and 51 have correct DCG metadata
+    EXPECT_EQ(2, metadata.dcg_meta().dcgs_size());
+    EXPECT_TRUE(metadata.dcg_meta().dcgs().count(50));
+    EXPECT_TRUE(metadata.dcg_meta().dcgs().count(51));
+
+    // Segment 0 (rssid 50): 2 DCGs with remapped column IDs
+    const auto& final_seg0 = metadata.dcg_meta().dcgs().at(50);
+    EXPECT_EQ(2, final_seg0.column_files_size());
+    EXPECT_EQ(2, final_seg0.versions_size());
+    EXPECT_EQ(3, final_seg0.versions(0));
+    EXPECT_EQ(5, final_seg0.versions(1));
+    EXPECT_EQ(100, final_seg0.unique_column_ids(0).column_ids(0)); // gc1 remapped
+    EXPECT_EQ(101, final_seg0.unique_column_ids(1).column_ids(0)); // gc2 remapped
+
+    // Segment 1 (rssid 51): same structure
+    const auto& final_seg1 = metadata.dcg_meta().dcgs().at(51);
+    EXPECT_EQ(2, final_seg1.column_files_size());
+    EXPECT_EQ(100, final_seg1.unique_column_ids(0).column_ids(0));
+    EXPECT_EQ(101, final_seg1.unique_column_ids(1).column_ids(0));
+
+    // All .cols filenames should be new lake-format names
+    for (const auto& [_, pair] : filename_map) {
+        EXPECT_TRUE(lake::is_cols(pair.first));
+    }
+}
+
 // Test OpReplication protobuf correctly carries DCG metadata
 TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_op_replication_dcg_meta_serialization) {
     TxnLogPB txn_log;
