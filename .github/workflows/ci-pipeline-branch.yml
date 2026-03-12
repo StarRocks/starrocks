@@ -138,6 +138,8 @@ jobs:
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             thirdparty:
             - 'thirdparty/**'
+            - '!thirdparty/build-thirdparty-darwin.sh'
+            - '!thirdparty/vars-darwin-aarch64.sh'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
