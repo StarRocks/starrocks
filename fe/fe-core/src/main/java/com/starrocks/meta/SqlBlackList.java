@@ -53,7 +53,7 @@ public class SqlBlackList {
             for (BlackListSql patternAndId : sqlBlackListMap.values()) {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
                 if (m.find()) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
+                    ErrorReport.reportSqlBlackListException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
                 }
             }
         }
@@ -141,4 +141,3 @@ public class SqlBlackList {
     // ids used in sql blacklist
     private final AtomicLong ids = new AtomicLong();
 }
-
