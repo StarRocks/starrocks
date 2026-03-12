@@ -23,9 +23,9 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/except_hash_set.h"
-#include "exec/exec_node.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -37,7 +37,7 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
-class ExceptNode final : public ExecNode {
+class ExceptNode final : public PipelineNode {
 public:
     ExceptNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
@@ -48,9 +48,6 @@ public:
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
