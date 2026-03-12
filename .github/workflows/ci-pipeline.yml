@@ -67,25 +67,11 @@ jobs:
         if: steps.check.outputs.pass == 'true'
         env:
           SHA: ${{ steps.upload_info.outputs.SHA }}
+          PR_NUMBER: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
         run: |
-          round_limit=10
-          while [[ $round_limit -gt 0 ]]
-          do
-            pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
-            if [[ "$pr_check_run_info" != 'null' ]] && [[ $(echo "$pr_check_run_info" | jq -r .status) == 'completed' ]]; then
-              status=$(echo "$pr_check_run_info" | jq -r .conclusion)
-              if [[ "$status" == 'success' ]]; then
-                exit 0
-              else
-                echo "::warning::The latest PR CHECKER status: ${status}!"
-              fi
-            fi
-            round_limit=$((round_limit-1))
-            sleep 30
-          done
-          
-          echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
-          exit 1
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/wait-for-pr-checker.sh
 
       - name: Check Blacklist
         id: check_blacklist
