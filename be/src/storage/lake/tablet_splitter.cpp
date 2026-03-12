@@ -140,8 +140,7 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
     std::vector<const RangeInfo*> candidate_ranges;
     candidate_ranges.reserve(ordered_ranges.size());
     for (const auto& r : ordered_ranges) {
-        if (tablet_range != nullptr &&
-            (tablet_range->less_than(r.min) || tablet_range->greater_than(r.max))) {
+        if (tablet_range != nullptr && (tablet_range->less_than(r.min) || tablet_range->greater_than(r.max))) {
             continue;
         }
         candidate_ranges.push_back(&r);
