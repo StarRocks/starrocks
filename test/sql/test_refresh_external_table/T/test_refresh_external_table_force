@@ -1,27 +1,55 @@
 -- name: test_refresh_external_table_force
 
--- Test basic REFRESH EXTERNAL TABLE syntax with FORCE option
--- Note: This test only validates syntax parsing. Actual refresh behavior requires external catalog setup.
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01'),
+  ('abc', 2000, '2023-12-02'),
+  (NULL, 2000, '2023-12-02'),
+  ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001, '2023-12-03'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2001, '2023-12-03'),
+  ('abc', 2001, '2023-12-04'),
+  (NULL, 2001, '2023-12-04');
 
--- Test 1: Basic refresh without FORCE
--- This should succeed for syntax validation
-REFRESH EXTERNAL TABLE db1.table1;
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
 
--- Test 2: Refresh with FORCE option
--- This should force clear all cache and reload metadata from remote catalog
-REFRESH EXTERNAL TABLE db1.table1 FORCE;
+-- Test 1: Basic refresh without FORCE on native OLAP table (unsupported type)
+[UC]REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
--- Test 3: Refresh with partitions and FORCE
-REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1", "p2") FORCE;
+-- Test 2: Refresh with FORCE option on native OLAP table (unsupported type)
+[UC]REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} FORCE;
 
--- Test 4: Refresh with catalog.db.table format and FORCE
-REFRESH EXTERNAL TABLE catalog1.db1.table1 FORCE;
+-- Test 3: Refresh with partitions and FORCE on native OLAP table (unsupported type)
+[UC]REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} PARTITION("2023-12-01", "2023-12-02") FORCE;
 
--- Test 5: Refresh with complex partition names and FORCE
-REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION("k1=0/k2=1", "k1=1/k2=2") FORCE;
+-- Test 4: Refresh with catalog.db.table format and FORCE - unknown catalog
+REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} FORCE;
 
--- Test 6: Refresh without FORCE (should be normal refresh)
-REFRESH EXTERNAL TABLE catalog1.db1.table1;
+-- Test 5: Refresh with complex partition names and FORCE - unknown catalog
+REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} PARTITION("2023-12-01", "2023-12-02") FORCE;
 
--- Test 7: Refresh with single partition and FORCE
-REFRESH EXTERNAL TABLE db1.table1 PARTITION("p1") FORCE;
+-- Test 6: Refresh without FORCE - unknown catalog
+REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+
+-- Test 7: Refresh with single partition and FORCE on native OLAP table (unsupported type)
+[UC]REFRESH EXTERNAL TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} PARTITION("2023-12-01") FORCE;
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

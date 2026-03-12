@@ -746,7 +746,7 @@ public class CachingIcebergCatalogTest {
                 props.getIcebergMetaCacheTtlSec();
                 result = 60L;
                 props.getIcebergTableCacheRefreshIntervalSec();
-                result = 1L;
+                result = 0L;
                 props.getIcebergTableCacheMemoryUsageRatio();
                 result = 1.0;
                 props.isEnableIcebergTableCache();
@@ -823,7 +823,7 @@ public class CachingIcebergCatalogTest {
                 props.getIcebergMetaCacheTtlSec();
                 result = 60L;
                 props.getIcebergTableCacheRefreshIntervalSec();
-                result = 1L;
+                result = 0L;
                 props.getIcebergTableCacheMemoryUsageRatio();
                 result = 1.0;
                 props.isEnableIcebergTableCache();
@@ -838,6 +838,9 @@ public class CachingIcebergCatalogTest {
                     Table capture(ConnectContext c, String db, String tbl) throws Exception {
                         long idx = callCount.incrementAndGet();
                         if (idx == 1) {
+                            return nativeTable1;
+                        } else if (idx == 2) {
+                            // Return nativeTable1 again for normal refresh test (same metadata location)
                             return nativeTable1;
                         }
                         return nativeTable2;
@@ -866,7 +869,7 @@ public class CachingIcebergCatalogTest {
             catalog.refreshTable("db1", "t1", ctx, null, true);
             Table afterForceRefresh = catalog.getTable(ctx, "db1", "t1");
             Assertions.assertSame(nativeTable2, afterForceRefresh);
-            Assertions.assertEquals(2, callCount.get());
+            Assertions.assertEquals(3, callCount.get());
         } finally {
             es.shutdownNow();
             System.out.println("===== test force refresh end =====");
