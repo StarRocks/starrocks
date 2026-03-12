@@ -127,7 +127,7 @@ public class BackendServiceClient {
             if (isConnectionPoolException(e)) {
                 // retry once for transient connection pool failures
                 try {
-                    Thread.sleep(10);
+                    Thread.sleep(Config.brpc_connection_pool_retry_wait_time_ms);
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
@@ -213,7 +213,7 @@ public class BackendServiceClient {
             if (isConnectionPoolException(e)) {
                 // retry once for transient connection pool failures
                 try {
-                    Thread.sleep(10);
+                    Thread.sleep(Config.brpc_connection_pool_retry_wait_time_ms);
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
@@ -318,7 +318,7 @@ public class BackendServiceClient {
                     throw new RpcException(address.hostname, e.getMessage());
                 }
                 try {
-                    Thread.sleep(10);
+                    Thread.sleep(Config.brpc_connection_pool_retry_wait_time_ms);
                 } catch (InterruptedException interruptedException) {
                     Thread.currentThread().interrupt();
                 }

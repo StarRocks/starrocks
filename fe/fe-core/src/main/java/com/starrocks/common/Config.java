@@ -957,6 +957,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
 
+    // BRPC connection pool retry wait time (ms).
+    // When a connection pool exception occurs (e.g. SYN packet loss), the retry will wait
+    // this amount of time before attempting to reconnect. Default is 10000ms (10s).
+    @ConfField(mutable = true)
+    public static int brpc_connection_pool_retry_wait_time_ms = 10000;
+
     @ConfField(mutable = true)
     public static int brpc_send_plan_fragment_timeout_ms = 60000;
 
