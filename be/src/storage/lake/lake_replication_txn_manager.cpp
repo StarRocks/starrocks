@@ -245,7 +245,18 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     MonotonicStopWatch watch;
     watch.start();
     size_t total_file_size = 0;
+
     for (const auto& pair : filename_map) {
+        // Fast cancel: check if the transaction has been aborted
+        if (txn_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Lake replication task cancelled, transaction is aborted"
+                         << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                         << ", min_active_txn_id: " << get_master_info().min_active_txn_id
+                         << ", copied files: " << files_to_delete.size() << "/" << filename_map.size();
+            return Status::Aborted("Lake replication cancelled, transaction is aborted");
+        }
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy", nullptr);
+
         const auto& src_file_name = pair.first;
         auto src_file_location = join_path(src_data_dir, src_file_name);
         auto it = file_locations.find(src_file_location);
@@ -310,8 +321,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id;
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s"
+              << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {

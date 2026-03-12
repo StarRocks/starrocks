@@ -176,8 +176,10 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
             }
         }
         taskNum = runningTasks.size();
-        LOG.info("Send lake replicate snapshot task, task num: {}, database id: {}, table id: {}, transaction id: {}",
-                taskNum, super.getDatabaseId(), super.getTableId(), super.getTransactionId());
+        LOG.info("Send lake replicate snapshot task, task num: {}, partition num: {},"
+                        + " database id: {}, table id: {}, transaction id: {}",
+                taskNum, super.getPartitionInfos().size(), super.getDatabaseId(),
+                super.getTableId(), super.getTransactionId());
         sendRunningTasks();
     }
 
