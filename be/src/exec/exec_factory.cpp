@@ -130,18 +130,18 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
     for (int i = 0; i < tnode.num_children; i++) {
         ++*node_idx;
         ExecNode* child = nullptr;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node_idx, &child)));
+        SET_AND_RETURN_STATUS_IF_ERROR(st, create_tree_helper(state, pool, tnodes, descs, node_idx, &child));
         node->add_child(child);
 
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= tnodes.size()) {
             // TODO: print thrift msg
-            SET_STATUS_AND_RETURN_IF_ERROR(st, Status::InternalError("Failed to reconstruct plan tree from thrift."));
+            SET_AND_RETURN_STATUS_IF_ERROR(st, Status::InternalError("Failed to reconstruct plan tree from thrift."));
         }
     }
 
-    SET_STATUS_AND_RETURN_IF_ERROR(st, node->init(tnode, state));
+    SET_AND_RETURN_STATUS_IF_ERROR(st, node->init(tnode, state));
 
     // build up tree of profiles; add children >0 first, so that when we print
     // the profile, child 0 is printed last (makes the output more readable)

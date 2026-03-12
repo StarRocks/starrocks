@@ -12,10 +12,13 @@
 #include "base/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
 
-#define DEFINE_STATUS(name, code)                                                       \
-    static Status name(std::string_view msg) { return Status(TStatusCode::code, msg); } \
-    template <typename FMT, typename... Args>                                           \
-    requires(sizeof...(Args) > 0) static Status name(FMT&& fmt, Args&&... args);
+#define DEFINE_STATUS(name, code)              \
+    static Status name(std::string_view msg) { \
+        return Status(TStatusCode::code, msg); \
+    }                                          \
+    template <typename FMT, typename... Args>  \
+        requires(sizeof...(Args) > 0)          \
+    static Status name(FMT&& fmt, Args&&... args);
 
 namespace starrocks {
 
@@ -431,6 +434,17 @@ struct StatusInstance {
 
 #define SET_STATUE_AND_RETURN_IF_ERROR(err_status, stmt) SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)
 
+#define SET_AND_RETURN_STATUS_IF_ERROR_INTERNAL(err_status, stmt)                                           \
+    do {                                                                                                    \
+        auto&& status__ = (stmt);                                                                           \
+        if (UNLIKELY(!status__.ok())) {                                                                     \
+            err_status = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+            return err_status;                                                                              \
+        }                                                                                                   \
+    } while (false)
+
+#define SET_AND_RETURN_STATUS_IF_ERROR(err_status, stmt) SET_AND_RETURN_STATUS_IF_ERROR_INTERNAL(err_status, stmt)
+
 #define EXIT_IF_ERROR(stmt)                   \
     do {                                      \
         auto&& status__ = (stmt);             \
@@ -501,7 +515,9 @@ struct StatusInstance {
 #define RETURN_IF_EXCEPTION(stmt)                   \
     do {                                            \
         try {                                       \
-            { stmt; }                               \
+            {                                       \
+                stmt;                               \
+            }                                       \
         } catch (const std::exception& e) {         \
             return Status::InternalError(e.what()); \
         }                                           \
