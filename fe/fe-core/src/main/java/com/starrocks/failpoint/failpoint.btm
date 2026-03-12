@@ -40,3 +40,12 @@ HELPER com.starrocks.failpoint.FailPointHelper
 IF shouldTrigger("thrift_server_accept_exception")
 DO throw new OutOfMemoryError("failpoint triggered");
 ENDRULE
+
+# Audit event processor throw exception
+RULE audit_event_processor_oom
+CLASS com.starrocks.qe.AuditLogBuilder
+METHOD exec(AuditEvent)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("audit_event_processor_oom")
+DO throw new OutOfMemoryError("failpoint triggered");
+ENDRULE
