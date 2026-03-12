@@ -207,4 +207,48 @@ TEST_F(ExecFactoryTest, test_create_tree_malformed_or_partial_tree) {
     }
 }
 
+// Build a minimal boolean literal TExpr (used as a conjunct to force ExprContext
+// allocation in the pool during node::init(), which is necessary to expose the UAF).
+static TExpr make_bool_literal_expr(bool value) {
+    TTypeNode type_node;
+    type_node.type = TTypeNodeType::SCALAR;
+    TScalarType scalar_type;
+    scalar_type.type = TPrimitiveType::BOOLEAN;
+    type_node.__set_scalar_type(scalar_type);
+    TTypeDesc type_desc;
+    type_desc.types.push_back(type_node);
+
+    TBoolLiteral bool_literal;
+    bool_literal.value = value;
+
+    TExprNode expr_node;
+    expr_node.node_type = TExprNodeType::BOOL_LITERAL;
+    expr_node.num_children = 0;
+    expr_node.type = type_desc;
+    expr_node.is_nullable = false;
+    expr_node.__set_bool_literal(bool_literal);
+
+    TExpr expr;
+    expr.nodes.push_back(expr_node);
+    return expr;
+}
+
+TEST_F(ExecFactoryTest, test_create_tree_child_failure_triggers_cleanup) {
+    // child[0]: has a conjunct, so ExprContext is allocated in obj_pool during init()
+    TPlanNode child0 = make_base_plan_node(TPlanNodeType::EMPTY_SET_NODE, 11, 0);
+    child0.conjuncts.push_back(make_bool_literal_expr(true));
+
+    // Parent expects 2 children; only child[0] is provided.
+    // When the loop tries to process child[1], node_idx goes out of bounds → error.
+    TPlan plan;
+    plan.nodes.emplace_back(make_base_plan_node(TPlanNodeType::SELECT_NODE, 10, 2));
+    plan.nodes.emplace_back(child0);
+
+    ExecNode* root = nullptr;
+    Status st = ExecFactory::create_tree(&_runtime_state, &_object_pool, plan, *_desc_tbl, &root);
+    // Must return an error (not crash)
+    ASSERT_ERROR(st);
+    ASSERT_TRUE(st.is_internal_error());
+}
+
 } // namespace starrocks
