@@ -1,0 +1,3 @@
+1. **(Optional)** If you want to perform a cross-cluster recovery within the region, you MUST modify the configuration file **cluster_snapshot.yaml** under the directory `fe/conf` of the Leader FE node. Otherwise, you can skip this step.
+
+   To restore the data in a new cluster, all files under the original storage path must be copied to the new path. You must use the template provided in [Appendix](#appendix).
