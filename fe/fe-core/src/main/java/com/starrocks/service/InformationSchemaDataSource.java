@@ -117,15 +117,14 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        UserIdentity currentUser;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (authInfo.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, authInfo.getCurrent_user_ident());
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -215,11 +214,20 @@ public class InformationSchemaDataSource {
 
     private static class AuthDbRequestResult {
         public final List<String> authorizedDbs;
-        public final ConnectContext context;
+        public final UserIdentity currentUser;
+        private final ConnectContext authContext;
 
-        public AuthDbRequestResult(List<String> authorizedDbs, ConnectContext context) {
+        public AuthDbRequestResult(List<String> authorizedDbs, ConnectContext authContext) {
             this.authorizedDbs = authorizedDbs;
-            this.context = context;
+            this.currentUser = authContext.getCurrentUserIdentity();
+            this.authContext = authContext;
+        }
+
+        public ConnectContext buildConnectContext() {
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
+            context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            return context;
         }
     }
 
@@ -239,7 +247,8 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.context, dbName, table);
+                            ConnectContext context = result.buildConnectContext();
+                            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                         } catch (AccessDeniedException e) {
                             LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                             continue;
@@ -376,7 +385,8 @@ public class InformationSchemaDataSource {
                 continue;
             }
             try {
-                Authorizer.checkAnyActionOnTableLikeObject(result.context, ele.dbName, table);
+                ConnectContext context = result.buildConnectContext();
+                Authorizer.checkAnyActionOnTableLikeObject(context, ele.dbName, table);
             } catch (AccessDeniedException e) {
                 LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
                 continue;
@@ -505,8 +515,7 @@ public class InformationSchemaDataSource {
 
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
-        ConnectContext context = result.context;
-
+        ConnectContext context = result.buildConnectContext();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
         if (request.isSetTable_name()) {
@@ -628,7 +637,7 @@ public class InformationSchemaDataSource {
             return response;
         }
 
-        UserIdentity currentUser = result.context.getCurrentUserIdentity();
+        UserIdentity currentUser = result.authContext.getCurrentUserIdentity();
         if (currentUser == null) {
             response.setRoles(roleList);
             return response;
@@ -671,7 +680,7 @@ public class InformationSchemaDataSource {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
-        ConnectContext context = result.context;
+        ConnectContext context = result.buildConnectContext();
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
