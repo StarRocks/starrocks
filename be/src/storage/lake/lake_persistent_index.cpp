@@ -737,19 +737,24 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));
     }
 
-    std::unordered_set<std::string> standalone_sstable_filename;
+    // Collect all input sstable filenames unconditionally, so that standalone filesets
+    // (which match by filename) can always be found — even when the input sstable has a
+    // fileset_id. This handles the case where an sstable was written with fileset_id but
+    // the in-memory fileset is classified as standalone (no range field), which would
+    // previously cause "no matching sstable fileset found" errors.
+    std::unordered_set<std::string> input_sstable_filenames;
     std::unordered_set<UniqueId> fileset_ids;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
+        input_sstable_filenames.insert(input_sstable.filename());
         if (input_sstable.has_fileset_id()) {
             fileset_ids.insert(input_sstable.fileset_id());
-        } else {
-            standalone_sstable_filename.insert(input_sstable.filename());
         }
     }
     // Whether contains this fileset.
+    // Standalone filesets (no range) are matched by filename; non-standalone by fileset_id.
     auto fileset_contains_func = [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
         if (fileset->is_standalone_sstable()) {
-            return standalone_sstable_filename.contains(fileset->standalone_sstable_filename());
+            return input_sstable_filenames.contains(fileset->standalone_sstable_filename());
         }
         return fileset_ids.contains(fileset->fileset_id());
     };
