@@ -48,8 +48,16 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             if (_standalone_sstable != nullptr) {
                 return Status::InternalError("more than one standalone sstable in fileset");
             }
-            _fileset_id = UniqueId::gen_uid();
-            sstable->set_fileset_id(_fileset_id);
+            // Preserve the existing fileset_id from metadata if present, to keep it
+            // consistent with what compaction txn_log records. Only generate a new
+            // random ID for truly legacy sstables (e.g., created before fileset_id
+            // was introduced).
+            if (sstable->sstable_pb().has_fileset_id()) {
+                _fileset_id = sstable->sstable_pb().fileset_id();
+            } else {
+                _fileset_id = UniqueId::gen_uid();
+                sstable->set_fileset_id(_fileset_id);
+            }
             _standalone_sstable = std::move(sstable);
         }
     }
@@ -73,8 +81,13 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
         std::string end_key = sstable->sstable_pb().range().end_key();
         _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
     } else {
-        _fileset_id = UniqueId::gen_uid();
-        sstable->set_fileset_id(_fileset_id);
+        // Preserve the existing fileset_id from metadata if present (same reason as above).
+        if (sstable->sstable_pb().has_fileset_id()) {
+            _fileset_id = sstable->sstable_pb().fileset_id();
+        } else {
+            _fileset_id = UniqueId::gen_uid();
+            sstable->set_fileset_id(_fileset_id);
+        }
         _standalone_sstable = std::move(sstable);
     }
     return Status::OK();
