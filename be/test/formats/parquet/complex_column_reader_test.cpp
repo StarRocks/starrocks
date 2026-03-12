@@ -46,7 +46,8 @@ std::string nullable_variant_json_at(const Column* column, size_t row) {
 }
 
 // Build a ShreddedFieldNode for the given path.
-ShreddedFieldNode make_node(const std::string& full_path, ShreddedFieldNode::Kind kind = ShreddedFieldNode::Kind::NONE) {
+ShreddedFieldNode make_node(const std::string& full_path,
+                            ShreddedFieldNode::Kind kind = ShreddedFieldNode::Kind::NONE) {
     ShreddedFieldNode node;
     node.name = full_path;
     node.full_path = full_path;
