@@ -339,8 +339,9 @@ public:
     static VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node,
                                                                                size_t num_rows);
 
-    static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, const ShreddedFieldNode& node,
-                                                                     std::string_view metadata_raw);
+    static StatusOr<std::optional<VariantRowValue>> build_variant_binding_from_node(size_t row,
+                                                                                    const ShreddedFieldNode& node,
+                                                                                    std::string_view metadata_raw);
 
     static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
                                              const VariantRowRef& full_row, Column* dst);

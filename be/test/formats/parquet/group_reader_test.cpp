@@ -1397,7 +1397,8 @@ TEST_F(GroupReaderTest, VariantObjectBindingBuildFromNode) {
 
     auto built = VariantColumnReader::build_variant_binding_from_node(0, profile_node, std::string_view{});
     ASSERT_TRUE(built.ok()) << built.status().to_string();
-    auto json = built.value().to_json();
+    ASSERT_TRUE(built->has_value());
+    auto json = (**built).to_json();
     ASSERT_TRUE(json.ok()) << json.status().to_string();
     ASSERT_EQ(R"({"salary":100})", json.value());
 }
