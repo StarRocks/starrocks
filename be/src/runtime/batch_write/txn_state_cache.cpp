@@ -233,7 +233,7 @@ void TxnStatePoller::submit(const TxnStatePollTask& task, int64_t delay_ms) {
     }
     int64_t execute_time = get_current_ms() + delay_ms;
     _pending_txn_ids.emplace(task.txn_id);
-    _pending_tasks.emplace(std::make_pair(execute_time, task));
+    _pending_tasks.emplace(execute_time, task);
     _cv.notify_all();
     TRACE_BATCH_WRITE << "submit poll task, txn_id: " << task.txn_id << ", db: " << task.db << ", tbl: " << task.tbl
                       << ", delay_ms: " << delay_ms;

@@ -356,7 +356,7 @@ Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFil
         std::vector<std::string> dict_words;
         dict_words.reserve(all_words.size());
         for (const auto& word : all_words) {
-            dict_words.emplace_back(std::string(word.get_data(), word.get_size()));
+            dict_words.emplace_back(word.get_data(), word.get_size());
         }
         predicates[i] = obj_pool->add(new DictColumnRuntimeFilterPredicate(rf_desc, column_id, std::move(dict_words)));
     }
