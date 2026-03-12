@@ -233,6 +233,9 @@ struct HdfsScannerParams {
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
 
     // columns of partition info
     std::vector<SlotDescriptor*> partition_slots;
@@ -413,6 +416,9 @@ struct HdfsScannerContext {
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
