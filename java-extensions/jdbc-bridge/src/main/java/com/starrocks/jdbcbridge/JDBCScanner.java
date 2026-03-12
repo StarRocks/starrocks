@@ -75,6 +75,13 @@ public class JDBCScanner {
             config.setMinimumIdle(scanContext.getMinimumIdleConnections());
             config.setIdleTimeout(scanContext.getConnectionIdleTimeoutMs());
             config.setConnectionTimeout(scanContext.getConnectionTimeoutMs());
+            // Connection lifecycle values (maxLifetime, keepaliveTime) are pre-validated by
+            // BE's jdbc_scanner.cpp before being passed via JNI. The BE enforces:
+            //   maxLifetime >= 30000 (or defaults to 300000)
+            //   keepaliveTime == 0 (disabled) or (>= 30000 and < maxLifetime)
+            // No additional validation needed here.
+            config.setMaxLifetime(scanContext.getConnectionMaxLifetimeMs());
+            config.setKeepaliveTime(scanContext.getConnectionKeepaliveTimeMs());
             HikariDataSource hikariDataSource = new HikariDataSource(config);
             // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
             // the classes of result data are loaded by the same class loader, otherwise we may encounter
