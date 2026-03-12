@@ -321,18 +321,13 @@ public class MockedFrontend {
 
     private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!fe.isReady() && tryCount < 600) {
+        while (!fe.isReady() && tryCount < 6000) {
             try {
                 tryCount++;
-<<<<<<< HEAD
-                Thread.sleep(1000);
-                System.out.println("globalStateMgr is not ready, wait for 1 second");
-=======
                 Thread.sleep(100);
                 if (tryCount % 10 == 0) {
                     LOG.warn("globalStateMgr is not ready, wait for 1 second");
                 }
->>>>>>> 94e76c4cd7 ([UT] Support mock journal for shared-data mock cluster (#70153))
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
