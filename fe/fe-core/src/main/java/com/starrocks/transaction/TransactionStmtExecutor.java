@@ -294,6 +294,13 @@ public class TransactionStmtExecutor {
                     txnCommitAttachment,
                     timeout);
 
+            // Re-fetch transactionState after commit because the COW pattern in DatabaseTransactionMgr
+            // replaces the in-memory state with a deep copy, making the original reference stale.
+            TransactionState freshTxnState = transactionMgr.getTransactionState(databaseId, transactionId);
+            if (freshTxnState != null) {
+                transactionState = freshTxnState;
+            }
+
             long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
                     context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
 

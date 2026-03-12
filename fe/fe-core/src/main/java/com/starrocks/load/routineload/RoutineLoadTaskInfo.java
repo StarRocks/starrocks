@@ -247,25 +247,25 @@ public abstract class RoutineLoadTaskInfo {
                 timeoutMs / 1000, computeResource);
     }
 
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
-            streamLoadTask.afterCommitted(txnState, txnOperated);
+            streamLoadTask.afterCommitted(txnState);
         }
     }
 
-    public void afterVisible(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterVisible(TransactionState txnState) throws StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
-            streamLoadTask.afterVisible(txnState, txnOperated);
+            streamLoadTask.afterVisible(txnState);
         }
     }
 
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) throws
             StarRocksException {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
-            streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+            streamLoadTask.afterAborted(txnState, txnStatusChangeReason);
         }
     }
 

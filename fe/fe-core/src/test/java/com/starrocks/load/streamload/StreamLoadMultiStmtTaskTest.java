@@ -150,14 +150,14 @@ public class StreamLoadMultiStmtTaskTest {
         map.put("t2", sub2);
         TransactionState txnState = new TransactionState();
         multiTask.beforePrepared(txnState);
-        multiTask.afterPrepared(txnState, true);
+        multiTask.afterPrepared(txnState);
         multiTask.replayOnPrepared(txnState);
         multiTask.beforeCommitted(txnState);
-        multiTask.afterCommitted(txnState, true);
+        multiTask.afterCommitted(txnState);
         multiTask.replayOnCommitted(txnState);
-        multiTask.afterAborted(txnState, true, "reason");
+        multiTask.afterAborted(txnState, "reason");
         multiTask.replayOnAborted(txnState);
-        multiTask.afterVisible(txnState, true);
+        multiTask.afterVisible(txnState);
         multiTask.replayOnVisible(txnState);
         List<List<String>> show = multiTask.getShowInfo();
         Assertions.assertEquals(2, show.size());

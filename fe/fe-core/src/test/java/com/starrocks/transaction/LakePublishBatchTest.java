@@ -108,12 +108,22 @@ public class LakePublishBatchTest {
         }
     }
 
-    private void waitTransactionDone(TransactionState transaction) throws InterruptedException {
-        while (!transaction.getTransactionStatus().isFinalStatus()) {
-            LOG.warn("transaction {} is running. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
+    private void waitTransactionDone(TransactionState transaction) throws Exception {
+        long dbId = transaction.getDbId();
+        long txnId = transaction.getTransactionId();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        while (true) {
+            // Re-fetch from the map each iteration, because COW may have replaced the object
+            TransactionState current = globalTransactionMgr.getDatabaseTransactionMgr(dbId)
+                    .getTransactionState(txnId);
+            if (current != null && current.getTransactionStatus().isFinalStatus()) {
+                LOG.warn("transaction {} is done. state: {}", txnId, current.getTransactionStatus());
+                break;
+            }
+            LOG.warn("transaction {} is running. state: {}", txnId,
+                    current != null ? current.getTransactionStatus() : "null");
             Thread.sleep(200);
         }
-        LOG.warn("transaction {} is done. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
     }
 
     @BeforeAll
@@ -355,6 +365,11 @@ public class LakePublishBatchTest {
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
+        // Re-fetch after waiting because COW may have replaced the objects in the map
+        transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId5);
+        transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId6);
         assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
         assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
     }
@@ -413,6 +428,11 @@ public class LakePublishBatchTest {
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
+        // Re-fetch after waiting because COW may have replaced the objects in the map
+        transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId7);
+        transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId8);
         assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }

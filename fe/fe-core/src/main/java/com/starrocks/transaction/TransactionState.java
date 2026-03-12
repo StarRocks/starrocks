@@ -369,7 +369,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
-    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+    private final ReentrantReadWriteLock txnLock;
 
     public void writeLock() {
         txnLock.writeLock().lock();
@@ -410,6 +410,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
 
         this.callbackIdList = Lists.newArrayList();
+        this.txnLock = new ReentrantReadWriteLock(true);
     }
 
     public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
@@ -441,6 +442,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+        this.txnLock = new ReentrantReadWriteLock(true);
     }
 
     public TransactionState(long transactionId,
@@ -474,6 +476,71 @@ public class TransactionState implements Writable, GsonPreProcessable {
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+        this.txnLock = new ReentrantReadWriteLock(true);
+    }
+
+    public TransactionState(TransactionState txnState) {
+        this.dbId = txnState.dbId;
+        this.tableIdList = txnState.tableIdList;
+        this.transactionId = txnState.transactionId;
+        this.label = txnState.label;
+        this.requestId = txnState.requestId;
+        this.idToTableCommitInfos = deepCopyIdToTableCommitInfos(txnState.idToTableCommitInfos);
+        this.txnCoordinator = txnState.txnCoordinator;
+        this.transactionStatus = txnState.transactionStatus;
+        this.sourceType = txnState.sourceType;
+        this.prepareTime = txnState.prepareTime;
+        this.preparedTime = txnState.preparedTime;
+        this.commitTime = txnState.commitTime;
+        this.finishTime = txnState.finishTime;
+        this.reason = txnState.reason;
+        this.globalTransactionId = txnState.globalTransactionId;
+        this.newFinish = txnState.newFinish;
+        this.finishState = txnState.finishState;
+        this.errorReplicas = txnState.errorReplicas;
+        this.tabletCommitInfos = txnState.tabletCommitInfos;
+        this.unknownReplicas = txnState.unknownReplicas;
+        this.useCombinedTxnLog = txnState.useCombinedTxnLog;
+        this.loadIds = txnState.loadIds;
+        this.latch = txnState.latch;
+        this.publishVersionTasks = txnState.publishVersionTasks;
+        this.hasSendTask = txnState.hasSendTask;
+        this.publishVersionTime = txnState.publishVersionTime;
+        this.publishVersionFinishTime = txnState.publishVersionFinishTime;
+        this.writeEndTimeMs = txnState.writeEndTimeMs;
+        this.writeDurationMs = txnState.writeDurationMs;
+        this.allowCommitTimeMs = txnState.allowCommitTimeMs;
+        this.callbackId = txnState.callbackId;
+        this.callbackIdList = txnState.callbackIdList;
+        this.timeoutMs = txnState.timeoutMs;
+        this.preparedTimeoutMs = txnState.preparedTimeoutMs;
+        this.txnCommitAttachment = txnState.txnCommitAttachment;
+        this.warehouseId = txnState.warehouseId;
+        this.computeResource = txnState.computeResource;
+        this.loadedTblPartitionIndexes = txnState.loadedTblPartitionIndexes;
+        this.errMsg = txnState.errMsg;
+        this.lastErrTimeMs = txnState.lastErrTimeMs;
+        this.finishChecker = txnState.finishChecker;
+        this.txnSpan = txnState.txnSpan;
+        this.traceParent = txnState.traceParent;
+        this.tableToPartitionNameToTPartition = txnState.tableToPartitionNameToTPartition;
+        this.tabletIdToTTabletLocation = txnState.tabletIdToTTabletLocation;
+        this.tableToCreatedPartitionNames = txnState.tableToCreatedPartitionNames;
+        this.isCreatePartitionFailed = txnState.isCreatePartitionFailed;
+        this.txnLock = txnState.txnLock;
+    }
+
+    private Map<Long, TableCommitInfo> deepCopyIdToTableCommitInfos(Map<Long, TableCommitInfo> tableCommitInfos) {
+        Map<Long, TableCommitInfo> copiedTableCommitInfos = Maps.newHashMap();
+        if (tableCommitInfos == null) {
+            return copiedTableCommitInfos;
+        }
+
+        for (Map.Entry<Long, TableCommitInfo> tableCommitInfoEntry : tableCommitInfos.entrySet()) {
+            copiedTableCommitInfos.put(tableCommitInfoEntry.getKey(),
+                    tableCommitInfoEntry.getValue() == null ? null : new TableCommitInfo(tableCommitInfoEntry.getValue()));
+        }
+        return copiedTableCommitInfos;
     }
 
     public void addCallbackId(long callbackId) {
@@ -758,16 +825,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
             if (callback != null) {
                 switch (transactionStatus) {
                     case ABORTED:
-                        callback.afterAborted(this, txnOperated, txnStatusChangeReason);
+                        callback.afterAborted(this, txnStatusChangeReason);
                         break;
                     case COMMITTED:
-                        callback.afterCommitted(this, txnOperated);
+                        callback.afterCommitted(this);
                         break;
                     case PREPARED:
-                        callback.afterPrepared(this, txnOperated);
+                        callback.afterPrepared(this);
                         break;
                     case VISIBLE:
-                        callback.afterVisible(this, txnOperated);
+                        callback.afterVisible(this);
                         break;
                     default:
                         break;

@@ -620,27 +620,30 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @param errorReplicaIds
      * @return
      */
-    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, 0L);
-    }
-
-    public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+    public TransactionState finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds)
             throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, lockTimeoutMs);
+        return dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, 0L);
     }
 
-    public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
+    public TransactionState finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds,
+                                              long lockTimeoutMs)
             throws StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
+        return dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds, lockTimeoutMs);
     }
 
-    public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
+    public TransactionStateBatch finishTransactionBatch(long dbId, TransactionStateBatch stateBatch,
+                                                        Set<Long> errorReplicaIds)
+            throws StarRocksException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        return dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
+    }
+
+    public TransactionState finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws
             StarRocksException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnState.getDbId());
-        dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
+        return dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
     }
 
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
