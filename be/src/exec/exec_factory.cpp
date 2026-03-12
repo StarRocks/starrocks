@@ -113,6 +113,12 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
     ExecNode* node = nullptr;
     RETURN_IF_ERROR(check_tuple_ids_in_descs(descs, tnode));
     RETURN_IF_ERROR(ExecFactory::create_vectorized_node(state, pool, tnode, descs, &node));
+    // Both the Node and ExprContext are allocated from the pool. If they are both allocated successfully
+    // but Node::init() fails, and *root is not set, the FragmentContext's plan will be nullptr, so the
+    // ExprContext will not be explicitly closed. During pool destruction, the ExprContext is destroyed
+    // before the Node (LIFO order). The Node's destructor then tries to close the already-destroyed
+    // ExprContext, causing a use-after-free.
+    *root = node;
 
     std::vector<ExecNode*> children;
     children.reserve(tnode.num_children);
@@ -144,7 +150,6 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
         node->runtime_profile()->add_child(node_children[0]->runtime_profile(), true, nullptr);
     }
 
-    *root = node;
     return Status::OK();
 }
 
