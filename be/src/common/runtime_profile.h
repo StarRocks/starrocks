@@ -332,7 +332,7 @@ public:
         // Stores an event in sequence with the given label and the
         // current time (relative to the first time start() was called) as
         // the timestamp.
-        void mark_event(const std::string& label) { _events.push_back(make_pair(label, _sw.elapsed_time())); }
+        void mark_event(const std::string& label) { _events.emplace_back(label, _sw.elapsed_time()); }
 
         int64_t elapsed_time() { return _sw.elapsed_time(); }
 

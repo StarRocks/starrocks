@@ -40,7 +40,7 @@ public:
     template <LogicalType Type>
     static TExpr create_column_ref_t_expr(SlotId slot_id, bool is_nullable) {
         TExpr expr;
-        expr.nodes.emplace_back(TExprNode());
+        expr.nodes.emplace_back();
         expr.nodes[0].__set_type(TypeDescriptor(Type).to_thrift());
         expr.nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         expr.nodes[0].__set_is_nullable(is_nullable);

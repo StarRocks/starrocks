@@ -131,7 +131,7 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
                 child->_metadata = other_child->_metadata;
                 bool indent_other_child = i.second;
                 _child_map[child->_name] = child;
-                _children.push_back(std::make_pair(child, indent_other_child));
+                _children.emplace_back(child, indent_other_child);
             }
 
             child->merge(other_child);
@@ -243,7 +243,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
                 child = _pool->add(new RuntimeProfile(tchild.name));
                 child->_metadata = tchild.metadata;
                 _child_map[tchild.name] = child;
-                _children.push_back(std::make_pair(child, tchild.indent));
+                _children.emplace_back(child, tchild.indent);
             }
 
             child->update(nodes, idx, is_node_old);
@@ -558,7 +558,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
     std::lock_guard<std::mutex> l2(_counter_lock);
 
     std::queue<std::pair<std::string, std::string>> name_queue;
-    name_queue.push(std::make_pair(ROOT_COUNTER, ROOT_COUNTER));
+    name_queue.emplace(ROOT_COUNTER, ROOT_COUNTER);
     while (!name_queue.empty()) {
         auto top_pair = std::move(name_queue.front());
         name_queue.pop();
@@ -589,7 +589,7 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile, const s
         }
 
         for (auto& child_name : names_it->second) {
-            name_queue.push(std::make_pair(child_name, name));
+            name_queue.emplace(child_name, name);
         }
     }
 }

@@ -769,7 +769,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (meta_pb.segment_encryption_metas_size() == 0) {
         for (int i = 0; i < rowset->num_segments(); ++i) {
-            _segment_encryption_metas.emplace_back(string());
+            _segment_encryption_metas.emplace_back();
         }
     } else {
         DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
