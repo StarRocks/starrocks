@@ -181,4 +181,47 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: v4 > 2");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFunctionDerivedForAsof() throws Exception {
+        String sql = "select * from t0 asof join t1 on v1 = v4 and v2 > v5 where all_match(x -> x > 1, [v1]) and v1 > 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
+
+        sql = "select * from t0 asof join t1 on v1 = v4 and v2 > v5 join t2 on v4 = v7 " +
+                "where all_match(x -> x > 1, [v1]) and v7 > 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 10> -> <slot 10> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
+    }
+    @Test
+    public void testJoinORToUnionWithCTEAndMultiDistinct() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        try {
+            String sql = "with shared as (\n" +
+                    "    select v1, v2, v3 from t0\n" +
+                    ")\n" +
+                    "select count(distinct a.v2), count(distinct b.v3)\n" +
+                    "from shared a\n" +
+                    "join shared b on a.v1 = b.v2 or a.v1 = b.v3;";
+
+            getFragmentPlan(sql);
+        } finally {
+            connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
+        }
+    }
+>>>>>>> defe4b3d6e ([BugFix] Preserve CTE consumer references in OptExpressionDuplicator if CTE producer is not duplicated (#69963))
 }
