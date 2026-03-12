@@ -615,6 +615,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum length of time for which bRPC clients wait as in the idle state.
 - Introduced in: -
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- Default: 10000
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: The wait time before retrying when a bRPC connection pool exception occurs (e.g. SYN packet loss during TCP handshake). When `ChannelPool.getChannel()` throws a `NoSuchElementException` (directly or wrapped in a `RuntimeException`), the retry logic sleeps for this duration before attempting to reconnect.
+- Introduced in: -
+
 ##### `brpc_inner_reuse_pool`
 
 - Default: true

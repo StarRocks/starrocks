@@ -614,6 +614,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: bRPC 客户端在空闲状态下等待的最长时间。
 - 引入版本: -
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: bRPC 连接池异常时的重试等待时间。当 `ChannelPool.getChannel()` 抛出 `NoSuchElementException`（直接抛出或被 `RuntimeException` 包装）时，重试逻辑会等待该时间后再尝试重新连接。典型场景如 TCP 握手期间 SYN 包丢失导致的瞬时连接池故障。
+- 引入版本: -
+
 ##### `brpc_inner_reuse_pool`
 
 - 默认值: true
