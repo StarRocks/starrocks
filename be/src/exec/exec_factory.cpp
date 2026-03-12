@@ -154,7 +154,6 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
         node->runtime_profile()->add_child(node_children[0]->runtime_profile(), true, nullptr);
     }
     *root = node;
-
     return Status::OK();
 }
 
