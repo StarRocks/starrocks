@@ -15,14 +15,15 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.exception.ExceptionCode;
 import com.staros.exception.StarException;
-import com.staros.journal.Journal;
 import com.staros.journal.JournalSystem;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.epack.persist.EditLogEPack;
+import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
@@ -46,7 +47,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final Logger LOG = LogManager.getLogger(StarOSBDBJEJournalSystem.class);
 
-    private BDBJEJournal bdbjeJournal;
+    private Journal bdbjeJournal;
     private JournalWriter journalWriter;
     private EditLog editLog;
     private AtomicLong replayedJournalId;
@@ -65,8 +66,17 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         replayer = null;
     }
 
+    @VisibleForTesting
+    public static StarOSBDBJEJournalSystem forTest(Journal journal) {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(journal);
+        journalSystem.journalWriter = new JournalWriter(journalSystem.bdbjeJournal, journalQueue);
+        journalSystem.editLog = new EditLogEPack(journalQueue);
+        return journalSystem;
+    }
+
     // for checkpoint thread only
-    public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
+    public StarOSBDBJEJournalSystem(Journal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
         editLog = new EditLogEPack(null);
@@ -158,7 +168,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         }
     }
 
-    public void write(Journal journal) throws StarException {
+    public void write(com.staros.journal.Journal journal) throws StarException {
         try {
             editLog.logStarMgrOperation(new StarMgrJournal(journal));
         } catch (Exception e) {
@@ -167,7 +177,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     }
 
     @Override
-    public Future<Boolean> writeAsync(Journal journal) throws StarException {
+    public Future<Boolean> writeAsync(com.staros.journal.Journal journal) throws StarException {
         try {
             return editLog.logStarMgrOperationNoWait(new StarMgrJournal(journal));
         } catch (Exception e) {
@@ -229,7 +239,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         return false;
     }
 
-    public BDBJEJournal getJournal() {
+    public Journal getJournal() {
         return bdbjeJournal;
     }
 
@@ -237,4 +247,3 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         return journalWriter;
     }
 }
-
