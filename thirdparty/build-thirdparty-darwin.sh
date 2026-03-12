@@ -290,15 +290,34 @@ restore_compile_flags() {
     unset LDFLAGS
 }
 
-ensure_java_home() {
-    if [[ -n "${JAVA_HOME:-}" ]]; then
+resolve_java_home() {
+    local java_home_candidate="$1"
+
+    if [[ -z "${java_home_candidate}" ]]; then
+        return 1
+    fi
+    if [[ -f "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home/include/jni.h" ]]; then
+        echo "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home"
         return 0
     fi
-    JAVA_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
-    if [[ -z "${JAVA_HOME}" ]]; then
-        ensure_formula openjdk@17
-        JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+    if [[ -f "${java_home_candidate}/include/jni.h" ]]; then
+        echo "${java_home_candidate}"
+        return 0
     fi
+    echo "${java_home_candidate}"
+}
+
+ensure_java_home() {
+    local java_home_candidate="${JAVA_HOME:-}"
+
+    if [[ -z "${java_home_candidate}" ]]; then
+        java_home_candidate="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
+    fi
+    if [[ -z "${java_home_candidate}" ]]; then
+        ensure_formula openjdk@17
+        java_home_candidate="$(brew --prefix openjdk@17)"
+    fi
+    JAVA_HOME="$(resolve_java_home "${java_home_candidate}")"
     export JAVA_HOME
     export PATH="${JAVA_HOME}/bin:${PATH}"
 }
@@ -1156,6 +1175,17 @@ build_formula_lz4() {
     sync_lib64_links
 }
 
+build_formula_zstd() {
+    ensure_formula zstd
+    local prefix
+    prefix="$(formula_prefix zstd)"
+    mkdir -p "${TP_INCLUDE_DIR}/zstd"
+    link_matching_if_missing "${TP_INCLUDE_DIR}" "${prefix}/include/zstd*.h"
+    link_matching_if_missing "${TP_INCLUDE_DIR}/zstd" "${prefix}/include/zstd*.h"
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libzstd.a" "${prefix}/lib/libzstd*.dylib"
+    sync_lib64_links
+}
+
 build_formula_lzo2() {
     ensure_formula lzo
     local prefix
@@ -1870,6 +1900,9 @@ for package in "${packages[@]}"; do
         zlib)
             build_formula_zlib
             ;;
+        zstd)
+            build_formula_zstd
+            ;;
         lz4)
             build_formula_lz4
             ;;
@@ -1966,7 +1999,10 @@ for package in "${packages[@]}"; do
         fast_float)
             build_formula_fast_float
             ;;
-        starcache|tenann|pprof|breakpad|clucene)
+        clucene)
+            build_clucene
+            ;;
+        starcache|tenann|pprof|breakpad)
             unsupported_package "${package}"
             ;;
         streamvbyte)
@@ -2023,5 +2059,7 @@ for package in "${packages[@]}"; do
             ;;
     esac
 done
+
+sync_lib64_links
 
 echo "Finished to build all thirdparties on Darwin"

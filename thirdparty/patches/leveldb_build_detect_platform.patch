@@ -17,7 +17,7 @@
 +    esac
      $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT -msse4.2 2>/dev/null  <<EOF
        int main() {}
- EOF
+EOF
 @@ -161,6 +171,7 @@
          PLATFORM_SSEFLAGS="-msse4.2"
      fi
