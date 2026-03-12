@@ -148,6 +148,7 @@ jobs:
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
   clang-format:
     runs-on: [self-hosted, light]
     needs: be-checker
@@ -198,6 +199,12 @@ jobs:
   thirdparty-update:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
+=======
+  thirdparty-update:
+    runs-on: [self-hosted, normal]
+    needs: be-checker
+    if: ${{ needs.be-checker.outputs.output1 == 'true' }}
+>>>>>>> 1c7c4f7cbd ([Tool] Delete clang format check in branch (#70201))
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
