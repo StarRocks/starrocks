@@ -41,13 +41,18 @@
 #include <ctime>
 #include <memory>
 
+#include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
@@ -65,7 +70,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/type_utils.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 
@@ -130,7 +134,7 @@ Status RowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_context.rowset_path_prefix));
 
     if (_context.is_pk_compaction) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
@@ -256,8 +260,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
 
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
-    RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    RETURN_IF_ERROR(RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta,
+                                                 &rowset, nullptr));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
@@ -753,9 +757,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
-    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
-                                          _context.rowset_path_prefix, _context.rowset_id));
+    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
@@ -767,7 +769,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (meta_pb.segment_encryption_metas_size() == 0) {
         for (int i = 0; i < rowset->num_segments(); ++i) {
-            _segment_encryption_metas.emplace_back(string());
+            _segment_encryption_metas.emplace_back();
         }
     } else {
         DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());

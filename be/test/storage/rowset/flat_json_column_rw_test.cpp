@@ -19,12 +19,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
@@ -44,10 +46,8 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {

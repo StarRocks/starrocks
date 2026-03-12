@@ -48,6 +48,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
@@ -56,8 +58,6 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "util/coding.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 class Column;
@@ -122,14 +122,7 @@ public:
         return &_buffer;
     }
 
-    void reset() override {
-        _offsets.clear();
-        _buffer.reserve(_options.data_page_size == 0 ? config::data_page_size : _options.data_page_size);
-        _buffer.resize(_reserved_head_size);
-        _next_offset = 0;
-        _size_estimate = sizeof(uint32_t);
-        _finished = false;
-    }
+    void reset() override;
 
     uint32_t count() const override { return _offsets.size(); }
 
@@ -185,42 +178,7 @@ public:
     explicit BinaryPlainPageDecoder(Slice data)
             : _data(data), _parsed(false), _num_elems(0), _offsets_pos(0), _cur_idx(0) {}
 
-    Status init() override {
-        RETURN_IF(_parsed, Status::OK());
-
-        if (_data.size < sizeof(uint32_t)) {
-            std::stringstream ss;
-            ss << "file corruption: not enough bytes for trailer in BinaryPlainPageDecoder ."
-                  "invalid data size:"
-               << _data.size << ", trailer size:" << sizeof(uint32_t);
-            return Status::Corruption(ss.str());
-        }
-
-        // Decode trailer
-        _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
-        _offsets_pos =
-                static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
-        _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
-        // TODO: align offset
-
-        if (_data.size < config::small_dictionary_page_size) {
-            _parsed_datas = std::vector<Slice>();
-            _parsed_datas->reserve(_num_elems);
-            for (uint32_t i = 0; i < _num_elems; i++) {
-                const uint32_t off1 = offset_uncheck(i);
-                const uint32_t off2 = offset(i + 1);
-                Slice s(&_data[off1], off2 - off1);
-                _parsed_datas->emplace_back(s);
-            }
-        }
-
-        _parsed = true;
-
-        uint32_t total_bytes = _offsets_pos;
-        _estimated_row_size = _num_elems == 0 ? 0 : total_bytes / _num_elems;
-
-        return Status::OK();
-    }
+    Status init() override;
 
     Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK_LE(pos, _num_elems);
@@ -328,6 +286,19 @@ public:
         }
     }
 
+    // Dictionary-page predicate cache (used by BinaryDictPageDecoder):
+    //
+    // For string columns with DICT_ENCODING, there is a single dictionary page (DICTIONARY_PAGE) shared by all
+    // data pages in the column. At runtime, ScalarColumnIterator loads that dictionary page into a
+    // BinaryPlainPageDecoder (this class). When predicate-late-materialization calls into
+    // BinaryDictPageDecoder::next_batch_with_filter(), we can evaluate predicates on the dictionary page once
+    // (dict_id -> selected) and reuse the selection across all subsequent data pages.
+    //
+    // This cache is only meaningful when this decoder instance represents the *dictionary page*.
+    // It should not be used for ordinary string data pages.
+    Status get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates, const uint8_t** selection,
+                                     uint32_t* dict_size, uint32_t* selected_count) const;
+
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
     uint32_t offset(int idx) const { return idx < _num_elems ? offset_uncheck(idx) : _offsets_pos; }
@@ -375,6 +346,11 @@ private:
     size_t _estimated_row_size;
 
     std::optional<std::vector<Slice>> _parsed_datas;
+
+    // Cached result of predicate evaluation on the dictionary page. See get_dict_filter_selection().
+    mutable bool _dict_filter_cache_valid{false};
+    mutable std::vector<uint8_t> _dict_filter_cache_selection;
+    mutable uint32_t _dict_filter_cache_selected_count{0};
 };
 
 } // namespace starrocks

@@ -17,12 +17,12 @@
 #include <atomic>
 #include <vector>
 
+#include "base/concurrency/race_detect.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/utils.h"
-#include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/race_detect.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::pipeline {
 class SourceOperator;
@@ -103,12 +103,7 @@ public:
     Observable& operator=(const Observable&) = delete;
 
     // Non-thread-safe, we only allow the need to do this in the fragment->prepare phase.
-    void add_observer(RuntimeState* state, PipelineObserver* observer) {
-        if (state->enable_event_scheduler()) {
-            DCHECK(observer != nullptr);
-            _observers.push_back(observer);
-        }
-    }
+    void add_observer(RuntimeState* state, PipelineObserver* observer);
 
     void detach_observers() { _observers.clear(); }
 
@@ -137,12 +132,8 @@ private:
 // We use this to simplify the development of this class of operators.
 class PipeObservable {
 public:
-    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-        _sink_observable.add_observer(state, observer);
-    }
-    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-        _source_observable.add_observer(state, observer);
-    }
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer);
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer);
 
     auto defer_notify_source() {
         return DeferOp([this]() { _source_observable.notify_source_observers(); });

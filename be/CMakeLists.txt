@@ -395,14 +395,12 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
-    Common
     Column
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
-    Gutil
     IO
     Serde
     Storage
@@ -414,14 +412,24 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
     Geo
-    Simd
     Cache
+    orc
     ${WL_END_GROUP}
+    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
+    RuntimeCore
+    ChunkCore
+    ColumnCore
+    TypesCore
+    FSCore
+    IOCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -483,10 +491,10 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
+    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
@@ -558,10 +566,13 @@ if (${WITH_TENANN} STREQUAL "ON")
 endif()
 
 # enable global pch compiling
-add_library(StarRocksPCH INTERFACE)
-target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+option(WITH_PCH "Enable precompiled headers for BE targets" ON)
+if (WITH_PCH)
+    add_library(StarRocksPCH INTERFACE)
+    target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+    endif()
 endif()
 
 
@@ -616,10 +627,13 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         )
     ELSE()
         ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
+        if (WITH_PCH)
+            target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
+        endif()
     ENDIF()
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
+
 
 set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
 
@@ -714,8 +728,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
 
-    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_OUTPUT_DIR_NAME}")
     endif()
@@ -723,6 +736,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
@@ -739,7 +753,6 @@ add_subdirectory(${SRC_DIR}/storage)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/simd)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)

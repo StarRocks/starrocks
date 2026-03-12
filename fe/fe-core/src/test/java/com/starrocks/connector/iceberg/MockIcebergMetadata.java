@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -22,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -31,8 +31,10 @@ import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -57,7 +59,6 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -179,11 +180,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_UNPARTITIONED_TABLE_NAME0), MOCKED_UNPARTITIONED_TABLE_NAME0,
                 schema, spec, 3);
 
-        String tableIdentifier = Joiner.on(":").join(MOCKED_UNPARTITIONED_TABLE_NAME0, UUID.randomUUID());
         MockIcebergTable mockIcebergTable = new MockIcebergTable(1, MOCKED_UNPARTITIONED_TABLE_NAME0,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
-                MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, null,
-                tableIdentifier, "");
+                MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, null, "");
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
@@ -476,10 +475,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         Schema schema = getIcebergPartitionSchema(tblName);
         TestTables.TestTable baseTable = getPartitionIdentityTable(tblName, schema);
 
-        String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
-                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null,
-                tableIdentifier, "");
+                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null, "");
     }
 
     public static MockIcebergTable getPartitionTransformIcebergTable(String tblName, List<Column> schemas)
@@ -487,10 +484,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         Schema schema = getIcebergPartitionTransformSchema(tblName);
         TestTables.TestTable baseTable = getPartitionTransformTable(tblName, schema);
 
-        String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
-                null, MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, tblName, schemas, baseTable, null,
-                tableIdentifier, "");
+                null, MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, tblName, schemas, baseTable, null, "");
     }
 
     @Override
@@ -507,7 +502,26 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
-            return MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
+            Map<String, IcebergTableInfo> dbTables = MOCK_TABLE_MAP.get(dbName);
+            if (dbTables == null) {
+                return getView(context, dbName, tblName);
+            }
+            IcebergTableInfo tableInfo = dbTables.get(tblName);
+            if (tableInfo == null) {
+                return getView(context, dbName, tblName);
+            }
+            MockIcebergTable t = tableInfo.icebergTable;
+            MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
+                        t.getCatalogDBName(), t.getCatalogTableName(),
+                        t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
+                        t.getComment());
+            ConnectorTableInfo info = GlobalStateMgr.getCurrentState()
+                    .getConnectorTblMetaInfoMgr()
+                    .getConnectorTableInfo(t.getCatalogName(), t.getCatalogDBName(), t.getTableIdentifier());
+            if (info != null && info.getRelatedMaterializedViews() != null) {
+                t1.getRelatedMaterializedViews().addAll(info.getRelatedMaterializedViews());
+            }
+            return t1;
         } finally {
             readUnlock();
         }
@@ -656,5 +670,20 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", VarcharType.VARCHAR),
+                    new Column("date", DateType.DATE)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location", Maps.newHashMap());
+        }
+        return null;
     }
 }

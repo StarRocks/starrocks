@@ -19,10 +19,13 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
+#include <string>
 
+#include "common/thread/cpu_util.h"
+#include "common/thread/thread.h"
 #include "pipeline_driver.h"
 #include "pipeline_driver_queue.h"
-#include "util/thread.h"
 
 namespace starrocks::pipeline {
 

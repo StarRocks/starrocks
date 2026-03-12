@@ -16,15 +16,43 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
+
+namespace {
+
+Status drop_corrupted_sstable_cache(const std::string& path) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (!config::lake_clear_corrupted_cache_data) {
+        return Status::NotSupported("lake_clear_corrupted_cache_data is turned off");
+    }
+    auto fs_or = FileSystemFactory::CreateSharedFromString(path);
+    if (!fs_or.ok()) {
+        LOG(INFO) << "clear corrupted cache for " << path << ", error:" << fs_or.status();
+        return fs_or.status();
+    }
+    auto drop_status = (*fs_or)->drop_local_cache(path);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::drop_corrupted_cache", &drop_status);
+    LOG(INFO) << "clear corrupted cache for " << path << ", error:" << drop_status;
+    return drop_status;
+#else
+    return Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#endif
+}
+
+} // namespace
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter, DelVectorPtr delvec,
@@ -36,7 +64,31 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     }
     options.block_cache = cache;
     sstable::Table* table;
-    RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
+    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
+    if (open_st.is_corruption()) {
+        auto drop_status = drop_corrupted_sstable_cache(rf->filename());
+        if (drop_status.ok()) {
+            delete table;
+            if (tablet_mgr == nullptr) {
+                return Status::InvalidArgument("tablet_mgr is null when loading sst file");
+            }
+            RandomAccessFileOptions opts;
+            if (!sstable_pb.encryption_meta().empty()) {
+                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+                opts.encryption_info = std::move(info);
+            }
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
+                                         opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
+            open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+            TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
+        }
+    }
+    if (!open_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
+        return open_st;
+    }
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
@@ -78,7 +130,11 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         value->set_rowid(v.second.get_rowid());
         RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
-    RETURN_IF_ERROR(builder.Finish());
+    if (auto st = builder.Finish(); !st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_write_error_total.increment(1);
+        LOG(WARNING) << "Failed to finish PersistentIndex SST, error: " << st;
+        return st;
+    }
     *filesz = builder.FileSize();
     if (range_pb != nullptr) {
         auto [key_start, key_end] = builder.KeyRange();
@@ -109,7 +165,21 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
     // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
+    auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
+    if (multiget_st.is_corruption()) {
+        auto drop_status = drop_corrupted_sstable_cache(_rf->filename());
+        if (drop_status.ok()) {
+            multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+            TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:retry_error", &multiget_st);
+        }
+    }
+    if (!multiget_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to multi_get from PersistentIndex SST file: " << _sstable_pb.filename()
+                     << ", error: " << multiget_st;
+        return multiget_st;
+    }
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
@@ -139,6 +209,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                 index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+            }
+        }
+        if (_sstable_pb.rssid_offset() != 0) {
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                const int64_t rssid =
+                        static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
             }
         }
 

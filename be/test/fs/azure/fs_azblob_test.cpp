@@ -16,8 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/credential/cloud_configuration_factory.h"
-#include "testutil/assert.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks {
 
@@ -40,7 +41,7 @@ TEST_F(AzBlobFileSystemTest, test_new_random_access_file) {
         scan_range_params.__set_hdfs_properties(hdfs_properties);
         FSOptions options(&scan_range_params);
 
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri, options));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateUniqueFromString(uri, options));
         ASSERT_EQ(fs->type(), FileSystem::AZBLOB);
 
         ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(uri));
@@ -63,7 +64,7 @@ TEST_F(AzBlobFileSystemTest, test_new_random_access_file) {
         scan_range_params.__set_hdfs_properties(hdfs_properties);
         FSOptions options(&scan_range_params);
 
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri, options));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateUniqueFromString(uri, options));
         ASSERT_EQ(fs->type(), FileSystem::AZBLOB);
 
         ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(uri));

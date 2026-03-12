@@ -16,7 +16,8 @@
 
 #include <utility>
 
-#include "util/filesystem_util.h"
+#include "base/path/filesystem_util.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks {
 
@@ -205,7 +206,7 @@ StatusOr<BinlogFileWriterPtr> BinlogBuilder::_create_binlog_writer() {
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(file_path))
     st = fs->delete_file(file_path);
     if (st.ok()) {
         LOG(INFO) << "Delete binlog file after creating failed, tablet: " << _tablet_id << ", file path: " << file_path;
@@ -223,7 +224,7 @@ Status BinlogBuilder::delete_binlog_files(std::vector<std::string>& file_paths) 
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_paths[0]))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(file_paths[0]))
     int32_t total_num = 0;
     int32_t fail_num = 0;
     for (auto& path : file_paths) {

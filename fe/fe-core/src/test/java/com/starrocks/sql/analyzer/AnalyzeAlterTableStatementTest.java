@@ -133,6 +133,18 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
+    public void testAlterTableSetTableQueryTimeoutAnalyze() {
+        // Cover AlterTableClauseAnalyzer's table_query_timeout branch (AlterTableClauseAnalyzer.java:465-472).
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"120\")");
+        // -1 is accepted and means reset to default behavior.
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"-1\")");
+
+        // Invalid value should be rejected by analyzer (it catches AnalysisException and reports SemanticException).
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"0\")");
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"abc\")");
+    }
+
+    @Test
     public void testDropIndex() {
         String sql = "DROP INDEX index1 ON test.t0";
         analyzeSuccess(sql);
@@ -146,6 +158,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\");");
         analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"10 days\");");
         analyzeFail("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"abcd\");", "Cannot parse text to Duration");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"true\");");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"false\");");
+        analyzeFail("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"abcd\");", "must be bool type(false/true)");
         analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
                 "Can only set one table property at a time");
         analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",

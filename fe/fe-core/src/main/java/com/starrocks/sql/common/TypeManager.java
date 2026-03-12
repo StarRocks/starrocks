@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
@@ -119,19 +120,37 @@ public class TypeManager {
         return new MapType(keyCommon, valueCommon);
     }
 
+    private static boolean isCastStructByName() {
+        final ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return false;
+        }
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        return SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
+    }
+
     private static Type getCommonStructType(StructType t1, StructType t2) {
         if (t1.getFields().size() != t2.getFields().size()) {
             return InvalidType.INVALID;
         }
+        boolean castByName = isCastStructByName();
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            StructField field1 = t1.getField(i);
+            StructField field2 = null;
+            if (castByName) {
+                field2 = t2.getField(field1.getName());
+            } else {
+                field2 = t2.getField(i);
+            }
+            if (field2 == null) {
+                return InvalidType.INVALID;
+            }
+            Type fieldCommon = getCommonSuperType(field1.getType(), field2.getType());
             if (!fieldCommon.isValid()) {
                 return InvalidType.INVALID;
             }
-
-            // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            fields.add(new StructField(field1.getName(), fieldCommon));
         }
         return new StructType(fields);
     }
@@ -163,6 +182,11 @@ public class TypeManager {
         if (VarcharType.VARCHAR.equals(compatibleType)) {
             if (types.get(0).isDateType()) {
                 return types.get(0);
+            }
+            //date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
+            if (!isBetween && types.size() > 1 && types.get(1).isDateType() &&
+                    types.stream().skip(1).allMatch(e -> e == types.get(1))) {
+                return types.get(1);
             }
         }
 
@@ -380,8 +404,19 @@ public class TypeManager {
             if (fromStruct.getFields().size() != toStruct.getFields().size()) {
                 return false;
             }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
+            boolean isCastByName = isCastStructByName();
+            for (int i = 0; i < toStruct.getFields().size(); ++i) {
+                StructField fromField = fromStruct.getField(i);
+                StructField toField = null;
+                if (isCastByName) {
+                    toField = toStruct.getField(fromField.getName());
+                } else {
+                    toField = toStruct.getField(i);
+                }
+                if (toField == null) {
+                    return false;
+                }
+                if (!canCastTo(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }
@@ -631,6 +666,9 @@ public class TypeManager {
         }
 
         if (t1.isStringType() || t2.isStringType()) {
+            if (t1.getLength() <= 0 || t2.getLength() <= 0) {
+                return VarcharType.VARCHAR;
+            }
             return TypeFactory.createVarcharType(Math.max(t1.getLength(), t2.getLength()));
         }
 

@@ -118,15 +118,15 @@ LIMIT 10;
 -- !result
 [UC] ANALYZE FULL TABLE t1;
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	analyze	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t2;
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	analyze	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	analyze	status	OK
 -- !result
 [UC] ANALYZE FULL TABLE t3;
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	analyze	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	analyze	status	OK
 -- !result
 SELECT min,max,row_count,hll_cardinality(ndv) FROM _statistics_.column_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -166,15 +166,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	histogram	status	OK
 -- !result
 set enable_stats_to_optimize_skew_join = false;
 -- result:
@@ -263,15 +263,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '400');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4589949')
 -- result:
@@ -291,15 +291,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '100');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 WITH 256 BUCKETS PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM t1 JOIN t2 USING (k1)', 'cardinality: 45150', 'cardinality: 45150', 'cardinality: 4562636')
 -- result:
@@ -328,7 +328,7 @@ insert into test_escaped_string select "bbbbbbb";
 -- !result
 [UC] analyze table test_escaped_string update histogram on k1;
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.test_escaped_string	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.test_escaped_string	histogram	status	OK
 -- !result
 function: assert_explain_costs_contains('select k1 from test_escaped_string', 'MCV')
 -- result:
@@ -336,15 +336,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	histogram	status	OK
 -- !result
 SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -360,15 +360,15 @@ SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'an
 -- !result
 [UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t1	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t1	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t2 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t2	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t2	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t3 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t3	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t3	histogram	status	OK
 -- !result
 SELECT buckets,mcv FROM _statistics_.histogram_statistics WHERE table_name = 'analyze_test_${uuid0}.t1' and column_name = 'k1';
 -- result:
@@ -553,15 +553,15 @@ SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n
 -- !result
 [UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t4	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t5	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t6	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 76')
 -- result:
@@ -593,15 +593,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t4	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t5	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'hll');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t6	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 270')
 -- result:
@@ -633,15 +633,15 @@ None
 -- !result
 [UC] ANALYZE TABLE t4 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t4	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t4	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t5 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t5	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t5	histogram	status	OK
 -- !result
 [UC] ANALYZE TABLE t6 UPDATE HISTOGRAM ON k1,k2,k3 PROPERTIES('histogram_sample_ratio' = '1.0', "histogram_mcv_size" = '0', 'histogram_collect_bucket_ndv_mode' = 'sample');
 -- result:
-analyze_test_500d94de346d47a281f7062436520c7b.t6	histogram	status	OK
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t6	histogram	status	OK
 -- !result
 function: assert_explain_verbose_contains('SELECT COUNT(*) FROM t4 WHERE k1="2020-02-01"', 'cardinality: 270')
 -- result:
@@ -668,6 +668,29 @@ function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 
 None
 -- !result
 function: assert_explain_costs_contains('SELECT COUNT(*) FROM (t4 n1 JOIN t5 n2 ON n1.k1 = n2.k1) JOIN t6 n3 ON n1.k3 = n3.k3', 'cardinality: 30100', 'cardinality: 30100', 'cardinality: 60000', 'cardinality: 2162260', 'cardinality: 478298162')
+-- result:
+None
+-- !result
+CREATE TABLE `t_histogram_all_columns` (
+    `k1` int,
+    `k2` varchar(20),
+    `k3` date
+)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_histogram_all_columns VALUES
+    (1, 'a', '2020-01-01'),
+    (2, 'b', '2020-01-02'),
+    (3, 'b', '2020-01-03'),
+    (NULL, NULL, NULL);
+-- result:
+-- !result
+[UC] ANALYZE TABLE t_histogram_all_columns UPDATE HISTOGRAM ON ALL COLUMNS;
+-- result:
+analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t_histogram_all_columns	histogram	status	OK
+-- !result
+function: assert_explain_costs_contains('select * from t_histogram_all_columns', 'MCV: [[1:10][2:10][3:10]]', 'MCV: [[b:20][a:10]] ESTIMATE', 'MCV: [[2020-01-01:10][2020-01-02:10][2020-01-03:10]]')
 -- result:
 None
 -- !result

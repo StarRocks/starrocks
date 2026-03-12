@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/simd/simd.h"
 #include "column/column.h"
+#include "common/runtime_profile.h"
 #include "exec/join/join_hash_map.h"
 #include "exec/join/join_hash_table_descriptor.h"
 #include "exec/join/join_key_constructor.h"
-#include "simd/simd.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

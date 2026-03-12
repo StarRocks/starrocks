@@ -109,18 +109,19 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (joinType != JoinOperator.INNER_JOIN && joinType != JoinOperator.LEFT_OUTER_JOIN) {
+            // only support inner join and left join
+            return false;
+        }
+
         // respect the join hint
         if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             return true;
         }
 
         if (!context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
-            return false;
-        }
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        JoinOperator joinType = joinOperator.getJoinType();
-        if (joinType != JoinOperator.INNER_JOIN && joinType != JoinOperator.LEFT_OUTER_JOIN) {
-            // only support inner join and left join
             return false;
         }
 
@@ -326,7 +327,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         inPredicateArgs.add(skewColumn);
         // build a defensive copy and remove NULL from it
         List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
-        nonNullSkewValues.removeIf(value -> value instanceof ConstantOperator && ((ConstantOperator) value).isNull());
+        nonNullSkewValues.removeIf(ScalarOperator::isConstantNull);
         inPredicateArgs.addAll(nonNullSkewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
@@ -368,7 +369,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> valueProjectMap = Maps.newHashMap();
         // use skew value to generate array
-        List<Type> skewTypes = skewValues.stream().map(ScalarOperator::getType).collect(Collectors.toList());
+        List<com.starrocks.type.Type> skewTypes =
+                skewValues.stream().map(v -> v.getType()).collect(Collectors.toList());
         ArrayType arrayType = new ArrayType(TypeManager.getCommonType(
                 skewTypes.toArray(new Type[0]), 0, skewTypes.size()));
         ArrayOperator arrayOperator = new ArrayOperator(arrayType, true, skewValues);

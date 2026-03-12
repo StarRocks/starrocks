@@ -21,11 +21,17 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/container/raw_container.h"
+#include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
@@ -41,6 +47,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -50,11 +57,6 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/raw_container.h"
-#include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
@@ -187,7 +189,7 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
 }
 
 Status TabletManager::drop_local_cache(const std::string& path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return fs->drop_local_cache(path);
 }
 
@@ -213,6 +215,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
     tablet_metadata_pb->set_gtid(req.gtid);
+    if (req.__isset.range) {
+        ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(req.range));
+        *tablet_metadata_pb->mutable_range() = range_pb;
+    }
 
     if (req.__isset.enable_persistent_index) {
         tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);
@@ -376,7 +382,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     const std::string meta_location =
             bundle_tablet_metadata_location(tablet_metas.begin()->first, tablet_metas.begin()->second.version());
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
@@ -583,7 +589,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
     std::unique_ptr<RandomAccessFile> input_file;
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     if (input_fs == nullptr) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(location));
         ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
     } else {
         ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
@@ -640,7 +646,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     ASSIGN_OR_RETURN(auto real_path, _location_provider->real_location(path));
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
-        ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(file_system, FileSystemFactory::CreateSharedFromString(path));
     } else {
         file_system = fs;
     }
@@ -760,7 +766,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     std::string prefix = fmt::format("{:016X}_", tablet_id);
 
     auto root = _location_provider->metadata_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
             objects.insert(join_path(root, name));
@@ -1246,7 +1252,18 @@ int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size)
         }
     }
 
-    int64_t base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    // Immutable check for random bucketing is best-effort.
+    // On cache hit, compute base_size directly from the cached metadata to avoid any remote I/O.
+    // On cache miss, whether to fallback LIST metadata files is controlled by
+    // `allow_list_object_for_random_bucketing_on_cache_miss`.
+    int64_t base_size = 0;
+    if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
+        for (const auto& rowset : metadata->rowsets()) {
+            base_size += rowset.data_size();
+        }
+    } else if (config::allow_list_object_for_random_bucketing_on_cache_miss) {
+        base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    }
 
     std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
@@ -1297,7 +1314,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (segment_info.fs) {
             fs = segment_info.fs;
         } else {
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
         segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
         if (fill_meta_cache) {
@@ -1419,7 +1436,11 @@ void TabletManager::stop() {
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
                                                                      int64_t to_version) {
+    if (!config::experimental_enable_lake_capture_tablet_and_rowsets) {
+        return Status::NotSupported("capture_tablet_and_rowsets is disabled");
+    }
     DCHECK(from_version <= to_version);
+
     auto tablet_ptr = std::make_shared<Tablet>(this, tablet_id);
     std::vector<std::shared_ptr<BaseRowset>> rowsets;
 

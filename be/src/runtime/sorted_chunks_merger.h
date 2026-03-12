@@ -16,11 +16,11 @@
 
 #include <queue>
 
-#include "column/column_helper.h"
+#include "column/chunk_slice.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -114,7 +114,7 @@ protected:
 class CascadeChunkMerger : public ChunkMerger {
 public:
     CascadeChunkMerger(RuntimeState* state);
-    ~CascadeChunkMerger() = default;
+    ~CascadeChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;
@@ -135,7 +135,7 @@ private:
 class ConstChunkMerger : public ChunkMerger {
 public:
     ConstChunkMerger(RuntimeState* state);
-    ~ConstChunkMerger() = default;
+    ~ConstChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;

@@ -64,7 +64,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -178,6 +177,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -189,6 +189,7 @@ import static com.starrocks.utframe.StarRocksTestBase.isOutputTraceLog;
 public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+    private static final Map<Integer, PortReservation> RESERVED_PORTS = new ConcurrentHashMap<>();
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -211,6 +212,37 @@ public class UtFrameUtils {
             "\"replication_num\" = \"1\",\n" +
             "\"in_memory\" = \"false\"\n" +
             ");";
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            for (PortReservation reservation : RESERVED_PORTS.values()) {
+                reservation.close();
+            }
+        }));
+    }
+
+    private static class PortReservation {
+        private final RandomAccessFile accessFile;
+        private final FileLock lock;
+
+        private PortReservation(RandomAccessFile accessFile, FileLock lock) {
+            this.accessFile = accessFile;
+            this.lock = lock;
+        }
+
+        private void close() {
+            try {
+                lock.release();
+            } catch (Exception ignored) {
+                // ignore
+            }
+            try {
+                accessFile.close();
+            } catch (Exception ignored) {
+                // ignore
+            }
+        }
+    }
 
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() {
@@ -274,10 +306,6 @@ public class UtFrameUtils {
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
-        // TODO: support startBDB = false in shared-data mode
-        if (!startBDB && runMode == RunMode.SHARED_DATA) {
-            throw new NotImplementedException("Have to set 'startBDB = true' when creating a shared-data cluster");
-        }
         // set additional fe config
         if (startBDB) {
             feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
@@ -330,6 +358,7 @@ public class UtFrameUtils {
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
         Config.alter_scheduler_interval_millisecond = 100;
+        Config.enable_virtual_columns = false;
 
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
@@ -362,9 +391,7 @@ public class UtFrameUtils {
 
     // create a min starrocks cluster with the given runMode
     public static void createMinStarRocksCluster(RunMode runMode) {
-        // TODO: support creating shared-data cluster without the real BDBJE journal
-        boolean startBdb = (runMode == RunMode.SHARED_DATA);
-        createMinStarRocksCluster(startBdb, runMode);
+        createMinStarRocksCluster(false, runMode);
     }
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
@@ -443,27 +470,41 @@ public class UtFrameUtils {
     }
 
     public static int findValidPort() {
-        String starRocksHome = System.getenv("STARROCKS_HOME");
-        File portDir = new File(starRocksHome + "/fe/ut_ports");
-        if (!portDir.exists()) {
-            Preconditions.checkState(portDir.mkdirs());
+        File portDir = getUtPortDir();
+        if (!portDir.exists() && !portDir.mkdirs()) {
+            throw new IllegalStateException("Failed to create ut port dir: " + portDir.getAbsolutePath());
         }
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 50; i++) {
             try (ServerSocket socket = new ServerSocket(0)) {
                 socket.setReuseAddress(true);
                 int port = socket.getLocalPort();
-                File file = new File(starRocksHome + "/fe/ut_ports/" + port);
-                if (file.exists()) {
+                if (RESERVED_PORTS.containsKey(port)) {
                     continue;
                 }
 
-                RandomAccessFile accessFile = new RandomAccessFile(file, "rws");
-                FileLock lock = accessFile.getChannel().tryLock();
+                File file = new File(portDir, String.valueOf(port));
+                RandomAccessFile accessFile = new RandomAccessFile(file, "rw");
+                FileLock lock;
+                try {
+                    lock = accessFile.getChannel().tryLock();
+                } catch (Exception e) {
+                    accessFile.close();
+                    throw e;
+                }
                 if (lock == null) {
+                    accessFile.close();
                     continue;
                 }
 
-                System.out.println("find valid port " + port + " at " + new Date());
+                PortReservation reservation = new PortReservation(accessFile, lock);
+                PortReservation existing = RESERVED_PORTS.putIfAbsent(port, reservation);
+                if (existing != null) {
+                    reservation.close();
+                    continue;
+                }
+
+                System.out.println("find valid port " + port + " at " + new Date()
+                        + ", lock dir: " + portDir.getAbsolutePath());
                 return port;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -472,6 +513,22 @@ public class UtFrameUtils {
         }
 
         throw new RuntimeException("can not find valid port");
+    }
+
+    private static File getUtPortDir() {
+        String customDir = System.getenv("STARROCKS_UT_PORT_DIR");
+        if (!Strings.isNullOrEmpty(customDir)) {
+            return new File(customDir);
+        }
+        String starRocksHome = System.getenv("STARROCKS_HOME");
+        if (!Strings.isNullOrEmpty(starRocksHome)) {
+            return new File(starRocksHome + "/fe/ut_ports");
+        }
+        File tmpDir = new File(System.getProperty("java.io.tmpdir"), "starrocks_ut_ports");
+        if (tmpDir.exists() || tmpDir.mkdirs()) {
+            return tmpDir;
+        }
+        return tmpDir;
     }
 
     /**

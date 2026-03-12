@@ -14,13 +14,11 @@
 
 #pragma once
 
-#include <iostream>
+#include <iosfwd>
 
-#include "common/logging.h"
+#include "base/utility/guard.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "types/logical_type.h"
-#include "util/guard.h"
 
 namespace starrocks {
 
@@ -134,7 +132,7 @@ constexpr bool is_string_type(LogicalType type) {
 
 constexpr bool is_object_type(LogicalType type) {
     return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
-           type == LogicalType::TYPE_PERCENTILE;
+           type == LogicalType::TYPE_PERCENTILE || type == TYPE_VARIANT;
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {
@@ -366,7 +364,7 @@ UNION_VALUE_GUARD(LogicalType, AggregateComplexLTGuard, lt_is_complex_aggregate,
                   lt_is_decimalv2_struct, lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct,
                   lt_is_json_struct)
 
-UNION_VALUE_GUARD(LogicalType, StringOrBinaryGaurd, lt_is_string_or_binary, lt_is_string_struct, lt_is_binary_struct)
+UNION_VALUE_GUARD(LogicalType, StringOrBinaryGuard, lt_is_string_or_binary, lt_is_string_struct, lt_is_binary_struct)
 
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);

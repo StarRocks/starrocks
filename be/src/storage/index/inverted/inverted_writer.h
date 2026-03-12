@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/status.h"
-#include "storage/collection.h"
+#include "types/collection.h"
 
 namespace starrocks {
 class WritableFile;

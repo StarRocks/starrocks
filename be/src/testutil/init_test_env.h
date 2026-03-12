@@ -14,28 +14,32 @@
 
 #pragma once
 
-#include "butil/file_util.h"
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
+
+#include "base/path/file_util.h"
+#include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
-#include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_path_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
+#include "types/time_types.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

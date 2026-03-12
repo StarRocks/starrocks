@@ -14,23 +14,21 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
 #include "exec/pipeline/set/raw_values_source_operator.h"
-#include "runtime/types.h"
+#include "exec/pipeline_node.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 // RawValuesNode is optimized for large constant lists.
 // It avoids expensive expression evaluation by directly constructing
 // columns from typed raw data (List<Long> or List<String>).
-class RawValuesNode final : public ExecNode {
+class RawValuesNode final : public PipelineNode {
 public:
     RawValuesNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~RawValuesNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;

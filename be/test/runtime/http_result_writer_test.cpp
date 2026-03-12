@@ -18,12 +18,15 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -57,8 +60,8 @@ TEST(HttpResultWriterTest, BasicJsonFormat) {
     expr_ctxs.push_back(managed_expr_ctxs.back().get());
     managed_expr_ctxs.emplace_back(std::make_unique<ExprContext>(c1ref.get()));
     expr_ctxs.push_back(managed_expr_ctxs.back().get());
-    ASSERT_OK(Expr::prepare(expr_ctxs, &dummy_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &dummy_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &dummy_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &dummy_state));
 
     TUniqueId uuid(generate_uuid());
     RuntimeProfile dummy_profile{"dummy"};

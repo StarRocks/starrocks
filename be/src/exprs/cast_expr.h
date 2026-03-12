@@ -17,17 +17,17 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "jsonpath.h"
-#include "runtime/types.h"
-#include "types/large_int_value.h"
-#include "variant_path_parser.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -45,7 +45,8 @@ public:
 
 private:
     static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
-                                            const TypeDescriptor& cast_type, bool allow_throw_exception);
+                                            const TypeDescriptor& cast_type, bool allow_throw_exception,
+                                            bool cast_by_name = false);
     static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TExprNode& node, const TypeDescriptor& from_type,
                                             const TypeDescriptor& to_type, bool allow_throw_exception);
     static Expr* create_json_to_complex_type_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
@@ -307,8 +308,7 @@ public:
 
 private:
     // Invoked only by clone.
-    CastToVariantExpr(const CastToVariantExpr& rhs)
-            : Expr(rhs), _from_type(rhs._from_type), _allow_throw_exception(rhs._allow_throw_exception) {}
+    CastToVariantExpr(const CastToVariantExpr& rhs) = default;
 
     TypeDescriptor _from_type;
     bool _allow_throw_exception;
@@ -352,8 +352,10 @@ private:
 //   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
 class CastStructExpr final : public Expr {
 public:
-    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts)
-            : Expr(node), _field_casts(std::move(field_casts)) {}
+    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts,
+                   std::vector<int> source_field_indices)
+            : Expr(node), _field_casts(std::move(field_casts)),
+              _source_field_indices(std::move(source_field_indices)) {}
 
     ~CastStructExpr() override = default;
 
@@ -365,16 +367,24 @@ public:
         for (int i = 0; i < _field_casts.size(); ++i) {
             if (_field_casts[i] != nullptr) {
                 cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            } else {
+                cloned->_field_casts.emplace_back(nullptr);
             }
         }
+        cloned->_source_field_indices = _source_field_indices;
         return pool->add(cloned.release());
     }
+
+    const std::vector<int>& source_field_indices() const { return _source_field_indices; }
 
 private:
     // Invoked only by clone.
     CastStructExpr(const CastStructExpr& rhs) : Expr(rhs) {}
 
     std::vector<Expr*> _field_casts;
+    // Maps target field index -> source field index.
+    // Used to handle STRUCT fields reordering when field names match but order differs.
+    std::vector<int> _source_field_indices;
 };
 
 // cast NULL OR Boolean to ComplexType
@@ -384,7 +394,7 @@ class MustNullExpr final : public Expr {
 public:
     MustNullExpr(const TExprNode& node) : Expr(node) {}
 
-    MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
+    MustNullExpr(const MustNullExpr& rhs) = default;
 
     ~MustNullExpr() override = default;
 
@@ -404,7 +414,7 @@ struct CastToString {
             return v.to_string();
         } else if constexpr (IsInt128<Type>) {
             // int128_t
-            return LargeIntValue::to_string(v);
+            return int128_to_string(v);
         } else if constexpr (IsInt256<Type>) {
             // int256_t
             return v.to_string();

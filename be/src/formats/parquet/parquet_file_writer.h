@@ -40,6 +40,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -55,10 +56,10 @@
 #include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
-#include "fs/fs.h"
+#include "fs/fs_fwd.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "runtime/runtime_fwd.h"
+#include "types/type_descriptor.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace parquet {
@@ -70,7 +71,6 @@ namespace starrocks {
 class Chunk;
 class FileSystem;
 class PriorityThreadPool;
-class RuntimeState;
 
 namespace parquet {
 class ChunkWriter;
@@ -93,6 +93,11 @@ struct ParquetWriterOptions : FileWriterOptions {
     bool use_int96_timestamp_encoding = false;
     ::parquet::ParquetVersion::type version = ::parquet::ParquetVersion::PARQUET_2_6;
 
+    // Column-level dictionary encoding configuration
+    // key: column name, value: whether to enable dictionary encoding
+    // Columns not in this map use the global default behavior
+    std::unordered_map<std::string, bool> column_dictionary_enabled;
+
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
     inline static std::string VERSION = "version";
@@ -104,7 +109,7 @@ public:
                       std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
-                      const std::function<void()>& rollback_action);
+                      std::function<void()> rollback_action, std::vector<bool> nullable = {});
 
     ~ParquetFileWriter() override;
 
@@ -118,12 +123,12 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
-            const std::vector<FileColumnId>& file_column_ids);
+            const std::vector<FileColumnId>& file_column_ids, const std::vector<bool>& nullable);
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
@@ -141,6 +146,7 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
+    std::vector<bool> _nullable;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
@@ -153,11 +159,17 @@ public:
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
                              std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state);
+                             RuntimeState* runtime_state, std::vector<bool> nullable = {});
 
     Status init() override;
 
     StatusOr<WriterAndStream> create(const std::string& path) const override;
+
+    // Set column-level dictionary encoding configuration
+    // Must be called before init()
+    void set_column_dictionary_enabled(std::unordered_map<std::string, bool> config) {
+        _column_dictionary_enabled = std::move(config);
+    }
 
 private:
     std::shared_ptr<FileSystem> _fs;
@@ -170,6 +182,10 @@ private:
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::vector<bool> _nullable;
+
+    // Column-level dictionary encoding configuration
+    std::unordered_map<std::string, bool> _column_dictionary_enabled;
 };
 
 } // namespace starrocks::formats

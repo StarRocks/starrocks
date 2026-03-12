@@ -19,12 +19,13 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -37,9 +38,8 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
@@ -197,7 +197,7 @@ protected:
             auto st = iter->seek_to_first();
             ASSERT_TRUE(st.ok()) << st.to_string();
 
-            size_t rows_read;
+            size_t rows_read = 0;
             std::for_each(jsons.begin(), jsons.end(), [&](MutableColumnPtr& json) { rows_read += json->size(); });
             st = iter->next_batch(&rows_read, read_col.get());
             ASSERT_TRUE(st.ok());

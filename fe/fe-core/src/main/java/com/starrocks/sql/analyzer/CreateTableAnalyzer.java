@@ -644,7 +644,8 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
+                                stmt.getKeysDesc().getKeysType());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -693,7 +694,12 @@ public class CreateTableAnalyzer {
             Map<String, String> properties = stmt.getProperties();
             KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
 
-            if (Config.enable_range_distribution) {
+            boolean enableRangeDistribution = Config.enable_range_distribution;
+            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRangeDistribution()) {
+                enableRangeDistribution = true;
+            }
+
+            if (enableRangeDistribution) {
                 if (distributionDesc == null) {
                     // For duplicate key table, if both duplicate key and order by are not
                     // specified, use random distribution, otherwise, use range distribution

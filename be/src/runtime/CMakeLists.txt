@@ -17,6 +17,40 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
+set(RUNTIME_CORE_FILES
+    current_thread.cpp
+    descriptors.cpp
+    runtime_state.cpp
+    mem_tracker.cpp
+    mem_pool.cpp
+    runtime_filter.cpp
+    runtime_filter_layout.cpp
+    runtime_filter_builder.cpp
+    runtime_filter_factory.cpp
+    runtime_filter_cache.cpp
+    bucket_aware_partition.cpp
+    starrocks_metrics.cpp
+    memory/roaring_hook.cpp
+    memory/system_allocator.cpp
+    memory/tracked_allocator.cpp
+    memory/mem_chunk_allocator.cpp
+    memory/memory_allocator.cpp
+)
+
+ADD_BE_LIB(RuntimeCore
+    ${RUNTIME_CORE_FILES}
+)
+
+target_link_libraries(RuntimeCore PUBLIC
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
@@ -28,25 +62,18 @@ set(RUNTIME_FILES
     sender_queue.cpp
     data_stream_sender.cpp
     multi_cast_data_stream_sink.cpp
-    datetime_value.cpp
-    descriptors.cpp
+    descriptors_ext.cpp
     exec_env.cpp
-    exec.cpp
-    global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
-    mem_pool.cpp
     plan_fragment_executor.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
-    runtime_state.cpp
-    decimalv2_value.cpp
+    runtime_state_helper.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
-    types.cpp
     agg_state_desc.cpp
-    mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
@@ -80,21 +107,19 @@ set(RUNTIME_FILES
     metadata_result_writer.cpp
     variable_result_writer.cpp
     arrow_result_writer.cpp
-    memory/roaring_hook.cpp
-    memory/system_allocator.cpp
-    memory/mem_chunk_allocator.cpp
-    memory/column_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
-    time_types.cpp
     runtime_filter_worker.cpp
+    runtime_filter_serde.cpp
+    runtime_filter/runtime_filter_descriptor.cpp
+    runtime_filter/runtime_filter_probe.cpp
+    runtime_filter/runtime_filter_helper.cpp
     global_dict/decoder.cpp
+    global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
-    current_thread.cpp
-    runtime_filter_cache.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
@@ -107,9 +132,10 @@ set(RUNTIME_FILES
     dictionary_cache_sink.cpp
     type_pack.cpp
     customized_result_writer.cpp
-    int128_to_double.cpp
     diagnose_daemon.cpp
     load_fail_point.cpp
+    logconfig.cpp
+    prof/heap_prof.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
@@ -120,3 +146,5 @@ set(RUNTIME_FILES ${RUNTIME_FILES}
 ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
+
+target_link_libraries(Runtime PUBLIC RuntimeCore)

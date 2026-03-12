@@ -14,8 +14,10 @@
 
 #include "agent/resource_group_usage_recorder.h"
 
+#include "base/time/time.h"
+#include "common/system/cpu_info.h"
 #include "exec/workgroup/work_group.h"
-#include "util/time.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -24,15 +25,19 @@
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
-#include "util/compression/stream_compression.h"
-#include "util/defer_op.h"
+#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 
@@ -47,13 +52,18 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _strict_mode(false),
           _error_counter(0),
           _file_scan_type(TFileScanType::LOAD),
-          _schema_only(schema_only) {}
+          _file_format_str("UNKNOWN"),
+          _schema_only(schema_only) {
+    if (_params.__isset.file_scan_type) {
+        _file_scan_type = _params.file_scan_type;
+    }
+}
 
 FileScanner::~FileScanner() = default;
 
 void FileScanner::close() {
     if (!_schema_only) {
-        Expr::close(_dest_expr_ctx, _state);
+        ExprExecutor::close(_dest_expr_ctx, _state);
     }
 }
 
@@ -104,7 +114,7 @@ Status FileScanner::init_expr_ctx() {
         }
 
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
 
@@ -230,7 +240,8 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                         error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                                   << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
-                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(), "");
+                        RuntimeStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
+                                                                           error_msg.str(), "");
                     }
 
                     // avoid print too many debug log
@@ -240,7 +251,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     std::stringstream error_msg;
                     error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
+                    RuntimeStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
                 }
             }
         }
@@ -295,7 +306,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
@@ -314,9 +325,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         return Status::OK();
     }
 
-    using DecompressorPtr = std::shared_ptr<StreamCompression>;
-    std::unique_ptr<StreamCompression> dec;
-    RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &dec));
+    using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+    ASSIGN_OR_RETURN(auto dec, StreamDecompressor::create_decompressor(compression));
     auto stream = std::make_unique<io::CompressedInputStream>(src_file->stream(), DecompressorPtr(dec.release()));
     *file = std::make_shared<SequentialFile>(std::move(stream), range_desc.path);
     return Status::OK();
@@ -333,7 +343,7 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;

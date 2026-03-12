@@ -14,6 +14,8 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include "base/debug/trace.h"
+#include "common/config_exec_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -21,15 +23,15 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
 Status PrimaryKeyCompactionConflictResolver::execute() {
     Schema pkey_schema = generate_pkey_schema();
+    ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type, true));
 
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());
@@ -99,7 +101,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 // 6. replace pk index
                                 TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
                                 TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
-                                                                              col.get()));
+                                                                              col.get(), encoding_type));
                                 RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, current_rowid,
                                                                       replace_indexes, *col));
                                 current_rowid += chunk->num_rows();

@@ -18,18 +18,18 @@
 #include <boost/algorithm/string.hpp>
 
 #include "cache/cache_options.h"
+#include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -233,6 +233,9 @@ struct HdfsScannerParams {
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
 
     // columns of partition info
     std::vector<SlotDescriptor*> partition_slots;
@@ -413,6 +416,9 @@ struct HdfsScannerContext {
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
     // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
@@ -507,7 +513,12 @@ protected:
 
 public:
     static constexpr const char* ICEBERG_ROW_ID = "_row_id";
+    static constexpr const char* ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
     static constexpr const char* ICEBERG_ROW_POSITION = "_pos";
+    // Iceberg v3 spec reserved field IDs for row lineage columns.
+    // See: https://iceberg.apache.org/spec/#reserved-field-ids
+    static constexpr int32_t ICEBERG_ROW_ID_COLUMN_ID = 2147483540;
+    static constexpr int32_t ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID = 2147483539;
 };
 
 } // namespace starrocks

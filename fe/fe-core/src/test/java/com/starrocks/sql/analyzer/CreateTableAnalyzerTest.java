@@ -18,9 +18,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -123,6 +125,43 @@ public class CreateTableAnalyzerTest {
         });
         assertThat(exception.getMessage(), containsString("max_column_number_per_table"));
         Config.max_column_number_per_table = 10000;
+    }
+
+    @Test
+    public void testPrimaryKeyTablePartitionSourceColumnsMustBePrimaryKeys() {
+        String nonKeyGeneratedPartitionColumnSql = "CREATE TABLE test_create_table_db.t_pk_partition_non_key (\n" +
+                "  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                "  `transaction_time` datetime NOT NULL,\n" +
+                "  `transaction_date` date NULL AS date(transaction_time)\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY (`transaction_date`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(nonKeyGeneratedPartitionColumnSql,
+                "The partition expr should base on key column");
+
+        String nonKeyPartitionExprSourceSql = "CREATE TABLE test_create_table_db.t_pk_partition_expr_non_key_source (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `transaction_time` bigint NOT NULL,\n" +
+                "  `v1` int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY from_unixtime(transaction_time)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(nonKeyPartitionExprSourceSql,
+                "The partition expr should base on key column");
+
+        String keyPartitionExprSourceSql = "CREATE TABLE test_create_table_db.t_pk_partition_on_key_expr (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `v1` int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY from_unixtime(id)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeSuccess(keyPartitionExprSourceSql);
     }
 
     private void testValidComplexDefault(String columnDef) {
@@ -459,8 +498,9 @@ public class CreateTableAnalyzerTest {
 
         testInvalidComplexDefault(
                 "c4 STRUCT<id INT, name STRING> DEFAULT row('not_int', 123, 456)",
-                "Invalid default value for 'c4': Default value type struct<col1 varchar, col2 tinyint(4), col3 smallint(6)> " +
-                        "cannot be cast to column type struct<id int(11), name varchar(65533)>");
+                "Invalid default value for 'c4': Default value type struct<`col1` varchar, `col2` tinyint(4), " +
+                        "`col3` smallint(6)> cannot be cast to column type struct<`id` int(11), `name` " +
+                        "varchar(65533)>");
 
         testInvalidComplexDefault("c1 ARRAY<STRUCT<id INT>> DEFAULT [row(1, 'extra_field')]", "");
 
@@ -521,6 +561,43 @@ public class CreateTableAnalyzerTest {
                     "ORDER BY(v2, v1)\n" +
                     "PROPERTIES (\"replication_num\" = \"1\");";
             analyzeSuccess(sql3);
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+        }
+    }
+
+    @Test
+    public void testCreateTableForceRange() {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            String sql = "CREATE TABLE test_create_table_db.force_range_table\n" +
+                    "(\n" +
+                    "    k1 int,\n" +
+                    "    k2 int,\n" +
+                    "    v1 int\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(k1, k2)\n" +
+                    "PROPERTIES('replication_num' = '1');";
+
+            // 1. Default: should NOT be range distribution if Config is false
+            CreateTableStmt stmt1 = (CreateTableStmt) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt1.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 2. Set session variable to true: should be range distribution
+            connectContext.getSessionVariable().setEnableRangeDistribution(true);
+            try {
+                CreateTableStmt stmt2 = (CreateTableStmt) analyzeSuccess(sql);
+                Assertions.assertTrue(stmt2.getDistributionDesc() instanceof RangeDistributionDesc);
+            } finally {
+                connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            }
+
+            // 3. Set Config to true: should be range distribution even if session variable is false
+            Config.enable_range_distribution = true;
+            CreateTableStmt stmt3 = (CreateTableStmt) analyzeSuccess(sql);
+            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
         } finally {
             Config.enable_range_distribution = oldEnableRangeDistribution;
         }

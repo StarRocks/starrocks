@@ -36,6 +36,8 @@
 
 #include <iostream>
 
+#include "base/testutil/assert.h"
+#include "base/types/decimal12.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -43,12 +45,12 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
@@ -58,10 +60,9 @@
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 #include "types/date_value.h"
+#include "types/type_traits.h"
 
 using std::string;
 
@@ -273,15 +274,25 @@ protected:
                 size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
+                Buffer<uint8_t> buffer;
+                Buffer<Slice> slices;
+                const uint8_t* raw_data = nullptr;
+                if constexpr (is_object_type(type)) {
+                    const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                    data_column->build_slices(buffer, slices);
+                } else {
+                    raw_data = column->raw_data();
+                }
                 for (int j = 0; j < rows_read; ++j) {
                     if (type == TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string())
                                 << "j:" << j;
-                    } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
-                                << "j:" << j;
+                    } else if (type == TYPE_VARCHAR) {
+                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string()) << "j:" << j;
+                    } else if (type == TYPE_OBJECT || type == TYPE_HLL) {
+                        ASSERT_EQ(value, slices[j].to_string());
                     } else {
-                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
+                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
                     }
                 }
             }
@@ -296,15 +307,27 @@ protected:
                     size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
+
+                    Buffer<uint8_t> buffer;
+                    Buffer<Slice> slices;
+                    const uint8_t* raw_data = nullptr;
+                    if constexpr (is_object_type(type)) {
+                        const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                        data_column->build_slices(buffer, slices);
+                    } else {
+                        raw_data = column->raw_data();
+                    }
+
                     for (int j = 0; j < rows_read; ++j) {
                         if (type == TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result,
-                                      reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string())
                                     << "j:" << j;
-                        } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
+                        } else if (type == TYPE_VARCHAR) {
+                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string());
+                        } else if (type == TYPE_HLL || type == TYPE_OBJECT) {
+                            ASSERT_EQ(value, slices[j].to_string());
                         } else {
-                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
+                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
                         }
                     }
                 }
@@ -444,7 +467,6 @@ protected:
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(s1.size() * count);
         auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
         for (size_t i = 0; i < count; i += 16) {
             CHECK(col->append_strings(v));
@@ -471,7 +493,6 @@ protected:
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
             (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 

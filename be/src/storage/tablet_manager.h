@@ -44,6 +44,8 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "base/concurrency/spinlock.h"
+#include "base/statusor.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -52,9 +54,7 @@
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/options.h"
 #include "storage/tablet.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
@@ -97,6 +97,9 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
+    TabletManager(const TabletManager&) = delete;
+    const TabletManager& operator=(const TabletManager&) = delete;
+
     explicit TabletManager(int64_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
@@ -117,6 +120,8 @@ public:
                                                    std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
+
+    StatusOr<TabletSharedPtr> get_tablet_by_id(TTabletId tablet_id, bool include_deleted = false);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
@@ -235,9 +240,6 @@ private:
         std::unordered_set<int64_t> _locks[kNumShard];
     };
 
-    TabletManager(const TabletManager&) = delete;
-    const TabletManager& operator=(const TabletManager&) = delete;
-
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one
     Status _add_tablet_unlocked(const TabletSharedPtr& tablet, bool update_meta, bool force);
@@ -280,6 +282,7 @@ private:
     void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
 
     std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);

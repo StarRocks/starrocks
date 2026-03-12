@@ -35,6 +35,7 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#include <runtime/mem_tracker.h>
 #ifdef WITH_TENANN
 #include <tenann/index/index_cache.h>
 #endif
@@ -46,13 +47,15 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "base/metrics.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config_cache_fwd.h"
+#include "exec/query_cache/cache_manager.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/runtime_filter_worker.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 
@@ -285,6 +288,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("ordinal_index_mem_bytes", &_memory_metrics->ordinal_index_mem_bytes);
     registry->register_metric("bitmap_index_mem_bytes", &_memory_metrics->bitmap_index_mem_bytes);
     registry->register_metric("bloom_filter_index_mem_bytes", &_memory_metrics->bloom_filter_index_mem_bytes);
+    registry->register_metric("builtin_inverted_index_mem_bytes", &_memory_metrics->builtin_inverted_index_mem_bytes);
     registry->register_metric("segment_zonemap_mem_bytes", &_memory_metrics->segment_zonemap_mem_bytes);
     registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
@@ -379,6 +383,7 @@ void SystemMetrics::update_memory_metrics() {
     SET_MEM_METRIC_VALUE(ordinal_index_mem_tracker, ordinal_index_mem_bytes)
     SET_MEM_METRIC_VALUE(bitmap_index_mem_tracker, bitmap_index_mem_bytes)
     SET_MEM_METRIC_VALUE(bloom_filter_index_mem_tracker, bloom_filter_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(builtin_inverted_index_mem_tracker, builtin_inverted_index_mem_bytes)
     SET_MEM_METRIC_VALUE(segment_zonemap_mem_tracker, segment_zonemap_mem_bytes)
     SET_MEM_METRIC_VALUE(short_key_index_mem_tracker, short_key_index_mem_bytes)
     SET_MEM_METRIC_VALUE(compaction_mem_tracker, compaction_mem_bytes)

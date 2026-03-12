@@ -38,6 +38,7 @@
 #include <memory>
 #include <string>
 
+#include "base/phmap/phmap.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
@@ -47,7 +48,6 @@
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/types.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -141,7 +141,7 @@ public:
                           Column* column) override;
 
     Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
-                                     Column* dst);
+                                     Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 

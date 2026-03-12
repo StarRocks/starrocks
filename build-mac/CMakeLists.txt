@@ -105,7 +105,7 @@ if(NOT EXISTS "${GENCODE_DIR}")
     message(FATAL_ERROR "Generated C++ sources directory not found: ${GENCODE_DIR}")
 endif()
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
-set(OUTPUT_DIR "${BASE_DIR}/output")
+set(OUTPUT_DIR "${BASE_DIR}/../output/be")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 
 # Validate essential paths
@@ -1169,6 +1169,9 @@ install(TARGETS starrocks_be
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/bin)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib)
+
+# Install default BE config
+install(FILES ${BASE_DIR}/../conf/be.conf DESTINATION ${OUTPUT_DIR}/conf)
 
 # ==============================================================================
 # BUILD SUMMARY

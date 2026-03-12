@@ -16,21 +16,53 @@
 
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "column/type_traits.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "connector/deletion_vector/deletion_vector.h"
-#include "exec/exec_node.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "fs/hdfs/fs_hdfs.h"
 #include "io/cache_select_input_stream.hpp"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/type_info_allocator_adapter.h"
+#include "storage/types.h"
 #include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
+
+static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc, const std::string& default_value,
+                                                      size_t row_count, Column* column) {
+    auto type_info = get_type_info(slot_desc->type());
+    if (type_info == nullptr) {
+        return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
+    }
+    if (default_value.empty() && !slot_desc->type().is_string_type()) {
+        return Status::InvalidArgument(fmt::format(
+                "empty default value is only supported for string-like columns, col_name={}", slot_desc->col_name()));
+    }
+
+    // Parse default value into Datum using TypeInfo::from_string
+    // This handles all basic types: INT, BIGINT, FLOAT, DOUBLE, BOOLEAN, STRING, DATE, TIMESTAMP
+    MemPool mem_pool;
+    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
+    Datum datum;
+    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
+
+    // Fill column with the default value
+    for (size_t i = 0; i < row_count; ++i) {
+        column->append_datum(datum);
+    }
+
+    return Status::OK();
+}
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
@@ -126,7 +158,8 @@ Status HdfsScanner::_build_scanner_context() {
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
         if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
-            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION) {
+            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION ||
+            slot->col_name() == ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
@@ -158,6 +191,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.scan_range_id = _scanner_params.scan_range_id;
+    ctx.materialize_slot_default_values = _scanner_params.materialize_slot_default_values;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -258,7 +292,8 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     if (status.ok()) {
         if (!_scanner_params.scanner_conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.scanner_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(
+                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_params.scanner_conjunct_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -355,9 +390,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsScanner::create_random_access_fi
     // if compression
     // input_stream = DecompressInputStream(input_stream)
     if (options.compression_type != CompressionTypePB::NO_COMPRESSION) {
-        using DecompressorPtr = std::shared_ptr<StreamCompression>;
-        std::unique_ptr<StreamCompression> dec;
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(options.compression_type, &dec));
+        using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
+        ASSIGN_OR_RETURN(auto dec, StreamDecompressor::create_decompressor(options.compression_type));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
@@ -649,6 +683,9 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
                 col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
                 col->append_datum(int64_t(1));
                 col->assign(row_count, 0);
+            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
+                       it != materialize_slot_default_values.end()) {
+                RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
                 col->append_default(row_count);
             }
@@ -762,7 +799,8 @@ Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Fi
     if (conjunct_ctxs_by_slot.size()) {
         filter->assign(chunk_size, 1);
         for (auto& it : conjunct_ctxs_by_slot) {
-            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
+            ASSIGN_OR_RETURN(chunk_size,
+                             ChunkPredicateEvaluator::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
             if (chunk_size == 0) {
                 (*chunk)->set_num_rows(0);
                 return Status::OK();
@@ -784,7 +822,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
     }
     return !(chunk->has_rows());
 }

@@ -21,7 +21,7 @@ namespace starrocks {
 class LocalPrimaryKeyRecover : public PrimaryKeyRecover {
 public:
     LocalPrimaryKeyRecover(Tablet* tablet, UpdateManager* update_mgr) : _tablet(tablet), _update_mgr(update_mgr) {}
-    ~LocalPrimaryKeyRecover() {}
+    ~LocalPrimaryKeyRecover() = default;
 
     Status pre_cleanup() override;
 
@@ -41,6 +41,8 @@ public:
     // Sorrt rowset by rowsetid
     // also consider sorting in data loading and compact concurrency scenarios
     static Status sort_rowsets(std::vector<RowsetSharedPtr>* rowsets);
+
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const override;
 
 private:
     Tablet* _tablet;

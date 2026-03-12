@@ -266,6 +266,12 @@ public class StatementPlanner {
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
+                // Only pre-resolve external tables when there are internal tables to lock.
+                // This avoids holding meta lock while fetching external metadata.
+                // Check config first (cheapest), then locker state.
+                if (Config.enable_experimental_external_table_preparse && locker != null && !locker.isEmpty()) {
+                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
+                }
                 takeLock.run();
                 Analyzer.analyze(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
@@ -626,12 +632,6 @@ public class StatementPlanner {
                     sourceType,
                     session.getExecTimeout(),
                     session.getCurrentComputeResource());
-
-            // add table indexes to transaction state
-            if (targetTable instanceof OlapTable) {
-                TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
-                txnState.addTableIndexes((OlapTable) targetTable);
-            }
         }
 
         stmt.setTxnId(txnId);

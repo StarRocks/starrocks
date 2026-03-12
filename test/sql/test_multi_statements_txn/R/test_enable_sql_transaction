@@ -1,0 +1,105 @@
+-- name: test_txn_syntax_noop_when_disabled
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_txn(k int) primary key(k);
+-- result:
+-- !result
+set enable_sql_transaction = false;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_txn values(1);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t_txn order by k;
+-- result:
+1
+-- !result
+-- name: test_txn_rollback_when_enabled
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_txn(k int) primary key(k);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_txn values(2);
+-- result:
+-- !result
+rollback;
+-- result:
+-- !result
+select * from t_txn order by k;
+-- result:
+-- !result
+-- name: test_txn_commit_when_enabled
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_txn(k int) primary key(k);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t_txn values(3);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t_txn order by k;
+-- result:
+3
+-- !result
+-- name: test_enable_then_error_on_unsupported_stmt
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+select 1;
+-- result:
+1
+-- !result
+rollback;
+-- result:
+-- !result
+-- name: test_disable_then_no_error
+set enable_sql_transaction = false;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+select 1;
+-- result:
+1
+-- !result
+commit;
+-- result:
+-- !result

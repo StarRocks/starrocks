@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
@@ -31,7 +33,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -265,7 +266,8 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
@@ -313,7 +315,8 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
     writer.non_key_columns.emplace_back(Int16Column::create());
     writer.non_key_columns.emplace_back(Int32Column::create());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
@@ -374,7 +377,8 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
     const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
@@ -421,7 +425,8 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
     writer.non_key_columns.emplace_back(Int16Column::create());
     writer.non_key_columns.emplace_back(Int32Column::create());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());

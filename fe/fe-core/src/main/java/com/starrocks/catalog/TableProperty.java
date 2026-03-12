@@ -35,9 +35,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -337,6 +337,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
+    // table level query timeout in seconds
+    // default value -1 means use cluster query_timeout
+    @SerializedName(value = "tableQueryTimeout")
+    private int tableQueryTimeout = -1;
+
     /**
      * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
      * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
@@ -353,20 +358,84 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.properties = properties;
     }
 
+    public TableProperty(TableProperty other) {
+        this.properties = Maps.newLinkedHashMap();
+        if (other.properties != null) {
+            this.properties.putAll(other.properties);
+        }
+        this.flatJsonConfig = other.flatJsonConfig == null ? null : new FlatJsonConfig(other.flatJsonConfig);
+        this.dynamicPartitionProperty = copyDynamicPartitionProperty(other.dynamicPartitionProperty);
+        this.replicationNum = other.replicationNum;
+        this.partitionTTLNumber = other.partitionTTLNumber;
+        this.partitionTTL = other.partitionTTL;
+        this.partitionRetentionCondition = other.partitionRetentionCondition;
+        this.timeDriftConstraintSpec = other.timeDriftConstraintSpec;
+        this.partitionRefreshNumber = other.partitionRefreshNumber;
+        this.partitionRefreshStrategy = other.partitionRefreshStrategy;
+        this.mvRefreshMode = other.mvRefreshMode;
+        this.autoRefreshPartitionsLimit = other.autoRefreshPartitionsLimit;
+        this.excludedTriggerTables = other.excludedTriggerTables == null ? null : Lists.newArrayList(other.excludedTriggerTables);
+        this.excludedRefreshTables = other.excludedRefreshTables == null ? null : Lists.newArrayList(other.excludedRefreshTables);
+        this.mvSortKeys = other.mvSortKeys == null ? null : Lists.newArrayList(other.mvSortKeys);
+        this.forceExternalTableQueryRewrite = other.forceExternalTableQueryRewrite;
+        this.queryRewriteConsistencyMode = other.queryRewriteConsistencyMode;
+        this.mvQueryRewriteSwitch = other.mvQueryRewriteSwitch;
+        this.mvTransparentRewriteMode = other.mvTransparentRewriteMode;
+        this.enablePersistentIndex = other.enablePersistentIndex;
+        this.persistentIndexType = other.persistentIndexType;
+        this.primaryIndexCacheExpireSec = other.primaryIndexCacheExpireSec;
+        this.storageVolume = other.storageVolume;
+        this.storageCoolDownTTL = other.storageCoolDownTTL;
+        this.resourceGroup = other.resourceGroup;
+        this.compressionType = other.compressionType;
+        this.compressionLevel = other.compressionLevel;
+        this.writeQuorum = other.writeQuorum;
+        this.enableReplicatedStorage = other.enableReplicatedStorage;
+        this.storageType = other.storageType;
+        this.bucketSize = other.bucketSize;
+        this.mutableBucketNum = other.mutableBucketNum;
+        this.enableLoadProfile = other.enableLoadProfile;
+        this.baseCompactionForbiddenTimeRanges = other.baseCompactionForbiddenTimeRanges;
+        this.hasDelete = other.hasDelete;
+        this.hasForbiddenGlobalDict = other.hasForbiddenGlobalDict;
+        if (other.storageInfo != null) {
+            this.storageInfo = new StorageInfo(other.storageInfo.getFilePathInfo(), other.storageInfo.getCacheInfo());
+        }
+        this.binlogAvailableVersions = other.binlogAvailableVersions == null
+                ? new HashMap<>()
+                : new HashMap<>(other.binlogAvailableVersions);
+        this.binlogConfig = other.binlogConfig == null ? null : new BinlogConfig(other.binlogConfig);
+        this.uniqueConstraints = other.uniqueConstraints == null ? null : Lists.newArrayList(other.uniqueConstraints);
+        this.foreignKeyConstraints = other.foreignKeyConstraints == null ? null : Lists.newArrayList(other.foreignKeyConstraints);
+        this.useFastSchemaEvolution = other.useFastSchemaEvolution;
+        this.dataCachePartitionDuration = other.dataCachePartitionDuration;
+        this.location = copyLocation(other.location);
+        this.fileBundling = other.fileBundling;
+        this.compactionStrategy = other.compactionStrategy;
+        this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
+        this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
+        this.tableQueryTimeout = other.tableQueryTimeout;
+        this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
+    }
+
     public TableProperty copy() {
-        TableProperty newTableProperty = new TableProperty(Maps.newHashMap(this.properties));
-        try {
-            newTableProperty.gsonPostProcess();
-        } catch (IOException e) {
-            Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
+        return new TableProperty(this);
+    }
+
+    private static DynamicPartitionProperty copyDynamicPartitionProperty(DynamicPartitionProperty other) {
+        if (other == null || !other.isExists()) {
+            return new DynamicPartitionProperty(Maps.newHashMap());
         }
-        newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
-        if (this.storageInfo != null) {
-            newTableProperty.storageInfo =
-                    new StorageInfo(this.storageInfo.getFilePathInfo(), this.storageInfo.getCacheInfo());
+        return new DynamicPartitionProperty(Maps.newHashMap(other.getProperties()));
+    }
+
+    private static Multimap<String, String> copyLocation(Multimap<String, String> location) {
+        if (location == null) {
+            return null;
         }
-        return newTableProperty;
+        Multimap<String, String> copied = HashMultimap.create();
+        copied.putAll(location);
+        return copied;
     }
 
     public static boolean isSamePrefixProperties(Map<String, String> properties, String prefix) {
@@ -433,6 +502,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
+                buildTableQueryTimeout();
+                buildDataCacheEnable();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -880,6 +951,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildDataCacheEnable() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            boolean dataCacheEnable = Boolean.parseBoolean(
+                    properties.getOrDefault(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "false"));
+            if (this.storageInfo != null) {
+                this.storageInfo.setDataCacheEnable(dataCacheEnable);
+            } else {
+                LOG.warn("Setting datacache.enable to {} while storage info is null", dataCacheEnable);
+            }
+        }
+        return this;
+    }
+
     public void setStorageCoolDownTTL(PeriodDuration storageCoolDownTTL) {
         this.storageCoolDownTTL = storageCoolDownTTL;
     }
@@ -1299,6 +1383,41 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return cloudNativeFastSchemaEvolutionV2;
     }
 
+    public TableProperty buildTableQueryTimeout() {
+        String timeoutStr = properties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+
+        if (timeoutStr == null) {
+            tableQueryTimeout = -1;
+            return this;
+        }
+        try {
+            int timeout = Integer.parseInt(timeoutStr);
+            if (timeout > 0) {
+                tableQueryTimeout = timeout;
+                return this;
+            }
+
+            // -1 means unset table_query_timeout and fallback to default behavior.
+            if (timeout == -1) {
+                LOG.info("table_query_timeout reset to default");
+            } else {
+                LOG.warn("Invalid table_query_timeout value: {}. Must be > 0 or -1 for default. Using default (-1).",
+                        timeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            LOG.warn("Invalid table_query_timeout value: {}. Must be a valid integer. Using default (-1).",
+                    timeoutStr, e);
+        }
+
+        properties.remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        tableQueryTimeout = -1;
+        return this;
+    }
+
+    public int getTableQueryTimeout() {
+        return tableQueryTimeout;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1334,7 +1453,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
-        buildLakeCompactionMaxParallel();
-        buildEnableStatisticCollectOnFirstLoad();
+        // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

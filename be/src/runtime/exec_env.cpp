@@ -40,16 +40,24 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
-#include "common/config.h"
-#include "common/configbase.h"
+#include "base/string/parse_util.h"
+#include "base/time/time.h"
+#include "base/utility/pretty_printer.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
+#include "common/mem_chunk.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
+#include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -61,9 +69,11 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
@@ -82,6 +92,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -92,24 +103,25 @@
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+#include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
-#include "util/mem_info.h"
-#include "util/parse_util.h"
-#include "util/pretty_printer.h"
+#include "util/global_metrics_registry.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
 #endif
 
 namespace starrocks {
+
+int64_t GlobalEnv::process_mem_limit() const {
+    return _process_mem_tracker->limit();
+}
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -158,6 +170,30 @@ static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) 
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
+namespace {
+
+bool allocate_hll_registers_with_mem_chunk_allocator(size_t size, void* /*ctx*/, MemChunk* chunk) {
+    return MemChunkAllocator::allocate(size, chunk);
+}
+
+void free_hll_registers_with_mem_chunk_allocator(const MemChunk& chunk, void* /*ctx*/) {
+    MemChunkAllocator::free(chunk);
+}
+
+void register_hll_registers_allocator() {
+    HyperLogLog::RegistersAllocator allocator;
+    allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
+    allocator.free = free_hll_registers_with_mem_chunk_allocator;
+    Status st = HyperLogLog::set_registers_allocator(allocator);
+    CHECK(st.ok()) << "failed to register hll registers allocator: " << st.to_string();
+}
+
+MemTracker* process_mem_tracker_provider() {
+    return GlobalEnv::GetInstance()->process_mem_tracker();
+}
+
+} // namespace
+
 bool GlobalEnv::_is_init = false;
 
 bool GlobalEnv::is_init() {
@@ -166,6 +202,7 @@ bool GlobalEnv::is_init() {
 
 Status GlobalEnv::init() {
     RETURN_IF_ERROR(_init_mem_tracker());
+    CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
     _is_init = true;
     return Status::OK();
 }
@@ -227,6 +264,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _bitmap_index_mem_tracker = regist_tracker(MemTrackerType::BITMAP_INDEX, -1, column_metadata_mem_tracker());
     _bloom_filter_index_mem_tracker =
             regist_tracker(MemTrackerType::BLOOM_FILTER_INDEX, -1, column_metadata_mem_tracker());
+    _builtin_inverted_index_mem_tracker =
+            regist_tracker(MemTrackerType::BUILTIN_INVERTED_INDEX, -1, column_metadata_mem_tracker());
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(MemTrackerType::COMPACTION, compaction_mem_limit, process_mem_tracker());
@@ -247,13 +286,15 @@ Status GlobalEnv::_init_mem_tracker() {
     _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
-    MemChunkAllocator::init_metrics();
+    register_hll_registers_allocator();
+    register_mem_chunk_allocator_metrics(GlobalMetricsRegistry::instance()->metrics());
 
     return Status::OK();
 }
 
 std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
     std::vector<std::shared_ptr<MemTracker>> mem_trackers;
+    mem_trackers.reserve(_mem_tracker_map.size());
     for (auto& item : _mem_tracker_map) {
         mem_trackers.emplace_back(item.second);
     }
@@ -320,7 +361,7 @@ ExecEnv::~ExecEnv() = default;
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
-    _metrics = StarRocksMetrics::instance()->metrics();
+    _metrics = GlobalMetricsRegistry::instance()->metrics();
     _stream_mgr = new DataStreamMgr();
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr();
@@ -458,7 +499,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            StarRocksMetrics::instance()->get_pipeline_executor_metrics());
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -537,9 +578,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     };
     REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
 
-    _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
-    _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
-    _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
+    _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
+    _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
+    _broker_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.

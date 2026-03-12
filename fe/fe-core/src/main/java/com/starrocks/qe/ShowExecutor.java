@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -113,6 +114,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -148,14 +150,17 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.LakeTabletStatus;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.PartitionRef;
@@ -229,11 +234,11 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -247,7 +252,12 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -270,6 +280,7 @@ import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -298,6 +309,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -311,7 +323,80 @@ public class ShowExecutor {
     }
 
     public static ShowResultSet execute(ShowStmt statement, ConnectContext context) {
-        return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
+        ShowResultSet result = GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
+        List<List<String>> datas = doPredicate(statement, result);
+        datas = doOrderByLimit(statement, datas);
+        result.setResultRows(datas);
+        return result;
+    }
+
+    private static List<List<String>> doOrderByLimit(ShowStmt statement, List<List<String>> datas) {
+        if (!statement.isSelfOrderBy() && CollectionUtils.isNotEmpty(statement.getOrderByPairs())) {
+            OrderByPair[] orderByPairArr = statement.getOrderByPairs().toArray(new OrderByPair[0]);
+            datas.sort((row1, row2) -> {
+                for (OrderByPair pair : orderByPairArr) {
+                    int index = pair.getIndex();
+                    if (index >= row1.size() || index >= row2.size()) {
+                        continue;
+                    }
+                    String val1 = row1.get(index);
+                    String val2 = row2.get(index);
+
+                    int cmp;
+                    try {
+                        double d1 = Double.parseDouble(val1);
+                        double d2 = Double.parseDouble(val2);
+                        cmp = Double.compare(d1, d2);
+                    } catch (NumberFormatException e) {
+                        cmp = val1.compareTo(val2);
+                    }
+                    if (cmp != 0) {
+                        return pair.isDesc() ? -cmp : cmp;
+                    }
+                }
+                return 0;
+            });
+        }
+        if (!statement.isSelfLimit() && statement.getLimitElement() != null) {
+            LimitElement le = statement.getLimitElement();
+            Stream<List<String>> stream = datas.stream();
+            if (le.hasOffset()) {
+                stream = stream.skip(le.getOffset());
+            }
+            if (le.hasLimit()) {
+                stream = stream.limit(le.getLimit());
+            }
+            datas = stream.collect(Collectors.toList());
+        }
+        return datas;
+    }
+
+    private static List<List<String>> doPredicate(ShowStmt statement, ShowResultSet result) {
+        if (statement.isSelfPredicate() || statement.getPredicate() == null) {
+            return result.getResultRows();
+        }
+        // build columns
+        List<List<String>> datas = Lists.newArrayList();
+        Map<String, ScalarOperator> valuesMappings = Maps.newHashMap();
+        for (List<String> rows : result.getResultRows()) {
+            valuesMappings.clear();
+            for (int index = 0; index < result.getMetaData().getColumns().size(); index++) {
+                Column c = result.getMetaData().getColumn(index);
+                valuesMappings.put(c.getName().toLowerCase(), ConstantOperator.createVarchar(rows.get(index)));
+            }
+            ScalarOperator p = SqlToScalarOperatorTranslator.translateWithSlotRef(statement.getPredicate(),
+                    slotRef -> valuesMappings.get(slotRef.getColumnName().toLowerCase()));
+            ScalarOperatorRewriter re = new ScalarOperatorRewriter();
+            ScalarOperator r = re.rewrite(p, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+
+            if (!r.isConstantRef()) {
+                throw UnsupportedException.unsupportedException(
+                        "doesn't support predicate: " + ExprToSql.toMySql(statement.getPredicate()));
+            } else if (r.isConstantTrue()) {
+                datas.add(rows);
+            }
+        }
+        return datas;
     }
 
     public static class ShowExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
@@ -2274,6 +2359,57 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, ConnectContext context) {
+            // Check db table partition
+            String dbName = statement.getDbName() != null ? statement.getDbName() : context.getDatabase();
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+
+            String tableName = statement.getTblName();
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            }
+
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                throw new SemanticException("Only support show tablet status for cloud native table or materialized view");
+            }
+
+            PartitionRef partitionRef = statement.getPartitionRef();
+            List<String> partitionNames = partitionRef != null ? partitionRef.getPartitionNames() : Lists.newArrayList();
+
+            // Check status filter
+            LakeTabletStatus statusFilter = null;
+            BinaryType op = null;
+            Expr where = statement.getWhere();
+            if (where instanceof BinaryPredicate binaryPredicate) {
+                op = binaryPredicate.getOp();
+                Expr leftChild = binaryPredicate.getChild(0);
+                Expr rightChild = binaryPredicate.getChild(1);
+                String leftKey = ((SlotRef) leftChild).getColumnName();
+                if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
+                    statusFilter = Enums.getIfPresent(
+                            LakeTabletStatus.class, ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
+                }
+            }
+
+            // Get tablet status
+            int maxMissingDataFilesToShow = statement.getMaxMissingDataFilesToShow();
+            ComputeResource computeResource = context.getCurrentComputeResource();
+            List<List<String>> results;
+            try {
+                results = TabletRepairHelper.getTabletStatus(
+                        db, (OlapTable) table, partitionNames, statusFilter, op, maxMissingDataFilesToShow, computeResource);
+            } catch (Exception e) {
+                LOG.warn("Failed to get tablet status", e);
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), results);
+        }
+
+        @Override
         public ShowResultSet visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                         ConnectContext context) {
             List<List<String>> results;
@@ -2316,6 +2452,13 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                      ConnectContext context) {
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement),
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotShowResult());
         }
 
         @Override
@@ -3082,7 +3225,7 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
+            Expr predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }

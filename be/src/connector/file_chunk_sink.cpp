@@ -16,6 +16,7 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -24,7 +25,8 @@
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -50,23 +52,27 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    std::shared_ptr<FileSystem> fs =
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
+
+    auto normalized_format = normalize_format_name(ctx->format);
+    ASSIGN_OR_RETURN(std::string file_suffix, build_canonical_file_suffix(normalized_format, ctx->compression_type));
+
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, file_suffix);
 
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
-    if (boost::iequals(ctx->format, formats::PARQUET)) {
+    if (normalized_format == formats::PARQUET) {
         file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
                 fs, ctx->compression_type, ctx->options, ctx->column_names,
                 std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
                 std::nullopt, ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::ORC)) {
+    } else if (normalized_format == formats::ORC) {
         file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
                 fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
                 runtime_state);
-    } else if (boost::iequals(ctx->format, formats::CSV)) {
+    } else if (normalized_format == formats::CSV) {
         file_writer_factory = std::make_shared<formats::CSVFileWriterFactory>(
                 fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
                 runtime_state);

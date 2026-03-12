@@ -25,22 +25,6 @@
 
 namespace starrocks {
 
-TypeDescriptor array_type(const TypeDescriptor& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.emplace_back(child_type);
-    return t;
-}
-
-TypeDescriptor array_type(const LogicalType& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.resize(1);
-    t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
-    return t;
-}
-
 class ArrayFunctionsTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -167,6 +151,10 @@ TEST_F(ArrayFunctionsTest, array_length) {
         EXPECT_EQ(result->get(2), Datum(1));
         EXPECT_EQ(result->get(3), Datum(1));
         EXPECT_EQ(result->get(4), Datum(2));
+
+        // array_length should not mutate input nullable null bitmap.
+        auto* nullable = down_cast<NullableColumn*>(c.get());
+        EXPECT_EQ(nullable->data_column()->size(), nullable->null_column()->size());
     }
 
     // []

@@ -80,6 +80,8 @@ public class AnalyzeMgr implements Writable {
 
     // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    // Cancellation markers for analyze tasks. Used to make KILL ANALYZE deterministic even if it misses the SQL window.
+    private final Set<Long> cancelledAnalyzeIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     // only first load of table will trigger analyze, so we don't need limit thread pool queue size
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
             Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
@@ -589,15 +591,15 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            List<Long> pids =
+                    dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
 
-        List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
-
-        StatisticExecutor executor = new StatisticExecutor();
-        statsConnectCtx.setThreadLocalInfo();
-        if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
-            pids.forEach(dropPartitionIds::remove);
+            StatisticExecutor executor = new StatisticExecutor();
+            if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
+                pids.forEach(dropPartitionIds::remove);
+            }
         }
     }
 
@@ -657,15 +659,16 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setStatisticsConnection(true);
-        statsConnectCtx.setThreadLocalInfo();
-        StatisticExecutor executor = new StatisticExecutor();
-        statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
-        boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
-        if (!res) {
-            LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+        try (var scope = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
+            StatisticExecutor executor = new StatisticExecutor();
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
+            boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
+            if (!res) {
+                LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
+            }
+            lastCleanTime = LocalDateTime.now();
         }
-        lastCleanTime = LocalDateTime.now();
     }
 
     private void clearStaleStatsWhenStarted() {
@@ -731,13 +734,14 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        statsConnectCtx.setThreadLocalInfo();
-        StatisticExecutor executor = new StatisticExecutor();
-        List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
+        try (var scope = statsConnectCtx.bindScope()) {
+            StatisticExecutor executor = new StatisticExecutor();
+            List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 
-        statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
-        if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
-            checkDbTableIds.forEach(checkTableIds::remove);
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
+            if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
+                checkDbTableIds.forEach(checkTableIds::remove);
+            }
         }
     }
 
@@ -874,6 +878,7 @@ public class AnalyzeMgr implements Writable {
 
     public void unregisterConnection(long analyzeID, boolean killExecutor) {
         ConnectContext context = connectionMap.remove(analyzeID);
+        cancelledAnalyzeIds.remove(analyzeID);
         if (killExecutor) {
             if (context != null) {
                 context.kill(false, "kill analyze unregisterConnection");
@@ -885,11 +890,15 @@ public class AnalyzeMgr implements Writable {
 
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
-        if (context != null) {
-            context.kill(false, USER_CANCEL_MESSAGE);
-        } else {
+        if (context == null) {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
         }
+        cancelledAnalyzeIds.add(analyzeID);
+        context.kill(false, USER_CANCEL_MESSAGE);
+    }
+
+    public boolean isAnalyzeCancelled(long analyzeID) {
+        return cancelledAnalyzeIds.contains(analyzeID);
     }
 
     public void killAllPendingTasks() {

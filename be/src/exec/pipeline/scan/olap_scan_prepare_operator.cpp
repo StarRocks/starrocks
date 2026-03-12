@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exprs/expr_executor.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -45,7 +46,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
-        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(state, _morsel_queue->prepare_olap_scan_ranges()));
     }
 
     return Status::OK();
@@ -128,15 +129,15 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
                                            &(tuple_desc->decoded_slots()));
     DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void OlapScanPrepareOperatorFactory::close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 
     SourceOperatorFactory::close(state);
 }

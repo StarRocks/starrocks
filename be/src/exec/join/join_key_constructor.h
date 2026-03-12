@@ -16,19 +16,20 @@
 
 #include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
+#include <runtime/mem_pool.h>
 #include <runtime/runtime_state.h>
 
 #include <coroutine>
 #include <cstdint>
 #include <optional>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_table_descriptor.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -43,7 +44,7 @@ public:
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
 
     static void prepare(RuntimeState* state, JoinHashTableItems* table_items) {}
-    static void build_key(RuntimeState* state, JoinHashTableItems* table_items) {}
+    static void build_key(RuntimeState* state, JoinHashTableItems* table_items);
     static size_t get_key_column_bytes(const JoinHashTableItems& table_items) {
         return table_items.key_columns[0]->byte_size();
     }

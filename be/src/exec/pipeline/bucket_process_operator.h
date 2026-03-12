@@ -17,13 +17,13 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 // similar with query_cache::MultilaneOperator but it only proxy one operator.

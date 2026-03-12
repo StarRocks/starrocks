@@ -16,7 +16,12 @@
 
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
 #include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gtest/gtest.h"
@@ -28,11 +33,9 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
-#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -714,8 +717,8 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     ExprContext* ctx = nullptr;
 
-    Status st =
-            Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
+    Status st = ExprFactory::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx,
+                                              chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();

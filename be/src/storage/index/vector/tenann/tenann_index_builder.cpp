@@ -19,7 +19,7 @@
 #include <tenann/util/threads.h>
 
 #include "column/array_column.h"
-#include "common/config.h"
+#include "common/config_vector_index_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "tenann/factory/index_factory.h"
@@ -149,7 +149,7 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
 Status TenAnnIndexBuilderProxy::flush() {
     try {
         _index_builder->Flush();
-    } catch (tenann::FatalError& e) {
+    } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
         return Status::InternalError(e.what());
     }

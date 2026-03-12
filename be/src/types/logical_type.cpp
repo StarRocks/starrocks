@@ -16,7 +16,7 @@
 
 #include <algorithm>
 
-#include "column/type_traits.h"
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -303,17 +303,6 @@ LogicalType scalar_field_type_to_logical_type(LogicalType field_type) {
     LogicalType ltype = g_scalar_ftype_to_ltype.get_logical_type(field_type);
     DCHECK(ltype != TYPE_UNKNOWN);
     return ltype;
-}
-
-struct FixedLengthTypeGetter {
-    template <LogicalType ltype>
-    size_t operator()() {
-        return RunTimeFixedTypeLength<ltype>::value;
-    }
-};
-
-size_t get_size_of_fixed_length_type(LogicalType ltype) {
-    return type_dispatch_all(ltype, FixedLengthTypeGetter());
 }
 
 const std::vector<LogicalType>& sortable_types() {

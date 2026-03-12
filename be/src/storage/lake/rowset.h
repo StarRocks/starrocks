@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <optional>
+#include <unordered_set>
+
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -21,6 +24,7 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/seek_range.h"
 
 namespace starrocks::lake {
 
@@ -48,7 +52,18 @@ public:
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
                     size_t compaction_segment_limit);
 
-    virtual ~Rowset();
+    // Create a Rowset with a specific segment range [segment_start, segment_end).
+    // Used for large rowset split compaction where a single rowset is split into multiple subtasks.
+    // Each subtask processes a subset of segments.
+    //
+    // Requires:
+    //  - segment_start >= 0
+    //  - segment_end > segment_start
+    //  - segment_end <= metadata.segments_size()
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
+                    int32_t segment_start, int32_t segment_end);
+
+    ~Rowset() override;
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 
@@ -83,12 +98,23 @@ public:
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
     // if _compaction_segment_limit is set > 0, it means only partial segments will be used
+    // if _segment_range_end > 0, it means segment range mode is used
     [[nodiscard]] int64_t num_segments() const {
+        if (_segment_range_end > 0) {
+            return _segment_range_end - _segment_range_start;
+        }
         return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
     }
 
     // only used in compaction
     [[nodiscard]] bool partial_segments_compaction() const { return _compaction_segment_limit > 0; }
+
+    // Check if this rowset uses segment range mode (for large rowset split compaction)
+    [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
+
+    // Get segment range [start, end), only valid when is_segment_range_mode() returns true
+    [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
+    [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
     // only used in compaction
     [[nodiscard]] Status add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_compaction,
                                                               TabletWriter* writer, uint64_t& uncompacted_num_rows,
@@ -120,11 +146,14 @@ public:
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
+
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
 
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
 
@@ -133,6 +162,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;
@@ -145,6 +176,11 @@ private:
     // default is 0 means every segment will be used.
     // only used for compaction
     size_t _compaction_segment_limit;
+    // Segment range for large rowset split compaction.
+    // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
+    // Default is 0, meaning all segments are used.
+    int32_t _segment_range_start = 0;
+    int32_t _segment_range_end = 0;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {

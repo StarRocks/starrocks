@@ -66,6 +66,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.type.VariantType;
@@ -257,7 +258,7 @@ public class TypeTest {
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(IntegerType.INT), "array<int(11)>"},
                 {new MapType(IntegerType.INT, IntegerType.INT), "map<int(11),int(11)>"},
-                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<col1 int(11)>"},
+                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<`col1` int(11)>"},
         };
 
         for (Object[] tc : testCases) {
@@ -279,7 +280,7 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isMapType());
-        Assertions.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
+        Assertions.assertEquals("MAP<INT,struct<`c1` int(11), `cc1` varchar(1073741824)>>", deType.toString());
         // Make sure select fields are false when initialized
         Assertions.assertFalse(deType.getSelectedFields()[0]);
         Assertions.assertFalse(deType.getSelectedFields()[1]);
@@ -300,7 +301,8 @@ public class TypeTest {
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isStructType());
         Assertions.assertEquals(
-                "struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1073741824)>>",
+                "struct<`struct_test` int(11) COMMENT 'comment test', `c1` struct<`c1` int(11), `cc1` " +
+                        "varchar(1073741824)>>",
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assertions.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
@@ -415,6 +417,34 @@ public class TypeTest {
         pTypeDesc = buildStructType(fieldNames, fieldTypes);
         tp = TypeDeserializer.fromProtobuf(pTypeDesc);
         Assertions.assertTrue(tp.isStructType());
+    }
+
+    @Test
+    public void testTypeSerializerToProtobufScalar() {
+        ScalarType varchar = new VarcharType(10);
+        Type restoredVarchar = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(varchar));
+        Assertions.assertEquals(varchar, restoredVarchar);
+
+        ScalarType decimal = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 3);
+        Type restoredDecimal = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(decimal));
+        Assertions.assertEquals(decimal, restoredDecimal);
+    }
+
+    @Test
+    public void testTypeSerializerToProtobufComplex() {
+        Type arrayType = new ArrayType(IntegerType.INT);
+        Type restoredArray = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(arrayType));
+        Assertions.assertEquals(arrayType, restoredArray);
+
+        Type mapType = new MapType(IntegerType.INT, new VarcharType(20));
+        Type restoredMap = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(mapType));
+        Assertions.assertEquals(mapType, restoredMap);
+
+        StructType structType = new StructType(Lists.newArrayList(
+                new StructField("f1", IntegerType.INT),
+                new StructField("f2", new VarcharType(5))));
+        Type restoredStruct = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(structType));
+        Assertions.assertEquals(structType, restoredStruct);
     }
 
     @Test

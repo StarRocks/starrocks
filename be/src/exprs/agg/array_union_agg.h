@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -25,7 +26,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -84,7 +84,7 @@ struct ArrayUnionAggAggregateState {
         if (data_column.size() > 0 || size == 0) {
             return &data_column;
         }
-        data_column.get_data().reserve(size);
+        data_column.reserve(size);
         if constexpr (is_distinct) {
             if constexpr (lt_is_string<PT>) {
                 for (auto& key : set) {

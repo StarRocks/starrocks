@@ -16,9 +16,13 @@
 
 #include <google/protobuf/service.h>
 
-#include <mutex>
+#include <atomic>
 #include <shared_mutex>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_base.h"
+#include "base/phmap/phmap_utils.h"
 #include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -26,20 +30,14 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/descriptors.h"
-#include "runtime/result_queue_mgr.h"
-#include "runtime/runtime_state.h"
-#include "util/moodycamel/concurrentqueue.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_base.h"
-#include "util/phmap/phmap_utils.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 
 class LookUpDispatcher {
 public:
-    LookUpDispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId lookup_node_id,
-                     const std::vector<TupleId>& request_tuple_ids);
+    LookUpDispatcher(const TUniqueId& query_id, PlanNodeId lookup_node_id,
+                     const std::vector<TupleId>& request_tuple_ids, int64_t rpc_ref_cnt = 1);
 
     ~LookUpDispatcher() = default;
 
@@ -54,6 +52,9 @@ public:
 
     void attach_query_ctx(pipeline::QueryContext* query_ctx);
 
+    bool ref_dec() { return --_rpc_ref_cnt == 0; }
+    int32_t ref_cnt() const { return _rpc_ref_cnt.load(); }
+
     void attach_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _observable.add_observer(state, observer);
     }
@@ -65,16 +66,24 @@ public:
         });
     }
 
+    bool is_finished() const { return _is_finished; }
+
+    void set_finished() { _is_finished = true; }
+
 private:
-    [[maybe_unused]] RuntimeState* _state;
     const TUniqueId _query_id;
     [[maybe_unused]] PlanNodeId _lookup_node_id;
+    std::atomic<int64_t> _rpc_ref_cnt{0};
 
-    typedef moodycamel::ConcurrentQueue<pipeline::LookUpRequestContextPtr> RequestsQueue;
-    typedef std::shared_ptr<RequestsQueue> RequestsQueuePtr;
-    typedef phmap::flat_hash_map<TupleId, RequestsQueuePtr> RequestQueueMap;
+    using RequestsQueue = moodycamel::ConcurrentQueue<pipeline::LookUpRequestContextPtr>;
+    using RequestsQueuePtr = std::shared_ptr<RequestsQueue>;
+    using RequestQueueMap =
+            phmap::parallel_flat_hash_map<TupleId, RequestsQueuePtr, phmap::Hash<TupleId>, phmap::EqualTo<TupleId>,
+                                          phmap::Allocator<TupleId>, 4, bthread::Mutex>;
+
     RequestQueueMap _request_queues;
 
+    bool _is_finished = false;
     std::weak_ptr<pipeline::QueryContext> _query_ctx;
     pipeline::Observable _observable;
 };
@@ -86,12 +95,12 @@ public:
     LookUpDispatcherMgr() = default;
     ~LookUpDispatcherMgr() = default;
 
-    LookUpDispatcherPtr create_dispatcher(RuntimeState* state, const TUniqueId& query_id, PlanNodeId target_node_id,
-                                          const std::vector<TupleId>& request_tuple_ids);
+    LookUpDispatcherPtr create_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id,
+                                          const std::vector<TupleId>& request_tuple_ids, int64_t rpc_ref_cnt = 1);
 
     StatusOr<LookUpDispatcherPtr> get_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);
-    void remove_dispatcher(const TUniqueId& query_id, PlanNodeId target_node_id);
     Status lookup(const pipeline::RemoteLookUpRequestContextPtr& ctx);
+    Status lookup_close(const TUniqueId& query_id, PlanNodeId target_node_id);
 
     void close() {}
 

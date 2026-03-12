@@ -14,11 +14,22 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
+#include "common/config_vector_index_fwd.h"
+#include "common/runtime_profile.h"
 #include "fs/fs_util.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 namespace starrocks {
+
+VectorIndexWriter::VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
+                                     bool is_element_nullable)
+        : _tablet_index(std::move(tablet_index)),
+          _vector_index_file_path(std::move(vector_index_file_path)),
+          _start_vector_index_build_threshold(config::config_vector_index_default_build_threshold),
+          _is_element_nullable(is_element_nullable) {
+    // Element of array column must be nullable.
+    DCHECK(_is_element_nullable);
+}
 
 void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
                                const std::string& vector_index_file_path, bool is_element_nullable,

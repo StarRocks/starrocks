@@ -16,13 +16,14 @@
 
 #include <memory>
 #include <shared_mutex>
+#include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/sync_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
@@ -106,7 +107,7 @@ private:
     // That is, calling append_chunk() with a nullptr, won't accidentially stop the entire queue.
     struct QueueItem {
         ChunkPtr chunk_ptr;
-        QueueItem(const ChunkPtr& chunkPtr) : chunk_ptr(chunkPtr) {}
+        QueueItem(ChunkPtr chunkPtr) : chunk_ptr(std::move(chunkPtr)) {}
     };
     typedef std::shared_ptr<QueueItem> QueueItemPtr;
 

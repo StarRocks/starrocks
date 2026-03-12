@@ -109,6 +109,9 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
+                    if (olapTable.isRangeDistribution()) {
+                        shadowTablet.setRange(originTablet.getRange());
+                    }
                     mvIndex.addTablet(shadowTablet, shadowTabletMeta);
                     mvJob.addTabletIdMap(physicalPartitionId, shadowTablet.getId(), originTablet.getId());
                 }

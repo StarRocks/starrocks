@@ -14,11 +14,12 @@
 
 #pragma once
 
-#include "column/datum.h"
 #include "column/field.h"
 #include "column/schema.h"
 #include "exec/stream/state/state_table.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_iterator.h"
+#include "types/datum.h"
 
 namespace starrocks::stream {
 

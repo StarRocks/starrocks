@@ -18,11 +18,11 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "base/testutil/assert.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 

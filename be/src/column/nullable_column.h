@@ -17,7 +17,6 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-
 namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
@@ -55,21 +54,13 @@ public:
     NullableColumn() = default;
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
-    NullableColumn(const NullableColumn& rhs)
-            : _data_column(rhs._data_column->clone()),
-              _null_column(NullColumn::static_pointer_cast(rhs._null_column->clone())),
-              _has_null(rhs._has_null) {}
+
+    DISALLOW_COPY(NullableColumn);
 
     NullableColumn(NullableColumn&& rhs) noexcept
             : _data_column(std::move(rhs._data_column)),
               _null_column(std::move(rhs._null_column)),
               _has_null(rhs._has_null) {}
-
-    NullableColumn& operator=(const NullableColumn& rhs) {
-        NullableColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     NullableColumn& operator=(NullableColumn&& rhs) noexcept {
         NullableColumn tmp(std::move(rhs));
@@ -218,6 +209,12 @@ public:
 
     MutableColumnPtr clone_empty() const override {
         return create(_data_column->clone_empty(), _null_column->clone_empty());
+    }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,

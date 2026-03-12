@@ -14,10 +14,10 @@
 
 #include "formats/parquet/level_codec.h"
 
-#include "util/bit_stream_utils.inline.h"
-#include "util/bit_util.h"
-#include "util/coding.h"
-#include "util/slice.h"
+#include "base/bit/bit_stream_utils.inline.h"
+#include "base/bit/bit_util.h"
+#include "base/coding.h"
+#include "base/string/slice.h"
 
 namespace starrocks::parquet {
 

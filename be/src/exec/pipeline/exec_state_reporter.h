@@ -16,18 +16,21 @@
 
 #include <memory>
 
-#include "exec/pipeline/fragment_context.h"
+#include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
-#include "service/backend_options.h"
-#include "util/threadpool.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class ExecEnv;
+class RuntimeProfile;
+
+namespace pipeline {
 class ExecStateReporterMetrics;
+
 class ExecStateReporter {
 public:
     explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
@@ -44,15 +47,25 @@ public:
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids) const;
 
+    Status update_max_threads(int max_threads);
+    Status update_priority_max_threads(int max_threads);
+
     // STREAM MV
     static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
                                                           const std::vector<FragmentContext*>& fragment_ctxs);
 
     static Status report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env, const TNetworkAddress& fe_addr);
 
+public:
+    // Accessors exposed only for unit tests (via the friend declaration above).
+    // Normal code paths must not call these methods.
+    int TEST_pool_max_threads() const { return _thread_pool->max_threads(); }
+    int TEST_priority_pool_max_threads() const { return _priority_thread_pool->max_threads(); }
+
 private:
     ExecStateReporterMetrics* _metrics;
     std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _priority_thread_pool;
 };
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

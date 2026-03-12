@@ -17,16 +17,14 @@
 #include <string>
 #include <unordered_map>
 
-#include "runtime/exec_env.h"
+#include "base/string/parse_util.h"
+#include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
-#include "storage/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/mem_info.h"
-#include "util/parse_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -45,7 +43,7 @@ class PersistentIndexLoadExecutor;
 class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) override;
 
 private:
     KVStore* _meta = nullptr;
@@ -54,9 +52,9 @@ private:
 class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override;
     Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
-                DeltaColumnGroupList* pdcgs);
+                DeltaColumnGroupList* pdcgs) override;
     KVStore* meta() const { return _meta; }
 
 private:
@@ -68,6 +66,9 @@ private:
 // async apply thread pool.
 class UpdateManager {
 public:
+    UpdateManager(const UpdateManager&) = delete;
+    const UpdateManager& operator=(const UpdateManager&) = delete;
+
     UpdateManager(MemTracker* mem_tracker);
     ~UpdateManager();
 
@@ -144,12 +145,7 @@ public:
 
     string topn_memory_stats(size_t topn);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent);
-        return Status::OK();
-    }
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
 
     bool keep_pindex_bf() { return _keep_pindex_bf; }
     void set_keep_pindex_bf(bool keep_pindex_bf) { _keep_pindex_bf = keep_pindex_bf; }
@@ -191,9 +187,6 @@ private:
     std::unique_ptr<PersistentIndexLoadExecutor> _pindex_load_executor;
 
     bool _keep_pindex_bf = true;
-
-    UpdateManager(const UpdateManager&) = delete;
-    const UpdateManager& operator=(const UpdateManager&) = delete;
 };
 
 } // namespace starrocks

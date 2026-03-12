@@ -20,6 +20,8 @@
 
 #include <future>
 
+#include "base/concurrency/await.h"
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -30,8 +32,6 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "util/await.h"
 
 namespace starrocks::connector {
 namespace {
@@ -134,7 +134,7 @@ public:
 
     void set_flush_batch_size(int64_t flush_batch_size) { _flush_batch_size = flush_batch_size; }
 
-    CommitResult commit() override {
+    CommitResult close() override {
         size_t num_rows = WriterHelper::instance()->commit();
         CommitResult commit_result = {
                 .io_status = Status::OK(),

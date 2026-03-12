@@ -16,6 +16,7 @@
 
 #include <type_traits>
 
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -24,9 +25,9 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"
+#include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -275,7 +276,7 @@ public:
         this->data(state).reset(kv.first, kv.second);
     }
 
-    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {
+    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
         init_state_if_necessary(ctx, state);
         this->data(state).process_null(1);
     }
@@ -440,7 +441,7 @@ public:
     }
 
     void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
-                                  int64_t peer_group_end) const {
+                                  int64_t peer_group_end) const override {
         this->data(state).process_null(1);
     }
 

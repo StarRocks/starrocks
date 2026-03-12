@@ -22,6 +22,11 @@
 #include <ctime>
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
@@ -37,7 +42,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

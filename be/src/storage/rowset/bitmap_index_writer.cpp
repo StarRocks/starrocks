@@ -37,22 +37,24 @@
 #include <map>
 #include <memory>
 #include <roaring/roaring.hh>
+#include <type_traits>
 #include <utility>
 
+#include "base/hash/xxh3.h"
+#include "base/phmap/btree.h"
+#include "base/phmap/phmap.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
+#include "base/string/utf8.h"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_traits.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "util/faststring.h"
-#include "util/phmap/btree.h"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
-#include "util/utf8.h"
-#include "util/xxh3.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -255,7 +257,9 @@ public:
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)
-            : _gram_num(gram_num), _typeinfo(std::move(type_info)) {}
+            : _gram_num(gram_num),
+              _typeinfo(std::move(type_info)),
+              _type_info_allocator(make_type_info_allocator(&_pool)) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -279,7 +283,7 @@ public:
         } else {
             // new value, copy value and insert new key->bitmap pair
             CppType new_value;
-            _typeinfo->deep_copy(&new_value, &value, &_pool);
+            _typeinfo->deep_copy(&new_value, &value, &_type_info_allocator);
             _mem_index.emplace(new_value, _rid);
             BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
@@ -403,7 +407,12 @@ private:
         IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
         RETURN_IF_ERROR(dict_column_writer.init());
         for (auto const& dict : sorted_dicts) {
-            RETURN_IF_ERROR(dict_column_writer.add(&dict));
+            if constexpr (std::is_same_v<CppType, bool>) {
+                bool value = static_cast<bool>(dict);
+                RETURN_IF_ERROR(dict_column_writer.add(&value));
+            } else {
+                RETURN_IF_ERROR(dict_column_writer.add(&dict));
+            }
         }
         return dict_column_writer.finish(meta);
     }
@@ -486,6 +495,7 @@ private:
     // use OrderedMemoryIndexType. Especially for the case of built-in inverted index workload.
     UnorderedMemoryIndexType _mem_index;
     MemPool _pool;
+    TypeInfoAllocator _type_info_allocator;
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;

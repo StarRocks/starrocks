@@ -192,6 +192,11 @@ public class AlterHandlerEditLogTest {
         public void write(java.io.DataOutput out) throws java.io.IOException {
             // Mock implementation
         }
+
+        @Override
+        public AlterJobV2 copyForPersist() {
+            return new MockAlterJobV2(getJobId(), getType(), getDbId(), getTableId(), getTableName(), getTimeoutMs());
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 /*
 !.gitignore
 !.cursorrules
+!AGENTS.md
+!CLAUDE.md
 !benchmark/
 !cmake_modules/
 !src/

@@ -23,6 +23,90 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.6
+
+Release Date: February 14, 2026
+
+### Improvements
+
+- Support Partition Transforms with parentheses when creating Iceberg tables (for example, `PARTITION BY (bucket(k1, 3))`). [#68945](https://github.com/StarRocks/starrocks/pull/68945)
+- Removed the restriction that partition columns in Iceberg tables must be at the end of the column list; they can now be defined at any position. [#68340](https://github.com/StarRocks/starrocks/pull/68340)
+- Introduced host-level sorting for Iceberg table sink, controlled by the system variable `connector_sink_sort_scope` (Default: FILE), to organize data layout for better read performance. [#68121](https://github.com/StarRocks/starrocks/pull/68121)
+- Improved error messages for Iceberg partition transform functions (for example, `bucket`, `truncate`) when the argument count is incorrect. [#68349](https://github.com/StarRocks/starrocks/pull/68349)
+- Refactored table property handling to improve support for different file formats (ORC/Parquet) and compression codecs in Iceberg tables. [#68588](https://github.com/StarRocks/starrocks/pull/68588)
+- Added table-level query timeout configuration `table_query_timeout` for fine-grained control (Priority: Session &gt; Table &gt; Cluster). [#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- Supports the `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` statement to view automated snapshot status and schedule. [#68455](https://github.com/StarRocks/starrocks/pull/68455)
+- Supports displaying the original user-defined SQL with comments in `SHOW CREATE VIEW`. [#68040](https://github.com/StarRocks/starrocks/pull/68040)
+- Exposed Merge Commit-enabled Stream Load tasks in `information_schema.loads` for better observability. [#67879](https://github.com/StarRocks/starrocks/pull/67879)
+- Introduced FE memory estimation utility API `/api/memory_usage`. [#68287](https://github.com/StarRocks/starrocks/pull/68287)
+- Reduced unnecessary logging in `CatalogRecycleBin` during partition recycling. [#68533](https://github.com/StarRocks/starrocks/pull/68533)
+- Triggered refresh of related asynchronous materialized views when the base table undergoes Swap/Drop/Replace Partition operations. [#68430](https://github.com/StarRocks/starrocks/pull/68430)
+- Supports `VARBINARY` type for `count distinct`-like aggregate functions. [#68442](https://github.com/StarRocks/starrocks/pull/68442)
+- Enhanced expression statistics to propagate histogram MCV for semantics-safe expressions (for example, `cast(k as bigint) + 10`) to improve skew detection. [#68292](https://github.com/StarRocks/starrocks/pull/68292)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Potential crashes in Skew Join V2 runtime filters. [#67611](https://github.com/StarRocks/starrocks/pull/67611)
+- Join predicate type mismatch (for example, INT = VARCHAR) caused by low-cardinality rewriting. [#68568](https://github.com/StarRocks/starrocks/pull/68568)
+- Issues in query queue allocation time and pending timeout logic. [#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- `unique_id` conflict for Flat JSON extended columns after schema changes. [#68279](https://github.com/StarRocks/starrocks/pull/68279)
+- Concurrent partition access issues in `OlapTableSink.complete()`. [#68853](https://github.com/StarRocks/starrocks/pull/68853)
+- Incorrect metadata tracking when restoring manually downloaded cluster snapshots. [#68368](https://github.com/StarRocks/starrocks/pull/68368)
+- Double slashes in backup paths when the repository location ends with `/`. [#68764](https://github.com/StarRocks/starrocks/pull/68764)
+- OBS AK/SK credentials in the `SHOW CREATE CATALOG` output were not masked. [#65462](https://github.com/StarRocks/starrocks/pull/65462)
+
+## 4.0.5
+
+Release Date: February 3, 2026
+
+### Improvements
+
+- Bumped Paimon version to 1.3.1. [#67098](https://github.com/StarRocks/starrocks/pull/67098)
+- Restored missing optimizations in DP statistics estimation to reduce redundant calculations. [#67852](https://github.com/StarRocks/starrocks/pull/67852)
+- Improved pruning in DP Join reorder to skip expensive candidate plans earlier. [#67828](https://github.com/StarRocks/starrocks/pull/67828)
+- Optimized JoinReorderDP partition enumeration to reduce object allocation and added an atom count cap (&le; 62). [#67643](https://github.com/StarRocks/starrocks/pull/67643)
+- Optimized DP join reorder pruning and added checks to BitSet to reduce stream operation overhead. [#67644](https://github.com/StarRocks/starrocks/pull/67644)
+- Skipped predicate column statistics collection during DP statistics estimation to reduce CPU overhead. [#67663](https://github.com/StarRocks/starrocks/pull/67663)
+- Optimized correlated Join row count estimation to avoid repeatedly building `Statistics` objects. [#67773](https://github.com/StarRocks/starrocks/pull/67773)
+- Reduced memory allocations in `Statistics.getUsedColumns`. [#67786](https://github.com/StarRocks/starrocks/pull/67786)
+- Avoided redundant `Statistics` map copies when only row counts are updated. [#67777](https://github.com/StarRocks/starrocks/pull/67777)
+- Skipped aggregate pushdown logic when no aggregation exists in the query to reduce overhead. [#67603](https://github.com/StarRocks/starrocks/pull/67603)
+- Improved COUNT DISTINCT over windows, added support for fused multi-distinct aggregations, and optimized CTE generation. [#67453](https://github.com/StarRocks/starrocks/pull/67453)
+- Supports `map_agg` function in the Trino dialect. [#66673](https://github.com/StarRocks/starrocks/pull/66673)
+- Supports batching retrieval of LakeTablet location information during physical planning to reduce RPC calls in shared-data clusters. [#67325](https://github.com/StarRocks/starrocks/pull/67325)
+- Added a thread pool for Publish Version transactions to shared-nothing clusters to improve concurrency. [#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- Optimized LocalMetastore locking granularity by replacing database-level locks with table-level locks. [#67658](https://github.com/StarRocks/starrocks/pull/67658)
+- Refactored MergeCommitTask lifecycle management and added support for task cancellation. [#67425](https://github.com/StarRocks/starrocks/pull/67425)
+- Supports intervals for automated cluster snapshots. [#67525](https://github.com/StarRocks/starrocks/pull/67525)
+- Automatically cleaned up unused `mem_pool` entries in MemTrackerManager. [#67347](https://github.com/StarRocks/starrocks/pull/67347)
+- Ignored `information_schema` queries during warehouse idle checks. [#67958](https://github.com/StarRocks/starrocks/pull/67958)
+- Supports dynamically enabling global shuffle for Iceberg table sinks based on data distribution. [#67442](https://github.com/StarRocks/starrocks/pull/67442)
+- Added Profile metrics for connector sink modules. [#67761](https://github.com/StarRocks/starrocks/pull/67761)
+- Improved the collection and display of load spill metrics in Profiles, distinguishing between local and remote I/O. [#67527](https://github.com/StarRocks/starrocks/pull/67527)
+- Changed Async-Profiler log level to Error to avoid repeating warning logs. [#67297](https://github.com/StarRocks/starrocks/pull/67297)
+- Notified Starlet during BE shutdown to report SHUTDOWN status to StarMgr. [#67461](https://github.com/StarRocks/starrocks/pull/67461)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Lacking support for legal simple paths containing hyphens (`-`). [#67988](https://github.com/StarRocks/starrocks/pull/67988)
+- Runtime error when aggregate pushdown occurred on grouping keys involving JSON types. [#68142](https://github.com/StarRocks/starrocks/pull/68142)
+- Issue where JSON path rewrite rules incorrectly pruned partition columns referenced in partition predicates. [#67986](https://github.com/StarRocks/starrocks/pull/67986)
+- Type mismatch issue when rewriting simple aggregation using statistics. [#67829](https://github.com/StarRocks/starrocks/pull/67829)
+- Potential heap-buffer-overflow in partition Joins. [#67435](https://github.com/StarRocks/starrocks/pull/67435)
+- Duplicate `slot_ids` introduced when pushing down heavy expressions. [#67477](https://github.com/StarRocks/starrocks/pull/67477)
+- Division-by-zero error in ExecutionDAG fragment connection for lacking precondition checks. [#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- Potential issues caused by fragment parallel prepare for single BE. [#67798](https://github.com/StarRocks/starrocks/pull/67798)
+- Operator terminates incorrectly for lacking `set_finished` method for RawValuesSourceOperator. [#67609](https://github.com/StarRocks/starrocks/pull/67609)
+- BE crash caused by unsupported DECIMAL256 type (precision > 38) in column aggregators. [#68134](https://github.com/StarRocks/starrocks/pull/68134)
+- Shared-data clusters lack support for Fast Schema Evolution v2 over DELETE operations by carrying `schema_key` in requests. [#67456](https://github.com/StarRocks/starrocks/pull/67456)
+- Shared-data clusters lack support for Fast Schema Evolution v2 over synchronous materialized views and traditional schema changes. [#67443](https://github.com/StarRocks/starrocks/pull/67443)
+- Vacuum might accidentally delete files when file bundling is disabled during FE downgrade. [#67849](https://github.com/StarRocks/starrocks/pull/67849)
+- Incorrect graceful exit handling in MySQLReadListener. [#67917](https://github.com/StarRocks/starrocks/pull/67917)
+
 ## 4.0.4
 
 Release Date: January 16, 2026
@@ -260,11 +344,6 @@ Release date: October 17, 2025
 - Supports vended credentials for the Iceberg catalog.
 - Supports granting StarRocks internal roles to external groups obtained via Group Provider. [#63385](https://github.com/StarRocks/starrocks/pull/63385) [#63258](https://github.com/StarRocks/starrocks/pull/63258)
 - Added REFRESH privilege to external tables to control the permission to refresh them. [#63385](https://github.com/StarRocks/starrocks/pull/62636)
-
-<!--
-- Supports HTTPS via configuring certificates on the StarRocks FE side, enhancing system access security to meet encrypted transmission requirements on the cloud or intranet. [#56394](https://github.com/StarRocks/starrocks/pull/56394)
-- Supports HTTPS communication between BE nodes to ensure the encryption and integrity of data transmission, preventing internal data leakage and Man-in-the-Middle attacks.[#53695](https://github.com/StarRocks/starrocks/pull/53695)
--->
 
 ### Storage Optimization and Cluster Management
 

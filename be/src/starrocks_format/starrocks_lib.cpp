@@ -20,15 +20,16 @@
 #include <filesystem>
 #include <fstream>
 
-#include "common/config.h"
+#include "base/time/timezone_utils.h"
+#include "common/config_lake_fwd.h"
+#include "common/configbase.h"
+#include "common/system/mem_info.h"
 #include "fs/fs_s3.h"
 #include "runtime/exec_env.h"
-#include "runtime/time_types.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_define.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
+#include "types/time_types.h"
 
 namespace starrocks::lake {
 

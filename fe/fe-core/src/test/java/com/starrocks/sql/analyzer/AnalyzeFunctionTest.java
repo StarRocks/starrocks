@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -141,6 +145,15 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ndv(h1) from test_object");
         analyzeFail("select approx_count_distinct(b1) from test_object");
         analyzeFail("select ndv(b1) from test_object");
+    }
+
+    @Test
+    public void testApproxCountDistinctWithVarbinary() {
+        analyzeSuccess("select approx_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ndv(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_hll_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_theta_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select count(distinct v_varbinary) from tbinary");
     }
 
     @Test
@@ -335,6 +348,83 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testStringAgg() throws Exception {
+        // Test basic STRING_AGG to GROUP_CONCAT conversion
+        QueryStatement stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',') from tall");
+        QueryRelation relation = stmt.getQueryRelation();
+        Assertions.assertTrue(relation instanceof SelectRelation);
+        SelectRelation selectRelation = (SelectRelation) relation;
+        Assertions.assertTrue(selectRelation.getOutputExpression().get(0) instanceof FunctionCallExpr);
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getChildren().size());
+
+        // Test STRING_AGG with ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertNotNull(functionCallExpr.getParams().getOrderByElements());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with ORDER BY multiple columns
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta, tb desc) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with DISTINCT
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',') from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+
+        // Test STRING_AGG with DISTINCT and ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG in various contexts
+        analyzeSuccess("select string_agg(ta, '-') from tall group by tb");
+        analyzeSuccess("select tb, string_agg(ta, '|') from tall group by tb");
+        analyzeSuccess("select string_agg(cast(ti as varchar), ',') from tall");
+        analyzeSuccess("select string_agg(concat(ta, tb), ',') from tall");
+        analyzeSuccess("select string_agg(ta, ' ') from tall where tb = 'test'");
+
+        // Test STRING_AGG error cases - invalid syntax
+        analyzeFail("select string_agg(ta) from tall",
+                "No matching function with signature: string_agg(varchar(20))");
+        analyzeFail("select string_agg(distinct ta) from tall",
+                "Getting syntax error");
+        analyzeFail("select string_agg(ta, ',', 'extra') from tall",
+                "No matching function with signature: string_agg(varchar(20), varchar, varchar)");
+        analyzeFail("select string_agg() from tall",
+                "No matching function with signature: string_agg()");
+
+        // Test STRING_AGG vs GROUP_CONCAT equivalence
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, '|' order by ta desc) from tall");
+        QueryStatement stmt2 =
+                (QueryStatement) analyzeSuccess("select group_concat(ta order by ta desc separator '|') from tall");
+        relation = stmt.getQueryRelation();
+        QueryRelation relation2 = stmt2.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        SelectRelation selectRelation2 = (SelectRelation) relation2;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        FunctionCallExpr functionCallExpr2 = (FunctionCallExpr) selectRelation2.getOutputExpression().get(0);
+        Assertions.assertEquals(functionCallExpr.getFunctionName(), functionCallExpr2.getFunctionName());
+        Assertions.assertEquals(functionCallExpr.getChildren().size(), functionCallExpr2.getChildren().size());
+    }
+
+    @Test
     public void testLagLeadFunction() throws Exception {
         analyzeSuccess("select lag(ta, 2, tc) over() from test_laglead");
         analyzeSuccess("select lead(ta, 2, tc) over() from test_laglead");
@@ -358,5 +448,66 @@ public class AnalyzeFunctionTest {
         // Single-argument LEAD/LAG is valid: offset/default will be filled by transformer
         analyzeSuccess("select lead(ta) over() from test_laglead");
         analyzeSuccess("select lag(ta) over() from test_laglead");
+    }
+
+    // ========== Named Arguments Tests ==========
+
+    @Test
+    public void testMixingNamedAndPositionalArguments() {
+        // Test mixing named and positional arguments - should fail
+        // With grammar separation, mixing is now a syntax error (not semantic)
+        // namedArgsFunctionCall only accepts namedArgumentList
+        // simpleFunctionCall only accepts expression list
+        analyzeFail("select concat('hello', sep => ', ')",
+                "Unexpected input");
+
+        // Positional first, then named - should fail
+        analyzeFail("select substr('hello', len => 3)",
+                "Unexpected input");
+
+        // Named first, then positional - should fail with syntax error
+        analyzeFail("select substr(str => 'hello', 1)",
+                "Unexpected input");
+    }
+
+    @Test
+    public void testMixingNamedAndPositionalArgumentsSpecialFunctions() {
+        // Special handler functions should also validate mixing
+        // With grammar separation, mixing is now caught at parse time
+
+        // LPAD - special handler in AstBuilder
+        analyzeFail("select lpad('hello', len => 10)",
+                "Unexpected input");
+
+        // Multiple positional then named
+        analyzeFail("select concat('a', 'b', sep => ',')",
+                "Unexpected input");
+
+        // RPAD
+        analyzeFail("select rpad('hi', size => 5)",
+                "Unexpected input");
+    }
+
+    @Test
+    public void testPurePositionalArguments() {
+        // Pure positional arguments should work normally
+        analyzeSuccess("select concat('hello', 'world')");
+        analyzeSuccess("select substr('hello', 1, 3)");
+        analyzeSuccess("select lpad('hi', 5, '*')");
+        analyzeSuccess("select rpad('hi', 5, '*')");
+    }
+
+    @Test
+    public void testPureNamedArgumentsOnUnsupportedFunction() {
+        // For functions WITHOUT special handling in AstBuilder,
+        // pure named arguments should fail with clear error message
+
+        // Note: Functions with special handling (substr, lpad, etc.)
+        // will strip NamedArgument wrappers and treat them as positional,
+        // so they will succeed (by design, for now)
+
+        // array_length has no special handling - should fail with clear message
+        analyzeFail("select array_length(arr => [1,2,3])",
+                "does not support named arguments");
     }
 }

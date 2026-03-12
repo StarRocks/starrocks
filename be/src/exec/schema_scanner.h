@@ -18,17 +18,19 @@
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
 class StarRocksServer;
 class RuntimeState;
+class TAuthInfo;
 } // namespace starrocks
 
 namespace starrocks {
@@ -118,6 +120,11 @@ public:
 protected:
     Status _create_slot_descs(ObjectPool* pool);
 
+    // Parse scan conjuncts and extract the literal value from an equality predicate
+    // in the form of `col_name = <literal>` (or `<literal> = col_name`).
+    // NOTE: currently only supports STRING literal predicates.
+    // Returns true and fills `result` when a matched predicate is found; otherwise false.
+    // Intended for schema scanners to push simple equality filters to FE RPC requests.
     bool _parse_expr_predicate(const std::string& col_name, std::string& result);
     bool _parse_expr_predicate(Expr* conjunct, const std::string& col_name, std::string& result);
 

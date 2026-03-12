@@ -37,10 +37,9 @@
 #include <gtest/gtest.h>
 #include <libgen.h>
 
-#include "common/config.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/metrics.h"
 #include "util/logging.h"
-#include "util/metrics.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 

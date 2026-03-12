@@ -21,6 +21,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks {
 
@@ -82,7 +83,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     // add the extended column access paths into tablet_schema
     {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_reader_params.tablet_schema);
-        int field_number = tmp_schema->num_columns();
+        int field_number = starrocks::next_uniq_id(_parent->_meta_scan_node);
         for (auto& path : _parent->_column_access_paths) {
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
@@ -101,6 +102,8 @@ Status OlapMetaScanner::_init_meta_reader_params() {
         }
         _reader_params.tablet_schema = tmp_schema;
     }
+
+    ASSIGN_OR_RETURN(_reader_params.tablet_schema, extend_schema_by_virtual_columns(_reader_params.tablet_schema));
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     VLOG(2) << "init_meta_reader schema: " << _reader_params.tablet_schema->debug_string();

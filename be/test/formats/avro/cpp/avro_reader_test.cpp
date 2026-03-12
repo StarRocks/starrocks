@@ -16,14 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

@@ -14,6 +14,9 @@
 #include <chrono>
 #include <memory>
 
+#include "base/bit/bit_mask.h"
+#include "base/orlp/pdqsort.h"
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_hash.h"
@@ -28,9 +31,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/bit_mask.h"
-#include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 template <LogicalType LT>
@@ -178,7 +178,8 @@ private:
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column_raw_ptr());
             auto src_null_data = src_nullable_column->immutable_null_column_data();
             auto dest_column_mut = NullableColumn::create(
-                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets())),
+                    ArrayColumn::create(std::move(dest_column_data),
+                                        UInt32Column::static_pointer_cast(src_data_column->offsets_column()->clone())),
                     NullColumn::create());
 
             auto& dest_nullable_column = down_cast<NullableColumn&>(*dest_column_mut.get());
@@ -203,7 +204,8 @@ private:
         } else {
             const auto* src_data_column = down_cast<const ArrayColumn*>(src_column.get());
             auto dest_column_mut =
-                    ArrayColumn::create(std::move(dest_column_data), UInt32Column::create(src_data_column->offsets()));
+                    ArrayColumn::create(std::move(dest_column_data),
+                                        UInt32Column::static_pointer_cast(src_data_column->offsets_column()->clone()));
 
             auto* dest_data_column = down_cast<ArrayColumn*>(dest_column_mut.get());
             for (size_t i = 0; i < chunk_size; i++) {
@@ -274,7 +276,7 @@ class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
-    using DataArray = typename RunTimeTypeTraits<LT>::ProxyContainerType;
+    using DataArray = typename RunTimeTypeTraits<LT>::ImmContainerType;
     using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
     using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
 
@@ -875,7 +877,6 @@ private:
         for (size_t i = 0; i < chunk_size; i++) {
             std::reverse(pool.begin() + array_offsets[i], pool.begin() + array_offsets[i + 1]);
         }
-        json_column->reset_cache();
     }
 
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
@@ -1607,7 +1608,7 @@ private:
             auto nullable = down_cast<NullableColumn*>(array_column->as_mutable_raw_ptr());
 
             array_col = down_cast<ArrayColumn*>(nullable->data_column_raw_ptr());
-            array_null = NullColumn::create(*nullable->null_column());
+            array_null = NullColumn::static_pointer_cast(nullable->null_column()->clone());
         } else {
             array_col = down_cast<ArrayColumn*>(array_column->as_mutable_raw_ptr());
             array_null = NullColumn::create(array_column->size(), 0);

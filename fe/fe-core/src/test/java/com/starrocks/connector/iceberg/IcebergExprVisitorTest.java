@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -89,6 +90,8 @@ public class IcebergExprVisitorTest {
     private static final SubfieldOperator K15 = new SubfieldOperator(K10, StringType.STRING, ImmutableList.of("k15"));
     private static final SubfieldOperator K16 = new SubfieldOperator(K10, FloatType.FLOAT, ImmutableList.of("k16"));
     private static final ColumnRefOperator K17 = new ColumnRefOperator(17, FloatType.DOUBLE, "k17.double", true, false);
+    private static final ColumnRefOperator LAST_UPDATED_SEQUENCE_NUMBER = new ColumnRefOperator(
+            18, IntegerType.BIGINT, IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, true, false);
 
     @Test
     public void testToIcebergExpression() {
@@ -445,6 +448,18 @@ public class IcebergExprVisitorTest {
         CastOperator cast = new CastOperator(VarcharType.VARCHAR, K17);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    @Test
+    public void testConvertLastUpdatedSequenceNumberPredicate() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, LAST_UPDATED_SEQUENCE_NUMBER,
+                        ConstantOperator.createBigint(1))),
+                context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
 }

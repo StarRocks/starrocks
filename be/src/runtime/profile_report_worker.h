@@ -13,14 +13,22 @@
 // limitations under the License.
 
 #pragma once
-#include <thread>
 
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
+#include "common/status.h"
+#include "common/thread/thread.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "util/thread.h"
 
 namespace starrocks {
+
+class ExecEnv;
 
 class TUniqueId;
 

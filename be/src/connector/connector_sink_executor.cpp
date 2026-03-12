@@ -15,10 +15,14 @@
 #include "connector/connector_sink_executor.h"
 
 #include "column/chunk.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "connector/partition_chunk_writer.h"
 #include "runtime/current_thread.h"
 #include "storage/load_chunk_spiller.h"
+#include "storage/options.h"
 
 namespace starrocks::connector {
 

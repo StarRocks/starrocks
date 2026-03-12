@@ -22,12 +22,14 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/configbase.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
 
 namespace starrocks {
 

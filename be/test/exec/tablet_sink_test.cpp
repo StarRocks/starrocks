@@ -19,17 +19,21 @@
 #include <fstream>
 #include <sstream>
 
+#include "base/string/slice.h"
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "exec/tablet_info.h"
-#include "runtime/decimalv2_value.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/slice.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 
@@ -52,6 +56,8 @@ protected:
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
         auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+        runtime_state->set_fragment_dict_state(fragment_dict_state);
         TUniqueId id;
         runtime_state->init_mem_trackers(id);
         runtime_state->set_db("test_db");

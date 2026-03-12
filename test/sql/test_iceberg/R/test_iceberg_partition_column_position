@@ -1,0 +1,295 @@
+-- name: test_iceberg_partition_column_position
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog ice_cat_${uuid0};
+-- result:
+-- !result
+create database ice_db_${uuid0};
+-- result:
+-- !result
+use ice_db_${uuid0};
+-- result:
+-- !result
+create table test_part_beginning (
+  dt date,
+  id bigint,
+  data string
+)
+partition by (dt);
+-- result:
+-- !result
+insert into test_part_beginning values ('2023-01-01', 1, 'data1');
+-- result:
+-- !result
+insert into test_part_beginning values ('2023-01-02', 2, 'data2');
+-- result:
+-- !result
+select * from test_part_beginning order by id;
+-- result:
+2023-01-01	1	data1
+2023-01-02	2	data2
+-- !result
+drop table test_part_beginning force;
+-- result:
+-- !result
+create table test_part_middle (
+  id bigint,
+  dt date,
+  data string
+)
+partition by (dt);
+-- result:
+-- !result
+insert into test_part_middle values (1, '2023-01-01', 'data1');
+-- result:
+-- !result
+insert into test_part_middle values (2, '2023-01-02', 'data2');
+-- result:
+-- !result
+select * from test_part_middle order by id;
+-- result:
+1	2023-01-01	data1
+2	2023-01-02	data2
+-- !result
+drop table test_part_middle force;
+-- result:
+-- !result
+create table test_part_end (
+  id bigint,
+  data string,
+  dt date
+)
+partition by (dt);
+-- result:
+-- !result
+insert into test_part_end values (1, 'data1', '2023-01-01');
+-- result:
+-- !result
+insert into test_part_end values (2, 'data2', '2023-01-02');
+-- result:
+-- !result
+select * from test_part_end order by id;
+-- result:
+1	data1	2023-01-01
+2	data2	2023-01-02
+-- !result
+drop table test_part_end force;
+-- result:
+-- !result
+create table test_multi_part (
+  id bigint,
+  dt date,
+  region string,
+  data string
+)
+partition by (dt, region);
+-- result:
+-- !result
+insert into test_multi_part values (1, '2023-01-01', 'east', 'data1');
+-- result:
+-- !result
+insert into test_multi_part values (2, '2023-01-02', 'west', 'data2');
+-- result:
+-- !result
+select * from test_multi_part order by id;
+-- result:
+1	2023-01-01	east	data1
+2	2023-01-02	west	data2
+-- !result
+drop table test_multi_part force;
+-- result:
+-- !result
+create table test_part_year_beginning (
+  dt date,
+  id bigint,
+  data string
+)
+partition by year(dt);
+-- result:
+-- !result
+insert into test_part_year_beginning values ('2023-01-01', 1, 'data1');
+-- result:
+-- !result
+insert into test_part_year_beginning values ('2024-01-01', 2, 'data2');
+-- result:
+-- !result
+select * from test_part_year_beginning order by id;
+-- result:
+2023-01-01	1	data1
+2024-01-01	2	data2
+-- !result
+drop table test_part_year_beginning force;
+-- result:
+-- !result
+create table test_part_month_middle (
+  id bigint,
+  dt date,
+  data string
+)
+partition by month(dt);
+-- result:
+-- !result
+insert into test_part_month_middle values (1, '2023-01-01', 'data1');
+-- result:
+-- !result
+insert into test_part_month_middle values (2, '2023-02-01', 'data2');
+-- result:
+-- !result
+select * from test_part_month_middle order by id;
+-- result:
+1	2023-01-01	data1
+2	2023-02-01	data2
+-- !result
+drop table test_part_month_middle force;
+-- result:
+-- !result
+create table test_part_day_end (
+  id bigint,
+  data string,
+  dt date
+)
+partition by day(dt);
+-- result:
+-- !result
+insert into test_part_day_end values (1, 'data1', '2023-01-01');
+-- result:
+-- !result
+insert into test_part_day_end values (2, 'data2', '2023-01-15');
+-- result:
+-- !result
+select * from test_part_day_end order by id;
+-- result:
+1	data1	2023-01-01
+2	data2	2023-01-15
+-- !result
+drop table test_part_day_end force;
+-- result:
+-- !result
+create table test_part_hour_beginning (
+  ts datetime,
+  id bigint,
+  data string
+)
+partition by hour(ts);
+-- result:
+-- !result
+insert into test_part_hour_beginning values ('2023-01-01 10:00:00', 1, 'data1');
+-- result:
+-- !result
+insert into test_part_hour_beginning values ('2023-01-01 15:00:00', 2, 'data2');
+-- result:
+-- !result
+select * from test_part_hour_beginning order by id;
+-- result:
+2023-01-01 10:00:00	1	data1
+2023-01-01 15:00:00	2	data2
+-- !result
+drop table test_part_hour_beginning force;
+-- result:
+-- !result
+create table test_part_truncate_middle (
+  id bigint,
+  name string,
+  data string
+)
+partition by truncate(name, 5);
+-- result:
+-- !result
+insert into test_part_truncate_middle values (1, 'hello', 'data1');
+-- result:
+-- !result
+insert into test_part_truncate_middle values (2, 'world', 'data2');
+-- result:
+-- !result
+select * from test_part_truncate_middle order by id;
+-- result:
+1	hello	data1
+2	world	data2
+-- !result
+drop table test_part_truncate_middle force;
+-- result:
+-- !result
+create table test_part_bucket_end (
+  id bigint,
+  data string,
+  user_id bigint
+)
+partition by bucket(user_id, 10);
+-- result:
+-- !result
+insert into test_part_bucket_end values (1, 'data1', 100);
+-- result:
+-- !result
+insert into test_part_bucket_end values (2, 'data2', 200);
+-- result:
+-- !result
+select * from test_part_bucket_end order by id;
+-- result:
+1	data1	100
+2	data2	200
+-- !result
+drop table test_part_bucket_end force;
+-- result:
+-- !result
+create table test_multi_transform (
+  id bigint,
+  dt date,
+  region string,
+  data string
+)
+partition by year(dt), bucket(region, 5);
+-- result:
+-- !result
+insert into test_multi_transform values (1, '2023-01-01', 'east', 'data1');
+-- result:
+-- !result
+insert into test_multi_transform values (2, '2023-02-01', 'west', 'data2');
+-- result:
+-- !result
+select * from test_multi_transform order by id;
+-- result:
+1	2023-01-01	east	data1
+2	2023-02-01	west	data2
+-- !result
+drop table test_multi_transform force;
+-- result:
+-- !result
+create table test_part_beginning_multi (
+  dt date,
+  region string,
+  id bigint,
+  data string
+)
+partition by (dt, region);
+-- result:
+-- !result
+insert into test_part_beginning_multi values ('2023-01-01', 'east', 1, 'data1');
+-- result:
+-- !result
+insert into test_part_beginning_multi values ('2023-01-02', 'west', 2, 'data2');
+-- result:
+-- !result
+select * from test_part_beginning_multi order by id;
+-- result:
+2023-01-01	east	1	data1
+2023-01-02	west	2	data2
+-- !result
+drop table test_part_beginning_multi force;
+-- result:
+-- !result
+drop database ice_db_${uuid0};
+-- result:
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

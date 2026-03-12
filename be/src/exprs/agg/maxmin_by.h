@@ -17,6 +17,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
@@ -25,7 +26,6 @@
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -401,6 +401,8 @@ public:
         }
     }
 
+    bool support_nullable_immediate_input() const override { return true; }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice src;
         if (column->only_null() || column->is_null(row_num)) {
@@ -668,6 +670,8 @@ public:
             update(ctx, columns, state, i);
         }
     }
+
+    bool support_nullable_immediate_input() const override { return true; }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         if (column->only_null() || column->is_null(row_num)) {

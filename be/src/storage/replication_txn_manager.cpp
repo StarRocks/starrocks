@@ -23,6 +23,11 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
+#include "common/config_http_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/BackendService.h"
@@ -35,7 +40,6 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset.h"
@@ -44,8 +48,6 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -1011,7 +1013,7 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
-                                                  rs_meta_ptr, &rowset_to_remove);
+                                                  rs_meta_ptr, &rowset_to_remove, tablet->data_dir()->get_meta());
             !s.ok()) {
             LOG(WARNING) << "Failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;

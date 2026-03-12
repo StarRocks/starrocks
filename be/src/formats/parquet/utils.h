@@ -14,15 +14,24 @@
 
 #pragma once
 
+#include <cstddef>
+
+#include "base/container/raw_container.h"
 #include "gen_cpp/parquet_types.h"
 #include "gen_cpp/types.pb.h"
-#include "util/raw_container.h"
+#include "types/type_descriptor.h"
 
 namespace parquet {
 class FileMetaData;
 } // namespace parquet
 
+namespace starrocks {
+class Column;
+}
+
 namespace starrocks::parquet {
+
+struct ParquetField;
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
@@ -48,9 +57,25 @@ public:
     static std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
                                           uint64_t file_size);
 
+    // Resolve constant/nullable wrappers and return the non-null underlying data column + row index.
+    // Returns false if column is null at `row` or input/output args are invalid.
+    static bool get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                 size_t* out_row);
+
+    // Returns true when the column has at least one non-null value in [0, num_rows).
+    static bool has_non_null_value(const Column* column, size_t num_rows);
+
+    // Returns true when the column is binary (after unwrap) and has at least one non-null value in [0, num_rows).
+    static bool has_non_null_binary_value(const Column* column, size_t num_rows);
+
 private:
     inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
 };
+
+// Infer typed descriptor for variant typed_value Parquet field (scalar/array/map/struct).
+// Falls back to TYPE_VARIANT when the source type cannot be represented safely.
+// This function always returns a concrete descriptor and never TYPE_UNKNOWN.
+TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field);
 
 struct NullInfos {
     // The number of nulls contained in the null vector.

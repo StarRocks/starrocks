@@ -14,24 +14,20 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
-#include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encryption.h"
-#include "gen_cpp/PlanNodes_types.h"
-#include "io/input_stream.h"
-#include "io/seekable_input_stream.h"
-#include "runtime/descriptors.h"
-#include "util/slice.h"
+#include "fs/fs_options.h"
+#include "io/core/input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 namespace starrocks {
 
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
-struct ResultFileOptions;
-class TUploadReq;
-class TDownloadReq;
 struct WritableFileOptions;
 class FileSystem;
 
@@ -42,64 +38,6 @@ struct SpaceInfo {
     int64_t free = 0;
     // Free space available to a non-privileged process (may be equal or less than free)
     int64_t available = 0;
-};
-
-struct FSOptions {
-private:
-    FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
-              const TCloudConfiguration* cloud_configuration,
-              const std::unordered_map<std::string, std::string>& fs_options = {})
-            : scan_range_params(scan_range_params),
-              export_sink(export_sink),
-              result_file_options(result_file_options),
-              upload(upload),
-              download(download),
-              cloud_configuration(cloud_configuration),
-              _fs_options(fs_options) {}
-
-public:
-    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TBrokerScanRangeParams* scan_range_params)
-            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const ResultFileOptions* result_file_options)
-            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
-
-    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
-
-    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
-
-    FSOptions(const TCloudConfiguration* cloud_configuration)
-            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
-
-    FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
-            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
-
-    const THdfsProperties* hdfs_properties() const;
-    const TCloudConfiguration* get_cloud_configuration() const;
-    bool azure_use_native_sdk() const;
-
-    const TBrokerScanRangeParams* scan_range_params;
-    const TExportSink* export_sink;
-    const ResultFileOptions* result_file_options;
-    const TUploadReq* upload;
-    const TDownloadReq* download;
-    const TCloudConfiguration* cloud_configuration;
-    const std::unordered_map<std::string, std::string> _fs_options;
-
-    static constexpr const char* FS_S3_ENDPOINT = "fs.s3a.endpoint";
-    static constexpr const char* FS_S3_ENDPOINT_REGION = "fs.s3a.endpoint.region";
-    static constexpr const char* FS_S3_ACCESS_KEY = "fs.s3a.access.key";
-    static constexpr const char* FS_S3_SECRET_KEY = "fs.s3a.secret.key";
-    static constexpr const char* FS_S3_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
-    static constexpr const char* FS_S3_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
-    static constexpr const char* FS_S3_READ_AHEAD_RANGE = "fs.s3a.readahead.range";
-    static constexpr const char* FS_S3_RETRY_LIMIT = "fs.s3a.retry.limit";
-    static constexpr const char* FS_S3_RETRY_INTERVAL = "fs.s3a.retry.interval";
 };
 
 struct SequentialFileOptions {
@@ -161,13 +99,6 @@ public:
 
     FileSystem() = default;
     virtual ~FileSystem() = default;
-
-    static StatusOr<std::shared_ptr<FileSystem>> Create(std::string_view uri, const FSOptions& options);
-
-    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
-                                                                        const FSOptions& options = FSOptions());
-
-    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own FileSystem
@@ -319,7 +250,14 @@ public:
 
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
-    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+    virtual Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) {
+        return Status::NotFound(path);
+    }
+
+    // Get file cache stats, return <cached_bytes, total_bytes>.
+    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset, int64_t size) {
+        return Status::NotSupported("FileSystem::get_cache_stats");
+    }
 
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message

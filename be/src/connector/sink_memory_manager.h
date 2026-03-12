@@ -15,7 +15,6 @@
 #pragma once
 
 #include "async_flush_stream_poller.h"
-#include "common/config.h"
 #include "connector/connector_chunk_sink.h"
 #include "formats/file_writer.h"
 #include "runtime/mem_tracker.h"
@@ -28,8 +27,8 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    void init(std::map<PartitionKey, PartitionChunkWriterPtr>* partition_chunk_writers,
-              AsyncFlushStreamPoller* io_poller, CommitFunc commit_func);
+    Status init(std::vector<PartitionChunkWriterPtr>* writers, AsyncFlushStreamPoller* io_poller,
+                CommitFunc commit_func);
 
     // return true if a victim is found and killed, otherwise return false
     bool kill_victim();
@@ -45,7 +44,7 @@ public:
     int64_t writer_occupied_memory() { return _writer_occupied_memory.load(); }
 
 private:
-    std::map<PartitionKey, PartitionChunkWriterPtr>* _candidates = nullptr; // reference, owned by sink operator
+    std::vector<PartitionChunkWriterPtr>* _candidates = nullptr; // reference, owned by sink operator
     CommitFunc _commit_func;
     AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};

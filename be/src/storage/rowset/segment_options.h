@@ -35,7 +35,6 @@ class ColumnAccessPath;
 class DeltaColumnGroupLoader;
 class DelvecLoader;
 class ObjectPool;
-class RecordPredicate;
 class RuntimeProfile;
 class TabletSchema;
 class Status;
@@ -62,13 +61,13 @@ public:
 
     DisjunctivePredicates delete_predicates;
 
-    std::shared_ptr<RecordPredicate> record_predicate;
-
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // rowset base segment id
     uint32_t rowset_id = 0;
+    uint32_t dynamic_rss_id_base = 0;
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
@@ -123,8 +122,6 @@ public:
 
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
-
-    bool read_by_generated_column_adding = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

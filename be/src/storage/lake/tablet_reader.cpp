@@ -18,9 +18,14 @@
 #include <utility>
 
 #include "column/datum_convert.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -37,6 +42,7 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "util/json_flattener.h"
@@ -662,6 +668,13 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                    MemPool* mempool) {
+    const TypeInfoAllocator* allocator = nullptr;
+    TypeInfoAllocator type_info_allocator;
+    if (mempool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mempool);
+        allocator = &type_info_allocator;
+    }
+
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -686,10 +699,10 @@ Status TabletReader::to_seek_tuple(const TabletSchema& tablet_schema, const Olap
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(
-                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i),
+                                              allocator));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), allocator));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));

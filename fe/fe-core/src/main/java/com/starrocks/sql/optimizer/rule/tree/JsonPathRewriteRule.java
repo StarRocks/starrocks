@@ -80,7 +80,7 @@ public class JsonPathRewriteRule extends TransformationRule {
 
     private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
     private static final java.util.regex.Pattern JSON_PATH_VALID_PATTERN =
-            java.util.regex.Pattern.compile("^[a-zA-Z0-9_]+$");
+            java.util.regex.Pattern.compile("^[a-zA-Z0-9_-]+$");
     public static final String COLUMN_REF_HINT = "JsonPathExtended";
 
     private static final Set<String> SUPPORTED_JSON_FUNCTIONS = Set.of(
@@ -346,6 +346,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (builder.getPredicate() != null) {
                 requiredColumnSet.union(builder.getPredicate().getUsedColumns());
             }
+            
+            if (scanOperator instanceof LogicalOlapScanOperator olapScanOperator &&
+                    MapUtils.isNotEmpty(olapScanOperator.getColRefToColumnMetaMap())) {
+                for (ScalarOperator p : olapScanOperator.getPrunedPartitionPredicates()) {
+                    if (p != null) {
+                        requiredColumnSet.union(p.getUsedColumns());
+                    }
+                }
+            }
+
             if (scanOperator.getProjection() != null) {
                 Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {

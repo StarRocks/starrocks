@@ -112,12 +112,15 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     // convert keys to pk single column format
     const auto& tablet_schema = _tablet->tablet_schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // search pks in pk index to get rowids
     EditVersion edit_version;
@@ -139,11 +142,13 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     plan_read_by_rssid(rowids, found, rowids_by_rssid, idxes);
 
     vector<std::pair<uint32_t, uint32_t>> value_column_ids_by_order_with_orig_idx;
+    value_column_ids_by_order_with_orig_idx.reserve(value_column_ids.size());
     for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
         value_column_ids_by_order_with_orig_idx.emplace_back(value_column_ids[i], i);
     }
     std::sort(value_column_ids_by_order_with_orig_idx.begin(), value_column_ids_by_order_with_orig_idx.end());
     vector<uint32_t> value_column_ids_by_order;
+    value_column_ids_by_order.reserve(value_column_ids_by_order_with_orig_idx.size());
     for (const auto& p : value_column_ids_by_order_with_orig_idx) {
         value_column_ids_by_order.push_back(p.first);
     }
@@ -207,6 +212,7 @@ Status handle_tablet_multi_get_rpc(const PTabletReaderMultiGetRequest& request, 
     const auto& tablet_schema = tablet->tablet_schema();
     const auto& keys_pb = request.keys();
     vector<ColumnId> key_column_ids;
+    key_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         key_column_ids.push_back(i);
     }

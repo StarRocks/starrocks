@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -38,6 +39,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
+import com.starrocks.connector.benchmark.RowCountEstimate;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -66,9 +69,11 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -103,6 +108,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -816,6 +822,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    private long estimateBenchmarkRowCount(Table table) {
+        Preconditions.checkState(table instanceof BenchmarkTable, "Not a benchmark table: %s", table.getType());
+        BenchmarkTable benchmarkTable = (BenchmarkTable) table;
+        RowCountEstimate estimate =
+                BenchmarkRowCountCalculator.estimateRowCount(benchmarkTable.getCatalogDBName(), benchmarkTable.getName(),
+                        benchmarkTable.getScaleFactor());
+        if (!estimate.isKnown()) {
+            return Config.default_statistics_output_row_count;
+        }
+        return estimate.getRowCount();
+    }
+
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
@@ -826,6 +844,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
                 Config.default_statistics_output_row_count);
+    }
+
+    @Override
+    public Void visitLogicalBenchmarkScan(LogicalBenchmarkScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                estimateBenchmarkRowCount(node.getTable()));
+    }
+
+    @Override
+    public Void visitPhysicalBenchmarkScan(PhysicalBenchmarkScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                estimateBenchmarkRowCount(node.getTable()));
     }
 
     @Override
@@ -878,6 +908,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToColumns().size());
 
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalCacheStatsScan(LogicalCacheStatsScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : node.getColRefToColumnMetaMap().keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
         return visitOperator(node, context);
     }
@@ -1791,16 +1832,22 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Preconditions.checkState(context.arity() == 1);
 
         long partitionLimit = 0;
+        long limit = Operator.DEFAULT_LIMIT;
+        long offset = Operator.DEFAULT_OFFSET;
         List<ColumnRefOperator> partitions = Collections.emptyList();
         boolean isTopNPushDownAgg = false;
         if (node instanceof LogicalTopNOperator) {
             partitionLimit = ((LogicalTopNOperator) node).getPartitionLimit();
             partitions = ((LogicalTopNOperator) node).getPartitionByColumns();
             isTopNPushDownAgg = ((LogicalTopNOperator) node).isTopNPushDownAgg();
+            limit = node.getLimit();
+            offset = ((LogicalTopNOperator) node).getOffset();
         } else if (node instanceof PhysicalTopNOperator) {
             partitionLimit = ((PhysicalTopNOperator) node).getPartitionLimit();
             partitions = ((PhysicalTopNOperator) node).getPartitionByColumns();
             isTopNPushDownAgg = ((PhysicalTopNOperator) node).isTopNPushDownAgg();
+            limit = node.getLimit();
+            offset = ((PhysicalTopNOperator) node).getOffset();
         }
 
         Statistics.Builder builder = Statistics.builder();
@@ -1824,8 +1871,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (isTopNPushDownAgg) {
-            // prefer to use the partition limit as output row count
-            builder.setOutputRowCount(1);
+            double outputRowCount = inputStatistics.getOutputRowCount();
+            if (limit != Operator.DEFAULT_LIMIT) {
+                double effectiveLimit = Math.max(1D, (double) limit + (double) offset);
+                outputRowCount = Math.min(outputRowCount, effectiveLimit);
+            }
+            builder.setOutputRowCount(outputRowCount);
         } else if (partitionLimit > 0 && !partitions.isEmpty()
                 && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
             double partitionNums = partitions.stream()

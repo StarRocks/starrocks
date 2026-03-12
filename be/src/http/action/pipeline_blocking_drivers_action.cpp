@@ -20,6 +20,7 @@
 
 #include <string>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
@@ -28,6 +29,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 

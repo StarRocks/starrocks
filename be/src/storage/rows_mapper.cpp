@@ -16,20 +16,21 @@
 
 #include <fmt/format.h>
 
-#include "common/config.h"
+#include "base/coding.h"
+#include "base/container/raw_container.h"
+#include "base/hash/crc32c.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "lake/filenames.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
-#include "util/coding.h"
-#include "util/crc32c.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
 Status RowsMapperBuilder::_init() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_filename));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_filename));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_wfile, fs->new_writable_file(wblock_opts, _filename));
     return Status::OK();
@@ -104,7 +105,7 @@ RowsMapperIterator::~RowsMapperIterator() {
 
 // Open file
 Status RowsMapperIterator::open(const FileInfo& filename) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(filename.path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(filename.path));
     ASSIGN_OR_RETURN(_rfile, fs->new_random_access_file(filename.path));
     int64_t file_size = 0;
     // PERFORMANCE OPTIMIZATION: Reuse file size if already known

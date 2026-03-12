@@ -16,9 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "storage/binlog_test_base.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -32,7 +33,7 @@ public:
         srand(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(_binlog_file_dir));
         CHECK_OK(fs::create_directories(_binlog_file_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(_binlog_file_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(_binlog_file_dir));
     }
 
     void TearDown() override { fs::remove_all(_binlog_file_dir); }

@@ -14,13 +14,11 @@
 
 #include "storage/merge_iterator.h"
 
-#include <boost/heap/skew_heap.hpp>
 #include <memory>
 #include <queue>
 #include <vector>
 
 #include "column/chunk.h"
-#include "common/config.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
@@ -375,11 +373,11 @@ inline Status HeapMergeIterator::fill(size_t child) {
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
         if (need_rssid_rowids) {
-            _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(),
-                                       _schema.sort_descs(), merge_condition, std::move(rssid_rowids)});
+            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
+                          merge_condition, std::move(rssid_rowids));
         } else {
-            _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(),
-                                       _schema.sort_descs(), merge_condition});
+            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
+                          merge_condition);
         }
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.

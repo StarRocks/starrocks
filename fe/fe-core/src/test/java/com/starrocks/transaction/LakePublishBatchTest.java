@@ -21,7 +21,6 @@ import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -109,12 +108,22 @@ public class LakePublishBatchTest {
         }
     }
 
-    private void waitTransactionDone(TransactionState transaction) throws InterruptedException {
-        while (!transaction.getTransactionStatus().isFinalStatus()) {
-            LOG.warn("transaction {} is running. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
+    private void waitTransactionDone(TransactionState transaction) throws Exception {
+        long dbId = transaction.getDbId();
+        long txnId = transaction.getTransactionId();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        while (true) {
+            // Re-fetch from the map each iteration, because COW may have replaced the object
+            TransactionState current = globalTransactionMgr.getDatabaseTransactionMgr(dbId)
+                    .getTransactionState(txnId);
+            if (current != null && current.getTransactionStatus().isFinalStatus()) {
+                LOG.warn("transaction {} is done. state: {}", txnId, current.getTransactionStatus());
+                break;
+            }
+            LOG.warn("transaction {} is running. state: {}", txnId,
+                    current != null ? current.getTransactionStatus() : "null");
             Thread.sleep(200);
         }
-        LOG.warn("transaction {} is done. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
     }
 
     @BeforeAll
@@ -356,6 +365,11 @@ public class LakePublishBatchTest {
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
+        // Re-fetch after waiting because COW may have replaced the objects in the map
+        transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId5);
+        transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId6);
         assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.ABORTED);
         assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.ABORTED);
     }
@@ -414,6 +428,11 @@ public class LakePublishBatchTest {
         waitTransactionDone(transactionState1);
         waitTransactionDone(transactionState2);
 
+        // Re-fetch after waiting because COW may have replaced the objects in the map
+        transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId7);
+        transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
+                getTransactionState(transactionId8);
         assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }
@@ -631,7 +650,7 @@ public class LakePublishBatchTest {
                         "txn1" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         TransactionState txnState1 = globalTransactionMgr.getTransactionState(db.getId(), txn1);
-        txnState1.addTableIndexes((OlapTable) table);
+        txnState1.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), Lists.newArrayList(normalIndex.getId()));
         List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
 
         // do a schema change, which will create a shadow index
@@ -658,7 +677,8 @@ public class LakePublishBatchTest {
                         "txn2" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         TransactionState txnState2 = globalTransactionMgr.getTransactionState(db.getId(), txn2);
-        txnState2.addTableIndexes((OlapTable) table);
+        txnState2.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                Lists.newArrayList(normalIndex.getId(), shadowIndex.getId()));
         List<TabletCommitInfo> commitInfo2 = commitAllTablets(List.of(normalTablet, shadowTablet));
 
         // txn3 includes tablets of both base index and shadow index
@@ -666,7 +686,8 @@ public class LakePublishBatchTest {
                 "txn3" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
                 TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         TransactionState txnState3 = globalTransactionMgr.getTransactionState(db.getId(), txn3);
-        txnState3.addTableIndexes((OlapTable) table);
+        txnState3.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                Lists.newArrayList(normalIndex.getId(), shadowIndex.getId()));
         List<TabletCommitInfo> commitInfo3 = commitAllTablets(List.of(normalTablet, shadowTablet));
 
         // commit in the order of txn2, tnx1, and txn3

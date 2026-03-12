@@ -54,11 +54,16 @@ StatusOr<FileInfo> LakePrimaryKeyCompactionConflictResolver::filename() const {
 Schema LakePrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(_metadata->schema());
     std::vector<uint32_t> pk_columns;
+    pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
     return ChunkHelper::convert_schema(tablet_schema, pk_columns);
+}
+
+StatusOr<PrimaryKeyEncodingType> LakePrimaryKeyCompactionConflictResolver::primary_key_encoding_type() const {
+    return _rowset->tablet_schema()->primary_key_encoding_type_or_error();
 }
 
 Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(

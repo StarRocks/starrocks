@@ -14,12 +14,14 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include "base/debug/trace.h"
+#include "base/string/string_util.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
-#include "util/string_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -232,7 +234,6 @@ Status PersistentIndexMemtable::flush() {
     sstable_pb.set_max_rss_rowid(max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
-    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);

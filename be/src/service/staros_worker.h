@@ -21,14 +21,15 @@
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "base/time/time.h"
 #include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
 #include "starcache/star_cache.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -87,7 +88,7 @@ private:
         ShardInfo shard_info;
         std::shared_ptr<std::string> fs_cache_key;
 
-        ShardInfoDetails(const ShardInfo& info) : shard_info(info) {}
+        ShardInfoDetails(ShardInfo info) : shard_info(std::move(info)) {}
     };
 
     struct CacheValue {
@@ -107,7 +108,8 @@ private:
 
     static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
 
-    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(
+            const ShardInfo& info, const Configuration* initial_conf = nullptr);
 
     static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
 

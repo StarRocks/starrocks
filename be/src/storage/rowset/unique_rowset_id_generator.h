@@ -36,9 +36,9 @@
 
 #include <atomic>
 
+#include "base/concurrency/spinlock.h"
+#include "base/uid_util.h"
 #include "storage/rowset/rowset_id_generator.h"
-#include "util/spinlock.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -46,6 +46,8 @@ class UniqueRowsetIdGenerator : public RowsetIdGenerator {
 public:
     UniqueRowsetIdGenerator(const UniqueId& backend_uid);
     ~UniqueRowsetIdGenerator() override = default;
+    UniqueRowsetIdGenerator(const UniqueRowsetIdGenerator&) = delete;
+    const UniqueRowsetIdGenerator& operator=(const UniqueRowsetIdGenerator&) = delete;
 
     RowsetId next_id() override;
 
@@ -59,9 +61,6 @@ private:
     const int64_t _version = 2; // modify it when create new version id generator
     std::atomic<int64_t> _inc_id;
     std::unordered_set<int64_t> _valid_rowset_id_hi;
-
-    UniqueRowsetIdGenerator(const UniqueRowsetIdGenerator&) = delete;
-    const UniqueRowsetIdGenerator& operator=(const UniqueRowsetIdGenerator&) = delete;
 }; // UniqueRowsetIdGenerator
 
 } // namespace starrocks

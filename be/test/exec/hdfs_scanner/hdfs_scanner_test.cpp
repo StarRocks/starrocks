@@ -17,22 +17,30 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <vector>
 
+#include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "column/column_helper.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -62,10 +70,12 @@ protected:
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
+    TupleDescriptor* _create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable);
 
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::vector<std::unique_ptr<FragmentDictState>> _fragment_dict_states;
     std::string _debug_row_output;
     int _debug_rows_per_call = 1;
 };
@@ -83,10 +93,13 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
         query_globals.__set_time_zone(timezone);
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
+    _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
     _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
@@ -153,12 +166,16 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
+    return _create_tuple_desc_with_nullable(descs, true);
+}
+
+TupleDescriptor* HdfsScannerTest::_create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     TTupleDescriptorBuilder tuple_desc_builder;
     int slot_id = 0;
     while (descs->name != "") {
-        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(true);
+        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(nullable);
         tuple_desc_builder.add_slot(slot_desc_builder.build());
         descs += 1;
         slot_id += 1;
@@ -249,6 +266,62 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     scanner->close();
 }
 
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
+}
+
+// Empty string defaults should be preserved for string columns.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['']", chunk->debug_row(0));
+}
+
+// Empty string defaults should also work for non-nullable string columns.
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
+    auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['']", chunk->debug_row(0));
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    EXPECT_FALSE(status.ok());
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
@@ -323,7 +396,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     TExpr texpr;
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
-    Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
+    Status st = ExprFactory::create_expr_tree(pool, texpr, &ctx, nullptr);
     DCHECK(st.ok()) << st.message();
     return ctx;
 }
@@ -424,8 +497,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -447,8 +520,8 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -498,8 +571,8 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
         std::vector<int64_t> values = {10, 20};
         extend_partition_values(&_pool, param, values);
 
-        ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-        ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
         std::unique_ptr<BadOrcFileStream> file_stream(new BadOrcFileStream());
         file_stream->ret_errno = ec.ret_errno;
@@ -572,8 +645,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     // TupleDescriptor* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -607,8 +680,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -630,16 +703,16 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -661,16 +734,16 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
-    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
-    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->partition_values, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -740,8 +813,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -826,8 +899,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -924,8 +997,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1023,8 +1096,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1145,8 +1218,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
-        ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-        ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
@@ -1196,8 +1269,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     auto scanner = std::make_shared<HdfsOrcScanner>();
     Status status = scanner->init(_runtime_state, *param);
@@ -1343,8 +1416,8 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1409,8 +1482,8 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1469,8 +1542,8 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
-        ASSERT_OK(Expr::open(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(it.second, _runtime_state));
+        ASSERT_OK(ExprExecutor::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1566,8 +1639,8 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
         param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->scanner_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->scanner_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->scanner_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->scanner_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1674,13 +1747,13 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_TRUE(status.ok()) << status.message();
 
         // build runtime filter.
-        RuntimeFilter* f = RuntimeFilterHelper::create_runtime_bloom_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
+        RuntimeFilter* f = RuntimeFilterFactory::create_bloom_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
         f->get_membership_filter()->init(10);
         auto column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        ASSERT_OK(RuntimeFilterHelper::fill_runtime_filter(column, LogicalType::TYPE_BIGINT, f, 0, false));
+        ASSERT_OK(RuntimeFilterBuilder::fill(f, LogicalType::TYPE_BIGINT, column, 0, false));
 
         ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
         rf_probe_desc.set_runtime_filter(f);
@@ -1756,8 +1829,8 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2512,8 +2585,8 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2678,8 +2751,8 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         param->scanner_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2725,8 +2798,8 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         param->all_conjunct_ctxs.push_back(ctx);
     }
 
-    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());

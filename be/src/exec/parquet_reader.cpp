@@ -21,15 +21,15 @@
 #include <memory>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
 #include "util/byte_buffer.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================

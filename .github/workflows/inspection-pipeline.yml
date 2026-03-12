@@ -283,6 +283,38 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
+  clang-tidy-full-ubuntu:
+    runs-on: [self-hosted, normal]
+    name: Clang-Tidy Full (Ubuntu)
+    needs:
+      - info
+    continue-on-error: true
+    env:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+    steps:
+      - name: UPDATE ECI & RUN CLANG-TIDY
+        id: run_clang_tidy
+        shell: bash
+        timeout-minutes: 120
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
+            --build Release --linuxdistro ubuntu --be --clang-tidy --clang-tidy-mode full
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_clang_tidy.outputs.ECI_ID }}
+          eci rm ${{ steps.run_clang_tidy.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_clang_tidy.outputs.RES_FILE }}
+          rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
+
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
@@ -373,6 +405,7 @@ jobs:
         with:
           pattern: BUILD-RESULT-*
           path: outputs
+          merge-multiple: false
 
       - name: Analyse Build Artifact
         id: analyse_artifact
@@ -441,7 +474,7 @@ jobs:
           fi
 
   system-test-release:
-    name: 'Release/Centos'
+    name: 'Release/Centos Native'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -455,29 +488,12 @@ jobs:
       FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: centos7
-      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
-      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
-
-  system-test-asan:
-    name: 'ASAN/Centos'
-    uses: ./.github/workflows/inspection-reusable-pipeline.yml
-    needs:
-      - info
-      - test_filter
-    secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
-    with:
-      BRANCH: ${{ needs.info.outputs.BRANCH }}
-      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
-      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_BE_TAR_PATH }}
-      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.CENTOS_ASAN_FE_TAR_PATH }}
-      BUILD_TYPE: ASAN
-      LINUX_DISTRO: centos7
+      SYSTEM_TEST_MODE: native
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
 
   system-test-release-ubuntu:
-    name: 'Release/Ubuntu'
+    name: 'Release/Ubuntu Native'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -491,13 +507,34 @@ jobs:
       FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
       BUILD_TYPE: Release
       LINUX_DISTRO: ubuntu
+      SYSTEM_TEST_MODE: native
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
       WITH_FEATURE_COV: ${{ needs.info.outputs.WITH_FEATURE_COV }}
       IS_ARM: ${{ needs.info.outputs.IS_ARM }}
 
+  system-test-release-ubuntu-cloud:
+    name: 'Release/Ubuntu Cloud'
+    uses: ./.github/workflows/inspection-reusable-pipeline.yml
+    needs:
+      - info
+      - test_filter
+    secrets: inherit
+    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH != ''
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_FE_TAR_PATH }}
+      BUILD_TYPE: Release
+      LINUX_DISTRO: ubuntu
+      SYSTEM_TEST_MODE: cloud
+      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
+      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+      IS_ARM: ${{ needs.info.outputs.IS_ARM }}
+
   system-test-asan-ubuntu:
-    name: 'ASAN/Ubuntu'
+    name: 'ASAN/Ubuntu Native'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -511,6 +548,26 @@ jobs:
       FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH }}
       BUILD_TYPE: ASAN
       LINUX_DISTRO: ubuntu
+      SYSTEM_TEST_MODE: native
+      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
+      INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+
+  system-test-asan-ubuntu-cloud:
+    name: 'ASAN/Ubuntu Cloud'
+    uses: ./.github/workflows/inspection-reusable-pipeline.yml
+    needs:
+      - info
+      - test_filter
+    secrets: inherit
+    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH != '' && needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      BE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_BE_TAR_PATH }}
+      FE_OUTPUT_TAR: ${{ needs.test_filter.outputs.UBUNTU_ASAN_FE_TAR_PATH }}
+      BUILD_TYPE: ASAN
+      LINUX_DISTRO: ubuntu
+      SYSTEM_TEST_MODE: cloud
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
 
@@ -609,20 +666,18 @@ jobs:
       - be-ut
       - fe-ut
       - system-test-release
-      - system-test-asan
       - system-test-release-ubuntu
+      - system-test-release-ubuntu-cloud
       - system-test-asan-ubuntu
+      - system-test-asan-ubuntu-cloud
     if: always()
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       GH_TOKEN: ${{ github.token }}
       RELEASE_CONF_FILE: ${{ needs.system-test-release.outputs.CONF_FILE }}
-      ASAN_CONF_FILE: ${{ needs.system-test-asan.outputs.CONF_FILE }}
       RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release.outputs.MYSQL_ECI_ID }}
-      ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan.outputs.MYSQL_ECI_ID }}
       RELEASE_RESULT: ${{ needs.system-test-release.result }}
-      ASAN_RESULT: ${{ needs.system-test-asan.result }}
       UBUNTU_RELEASE_CONF_FILE: ${{ needs.system-test-release-ubuntu.outputs.CONF_FILE }}
       UBUNTU_ASAN_CONF_FILE: ${{ needs.system-test-asan-ubuntu.outputs.CONF_FILE }}
       UBUNTU_RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release-ubuntu.outputs.MYSQL_ECI_ID }}

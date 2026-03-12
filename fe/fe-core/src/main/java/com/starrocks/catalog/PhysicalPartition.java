@@ -373,6 +373,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return indices;
     }
 
+    // Create new rollup index.
+    // 1. indexMetaIdToIndexIds currently does not contain mIndex.metaId.
     public void createRollupIndex(MaterializedIndex mIndex) {
         Preconditions.checkState(!indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
                 String.format("index meta id %d already exists", mIndex.getMetaId()));
@@ -387,6 +389,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
     }
 
+    // Add new version base or rollup materialized index.
+    // 1. mIndex.state is NORMAL.
+    // 2. indexMetaIdToIndexIds currently contains mIndex.metaId.
     public void addMaterializedIndex(MaterializedIndex mIndex, boolean isBaseIndex) {
         Preconditions.checkState(indexMetaIdToIndexIds.containsKey(mIndex.getMetaId()),
                 String.format("index meta id %d not exist", mIndex.getMetaId()));
@@ -399,6 +404,25 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
         indexMetaIdToIndexIds.get(mIndex.getMetaId()).add(mIndex.getId());
         idToVisibleIndex.put(mIndex.getId(), mIndex);
+    }
+
+    public MaterializedIndex deleteMaterializedIndexByIndexId(long indexId) {
+        MaterializedIndex index = idToVisibleIndex.remove(indexId);
+        if (index == null) {
+            index = idToShadowIndex.remove(indexId);
+        }
+
+        if (index != null) {
+            List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
+            Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
+                    String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
+
+            if (indexIds.isEmpty()) {
+                indexMetaIdToIndexIds.remove(index.getMetaId());
+            }
+        }
+
+        return index;
     }
 
     public List<MaterializedIndex> deleteMaterializedIndexByMetaId(long indexMetaId) {
@@ -761,6 +785,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
             // set baseIndexMetaId
             baseIndexMetaId = baseIndex.getMetaId();
+
+            // reset baseIndex to null
+            baseIndex = null;
         }
     }
 }

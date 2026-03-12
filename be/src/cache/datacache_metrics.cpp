@@ -14,12 +14,18 @@
 
 #include "cache/datacache_metrics.h"
 
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/datacache.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/disk_cache/starcache_engine.h"
+#endif
 
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -29,15 +35,19 @@ void register_datacache_metrics(bool) {}
 #else
 static void update_datacache_metrics(bool use_same_instance) {
     auto* cache_env = DataCache::GetInstance();
-    const auto* local_disk_cache = cache_env->local_disk_cache();
-    DataCacheDiskMetrics disk_metrics{};
-    if (local_disk_cache && local_disk_cache->is_initialized()) {
-        disk_metrics = local_disk_cache->cache_metrics();
-    }
     const auto* local_mem_cache = cache_env->local_mem_cache();
     DataCacheMemMetrics mem_metrics{};
     if (local_mem_cache && local_mem_cache->is_initialized()) {
         mem_metrics = local_mem_cache->cache_metrics();
+    }
+    auto* local_disk_cache = cache_env->local_disk_cache();
+    DataCacheDiskMetrics disk_metrics{};
+    int64_t meta_used_bytes = 0;
+    if (local_disk_cache && local_disk_cache->is_initialized()) {
+        disk_metrics = local_disk_cache->cache_metrics();
+        auto* starcache = static_cast<StarCacheEngine*>(local_disk_cache);
+        auto&& star_metrics = starcache->starcache_metrics(0);
+        meta_used_bytes = star_metrics.meta_used_bytes;
     }
 #ifdef USE_STAROS
     if (!use_same_instance) {
@@ -46,16 +56,23 @@ static void update_datacache_metrics(bool use_same_instance) {
         // merge the disk cache metrics
         disk_metrics.disk_quota_bytes += starlet_cache_metrics.disk_quota_bytes;
         disk_metrics.disk_used_bytes += starlet_cache_metrics.disk_used_bytes;
+        meta_used_bytes += starlet_cache_metrics.mem_used_bytes;
     }
 #endif
     StarRocksMetrics::instance()->datacache_mem_quota_bytes.set_value(mem_metrics.mem_quota_bytes);
     StarRocksMetrics::instance()->datacache_mem_used_bytes.set_value(mem_metrics.mem_used_bytes);
     StarRocksMetrics::instance()->datacache_disk_quota_bytes.set_value(disk_metrics.disk_quota_bytes);
     StarRocksMetrics::instance()->datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
+    StarRocksMetrics::instance()->datacache_meta_used_bytes.set_value(meta_used_bytes);
+
+    // Update hit rate metrics from DataCacheHitRateCounter
+    auto* hit_rate_counter = DataCacheHitRateCounter::instance();
+    StarRocksMetrics::instance()->block_cache_hit_bytes.set_value(hit_rate_counter->block_cache_hit_bytes());
+    StarRocksMetrics::instance()->block_cache_miss_bytes.set_value(hit_rate_counter->block_cache_miss_bytes());
 }
 
 void register_datacache_metrics(bool use_same_instance) {
-    StarRocksMetrics::instance()->metrics()->register_hook(
+    GlobalMetricsRegistry::instance()->metrics()->register_hook(
             "update_datacache_metrics", [use_same = use_same_instance] { update_datacache_metrics(use_same); });
 }
 #endif

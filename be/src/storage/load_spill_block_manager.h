@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <utility>
+
+#include "common/thread/threadpool.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -25,8 +27,8 @@ class ThreadPoolToken;
 
 class LoadSpillBlockMergeExecutor {
 public:
-    LoadSpillBlockMergeExecutor() {}
-    ~LoadSpillBlockMergeExecutor() {}
+    LoadSpillBlockMergeExecutor() = default;
+    ~LoadSpillBlockMergeExecutor() = default;
     Status init();
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }
@@ -70,6 +72,7 @@ public:
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
     std::vector<BlockGroupPtrWithSlot>& block_groups() { return _block_groups; }
+    std::mutex* block_groups_mutex() { return &_mutex; }
     size_t total_bytes() const { return _total_bytes; }
 
 private:
@@ -86,7 +89,7 @@ public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
                           const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
-            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(fs) {
+            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(std::move(fs)) {
         _remote_spill_path = remote_spill_path + "/load_spill";
     }
 
@@ -97,6 +100,11 @@ public:
     Status init();
 
     bool is_initialized() const { return _initialized; }
+
+    // Delete the remote spill parent directory (e.g. <remote_spill_path>/<load_id>).
+    // Called in destructor after all spill blocks have been released, so that individual
+    // container destructors only delete their own files and this method cleans up the directory.
+    Status clear_parent_path();
 
     // acquire Block from BlockManager
     StatusOr<spill::BlockPtr> acquire_block(size_t block_size, bool force_remote = false);

@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "column/schema.h"
@@ -36,8 +37,8 @@ class MetaFileBuilder;
 class LakePrimaryKeyRecover : public PrimaryKeyRecover {
 public:
     explicit LakePrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata)
-            : _builder(builder), _tablet(tablet), _metadata(metadata) {}
-    ~LakePrimaryKeyRecover() {}
+            : _builder(builder), _tablet(tablet), _metadata(std::move(metadata)) {}
+    ~LakePrimaryKeyRecover() = default;
 
     // clean old state, include pk index and delvec
     Status pre_cleanup() override;
@@ -54,6 +55,8 @@ public:
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;
 
     int64_t tablet_id() override;
+
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const override;
 
     // Sorrt rowset by rowsetid
     // also consider sorting in data loading and compact concurrency scenarios

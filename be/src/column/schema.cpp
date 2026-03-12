@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "exec/sorting/sorting.h"
+#include "common/sort_desc.h"
 
 namespace starrocks {
 

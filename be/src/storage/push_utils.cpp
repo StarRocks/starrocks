@@ -14,11 +14,28 @@
 
 #include "storage/push_utils.h"
 
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "common/config_exec_fwd.h"
+#include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
+#include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
+
 namespace starrocks {
 
 PushBrokerReader::~PushBrokerReader() {
     _counter.reset();
     _scanner.reset();
+}
+
+Status PushBrokerReader::close() {
+    _scanner->close();
+    _ready = false;
+    return Status::OK();
 }
 
 Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushReq& request) {
@@ -49,7 +66,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushR
     _runtime_profile = _runtime_state->runtime_profile();
     _runtime_profile->set_name("PushBrokerReader");
 
-    _runtime_state->init_mem_trackers(dummy_id);
+    _runtime_state->init_mem_trackers(dummy_id, ExecEnv::GetInstance()->query_pool_mem_tracker());
 
     // init tuple desc
     auto tuple_id = t_scan_range.params.dest_tuple_id;

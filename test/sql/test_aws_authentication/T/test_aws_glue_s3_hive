@@ -1,6 +1,6 @@
 -- name: test_aws_glue_s3_hive
 
-CREATE EXTERNAL CATALOG test_aws_glue_s3_hive
+CREATE EXTERNAL CATALOG test_aws_glue_s3_hive_${uuid0}
 PROPERTIES
 (
 "type"="hive",
@@ -13,11 +13,29 @@ PROPERTIES
 "aws.s3.region"="${aws_region}"
 );
 
-select * from test_aws_glue_s3_hive.sql_test_db.hive_glue_s3_parquet;
+select * from test_aws_glue_s3_hive_${uuid0}.sql_test_db.hive_glue_s3_parquet;
 
-drop catalog test_aws_glue_s3_hive;
+drop catalog test_aws_glue_s3_hive_${uuid0};
 
-CREATE EXTERNAL CATALOG test_aws_assume_role_glue_s3_hive
+CREATE EXTERNAL CATALOG test_aws_glue_s3_hive_${uuid0}
+PROPERTIES
+(
+"type"="hive",
+"hive.metastore.type"="glue",
+"hive.metastore.glue.catalogid" = "${aws_account_id}",
+"aws.glue.access_key"="${aws_ak}",
+"aws.glue.secret_key"="${aws_sk}",
+"aws.glue.region"="${aws_region}",
+"aws.s3.access_key"="${aws_ak}",
+"aws.s3.secret_key"="${aws_sk}",
+"aws.s3.region"="${aws_region}"
+);
+
+select * from test_aws_glue_s3_hive_${uuid0}.sql_test_db.hive_glue_s3_parquet;
+
+drop catalog test_aws_glue_s3_hive_${uuid0};
+
+CREATE EXTERNAL CATALOG test_assume_role_hive_${uuid0}
 PROPERTIES
 (
 "type"="hive",
@@ -25,17 +43,17 @@ PROPERTIES
 "aws.glue.access_key"="${aws_ak}",
 "aws.glue.secret_key"="${aws_sk}",
 "aws.glue.region"="${aws_region}",
-"aws.glue.assume_role"="${aws_assume_role}",
+"aws.glue.iam_role_arn"="${aws_assume_role}",
 "aws.glue.sts.region"="${aws_sts_region}",
 "aws.glue.sts.endpoint"="${aws_sts_endpoint}",
 "aws.s3.access_key"="${aws_ak}",
 "aws.s3.secret_key"="${aws_sk}",
 "aws.s3.region"="${aws_region}",
-"aws.s3.assume_role"="${aws_assume_role}",
+"aws.s3.iam_role_arn"="${aws_assume_role}",
 "aws.s3.sts.region"="${aws_sts_region}",
 "aws.s3.sts.endpoint"="${aws_sts_endpoint}"
 );
 
-select * from test_aws_assume_role_glue_s3_hive.sql_test_db.hive_glue_s3_parquet;
+select * from test_assume_role_hive_${uuid0}.sql_test_db.hive_glue_s3_parquet;
 
-drop catalog test_aws_assume_role_glue_s3_hive;
+drop catalog test_assume_role_hive_${uuid0};

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
@@ -54,6 +55,24 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "PARTITION p202004 VALUES [('2020-01-01'), ('2020-04-01')),\n"
                 + "PARTITION p202007 VALUES [('2020-04-01'), ('2020-07-01')),\n"
                 + "PARTITION p202012 VALUES [('2020-07-01'), ('2020-12-01')))\n"
+                + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
+                + "PROPERTIES (\n"
+                + "\"replication_num\" = \"1\",\n"
+                + "\"in_memory\" = \"false\"\n"
+                + ");");
+
+        starRocksAssert.withTable("CREATE TABLE `ptest_case` (\n"
+                + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
+                + "  `d2` date    NULL COMMENT \"\",\n"
+                + "  `v1` int(11) NULL COMMENT \"\"\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(`k1`, `d2`)\n"
+                + "COMMENT \"OLAP\"\n"
+                + "PARTITION BY RANGE(`d2`)\n"
+                + "(PARTITION P202001 VALUES [('0000-01-01'), ('2020-01-01')),\n"
+                + "PARTITION P202004 VALUES [('2020-01-01'), ('2020-04-01')),\n"
+                + "PARTITION P202007 VALUES [('2020-04-01'), ('2020-07-01')),\n"
+                + "PARTITION P202012 VALUES [('2020-07-01'), ('2020-12-01')))\n"
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
@@ -237,6 +256,13 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    @Test
+    public void testPartitionClauseCaseInsensitive() throws Exception {
+        String sql = "select * from ptest_case partition(p202007)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=1/4");
     }
 
     private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
@@ -612,6 +638,36 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.getTable("test", "t4_range_minmax")
                 .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
         starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        FeConstants.runningUnitTest = true;
+
+    }
+
+    @Test
+    public void testMinMaxRangePartitionPruneWithDateTruncPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_expr_range_minmax values('2025-04-29', 1, 'bar')");
+        FeConstants.runningUnitTest = false;
+        starRocksAssert.getTable("test", "t4_expr_range_minmax")
+                .getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME)
+                .getDefaultPhysicalPartition()
+                // after `alter table t4_expr_range_minmax modify column `id` varchar(11)`,
+                // visible version of shadow partition will increase
+                .updateVisibleVersion(2);
+        // min(dt) should not be affected by shadow partition
+        starRocksAssert.query("select min(dt) from t4_expr_range_minmax").explainContains("partitions=1/2");
         FeConstants.runningUnitTest = true;
 
     }

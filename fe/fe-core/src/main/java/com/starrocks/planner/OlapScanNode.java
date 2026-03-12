@@ -200,6 +200,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    private boolean enableGlobalLateMaterialization = false;
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -231,6 +232,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
         this.isPreAggregation = isPreAggregation;
         this.reasonOfPreAggregation = reason;
+    }
+
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
     public List<Long> getScanTabletIds() {
@@ -1111,11 +1116,16 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+                msg.lake_scan_node.setNext_uniq_id(olapTable.getMaxColUniqueId());
             }
 
             if (!scanTabletIds.isEmpty()) {
                 msg.lake_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
+            }
+
+            if (enableGlobalLateMaterialization) {
+                msg.lake_scan_node.setEnable_global_late_materialization(true);
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
@@ -1170,10 +1180,15 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+                msg.olap_scan_node.setNext_uniq_id(olapTable.getMaxColUniqueId());
             }
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
+            if (enableGlobalLateMaterialization) {
+                msg.olap_scan_node.setEnable_global_late_materialization(true);
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
@@ -1583,8 +1598,17 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                throw new RuntimeException(String.format("Partition %d not found in table %s. ",
+                        partitionId, olapTable.getName()));
+            }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                if (materializedIndex == null) {
+                    throw new RuntimeException(String.format("Materialized index with meta id %d " +
+                                    "not found in partition %s (physical partition id: %d) of table %s. ",
+                            index.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
+                }
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
@@ -1594,8 +1618,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         for (Long tabletId : scanTabletIds) {
             // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
             // maybe invalid.
-            Preconditions.checkState(tabletToPartitionMap.containsKey(tabletId),
-                    "Invalid tablet id: '" + tabletId + "'");
+            if (!tabletToPartitionMap.containsKey(tabletId)) {
+                throw new RuntimeException(String.format("Invalid tablet id: '%d'. The tablet may have been dropped. " +
+                                "Selected partitions: %s, Table: %s, IndexMetaId: %d. ",
+                        tabletId, selectedPartitionIds, olapTable.getName(), index.indexMetaId));
+            }
             long partitionId = tabletToPartitionMap.get(tabletId);
             partitionToTabletMap.computeIfAbsent(partitionId, k -> Lists.newArrayList()).add(tabletId);
         }

@@ -18,23 +18,30 @@
 #include <ios>
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/function_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
@@ -50,6 +57,12 @@
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context);
+
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
@@ -111,6 +124,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
     }
 }
 
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
+}
+
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _state = state;
 
@@ -161,9 +178,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+                    ExprFactory::create_expr_from_thrift_nodes(_pool, desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -208,6 +225,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -294,7 +312,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = ColumnHelper::create_column(
@@ -302,7 +320,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = ColumnHelper::create_column(_order_ctxs[i]->root()->type(),
@@ -322,7 +340,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -331,10 +349,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_partition_ctxs, state));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state));
+            RETURN_IF_ERROR(ExprExecutor::prepare(_order_ctxs, state));
         }
     }
 
@@ -349,10 +367,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 Status Analytor::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(Expr::open(_partition_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_order_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_order_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
 
@@ -360,6 +378,19 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
+        std::vector<int> attached_udaf_idx;
+        bool init_success = false;
+        DeferOp cleanup_on_fail([&]() {
+#ifndef __APPLE__
+            if (init_success) {
+                return;
+            }
+            for (int idx : attached_udaf_idx) {
+                destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+            }
+#endif
+        });
+
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
 #ifndef __APPLE__
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
@@ -367,13 +398,16 @@ Status Analytor::open(RuntimeState* state) {
                 auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                   _agg_fn_ctxs[i]);
                 RETURN_IF_ERROR(st);
+                attached_udaf_idx.emplace_back(i);
             }
 #endif
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+        RETURN_IF_UNLIKELY_NULL(agg_states, Status::MemoryAllocFailed("alloc analytic agg states failed"));
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(
                 std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+        init_success = true;
         return Status::OK();
     };
 
@@ -414,10 +448,19 @@ void Analytor::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
-        Expr::close(_order_ctxs, state);
-        Expr::close(_partition_ctxs, state);
+#ifndef __APPLE__
+        for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
+            }
+        }
+#endif
+
+        ExprExecutor::close(_order_ctxs, state);
+        ExprExecutor::close(_partition_ctxs, state);
+
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
         return Status::OK();
     };

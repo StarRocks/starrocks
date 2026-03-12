@@ -42,7 +42,11 @@
 
 #include <cstring>
 
+#include "base/concurrency/concurrent_limiter.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
+#include "common/system/cpu_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -51,10 +55,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
-#include "util/concurrent_limiter.h"
-#include "util/cpu_info.h"
 
 class mg_connection;
 

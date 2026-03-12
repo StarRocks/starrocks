@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/stats/ndv_estimator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
@@ -24,8 +25,8 @@
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "simdjson.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "util/ndv_estimator.h"
 
 namespace starrocks {
 
@@ -37,16 +38,22 @@ struct Bucket {
     static Bucket from_json(simdjson::ondemand::array bucket_json, const FunctionContext::TypeDesc* type_desc,
                             MemPool* mem_pool) {
         TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
+        const TypeInfoAllocator* allocator = nullptr;
+        TypeInfoAllocator type_info_allocator;
+        if (mem_pool != nullptr) {
+            type_info_allocator = make_type_info_allocator(mem_pool);
+            allocator = &type_info_allocator;
+        }
         auto bucket_iter = bucket_json.begin();
 
         Datum lower_datum;
-        std::ignore =
-                datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        std::ignore = datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}},
+                                        allocator);
         ++bucket_iter;
 
         Datum upper_datum;
-        std::ignore =
-                datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        std::ignore = datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}},
+                                        allocator);
         ++bucket_iter;
 
         int64_t count = std::stoll(std::string{std::string_view{*bucket_iter}});

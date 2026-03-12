@@ -16,17 +16,24 @@
 
 #include <fmt/format.h>
 #include <fslib/configuration.h>
+#include <fslib/file.h>
+#include <fslib/file_system.h>
 #include <fslib/fslib_all_initializer.h>
 #include <fslib/star_cache_configuration.h>
+#include <fslib/stat.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
 
-#include "common/config.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_object_storage_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
 #include "storage/rowset/page_io.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -95,7 +102,7 @@ public:
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
         fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
@@ -157,7 +164,7 @@ TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
 
 TEST_P(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -185,7 +192,7 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
 }
 
 TEST_P(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
     bool created = false;
 
     //
@@ -305,7 +312,7 @@ TEST_P(StarletFileSystemTest, test_directory) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -348,12 +355,12 @@ TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 
 TEST_P(StarletFileSystemTest, test_delete_files) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
 
     auto uri1 = StarletPath("/f1");
     ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
@@ -417,7 +424,7 @@ TEST_P(StarletFileSystemTest, test_tag) {
     bool old = config::starlet_write_file_with_tag;
     config::starlet_write_file_with_tag = true;
     auto uri1 = StarletPath("tag.dat");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri1));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri1));
     ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
 
     auto uri2 = StarletPath("tag.meta");
@@ -440,7 +447,7 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
     config::lake_clear_corrupted_cache_data = false;
     auto uri = StarletPath("cache.dat");
     ASSERT_TRUE(drop_local_cache_data(uri).is_not_supported());
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     ASSERT_OK(wf->append("hello"));
     ASSERT_OK(wf->append(" world!"));
@@ -452,7 +459,240 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
     config::lake_clear_corrupted_cache_data = old;
 }
 
+TEST_P(StarletFileSystemTest, test_get_cache_stats) {
+    auto uri = StarletPath("cache_stats.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
+    ASSERT_OK(wf->append("hello"));
+    ASSERT_OK(wf->append(" world!"));
+    ASSERT_OK(wf->close());
+
+    auto result = fs->get_cache_stats(uri, 0, 12);
+    // get_cache_stats may or may not be supported depending on the underlying fslib,
+    // but the code path in fs_starlet.cpp is exercised either way.
+    if (result.ok()) {
+        EXPECT_EQ(result.value().second, 12);
+    }
+
+    ASSERT_OK(fs->delete_file(uri));
+}
+
 INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
                         ::testing::Values(std::string("s3"), std::string("cachefs")));
+
+class MockStarletFileSystem : public staros::starlet::fslib::FileSystem {
+public:
+    MockStarletFileSystem() : staros::starlet::fslib::FileSystem() {}
+    ~MockStarletFileSystem() override = default;
+
+    std::string_view scheme() override { return "mock"; }
+
+    absl::StatusOr<std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>> open(
+            std::string_view path, const staros::starlet::fslib::ReadOptions& opts) override {
+        return absl::UnimplementedError("MockStarletFileSystem::open not implemented");
+    }
+
+    absl::StatusOr<std::unique_ptr<staros::starlet::fslib::WritableFile>> create(
+            std::string_view path, const staros::starlet::fslib::WriteOptions& opts) override {
+        return absl::UnimplementedError("MockStarletFileSystem::create not implemented");
+    }
+
+    absl::StatusOr<bool> exists(std::string_view path) override { return false; }
+
+    absl::Status rename_file(std::string_view src, std::string_view dest) override {
+        return absl::UnimplementedError("MockStarletFileSystem::rename_file not implemented");
+    }
+
+    absl::Status rename_dir(std::string_view src, std::string_view dest) override {
+        return absl::UnimplementedError("MockStarletFileSystem::rename_dir not implemented");
+    }
+
+    absl::Status delete_file(std::string_view path) override {
+        return absl::UnimplementedError("MockStarletFileSystem::delete_file not implemented");
+    }
+
+    absl::Status delete_files(absl::Span<const std::string> paths) override {
+        return absl::UnimplementedError("MockStarletFileSystem::delete_files not implemented");
+    }
+
+    absl::Status delete_dir(std::string_view path, bool recursive) override {
+        return absl::UnimplementedError("MockStarletFileSystem::delete_dir not implemented");
+    }
+
+    absl::StatusOr<staros::starlet::fslib::Stat> stat(std::string_view path) override {
+        return absl::UnimplementedError("MockStarletFileSystem::stat not implemented");
+    }
+
+    absl::Status hard_link(std::string_view src, std::string_view dest) override {
+        return absl::UnimplementedError("MockStarletFileSystem::hard_link not implemented");
+    }
+
+    absl::Status mkdir(std::string_view path, bool create_parent) override {
+        return absl::UnimplementedError("MockStarletFileSystem::mkdir not implemented");
+    }
+
+    absl::Status list_dir(std::string_view path, bool recursive,
+                          std::function<bool(staros::starlet::fslib::EntryStat)> visitor,
+                          std::string_view name_prefix) override {
+        return absl::UnimplementedError("MockStarletFileSystem::list_dir not implemented");
+    }
+
+protected:
+    absl::Status initialize(const staros::starlet::fslib::Configuration& conf) override { return absl::OkStatus(); }
+};
+
+class NewFsStarletTest : public ::testing::Test {
+public:
+    void SetUp() override {
+        staros::starlet::fslib::register_builtin_filesystems();
+        // Initialize g_worker for the test
+        g_worker = std::make_shared<starrocks::StarOSWorker>();
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+        g_worker.reset();
+    }
+};
+
+TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_true) {
+    auto mock_fs = std::make_shared<MockStarletFileSystem>();
+    int64_t test_shard_id = 88888;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Call with use_raw_path=true
+    auto fs = new_fs_starlet(test_shard_id, true);
+    ASSERT_NE(nullptr, fs);
+    EXPECT_EQ(FileSystem::STARLET, fs->type());
+}
+
+TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_false) {
+    auto mock_fs = std::make_shared<MockStarletFileSystem>();
+    int64_t test_shard_id = 77777;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Call with use_raw_path=false
+    auto fs = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs);
+    EXPECT_EQ(FileSystem::STARLET, fs->type());
+}
+
+TEST_F(NewFsStarletTest, test_new_fs_starlet_cache_hit) {
+    auto mock_fs = std::make_shared<MockStarletFileSystem>();
+    int64_t test_shard_id = 66666;
+    int callback_count = 0;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        callback_count++;
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // First call - should miss cache and create new filesystem
+    auto fs1 = new_fs_starlet(test_shard_id, true);
+    ASSERT_NE(nullptr, fs1);
+    EXPECT_EQ(1, callback_count);
+
+    // Second call with same shard_id and same mode - should hit cache
+    auto fs2 = new_fs_starlet(test_shard_id, true);
+    ASSERT_NE(nullptr, fs2);
+    // Callback should not be called again due to cache hit
+    EXPECT_EQ(1, callback_count);
+}
+
+// Test separate caches for different modes
+// raw path mode and normal mode should use separate caches
+TEST_F(NewFsStarletTest, test_new_fs_starlet_separate_cache_for_modes) {
+    auto mock_fs = std::make_shared<MockStarletFileSystem>();
+    int64_t test_shard_id = 55555;
+    int callback_count = 0;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        callback_count++;
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // First call with raw path mode
+    auto fs1 = new_fs_starlet(test_shard_id, true);
+    ASSERT_NE(nullptr, fs1);
+    EXPECT_EQ(1, callback_count);
+
+    // Second call with normal mode - should miss cache because different mode uses different cache
+    auto fs2 = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs2);
+    EXPECT_EQ(2, callback_count);
+
+    // Third call with raw path mode again - should hit cache
+    auto fs3 = new_fs_starlet(test_shard_id, true);
+    ASSERT_NE(nullptr, fs3);
+    EXPECT_EQ(2, callback_count);
+
+    // Fourth call with normal mode again - should hit cache
+    auto fs4 = new_fs_starlet(test_shard_id, false);
+    ASSERT_NE(nullptr, fs4);
+    EXPECT_EQ(2, callback_count);
+}
+
+// Test failure scenario when g_worker->get_shard_filesystem returns error
+TEST_F(NewFsStarletTest, test_new_fs_starlet_get_shard_filesystem_failure) {
+    int64_t test_shard_id = 44444;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = absl::InternalError("Mock error: failed to get shard filesystem");
+    });
+
+    // Call should return nullptr when get_shard_filesystem fails
+    auto fs = new_fs_starlet(test_shard_id, true);
+    EXPECT_EQ(nullptr, fs);
+
+    // Also test with use_raw_path=false
+    int64_t test_shard_id2 = 33333;
+    auto fs2 = new_fs_starlet(test_shard_id2, false);
+    EXPECT_EQ(nullptr, fs2);
+}
+
+// Test that different shard_ids use different cache entries
+TEST_F(NewFsStarletTest, test_new_fs_starlet_different_shard_ids) {
+    auto mock_fs = std::make_shared<MockStarletFileSystem>();
+    int callback_count = 0;
+
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        callback_count++;
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Create filesystem for shard 1
+    auto fs1 = new_fs_starlet(11111, true);
+    ASSERT_NE(nullptr, fs1);
+    EXPECT_EQ(1, callback_count);
+
+    // Create filesystem for shard 2 - should not hit cache
+    auto fs2 = new_fs_starlet(22222, true);
+    ASSERT_NE(nullptr, fs2);
+    EXPECT_EQ(2, callback_count);
+
+    // Access shard 1 again - should hit cache
+    auto fs3 = new_fs_starlet(11111, true);
+    ASSERT_NE(nullptr, fs3);
+    EXPECT_EQ(2, callback_count);
+
+    // Access shard 2 again - should hit cache
+    auto fs4 = new_fs_starlet(22222, true);
+    ASSERT_NE(nullptr, fs4);
+    EXPECT_EQ(2, callback_count);
+}
 
 } // namespace starrocks

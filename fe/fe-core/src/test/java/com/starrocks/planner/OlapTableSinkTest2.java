@@ -71,7 +71,7 @@ public class OlapTableSinkTest2 {
         }
 
         try {
-            OlapTableSink.createLocation(olapTable, partitionParam, false);
+            OlapTableSink.createLocation(olapTable, partitionParam, false, null);
         } catch (StarRocksException e) {
             System.out.println(e.getMessage());
             Assertions.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));

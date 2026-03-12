@@ -18,6 +18,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bit/bit_util.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -26,7 +27,6 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
-#include "util/bit_util.h"
 
 namespace starrocks {
 

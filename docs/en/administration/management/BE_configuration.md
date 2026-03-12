@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -140,7 +142,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Strings
 - Unit: -
 - Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Description: Specifies the file names (without extensions) or file name wildcards for which VLOG logs should be printed. Multiple file names can be separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks prints VLOG logs from the storage_engine.cpp and tablet_manager.cpp files. You can also use wildcards, e.g., set to `*` to print VLOG logs from all files. The VLOG log printing level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server
@@ -646,6 +648,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Sets the maximum number of worker threads in the backend's "update_schema" dynamic ThreadPool that processes TTaskType::UPDATE_SCHEMA tasks. The ThreadPool is created in agent_server during startup with a minimum of 0 threads (it can scale down to zero when idle) and a max equal to this setting; the pool uses the default idle timeout and an effectively unlimited queue. Increase this value to allow more concurrent schema-update tasks (higher CPU and memory usage), or lower it to limit parallel schema operations.
 - Introduced in: v3.2.3
 
+##### update_tablet_meta_info_worker_count
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Sets the maximum number of worker threads in the backend thread pool that handles tablet metadata update tasks. The thread pool is created during backend startup with a minimum of 0 threads (it can scale down to zero when idle) and a max equal to this setting (clamped to at least 1). Updating this value at runtime adjusts the pool's max threads. Increase it to allow more concurrent metadata-update tasks, or lower it to limit concurrency.
+- Introduced in: v4.1.0, v4.0.6, v3.5.13
+
 ### User, role, and privilege
 
 ##### ssl_certificate_path
@@ -761,6 +772,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
 - Introduced in: -
+
+##### exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send non-priority execution status reports (such as fragment completion and error status) from BE to FE via RPC. The actual pool size at startup is `max(1, exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the pool in every executor set (shared and exclusive). The pool has a fixed task queue size of 1000; report submissions are silently dropped when all threads are busy and the queue is full. Paired with `priority_exec_state_report_max_threads` for the high-priority pool. Increase this value when delayed or dropped exec-state reports are observed under high query concurrency.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
 
 ##### file_descriptor_cache_capacity
 
@@ -1095,6 +1115,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
 - Introduced in: -
 
+##### priority_exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the high-priority exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send high-priority execution status reports (such as urgent fragment failures) from BE to FE via RPC. Unlike the normal exec-state-report pool, this pool has an unbounded task queue. The actual pool size at startup is `max(1, priority_exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the priority pool in every executor set (shared and exclusive). Paired with `exec_state_report_max_threads` for the normal pool. Increase this value when high-priority reports are delayed under heavy concurrent query loads.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
+
 ##### priority_queue_remaining_tasks_increased_frequency
 
 - Default: 512
@@ -1240,6 +1269,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
 - Introduced in: -
+
+##### enable_parallel_memtable_finalize
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to enable parallel memtable finalize when loading data to lake tables (shared-data mode). When enabled, the memtable finalize operation (sort/aggregate) is moved from the write thread to the flush thread, allowing the write thread to continue inserting data into a new memtable while the previous one is being finalized and flushed in parallel. This can significantly improve load throughput by overlapping CPU-intensive finalize operations with I/O-bound flush operations. Note that this optimization is automatically disabled when auto-increment columns need to be filled, as auto-increment ID assignment must happen before the memtable is submitted for flush.
+- Introduced in: -
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether to allow object-storage LIST fallback when lake metadata cache misses during random bucketing size checks. `true` means fallback to LIST metadata files to compute base size (historical behavior, more accurate size estimation). `false` means skip LIST and use `base_size = 0`, which reduces LIST object requests but may delay immutable marking due to less accurate size estimation.
+- Introduced in: 4.1.0, 4.0.7, 3.5.15
 
 ##### enable_stream_load_verbose_log
 
@@ -1944,11 +1991,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### drop_tablet_worker_count
 
-- Default: 3
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used to drop a tablet.
+- Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
 - Introduced in: -
 
 ##### enable_check_string_lengths
@@ -2791,6 +2838,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The time interval at which Tablet Stat Cache updates.
 - Introduced in: -
 
+##### lake_enable_accurate_pk_row_count
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
+- Introduced in: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- Default: 300000
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
+- Introduced in: -
+
 ##### tablet_writer_open_rpc_timeout_sec
 
 - Default: 300
@@ -2927,6 +2992,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 
 ### Shared-data
+
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of segment files that need to be rebuilt in cloud-native Primary Key index. If the number of files that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the number of segments that must be replayed. Set to `0` to disable this early-flush strategy.
+- Introduced in: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- Default: 10000000
+- Type: Long
+- Unit: Rows
+- Is mutable: Yes
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Introduced in: -
 
 ##### download_buffer_size
 
@@ -3200,6 +3283,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The minimum number of idle connections in the JDBC connection pool.
 - Introduced in: -
 
+##### jdbc_connection_max_lifetime_ms
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum lifetime of a connection in the JDBC connection pool. Connections are recycled before this timeout to prevent stale connections. Minimum allowed value is 30000 (30 seconds).
+- Introduced in: -
+
+##### jdbc_connection_keepalive_time_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Keepalive interval for idle JDBC connections. Idle connections are tested at this interval to detect stale connections proactively. Set to 0 to disable keepalive probing. When enabled, must be >= 30000 and less than `jdbc_connection_max_lifetime_ms`. Invalid enabled values are silently disabled (reset to 0).
+- Introduced in: -
+
 ##### lake_clear_corrupted_cache_data
 
 - Default: false
@@ -3456,3 +3557,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Maximum number of bytes to read from the INFO logfile and show on the BE debug webserver's log page. The handler uses this value to compute a seek offset (showing the last N bytes) to avoid reading or serving very large log files. If the logfile is smaller than this value the whole file is shown. Note: in the current implementation the code that reads and serves the INFO log is commented out and the handler reports that the INFO log file couldn't be opened, so this parameter may have no effect unless the log-serving code is enabled.
 - Introduced in: v3.2.0
 
+### Removed parameters
+
+##### enable_bit_unpack_simd
+
+- Status: Removed
+- Description: This parameter has been removed. Bit-unpack SIMD selection is now handled at compile time (AVX2/BMI2) with automatic fallback to the default implementation.
+- Removed in: -
+
+<EditionSpecificBEItem />

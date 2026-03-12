@@ -21,12 +21,11 @@
 #include "common/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/utils.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace orc::proto {
 class ColumnStatistics;

@@ -19,11 +19,17 @@
 #include <iomanip>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_manager.h"
@@ -33,10 +39,6 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 
 namespace starrocks::lake {
 

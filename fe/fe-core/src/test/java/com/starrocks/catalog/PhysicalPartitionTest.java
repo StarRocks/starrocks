@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
 import org.junit.jupiter.api.Assertions;
@@ -158,7 +159,7 @@ public class PhysicalPartitionTest {
     }
 
     @Test
-    public void testGsonPostProcess() throws IOException {
+    public void testPhysicalPartitionUpgrade() throws IOException {
         long partitionId = 10001L;
         long parentId = 10002L;
 
@@ -182,14 +183,16 @@ public class PhysicalPartitionTest {
         Deencapsulation.setField(physicalPartition, "idToVisibleIndex", idToVisibleRollupIndex);
         Deencapsulation.setField(physicalPartition, "idToShadowIndex", idToShadowIndex);
 
-        physicalPartition.gsonPostProcess();
+        // Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(physicalPartition);
+        PhysicalPartition newPhysicalPartition = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
 
         // Check the state after post process
         // baseIndexMetaId should be set to baseIndex.getMataId()
-        Assertions.assertEquals(baseIndex.getMetaId(), (long) Deencapsulation.getField(physicalPartition, "baseIndexMetaId"));
+        Assertions.assertEquals(baseIndex.getMetaId(), (long) Deencapsulation.getField(newPhysicalPartition, "baseIndexMetaId"));
 
         // indexMetaIdToIndexIds should be set correctly
-        Map<Long, List<Long>> indexMetaIdToIndexIds = Deencapsulation.getField(physicalPartition, "indexMetaIdToIndexIds");
+        Map<Long, List<Long>> indexMetaIdToIndexIds = Deencapsulation.getField(newPhysicalPartition, "indexMetaIdToIndexIds");
         Assertions.assertEquals(4, indexMetaIdToIndexIds.size());
 
         Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseIndex.getMetaId()));
@@ -213,7 +216,7 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(shadowRollupIndex.getId(), shadowRollupIndexIds.get(0));
 
         // idToVisibleIndex should contain both baseIndex and rollupIndex
-        Map<Long, MaterializedIndex> idToVisibleIndexNew = Deencapsulation.getField(physicalPartition, "idToVisibleIndex");
+        Map<Long, MaterializedIndex> idToVisibleIndexNew = Deencapsulation.getField(newPhysicalPartition, "idToVisibleIndex");
         Assertions.assertEquals(2, idToVisibleIndexNew.size());
         Assertions.assertTrue(idToVisibleIndexNew.containsKey(baseIndex.getId()));
         Assertions.assertEquals(baseIndex, idToVisibleIndexNew.get(baseIndex.getId()));
@@ -221,10 +224,13 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(rollupIndex, idToVisibleIndexNew.get(rollupIndex.getId()));
 
         // idToShadowIndex is not changed
-        Map<Long, MaterializedIndex> idToShadowIndexNew = Deencapsulation.getField(physicalPartition, "idToShadowIndex");
+        Map<Long, MaterializedIndex> idToShadowIndexNew = Deencapsulation.getField(newPhysicalPartition, "idToShadowIndex");
         Assertions.assertEquals(2, idToShadowIndexNew.size());
         Assertions.assertTrue(idToShadowIndexNew.containsKey(shadowRollupIndex.getId()));
         Assertions.assertEquals(shadowRollupIndex, idToShadowIndexNew.get(shadowRollupIndex.getId()));
+
+        // baseIndex is null
+        Assertions.assertNull(Deencapsulation.getField(newPhysicalPartition, "baseIndex"));
     }
 
     @Test
@@ -443,5 +449,33 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(2, latestIndices.size());
         Assertions.assertTrue(latestIndices.contains(baseIndex2));
         Assertions.assertTrue(latestIndices.contains(rollup2));
+    }
+
+    @Test
+    public void testDeleteMaterializedIndexOperations() {
+        long partitionId = 1000L;
+        long parentId = 2000L;
+        long baseIndexId1 = 3001L;
+        long baseIndexId2 = 3002L;
+        long baseMetaId = 3100L;
+        long baseShardGroupId = 100L;
+
+        MaterializedIndex baseIndex1 = new MaterializedIndex(baseIndexId1, baseMetaId, IndexState.NORMAL, baseShardGroupId);
+        PhysicalPartition partition = new PhysicalPartition(partitionId, parentId, baseIndex1);
+
+        MaterializedIndex baseIndex2 = new MaterializedIndex(baseIndexId2, baseMetaId, IndexState.NORMAL, baseShardGroupId);
+        partition.addMaterializedIndex(baseIndex2, true);
+
+        Map<Long, List<Long>> indexMetaIdToIndexIds = Deencapsulation.getField(partition, "indexMetaIdToIndexIds");
+        Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseMetaId));
+        Assertions.assertEquals(2, indexMetaIdToIndexIds.get(baseMetaId).size());
+
+        partition.deleteMaterializedIndexByIndexId(baseIndexId1);
+        Assertions.assertTrue(indexMetaIdToIndexIds.containsKey(baseMetaId));
+        Assertions.assertEquals(1, indexMetaIdToIndexIds.get(baseMetaId).size());
+        Assertions.assertEquals(baseIndexId2, (long) indexMetaIdToIndexIds.get(baseMetaId).get(0));
+
+        partition.deleteMaterializedIndexByIndexId(baseIndexId2);
+        Assertions.assertFalse(indexMetaIdToIndexIds.containsKey(baseMetaId));
     }
 }

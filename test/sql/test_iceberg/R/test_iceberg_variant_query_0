@@ -274,11 +274,6 @@ ORDER BY case_id;
 3	None	None	None	None	None	None	None	None	None
 4	+49-222-0002	/eu/**/shadow	CHG-901	/svc/alpha/**	95	recover	0	dispatch	456
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_test_cases force;
 -- result:
 -- !result
@@ -287,4 +282,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

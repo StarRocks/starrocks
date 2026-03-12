@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -22,10 +23,10 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
@@ -85,7 +86,7 @@ struct ArrayAggAggregateState {
         if (data_column.size() > 0 || size == 0) {
             return &data_column;
         }
-        data_column.get_data().reserve(size);
+        data_column.reserve(size);
         if constexpr (is_distinct) {
             if constexpr (lt_is_string<PT>) {
                 for (auto& key : set) {
@@ -271,7 +272,7 @@ using ArrayAggAggregateWindowFunction = ArrayAggAggregateFunctionBase<LT, is_dis
 struct ArrayAggAggregateStateV2 {
     void initialize(FunctionContext* ctx) const {
         for (auto i = 0; i < ctx->get_arg_types().size(); ++i) {
-            data_columns.emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            data_columns.emplace_back(FunctionHelper::create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(data_columns.size() == ctx->get_is_asc_order().size() + 1);
     }
@@ -329,7 +330,7 @@ struct ArrayAggWindowStateV2 : public ArrayAggAggregateStateV2 {
 
     void initialize(FunctionContext* ctx) const {
         Base::initialize(ctx);
-        result_column = ctx->create_column(ctx->get_return_type(), true);
+        result_column = FunctionHelper::create_column(ctx->get_return_type(), true);
     }
     void reset(FunctionContext* ctx) {
         Base::reset(ctx);

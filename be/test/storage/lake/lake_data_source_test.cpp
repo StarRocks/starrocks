@@ -18,11 +18,18 @@
 #include <atomic>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -30,6 +37,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -43,11 +51,6 @@
 #include "storage/rowset/base_rowset.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 
@@ -203,7 +206,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
     data_source_provider->set_lake_tablet_manager(_tablet_mgr);
 
-    ASSERT_TRUE(data_source_provider->always_shared_scan());
+    ASSERT_FALSE(data_source_provider->always_shared_scan());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -222,9 +225,9 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
 
-    ASSERT_TRUE(morsel_queue_factory->is_shared());
-    auto morsel_queue = morsel_queue_factory->create(1);
-    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() > 1);
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
+    auto morsel_queue = morsel_queue_factory->create(0);
+    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() == 1);
 }
 
 TEST_F(LakeDataSourceTest, get_tablet_schema) {
@@ -264,6 +267,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
     runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // Build a minimal descriptor table with required column names.
     TDescriptorTableBuilder desc_tbl_builder;

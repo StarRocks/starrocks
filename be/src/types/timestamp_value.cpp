@@ -14,9 +14,9 @@
 
 #include "types/timestamp_value.h"
 
-#include "runtime/time_types.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};
@@ -402,7 +402,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
     bool result = from_uncommon_format_str(format, format_len, value, value_len, &content, nullptr);
     if (result) {
         _timestamp = timestamp::from_datetime(content._year, content._month, content._day, content._hour,
-                                              content._minute, content._second, 0);
+                                              content._minute, content._second, content._microsecond);
     }
     return result;
 }

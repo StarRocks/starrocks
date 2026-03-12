@@ -16,32 +16,20 @@
 
 #include <limits>
 
-#include "column/datum.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "storage/range.h"
+#include "types/datum.h"
 
 namespace starrocks::parquet {
 
 Status IcebergRowIdReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    // Ignore filter and output all rows in range, consistent with other reserved column readers
+    // (FixedValueColumnReader, RowSourceReader, ParquetPosReader). The caller (GroupReader)
+    // applies chunk->filter_range() uniformly across all columns after reading.
     Column* dst_col = dst->as_mutable_raw_ptr();
-    if (filter == nullptr) {
-        // No filter, generate row ids for all rows in the range
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            // Generate row id based on the first row id and the current row index.
-            int64_t row_id = _first_row_id + i;
-            dst_col->append_datum(Datum(row_id));
-        }
-    } else {
-        // Apply filter, only generate row ids for selected rows
-        DCHECK_EQ(filter->size(), range.span_size()) << "Filter size must match range size";
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            size_t filter_index = i - range.begin();
-            if ((*filter)[filter_index]) {
-                // Generate row id based on the first row id and the current row index.
-                int64_t row_id = _first_row_id + i;
-                dst_col->append_datum(Datum(row_id));
-            }
-        }
+    for (uint64_t i = range.begin(); i < range.end(); ++i) {
+        int64_t row_id = _first_row_id + i;
+        dst_col->append_datum(Datum(row_id));
     }
     return Status::OK();
 }
@@ -49,15 +37,6 @@ Status IcebergRowIdReader::read_range(const Range<uint64_t>& range, const Filter
 Status IcebergRowIdReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     dst->as_mutable_raw_ptr()->swap_column(*(src->as_mutable_raw_ptr()));
     return Status::OK();
-}
-
-void IcebergRowIdReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                                 int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
-    // No IO ranges to collect for row id reader.
-}
-
-void IcebergRowIdReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
-    // No offset index selection needed for row id reader.
 }
 
 StatusOr<bool> IcebergRowIdReader::row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
@@ -136,6 +115,8 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
     return true;
 }
 
+// Convert a single predicate on _row_id into a SparseRange of matching row_id values.
+// Returns true if the predicate was converted, false if unsupported.
 StatusOr<bool> IcebergRowIdReader::_apply_single_predicate(const ColumnPredicate* pred,
                                                            SparseRange<int64_t>& result_range) {
     switch (pred->type()) {

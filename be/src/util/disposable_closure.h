@@ -20,7 +20,7 @@
 #include <string_view>
 #include <utility>
 
-#include "service/brpc.h"
+#include "base/brpc/brpc.h"
 
 namespace starrocks {
 
@@ -34,7 +34,7 @@ public:
     using FailedFunc = std::function<void(const C&, std::string_view)>;
     using SuccessFunc = std::function<void(const C&, const T&)>;
 
-    DisposableClosure(const C& ctx) : _ctx(ctx) {}
+    DisposableClosure(C ctx) : _ctx(std::move(ctx)) {}
     ~DisposableClosure() override = default;
     // Disallow copy and assignment.
     DisposableClosure(const DisposableClosure& other) = delete;

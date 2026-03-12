@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/copied_datum.h"
 #include "column/datum_convert.h"
-#include "runtime/types.h"
+#include "fmt/format.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -25,7 +29,7 @@ class DatumVariant {
 public:
     DatumVariant() = default;
 
-    DatumVariant(const TypeInfoPtr& type, const Datum& value) : _type(type), _value(value) {}
+    DatumVariant(TypeInfoPtr type, const Datum& value) : _type(std::move(type)), _value(value) {}
 
     const TypeInfoPtr& type() const { return _type; }
 
@@ -40,6 +44,9 @@ public:
 
     Status from_proto(const VariantPB& variant_pb);
 
+    static Status from_proto(const VariantPB& variant_pb, Datum* dest_datum, TypeDescriptor* dest_type_desc = nullptr,
+                             TypeInfoPtr* dest_type_info = nullptr, MemPool* mem_pool = nullptr);
+
 private:
     TypeInfoPtr _type;
     CopiedDatum _value;
@@ -48,8 +55,10 @@ private:
 inline void DatumVariant::to_proto(VariantPB* variant_pb) const {
     *variant_pb->mutable_type() = TypeDescriptor::from_storage_type_info(_type.get()).to_protobuf();
     if (_value.get().is_null()) {
+        variant_pb->set_variant_type(VariantTypePB::NULL_VALUE);
         return;
     }
+    variant_pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
     *variant_pb->mutable_value() = datum_to_string(_type.get(), _value.get());
 }
 
@@ -57,14 +66,44 @@ inline Status DatumVariant::from_proto(const VariantPB& variant_pb) {
     if (!variant_pb.has_type()) {
         return Status::InvalidArgument("No type in variant");
     }
-    _type = get_type_info(TypeDescriptor::from_protobuf(variant_pb.type()));
     Datum datum;
-    if (!variant_pb.has_value()) {
-        datum.set_null();
-    } else {
-        RETURN_IF_ERROR(datum_from_string(_type.get(), &datum, variant_pb.value(), nullptr));
-    }
+    RETURN_IF_ERROR(from_proto(variant_pb, &datum, nullptr, &_type));
     _value.set(datum);
+    return Status::OK();
+}
+
+inline Status DatumVariant::from_proto(const VariantPB& variant_pb, Datum* dest_datum, TypeDescriptor* dest_type_desc,
+                                       TypeInfoPtr* dest_type_info, MemPool* mem_pool) {
+    if (!variant_pb.has_type()) {
+        return Status::InvalidArgument("No type in variant");
+    }
+
+    auto type_desc = TypeDescriptor::from_protobuf(variant_pb.type());
+    auto type_info = get_type_info(type_desc);
+    if (type_info == nullptr) {
+        return Status::InternalError(fmt::format("Unsupported type: {}", variant_pb.type().DebugString()));
+    }
+
+    if (variant_pb.variant_type() == VariantTypePB::NULL_VALUE) {
+        dest_datum->set_null();
+    } else if (variant_pb.variant_type() == VariantTypePB::NORMAL_VALUE && variant_pb.has_value()) {
+        const TypeInfoAllocator* allocator = nullptr;
+        TypeInfoAllocator type_info_allocator;
+        if (mem_pool != nullptr) {
+            type_info_allocator = make_type_info_allocator(mem_pool);
+            allocator = &type_info_allocator;
+        }
+        RETURN_IF_ERROR(datum_from_string(type_info.get(), dest_datum, variant_pb.value(), allocator));
+    } else {
+        return Status::InvalidArgument("Invalid variant value");
+    }
+
+    if (dest_type_desc != nullptr) {
+        *dest_type_desc = std::move(type_desc);
+    }
+    if (dest_type_info != nullptr) {
+        *dest_type_info = std::move(type_info);
+    }
     return Status::OK();
 }
 

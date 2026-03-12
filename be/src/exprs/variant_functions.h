@@ -16,6 +16,7 @@
 
 #include "column/column.h"
 #include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "function_helper.h"
 #include "types/logical_type.h"
 

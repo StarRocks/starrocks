@@ -30,8 +30,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.journal.LeaderTransferException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -254,6 +252,7 @@ public class TabletTaskExecutor {
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
                 .addColumns(indexMeta.getSchema())
+                .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build().toTabletSchema();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -292,6 +291,7 @@ public class TabletTaskExecutor {
                         .setEnableTabletCreationOptimization(option.isEnableTabletCreationOptimization())
                         .setGtid(option.getGtid())
                         .setCompactionStrategy(table.getCompactionStrategy())
+                        .setRange(table.isRangeDistribution() ? tablet.getRange() : null)
                         .build();
                 tasks.add(task);
                 createSchemaFile = false;
@@ -375,15 +375,6 @@ public class TabletTaskExecutor {
             long timeLeft = timeout;
             final long waitInterval = 1;
             while (timeLeft > 0) {
-                // fast fail for leader transfer
-                if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                    LOG.warn("leader transferred during creating tablets");
-                    if (ConnectContext.get() != null) {
-                        ConnectContext.get().setIsLeaderTransferred(true);
-                    }
-                    throw new LeaderTransferException();
-                }
-
                 if (countDownLatch.await(waitInterval, TimeUnit.SECONDS)) {
                     if (!countDownLatch.getStatus().ok()) {
                         String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
@@ -455,7 +446,7 @@ public class TabletTaskExecutor {
         for (Partition partition : olapTable.getAllPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 List<MaterializedIndex> allIndices = physicalPartition
-                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                        .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     int schemaHash = olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId());
                     for (Tablet tablet : materializedIndex.getTablets()) {

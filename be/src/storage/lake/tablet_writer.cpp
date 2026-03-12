@@ -14,12 +14,18 @@
 
 #include "storage/lake/tablet_writer.h"
 
+#include "common/config_primary_key_fwd.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
 void TabletWriter::try_enable_pk_index_eager_build() {
+    // Guard against multiple calls when writers are reused or merged in different pipeline phases
+    // (e.g., eager merge and final merge); this method is intentionally idempotent.
+    if (_enable_pk_index_eager_build) {
+        return;
+    }
     if (!config::enable_pk_index_eager_build || _schema->keys_type() != KeysType::PRIMARY_KEYS ||
         _schema->has_separate_sort_key()) {
         return;
@@ -32,12 +38,15 @@ void TabletWriter::try_enable_pk_index_eager_build() {
             return;
         }
     }
-    // For primary key table with single key column and the type is not VARCHAR/CHAR,
-    // we can't enable eager PK index build. The reason is that, in the current implementation,
-    // when encoding a single-key column of a non-binary type, big-endian encoding is not used,
+    // V2 encoding guarantees correct ordering for all column types after encoding,
+    // so eager PK index build is always safe.
+    if (_schema->has_valid_primary_key_encoding_type() &&
+        _schema->primary_key_encoding_type() == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        _enable_pk_index_eager_build = true;
+        return;
+    }
+    // For V1 encoding, single-key column of non-VARCHAR/CHAR type does not use big-endian encoding,
     // which may result in incorrect ordering between sst and segment files.
-    // This is a legacy bug, but for compatibility reasons, it will not be supported in the first phase.
-    // Will fix it later.
     if (_schema->num_key_columns() > 1 || _schema->column(0).type() == LogicalType::TYPE_VARCHAR ||
         _schema->column(0).type() == LogicalType::TYPE_CHAR) {
         _enable_pk_index_eager_build = true;
@@ -61,19 +70,25 @@ void TabletWriter::check_global_dict(SegmentWriter* segment_writer) {
 Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<TabletWriter>>& other_writers) {
     // merge other writers' files into current writer
     for (const auto& writer : other_writers) {
-        _segments.insert(_segments.end(), writer->_segments.begin(), writer->_segments.end());
-        _dels.insert(_dels.end(), writer->_dels.begin(), writer->_dels.end());
-        _ssts.insert(_ssts.end(), writer->_ssts.begin(), writer->_ssts.end());
-        _sst_ranges.insert(_sst_ranges.end(), writer->_sst_ranges.begin(), writer->_sst_ranges.end());
-        _num_rows += writer->_num_rows;
-        _data_size += writer->_data_size;
-        // _global_dict_columns_valid_info
-        for (const auto& [col, valid] : writer->_global_dict_columns_valid_info) {
-            if (!valid) {
-                _global_dict_columns_valid_info[col] = false;
-            } else if (_global_dict_columns_valid_info.find(col) == _global_dict_columns_valid_info.end()) {
-                _global_dict_columns_valid_info[col] = true;
-            }
+        RETURN_IF_ERROR(merge_other_writer(writer.get()));
+    }
+    return Status::OK();
+}
+
+Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
+    // merge other writer's files into current writer
+    _segments.insert(_segments.end(), other_writer->_segments.begin(), other_writer->_segments.end());
+    _dels.insert(_dels.end(), other_writer->_dels.begin(), other_writer->_dels.end());
+    _ssts.insert(_ssts.end(), other_writer->_ssts.begin(), other_writer->_ssts.end());
+    _sst_ranges.insert(_sst_ranges.end(), other_writer->_sst_ranges.begin(), other_writer->_sst_ranges.end());
+    _num_rows += other_writer->_num_rows;
+    _data_size += other_writer->_data_size;
+    // _global_dict_columns_valid_info
+    for (const auto& [col, valid] : other_writer->_global_dict_columns_valid_info) {
+        if (!valid) {
+            _global_dict_columns_valid_info[col] = false;
+        } else if (_global_dict_columns_valid_info.find(col) == _global_dict_columns_valid_info.end()) {
+            _global_dict_columns_valid_info[col] = true;
         }
     }
     return Status::OK();

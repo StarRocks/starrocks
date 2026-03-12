@@ -18,9 +18,10 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/hash/xxh3.h"
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/datum.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
@@ -28,9 +29,8 @@
 #include "service/internal_service.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/type_traits.h"
-#include "util/phmap/phmap.h"
-#include "util/xxh3.h"
+#include "types/datum.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -89,14 +89,14 @@ public:
     static constexpr uint8_t PREFETCHN = 8;
 
     DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _estimated_memory_useage(0) {}
-    virtual ~DictionaryCacheImpl() override = default;
+    ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
 
     using ValueColumnType = typename DictionaryCacheTypeTraits<ValueLogicalType>::ColumnType;
 
-    virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
+    inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             KeyCppType key;
@@ -157,8 +157,8 @@ public:
         return Status::OK();
     }
 
-    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
-                                 Column* null_column) override {
+    inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
+                         Column* null_column) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
@@ -307,9 +307,9 @@ public:
         return Status::OK();
     }
 
-    virtual inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
+    inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
 
-    virtual std::mutex& lock() override { return _lock; }
+    std::mutex& lock() override { return _lock; }
 
 private:
     // Avoid creating Datum
@@ -366,15 +366,18 @@ public:
                                            const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             MutableColumnPtr encoded_columns;
-            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                         .ok()) {
                 std::stringstream ss;
                 ss << "create column for primary key encoder failed";
                 LOG(WARNING) << ss.str();
                 return nullptr;
             }
             if (chunk->num_rows() > 0) {
-                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get());
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
             }
             return encoded_columns;
         }
@@ -389,7 +392,10 @@ public:
                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
-            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags);
+            // use V1 encoding type to decode the column for simplicity.
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk,
+                                             PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, value_encode_flags);
         }
         default:
             break;
@@ -439,11 +445,14 @@ public:
                                         const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
+            // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             std::vector<uint32_t> idxes;
+            idxes.reserve(schema.fields().size());
             for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
-            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes);
+            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes,
+                                                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
         }
         default:
             break;

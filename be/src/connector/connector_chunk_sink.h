@@ -23,8 +23,7 @@
 #include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {
 
@@ -82,6 +81,8 @@ protected:
     std::vector<std::function<void()>> _rollback_actions;
 
     std::map<PartitionKey, PartitionChunkWriterPtr> _partition_chunk_writers;
+    // passed to SinkOperatorMemoryManager to check memory usage
+    std::vector<PartitionChunkWriterPtr> _writers;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 
     std::shared_mutex _mutex;
@@ -91,7 +92,6 @@ protected:
 };
 
 struct ConnectorChunkSinkContext {
-public:
     virtual ~ConnectorChunkSinkContext() = default;
 };
 

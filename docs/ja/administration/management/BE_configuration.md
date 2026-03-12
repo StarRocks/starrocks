@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 設定
 
 <BEConfigMethod />
@@ -112,7 +114,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Strings
 - 単位: -
 - 可変: いいえ
-- 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
+- 説明: VLOGログを出力するファイル名（拡張子を除く）またはファイル名のワイルドカードを指定します。複数のファイル名はカンマで区切ることができます。たとえば、この設定項目を `storage_engine,tablet_manager` に設定すると、StarRocks は storage_engine.cpp および tablet_manager.cpp ファイルの VLOG ログを出力します。ワイルドカードも使用可能で、`*` に設定するとすべてのファイルの VLOG ログを出力します。VLOG ログの出力レベルは `sys_log_verbose_level` パラメータで制御されます。
 - 導入バージョン: -
 
 ### サーバー
@@ -478,6 +480,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE の "update_schema" 動的 ThreadPool で TTaskType::UPDATE_SCHEMA タスクを処理するワーカースレッドの最大数を設定します。ThreadPool は起動時に agent_server 内で作成され、最小 0 スレッド（アイドル時にゼロまでスケールダウン可能）、最大はこの設定値と等しくなります。プールはデフォルトのアイドルタイムアウトと事実上無制限のキューを使用します。より多くの同時スキーマ更新タスクを許可するにはこの値を増やします（CPU とメモリ使用量が増加します）。並列スキーマ操作を制限したい場合は値を下げます。このオプションはランタイムで変更できないため、変更には BE の再起動が必要です。
 - 導入バージョン: 3.2.3
 
+##### update_tablet_meta_info_worker_count
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: BE が tablet のメタデータ更新タスクを処理する動的スレッドプールの最大ワーカースレッド数を設定します。スレッドプールは起動時に作成され、最小 0 スレッド（アイドル時にゼロまでスケールダウン可能）、最大はこの設定値（最小 1 にクランプ）となります。ランタイムでこの値を変更するとスレッドプールの最大スレッド数が更新されます。並列度を上げたい場合は値を増やし、制限したい場合は下げてください。
+- 導入バージョン: v4.1.0, v4.0.6, v3.5.13
+
 ### ユーザー、ロール、および権限
 
 ##### ssl_certificate_path
@@ -584,6 +595,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: 各クエリの交換ノードの受信側の最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
 - 導入バージョン: -
+
+##### exec_state_report_max_threads
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: スレッド
+- 可変: はい
+- 説明: exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が通常優先度の実行状態レポート（フラグメント完了やエラーステータスなど）を BE から FE へ非同期で RPC 送信するために使用されます。起動時の実際のプールサイズは `max(1, exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）のプールに対して `update_max_threads` が呼び出されます。プールのタスクキューサイズは 1000 固定です。高並行クエリ実行時に実行状態レポートが遅延または消失する場合は値を増やしてください。対応する高優先度プールは `priority_exec_state_report_max_threads` で制御します。
+- 導入バージョン: v4.1.0, v4.0.8, v3.5.15
 
 ##### file_descriptor_cache_capacity
 
@@ -890,6 +910,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
 - 導入バージョン: -
 
+##### priority_exec_state_report_max_threads
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: スレッド
+- 可変: はい
+- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が高優先度の実行状態レポート（緊急なフラグメント失敗など）を BE から FE へ非同期で RPC 送信するために使用されます。通常のプールとは異なり、このプールのタスクキューはサイズ無制限です。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）の優先度プールに対して `update_max_threads` が呼び出されます。通常プールは `exec_state_report_max_threads` で制御します。
+- 導入バージョン: v4.1.0, v4.0.8, v3.5.15
+
 ##### query_cache_capacity
 
 - デフォルト: 536870912
@@ -990,6 +1019,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: 単一タブレット内で並列スピルマージを有効にするかどうかを指定します。これを有効にすると、データロード中のスピルマージのパフォーマンスが向上します。
 - 導入バージョン: -
+
+##### enable_parallel_memtable_finalize
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake テーブル（ストレージとコンピューティングの分離モード）へのデータロード時に並列 MemTable Finalize を有効にするかどうかを指定します。有効にすると、MemTable の Finalize 操作（ソート/集計）が書き込みスレッドからフラッシュスレッドに移動され、前の MemTable が並列で Finalize およびフラッシュされている間、書き込みスレッドは新しい MemTable へのデータ挿入を継続できます。これにより、CPU 集約型の Finalize 操作と I/O 集約型のフラッシュ操作をオーバーラップさせることで、ロードスループットを大幅に向上させることができます。注意: 自動インクリメント列を埋める必要がある場合、自動インクリメント ID の割り当ては MemTable がフラッシュに送信される前に完了する必要があるため、この最適化は自動的に無効になります。
+- 導入バージョン: -
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15 
 
 ##### enable_stream_load_verbose_log
 
@@ -1541,11 +1588,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- デフォルト: 3
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: タブレットを削除するために使用されるスレッドの数。
+- 説明: タブレットを削除するために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
 - 導入バージョン: -
 
 ##### enable_check_string_lengths
@@ -2289,6 +2336,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: タブレット統計キャッシュが更新される時間間隔。
 - 導入バージョン: -
 
+##### lake_enable_accurate_pk_row_count
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
+- 導入バージョン: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- デフォルト: 300000
+- タイプ: Int64
+- 単位: Milliseconds
+- 可変: はい
+- 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
+- 導入バージョン: -
+
 ##### transaction_apply_worker_count
 
 - デフォルト: 0
@@ -2407,6 +2472,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: -
 
 ### 共有データ
+
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大 Segment ファイル数。リビルドが必要なファイル数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、リプレイが必要な Segment 数を削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。
+- 導入バージョン: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- デフォルト: 10000000
+- タイプ: Long
+- 単位: 行
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。
+- 導入バージョン: -
 
 ##### download_buffer_size
 
@@ -2671,6 +2754,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: JDBC 接続プール内の最小アイドル接続数。
 - 導入バージョン: -
 
+##### jdbc_connection_max_lifetime_ms
+
+- デフォルト: 300000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続プール内の接続の最大有効期間。古い接続を防ぐため、このタイムアウトの前に接続はリサイクルされます。許可される最小値は30000（30秒）です。
+- 導入バージョン: -
+
+##### jdbc_connection_keepalive_time_ms
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: アイドル状態のJDBC接続のキープアライブ間隔。アイドル状態の接続は、古い接続をプロアクティブに検出するために、この間隔でテストされます。0に設定するとキープアライブプロービングを無効にします。有効な場合、>= 30000かつ`jdbc_connection_max_lifetime_ms`より小さい必要があります。無効な有効値はサイレントに無効化されます（0にリセット）。
+- 導入バージョン: -
+
 ##### lake_clear_corrupted_cache_data
 
 - デフォルト: false
@@ -2891,3 +2992,4 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
 
+<EditionSpecificBEItem />

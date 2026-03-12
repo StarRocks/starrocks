@@ -16,9 +16,11 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -542,6 +544,18 @@ public class ShowStmtMetaTest {
     }
 
     @Test
+    public void testAdminShowAutomatedSnapshotStmt() {
+        AdminShowAutomatedSnapshotStmt stmt = new AdminShowAutomatedSnapshotStmt();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(5, metaData.getColumnCount());
+        Assertions.assertEquals("Enabled", metaData.getColumn(0).getName());
+        Assertions.assertEquals("Interval", metaData.getColumn(1).getName());
+        Assertions.assertEquals("StorageVolume", metaData.getColumn(2).getName());
+        Assertions.assertEquals("LastSnapshotTime", metaData.getColumn(3).getName());
+        Assertions.assertEquals("NextSnapshotTime", metaData.getColumn(4).getName());
+    }
+
+    @Test
     public void testShowWhiteListStmt() {
         ShowWhiteListStmt stmt = new ShowWhiteListStmt();
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
@@ -936,6 +950,19 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("IsSetBadForce", metaData.getColumn(10).getName());
         Assertions.assertEquals("State", metaData.getColumn(11).getName());
         Assertions.assertEquals("Status", metaData.getColumn(12).getName());
+    }
+
+    @Test
+    public void testAdminShowTabletStatusStmt() {
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(null, null, null, NodePosition.ZERO);
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(6, metaData.getColumnCount());
+        Assertions.assertEquals("TabletId", metaData.getColumn(0).getName());
+        Assertions.assertEquals("PartitionId", metaData.getColumn(1).getName());
+        Assertions.assertEquals("Version", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Status", metaData.getColumn(3).getName());
+        Assertions.assertEquals("MissingDataFileCount", metaData.getColumn(4).getName());
+        Assertions.assertEquals("MissingDataFiles", metaData.getColumn(5).getName());
     }
 
     @Test

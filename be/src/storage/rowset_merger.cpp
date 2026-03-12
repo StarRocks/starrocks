@@ -17,8 +17,12 @@
 #include <memory>
 #include <queue>
 
+#include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
@@ -28,8 +32,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
 #include "storage/union_iterator.h"
-#include "util/pretty_printer.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -336,7 +338,9 @@ private:
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         MutableColumnPtr sort_column;
         if (schema.sort_key_idxes().size() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes(),
+                                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                         .ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
@@ -355,8 +359,8 @@ private:
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-            auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                      stats, nullptr, _chunk_size);
+            auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version, stats,
+                                                      _chunk_size);
             if (!res.ok()) {
                 return res.status();
             }
@@ -535,8 +539,8 @@ private:
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-                auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                          &non_key_stats, nullptr, _chunk_size);
+                auto res = rowset->get_segment_iterators2(schema, tablet_schema, MetaLoadMode::ALL, version,
+                                                          &non_key_stats, _chunk_size);
                 if (!res.ok()) {
                     return res.status();
                 }
@@ -638,7 +642,8 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
         }
     }();
     std::unique_ptr<RowsetMerger> merger;
-    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
+    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes(),
+                                                                PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     switch (key_type) {
     case TYPE_BOOLEAN:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();

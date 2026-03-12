@@ -20,13 +20,13 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
+#include "common/util/stack_trace_mutex.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
-#include "testutil/sync_point.h"
-#include "util/stack_trace_mutex.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -56,6 +56,8 @@ public:
     void flush(Callback cb);
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
+
+    void cancel(const Status& st);
 
     void close();
 
@@ -168,6 +170,10 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
+        // We're in the execution queue's pthread thread pool — safe to block.
+        // Merge tasks have already been drained by _block_merge_token->shutdown()
+        // in AsyncDeltaWriterImpl::close() before execution_queue_stop().
+        // close() runs here in pthread context, avoiding DCHECK_EQ(0, bthread_self()).
         delta_writer->close();
         return 0;
     }
@@ -323,6 +329,10 @@ inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallb
     }
 }
 
+inline void AsyncDeltaWriterImpl::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 inline void AsyncDeltaWriterImpl::close() {
     std::unique_lock l(_mtx);
     TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
@@ -346,10 +356,14 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Wait for block merge finished.
+        // Shutdown merge token first to drain any running/pending merge tasks.
+        // This must happen BEFORE execution_queue_stop() so that merge tasks
+        // (which access writer state like _mem_table_sink, _flush_token) complete
+        // before the stop handler calls delta_writer->close().
+        // Queued FinishTasks that try to submit new merge tasks will get
+        // ServiceUnavailable — that's fine since we're aborting anyway.
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
-            _block_merge_token.reset();
         }
 
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
@@ -357,9 +371,14 @@ inline void AsyncDeltaWriterImpl::close() {
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
-        // Wait for all running tasks completed.
+        // Wait for all running tasks to complete. The stop handler runs in the
+        // execution queue's pthread thread pool and calls delta_writer->close(),
+        // which avoids DCHECK_EQ(0, bthread_self()) failure.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
+
+        // Safe to destroy token now since shutdown() already drained it.
+        _block_merge_token.reset();
     }
 }
 
@@ -382,6 +401,10 @@ void AsyncDeltaWriter::flush(Callback cb) {
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
     TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
     _impl->finish(mode, std::move(cb));
+}
+
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _impl->cancel(st);
 }
 
 void AsyncDeltaWriter::close() {

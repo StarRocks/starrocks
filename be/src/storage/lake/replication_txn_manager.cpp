@@ -23,6 +23,11 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
+#include "common/config_http_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
@@ -35,7 +40,6 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/delete_handler.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
@@ -49,8 +53,6 @@
 #include "storage/segment_stream_converter.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {

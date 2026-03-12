@@ -17,14 +17,14 @@
 #include <simdjson.h>
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -56,17 +56,21 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
 
         simdjson::ondemand::parser parser;
         simdjson::padded_string json_metrics(metrics);
-        for (auto json_metric : parser.iterate(json_metrics)) {
-            auto& info = _infos.emplace_back();
-            info.id = frontend.id;
-            info.value = static_cast<int64_t>(double(json_metric["value"]));
-            auto n = std::string_view(json_metric["tags"]["metric"]);
-            info.name = std::string(n.begin(), n.end());
-            std::ostringstream oss;
-            oss << simdjson::to_json_string(json_metric["tags"]);
-            info.labels = oss.str();
-            VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
-                    << ", value: " << info.value;
+        try {
+            for (auto json_metric : parser.iterate(json_metrics)) {
+                auto& info = _infos.emplace_back();
+                info.id = frontend.id;
+                info.value = static_cast<int64_t>(double(json_metric["value"]));
+                auto n = std::string_view(json_metric["tags"]["metric"]);
+                info.name = std::string(n.begin(), n.end());
+                std::ostringstream oss;
+                oss << simdjson::to_json_string(json_metric["tags"]);
+                info.labels = oss.str();
+                VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+                        << ", value: " << info.value;
+            }
+        } catch (const simdjson::simdjson_error& e) {
+            return Status::InternalError("Parse the result of fe metrics failed: " + std::string(e.what()));
         }
     }
 

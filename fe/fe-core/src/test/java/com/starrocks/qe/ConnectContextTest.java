@@ -35,17 +35,25 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.NodePosition;
@@ -55,6 +63,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -62,9 +71,11 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.util.List;
+import java.util.Map;
 
 public class ConnectContextTest {
     @Mocked
@@ -229,6 +240,130 @@ public class ConnectContextTest {
         Assertions.assertTrue(ctx.isKilled());
 
         // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        // Cover ConnectContext.isSessionQueryTimeoutOverridden() exception path (ConnectContext.java:596-598).
+        // Make VariableMgr.getDefaultSessionVariable() throw, then isSessionQueryTimeoutOverridden() should return false.
+        new MockUp<VariableMgr>() {
+            @Mock
+            public SessionVariable getDefaultSessionVariable() {
+                throw new RuntimeException("mock default session variable failure");
+            }
+        };
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden());
+
+        // Prepare an executor with table_query_timeout info, so ConnectContext.checkTimeout() builds the table hint
+        // (ConnectContext.java:1376-1381).
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        // Manually set table timeout info so getTableQueryTimeoutInfo() returns non-null
+        Deencapsulation.setField(executor, "tableQueryTimeoutTableName", "test.t1");
+        Deencapsulation.setField(executor, "tableQueryTimeoutValue", 120);
+        ctx.setExecutor(executor);
+        
+        // Mock getExecTimeout() and getTableQueryTimeoutInfo() for this specific executor instance
+        // This is needed because getExecTimeout() resets the fields when no tables are found,
+        // but we want to test the case where table timeout info is available
+        final Pair<String, Integer> mockTableTimeoutInfo = Pair.create("test.t1", 120);
+        new Expectations(executor) {
+            {
+                // Mock getExecTimeout() to return 1 second (session timeout) without resetting fields
+                executor.getExecTimeout();
+                result = 1; // Return 1 second to match session timeout
+                minTimes = 0;
+                
+                // Mock getTableQueryTimeoutInfo() to always return table timeout info
+                executor.getTableQueryTimeoutInfo();
+                result = mockTableTimeoutInfo;
+                minTimes = 0;
+                
+                // Mock cancel() to set error message in context state
+                executor.cancel(anyString);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void cancel(String cancelledMessage) {
+                        ctx.getState().setError(cancelledMessage);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+        
+        // Ensure pendingTimeSecond is 0 so getExecTimeout() returns exactly 1
+        ctx.setPendingTimeSecond(0);
+        
+        // Verify that getExecTimeout() returns the expected value
+        int execTimeout = ctx.getExecTimeout();
+        Assertions.assertEquals(1, execTimeout, "getExecTimeout() should return 1 (session timeout + pending time)");
+
+        // Ensure modifiedSessionVariables doesn't contain QUERY_TIMEOUT so isSessionQueryTimeoutOverridden() returns false
+        // (unless getDefaultSessionVariable() throws, which we've mocked)
+        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
+        modifiedVars.remove(SessionVariable.QUERY_TIMEOUT);
+        
+        // Set session timeout to 1 second to make the query timeout quickly.
+        // Since the statement has no tables, executor.getExecTimeout() will return session timeout (1).
+        ctx.getSessionVariable().setQueryTimeoutS(1);
+        // Verify isSessionQueryTimeoutOverridden() still returns false after setting timeout
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden(), 
+                "isSessionQueryTimeoutOverridden() should return false even after setting timeout");
+        // Verify getTableQueryTimeoutInfo() returns non-null
+        Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+        Assertions.assertNotNull(tableTimeoutInfo, "getTableQueryTimeoutInfo() should return non-null");
+        Assertions.assertEquals("test.t1", tableTimeoutInfo.first);
+        Assertions.assertEquals(120, tableTimeoutInfo.second.intValue());
+        
+        // Verify conditions are met BEFORE checkTimeout() is called
+        // (Note: getExecTimeout() will reset table timeout info when no tables are found,
+        //  but checkTimeout() uses the info at the time it's called)
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden(), 
+                "isSessionQueryTimeoutOverridden() should return false before checkTimeout()");
+        Assertions.assertNotNull(executor.getTableQueryTimeoutInfo(), 
+                "getTableQueryTimeoutInfo() should return non-null before checkTimeout()");
+        
+        ctx.setStartTime();
+        // Wait 2 seconds to exceed the 1 second timeout
+        long now = ctx.getStartTime() + 2_000L;
+        
+        // Verify conditions before calling checkTimeout()
+        boolean isOverridden = ctx.isSessionQueryTimeoutOverridden();
+        Pair<String, Integer> timeoutInfo = executor.getTableQueryTimeoutInfo();
+        int execTimeoutValue = ctx.getExecTimeout();
+        long delta = now - ctx.getStartTime();
+        
+        Assertions.assertFalse(isOverridden, "isSessionQueryTimeoutOverridden() should be false");
+        Assertions.assertNotNull(timeoutInfo, "getTableQueryTimeoutInfo() should return non-null");
+        Assertions.assertNotNull(ctx.getExecutor(), "executor should not be null");
+        Assertions.assertEquals(1, execTimeoutValue, "getExecTimeout() should return 1");
+        Assertions.assertTrue(delta > execTimeoutValue * 1000L, 
+                "delta (" + delta + ") should be greater than timeout (" + execTimeoutValue * 1000L + ")");
+        
+        boolean killed = ctx.checkTimeout(now);
+
+        // The query should be killed because 2 seconds > 1 second timeout
+        // Note: For query timeouts, killConnection is false, so isKilled() won't be set to true.
+        // We check the return value of checkTimeout() instead.
+        Assertions.assertTrue(killed, "checkTimeout() should return true when query times out");
+        Assertions.assertNotNull(ctx.getState().getErrorMessage());
+        
+        // Since isSessionQueryTimeoutOverridden() returned false and getTableQueryTimeoutInfo() returned non-null
+        // at the time checkTimeout() was called, the error message should contain the table timeout hint
+        // (ConnectContext.java:1375-1381)
+        String errorMsg = ctx.getState().getErrorMessage();
+        // The error message should contain either "table_query_timeout" or the table name "test.t1"
+        // Note: The actual format is "the table test.t1 table_query_timeout is 120s, pending time:0"
+        Assertions.assertTrue(errorMsg != null && (errorMsg.contains("table_query_timeout") || errorMsg.contains("test.t1")),
+                "Error message should contain table_query_timeout hint. " +
+                "isOverridden=" + isOverridden + ", timeoutInfo=" + timeoutInfo + ", " +
+                "executor=" + ctx.getExecutor() + ", " +
+                "Actual error: " + (errorMsg != null ? errorMsg : "null"));
+
         ctx.cleanup();
     }
 
@@ -475,5 +610,378 @@ public class ConnectContextTest {
         // set globalStateMgr explicitly
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+    }
+
+    @Test
+    public void testOnQueryFinished_withListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Mock listener
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Execute
+        ctx.onQueryFinished();
+
+        // Verify all listeners are called
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_listenerThrowsException() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Mock listener that throws exception
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        Mockito.doThrow(new RuntimeException("listener error")).when(listener1).onQueryFinished(ctx);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Should not throw exception, other listeners should still be called
+        ctx.onQueryFinished();
+
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_clearsListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        ConnectContext.Listener listener = Mockito.mock(ConnectContext.Listener.class);
+        ctx.registerListener(listener);
+
+        // First call
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+
+        // Second call - listener should not be called again (cleared after first call)
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_setsCNGroupName() {
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getCurrentComputeResourceName() {
+                return "test_cn_group";
+            }
+        };
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
+
+        ctx.onQueryFinished();
+
+        Assertions.assertEquals("test_cn_group", ctx.getAuditEventBuilder().build().cnGroup);
+    }
+
+    @Test
+    public void testOnQueryFinished_withoutListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Should not throw exception when no listeners
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    @Test
+    public void testOnQueryFinished_getCNGroupNameFails(@Mocked WarehouseManager warehouseManager) {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
+
+        // Should not throw exception even if getting CN group name fails
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for changeCatalogDb() journal-replay wait on follower FE
+    // -----------------------------------------------------------------------
+
+    /**
+     * On a follower FE, if the database is not found locally on the first check
+     * (journal not yet replayed), the follower fetches the leader's max journal ID,
+     * waits for local replay, and retries. If the database exists after the wait,
+     * changeCatalogDb() should succeed.
+     */
+    @Test
+    public void testChangeCatalogDb_followerWaitsForJournalAndSucceeds(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(1L, "testdb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call (outer condition): null  → enter wait block
+                // Second call (inner condition): mockDb → no error thrown
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                // Simulate a successful journal replay (no-op)
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("testdb"));
+        Assertions.assertEquals("testdb", ctx.getDatabase());
+    }
+
+    /**
+     * On a follower FE, if the database is still missing after journal replay wait
+     * (the database genuinely does not exist), changeCatalogDb() should throw ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db genuinely does not exist
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 (leader unavailable),
+     * the waitOn call is skipped entirely. The inner db check still runs and throws
+     * ERR_BAD_DB_ERROR if the database is not found.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSkipsWaitWhenLeaderJournalIdNegative(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db not found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // waitOn must never be called when journalId <= 0
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("missingdb"));
+    }
+
+    /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 but the database
+     * actually exists on the second check (e.g. replayed in the meantime),
+     * changeCatalogDb() should succeed without calling waitOn.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSucceedsWithoutWaitWhenDbAppearsAfterFetchFails(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(2L, "latedb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call: null (enter wait block), second call: found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("latedb"));
+        Assertions.assertEquals("latedb", ctx.getDatabase());
+    }
+
+    /**
+     * On the leader FE, changeCatalogDb() should throw immediately without fetching
+     * the leader journal ID or waiting for journal replay.
+     */
+    @Test
+    public void testChangeCatalogDb_leaderDoesNotWaitForJournal(
+            @Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // getJournalObservable must never be called on the leader
+                globalStateMgr.getJournalObservable();
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("somedb"));
+    }
+
+    /**
+     * On a follower FE, if the journal replay wait times out (DdlException from waitOn),
+     * the exception is swallowed and the inner db check still runs, throwing ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsDbErrorAfterJournalWaitTimeout(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws DdlException {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db does not appear even after wait
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // Simulate journal replay timeout
+                journalObservable.waitOn(100L, anyInt);
+                result = new DdlException("journal replay timeout");
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
 }

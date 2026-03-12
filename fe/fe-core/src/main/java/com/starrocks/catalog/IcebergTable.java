@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -37,6 +38,7 @@ import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
@@ -105,11 +107,12 @@ public class IcebergTable extends Table {
     public static final String SPEC_ID = "$spec_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
+    public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
     public static final String FILE_PATH = MetadataColumns.FILE_PATH.name();
     public static final String ROW_POSITION = MetadataColumns.ROW_POSITION.name();
 
     public static final Set<String> ICEBERG_META_COLUMNS = Set.of(
-            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, FILE_PATH, ROW_POSITION
+            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, LAST_UPDATED_SEQUENCE_NUMBER, FILE_PATH, ROW_POSITION
     );
 
     private String catalogName;
@@ -187,6 +190,10 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public void clearMetadata() {
+        this.nativeTable = null;
+    }
+
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {
@@ -234,15 +241,25 @@ public class IcebergTable extends Table {
     public List<Integer> getSortKeyIndexes() {
         List<Integer> indexes = new ArrayList<>();
         org.apache.iceberg.Table nativeTable = getNativeTable();
-        List<Types.NestedField> fields = nativeTable.schema().asStruct().fields();
-        List<Integer> sortFieldSourceIds = nativeTable.sortOrder().fields().stream()
-                .map(SortField::sourceId)
-                .collect(Collectors.toList());
+        SortOrder sortOrder = nativeTable.sortOrder();
+        if (sortOrder == null || sortOrder.fields().isEmpty()) {
+            return indexes;
+        }
 
+        List<Types.NestedField> fields = nativeTable.schema().asStruct().fields();
+        // The Iceberg table's sort order may differs from schema column order, e.g., sorting by [B, A] when
+        // schema is [A, B]), So we need to build a mapping from fieldId to schema index first, and then get
+        // the correct index according to sort order.
+        Map<Integer, Integer> fieldIdToIndex = Maps.newHashMap();
         for (int i = 0; i < fields.size(); i++) {
-            Types.NestedField field = fields.get(i);
-            if (sortFieldSourceIds.contains(field.fieldId())) {
-                indexes.add(i);
+            fieldIdToIndex.put(fields.get(i).fieldId(), i);
+        }
+
+        // Keep the returned indexes aligned with sortOrder.fields() order.
+        for (SortField sortField : sortOrder.fields()) {
+            Integer idx = fieldIdToIndex.get(sortField.sourceId());
+            if (idx != null) {
+                indexes.add(idx);
             }
         }
 
@@ -264,6 +281,7 @@ public class IcebergTable extends Table {
     public int getFormatVersion() {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion();
     }
+
     /**
      * <p>
      * In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
@@ -318,12 +336,20 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
-        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        String uuid = null;
+        if (nativeTable instanceof BaseTable) {
+            uuid = ((BaseTable) nativeTable).operations().current().uuid();
+        }
+        return Joiner.on(":").join(catalogTableName, uuid == null ? "" : uuid);
     }
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getTableLocation() {
@@ -508,19 +534,34 @@ public class IcebergTable extends Table {
 
         SortOrder sortOrder = nativeTable.sortOrder();
         if (sortOrder != null && sortOrder.isSorted()) {
-            TSortOrder tSortOrder = new TSortOrder();
-            List<Integer> sortKeyIndexes = getSortKeyIndexes();
-            for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
-                int sortKeyIndex = sortKeyIndexes.get(idx);
-                SortField sortField = sortOrder.fields().get(idx);
-                if (!sortField.transform().isIdentity()) {
-                    continue;
+            // Check if we should skip sort_order for host-level sorting
+            boolean shouldSkipSortOrder = false;
+            ConnectContext context = ConnectContext.get();
+            if (context != null) {
+                ConnectorSinkSortScope sortScope = ConnectorSinkSortScope.fromName(
+                        context.getSessionVariable().getConnectorSinkSortScope());
+                // When using host-level sorting, FE ensures data is sorted before reaching BE,
+                // so we don't need to pass sort_order to BE to avoid duplicate sorting
+                if (sortScope == ConnectorSinkSortScope.NONE || sortScope == ConnectorSinkSortScope.HOST) {
+                    shouldSkipSortOrder = true;
                 }
-                tSortOrder.addToSort_key_idxes(sortKeyIndex);
-                tSortOrder.addToIs_ascs(sortField.direction() == SortDirection.ASC);
-                tSortOrder.addToIs_null_firsts(sortField.nullOrder() == NullOrder.NULLS_FIRST);
             }
-            tIcebergTable.setSort_order(tSortOrder);
+
+            if (!shouldSkipSortOrder) {
+                TSortOrder tSortOrder = new TSortOrder();
+                List<Integer> sortKeyIndexes = getSortKeyIndexes();
+                for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                    int sortKeyIndex = sortKeyIndexes.get(idx);
+                    SortField sortField = sortOrder.fields().get(idx);
+                    if (!sortField.transform().isIdentity()) {
+                        continue;
+                    }
+                    tSortOrder.addToSort_key_idxes(sortKeyIndex);
+                    tSortOrder.addToIs_ascs(sortField.direction() == SortDirection.ASC);
+                    tSortOrder.addToIs_null_firsts(sortField.nullOrder() == NullOrder.NULLS_FIRST);
+                }
+                tIcebergTable.setSort_order(tSortOrder);
+            }
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
@@ -587,6 +628,7 @@ public class IcebergTable extends Table {
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
+            case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };

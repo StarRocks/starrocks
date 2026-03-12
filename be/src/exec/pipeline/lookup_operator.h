@@ -21,10 +21,8 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/descriptors.h"
+#include "runtime/descriptors_fwd.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "util/runtime_profile.h"
-#include "util/spinlock.h"
 
 namespace starrocks::pipeline {
 

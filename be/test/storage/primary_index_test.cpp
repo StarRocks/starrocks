@@ -18,6 +18,7 @@
 
 #include <random>
 
+#include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -26,7 +27,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
-#include "testutil/parallel_test.h"
 
 using namespace starrocks;
 
@@ -376,8 +376,9 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     }
 
     MutableColumnPtr pk_column;
-    PrimaryKeyEncoder::create_column(*schema, &pk_column);
-    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+    PrimaryKeyEncoder::create_column(*schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_column).ok());
     LOG(INFO) << "pk_index memory:" << pk_index->memory_usage();

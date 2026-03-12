@@ -44,15 +44,20 @@
 
 #include "agent/master_info.h"
 #include "agent/task_worker_pool.h"
+#include "base/network/network_util.h"
+#include "common/config_network_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/system/cpu_info.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
+#include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
-#include "service/backend_options.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
-#include "util/network_util.h"
-#include "util/thrift_server.h"
 
 using std::fstream;
 using std::nothrow;

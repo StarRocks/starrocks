@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -131,7 +132,9 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -140,7 +143,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
-    private final Table table;
+    protected final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
         this.table = table;
@@ -478,6 +481,19 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (NumberFormatException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid lake_compaction_max_parallel value: " + value + ". Value must be an integer.");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
+                                " must be bool type(false/true)");
             }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
@@ -1090,6 +1106,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     // 2. storage_medium && storage_cooldown_time
     // 3. in_memory
     // 4. tablet type
+    // 5. datacache.enable
     private void checkProperties(Map<String, String> properties) throws AnalysisException {
         // 1. data property
         DataProperty newDataProperty = null;
@@ -1107,6 +1124,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         // 4. tablet type
         PropertyAnalyzer.analyzeTabletType(properties);
+
+        // 5. datacache.enable (validate bool value if present)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE
+                        + " must be bool type(false/true)");
+            }
+        }
     }
 
     @Override
@@ -1298,6 +1324,55 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         return null;
     }
 
+    @Override
+    public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {
+            throw new SemanticException("Partitions and tablets cannot be specified at the same time");
+        }
+
+        if (clause.getPartitionNames() != null) {
+            if (clause.getPartitionNames().isTemp()) {
+                throw new SemanticException("Cannot merge tablet in temp partition");
+            }
+            if (clause.getPartitionNames().getPartitionNames().isEmpty()) {
+                throw new SemanticException("Empty partitions");
+            }
+        }
+
+        if (clause.getTabletGroupList() != null) {
+            if (clause.getTabletGroupList().getTabletIdGroups().isEmpty()) {
+                throw new SemanticException("Empty tablets");
+            }
+            for (List<Long> tabletIds : clause.getTabletGroupList().getTabletIdGroups()) {
+                if (tabletIds.isEmpty()) {
+                    throw new SemanticException("Empty tablets");
+                }
+                if (tabletIds.size() < 2) {
+                    throw new SemanticException("Tablet list must contain at least 2 tablets");
+                }
+            }
+        }
+
+        Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
+                : Maps.newHashMap(clause.getProperties());
+        try {
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage(), e);
+        }
+
+        if (!copiedProperties.isEmpty()) {
+            throw new SemanticException("Unknown properties: " + copiedProperties);
+        }
+
+        return null;
+    }
+
     // ------------------------------------------- Alter partition clause ----------------------------------==--------------------
 
     @Override
@@ -1392,7 +1467,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             properties.putAll(clauseProperties);
         }
 
-        for (PartitionDesc partitionDesc : partitionDescs) {
+        List<String> rangePartitionNames = null;
+        if (addPartitionClause.getPartitionDesc() instanceof RangePartitionDesc) {
+            rangePartitionNames =
+                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+        }
+
+        Iterator<PartitionDesc> iterator = partitionDescs.iterator();
+        while (iterator.hasNext()) {
+            PartitionDesc partitionDesc = iterator.next();
             Map<String, String> cloneProperties = Maps.newHashMap(properties);
             Map<String, String> sourceProperties = partitionDesc.getProperties();
             if (sourceProperties != null && !sourceProperties.isEmpty()) {
@@ -1411,6 +1494,23 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
                         rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
+                    if (singleRangePartitionDesc.isSystem()) {
+                        long enclosingId = rangePartitionInfo.getEnclosingPartitionId(
+                                table.getIdToColumn(), singleRangePartitionDesc,
+                                addPartitionClause.isTempPartition());
+                        if (enclosingId >= 0) {
+                            Partition enclosingPartition = olapTable.getPartition(enclosingId);
+                            if (enclosingPartition != null && rangePartitionNames != null) {
+                                int idx = rangePartitionNames.indexOf(
+                                        singleRangePartitionDesc.getPartitionName());
+                                if (idx >= 0) {
+                                    rangePartitionNames.set(idx, enclosingPartition.getName());
+                                }
+                            }
+                            iterator.remove();
+                            continue;
+                        }
+                    }
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
@@ -1438,6 +1538,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
+        }
+
+        if (rangePartitionNames != null) {
+            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionNames);
+            rangePartitionNames.clear();
+            rangePartitionNames.addAll(deduped);
         }
     }
 

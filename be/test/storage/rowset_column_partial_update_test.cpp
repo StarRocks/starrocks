@@ -18,7 +18,13 @@
 #include <iostream>
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -38,7 +44,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

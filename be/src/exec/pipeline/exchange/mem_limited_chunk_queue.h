@@ -17,11 +17,11 @@
 #include <mutex>
 #include <queue>
 
+#include "base/bit/bit_mask.h"
+#include "base/concurrency/spinlock.h"
+#include "base/phmap/phmap.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "serde/encode_context.h"
-#include "util/bit_mask.h"
-#include "util/phmap/phmap.h"
-#include "util/spinlock.h"
 
 namespace starrocks::pipeline {
 

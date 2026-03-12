@@ -29,6 +29,7 @@ import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.alter.reshard.IdenticalTablet;
+import com.starrocks.alter.reshard.MergeTabletJob;
 import com.starrocks.alter.reshard.MergingTablet;
 import com.starrocks.alter.reshard.ReshardingTablet;
 import com.starrocks.alter.reshard.SplitTabletJob;
@@ -100,6 +101,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.StringVariant;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
@@ -393,7 +395,8 @@ public class RuntimeTypeAdapterTypes {
                 RuntimeTypeAdapterFactory.of(Function.class, "clazz")
                         .registerSubtype(ScalarFunction.class, "ScalarFunction")
                         .registerSubtype(AggregateFunction.class, "AggregateFunction")
-                        .registerSubtype(TableFunction.class, "TableFunction");
+                        .registerSubtype(TableFunction.class, "TableFunction")
+                        .registerSubtype(SqlFunction.class, "SqlFunction");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(Function.class, function_type_runtime_adapter_factory);
 
         final RuntimeTypeAdapterFactory<StorageVolumeMgr> storage_volume_mgr_type_runtime_adapter_factory =
@@ -423,7 +426,8 @@ public class RuntimeTypeAdapterTypes {
 
         final RuntimeTypeAdapterFactory<TabletReshardJob> tablet_reshard_job_runtime_type_adapter_factory =
                 RuntimeTypeAdapterFactory.of(TabletReshardJob.class, "clazz")
-                        .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
+                        .registerSubtype(SplitTabletJob.class, "SplitTabletJob")
+                        .registerSubtype(MergeTabletJob.class, "MergeTabletJob");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(TabletReshardJob.class,
                 tablet_reshard_job_runtime_type_adapter_factory);
 

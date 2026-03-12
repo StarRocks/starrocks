@@ -21,15 +21,16 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
+#include "base/utility/integer_util.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "testutil/assert.h"
-#include "testutil/scoped_updater.h"
-#include "util/defer_op.h"
-#include "util/integer_util.h"
 
 namespace starrocks::connector {
 namespace {
@@ -62,17 +63,17 @@ public:
     MOCK_METHOD(StatusOr<WriterAndStream>, create, (const std::string&), (const override));
 };
 
-class MockWriter : public formats::FileWriter {
+class MockWriter final : public formats::FileWriter {
 public:
     MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(int64_t, get_written_bytes, (), (override));
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
     MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
-    MOCK_METHOD(CommitResult, commit, (), (override));
+    MOCK_METHOD(CommitResult, close, (), (override));
 };
 
-class MockFile : public WritableFile {
+class MockFile final : public WritableFile {
 public:
     MOCK_METHOD(Status, append, (const Slice& data), (override));
     MOCK_METHOD(Status, appendv, (const Slice* data, size_t cnt), (override));

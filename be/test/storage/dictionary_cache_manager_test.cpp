@@ -20,13 +20,13 @@
 
 #include <fstream>
 
+#include "base/testutil/assert.h"
 #include "exec/tablet_info.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/descriptor_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 

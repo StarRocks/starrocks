@@ -382,6 +382,8 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30335, 'regexp_count', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_count',
      'StringFunctions::regexp_count_prepare', 'StringFunctions::regexp_close'],
+    [30336, 'regexp_position', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT', 'INT'], 'StringFunctions::regexp_position',
+     'StringFunctions::regexp_position_prepare', 'StringFunctions::regexp_position_close'],
     [30400, "money_format", True, False, "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", True, False, "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", True, False, "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -439,6 +441,11 @@ vectorized_functions = [
      'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
 
     [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
+
+    # raise_error always throws a RuntimeException at runtime for non-null input.
+    # BOOLEAN is used as a placeholder return type (consistent with Trino); the function
+    # returns NULL for NULL input and never produces a non-null BOOLEAN value.
+    [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
 
     # Binary Functions
     # to_binary
@@ -833,6 +840,8 @@ vectorized_functions = [
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
+    [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
+    [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
@@ -884,9 +893,15 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110025, "json_set", False, False, "JSON", ["JSON", "JSON", "..."], "JsonFunctions::json_set"],
     [110026, "json_pretty", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_pretty"],
+    [110027, "get_json_scalar", False, True,  "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110028, "get_json_scalar", False, True,  "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
+    [110113, "is_json_scalar", False, False, "BOOLEAN", ["JSON"], "JsonFunctions::is_json_scalar"],
+
 
     # variant type function
     [110200, "variant_query", False, False, "VARIANT", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_query",

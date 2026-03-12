@@ -20,18 +20,24 @@
 #include <random>
 #include <set>
 
+#include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
@@ -41,12 +47,14 @@
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
-#include "util/thrift_util.h"
+#include "types/type_descriptor.h"
+#include "types/variant.h"
 
 namespace starrocks::parquet {
 
@@ -57,6 +65,8 @@ class FileReaderTest : public testing::Test {
 public:
     void SetUp() override {
         _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
         _rf_probe_collector = _pool.add(new RuntimeFilterProbeCollector());
     }
     void TearDown() override {}
@@ -320,6 +330,7 @@ protected:
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
 
     const size_t _chunk_size = 4096;
@@ -361,7 +372,7 @@ StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(
     tRuntimeFilterDescription.__set_filter_id(1);
     tRuntimeFilterDescription.__set_has_remote_targets(false);
     tRuntimeFilterDescription.__set_build_plan_node_id(1);
-    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
     tRuntimeFilterDescription.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, true);
@@ -976,9 +987,9 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(opcode, slot_id, value, &t_conjuncts);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
-    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprExecutor::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(*conjunct_ctxs, _runtime_state));
 }
 
 void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
@@ -999,9 +1010,9 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
-    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprExecutor::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(*conjunct_ctxs, _runtime_state));
 }
 
 void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
@@ -1054,9 +1065,9 @@ void FileReaderTest::_create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
-    ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprExecutor::prepare(*conjunct_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(*conjunct_ctxs, _runtime_state));
 }
 
 THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path, size_t scan_length) {
@@ -2829,7 +2840,7 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
             {""},
     };
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    // RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
+    // RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _min_max_conjunct_ctxs, &cloned_conjunct_ctxs));
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[3], nullptr, tuple_desc, _runtime_state, ctx);
     for (const auto& [cid, col_children] : ctx->predicate_tree.root().col_children_map()) {
         for (const auto& child : col_children) {
@@ -3240,9 +3251,9 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr));
-    ASSERT_OK(Expr::prepare(expr_ctxs, _runtime_state));
-    ASSERT_OK(Expr::open(expr_ctxs, _runtime_state));
+    ASSERT_OK(ExprFactory::create_expr_trees(&_pool, t_conjuncts, &expr_ctxs, nullptr));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, _runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, _runtime_state));
 
     auto ctx = _create_scan_context(slot_descs, slot_descs, bloom_filter_file);
     ctx->conjunct_ctxs_by_slot.insert({3, expr_ctxs});
@@ -4401,6 +4412,63 @@ TEST_F(FileReaderTest, test_read_variant) {
     }
 
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const ColumnPtr& variant_col_nullable = chunk->get_column_by_index(0);
+    ASSERT_TRUE(variant_col_nullable->is_nullable());
+    const auto* nullable = down_cast<const NullableColumn*>(variant_col_nullable.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_FALSE(variant_col->shredded_paths().empty());
+    ASSERT_NE(-1, variant_col->find_shredded_path("id"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("age"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("score"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("events"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("numbers"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("groups"));
+
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"id\":1000") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"age\":20") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"score\":80") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"department\":\"dept_0\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"count\":2") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"numbers\":[1,2,3]") != std::string::npos);
+    // groups: array-of-objects-with-nested-array; verifies BUG-2 fix in _collect_overlays_for_array_element
+    ASSERT_TRUE(row0_json.value().find("\"groups\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[10,20,30]") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[40,50,60]") != std::string::npos);
+
+    VariantRowValue row1;
+    ASSERT_NE(variant_col->get_row_value(1, &row1), nullptr);
+    auto row1_json = row1.to_json();
+    ASSERT_TRUE(row1_json.ok());
+    ASSERT_TRUE(row1_json.value().find("\"score\":\"S81\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"rank\":\"L2\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"numbers\":[2,3,4]") != std::string::npos);
 }
 
 } // namespace starrocks::parquet

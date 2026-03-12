@@ -434,7 +434,9 @@ enum TTableType {
     ICEBERG_SNAPSHOTS_TABLE,
     ICEBERG_MANIFESTS_TABLE,
     ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE
+    ICEBERG_PARTITIONS_TABLE,
+    BENCHMARK_TABLE,
+    ICEBERG_PROPERTIES_TABLE
 }
 
 enum TKeysType {
@@ -442,6 +444,12 @@ enum TKeysType {
     DUP_KEYS,
     UNIQUE_KEYS,
     AGG_KEYS
+}
+
+enum TPrimaryKeyEncodingType {
+    PK_ENCODING_TYPE_NONE = 0,
+    PK_ENCODING_TYPE_V1 = 1,
+    PK_ENCODING_TYPE_V2 = 2
 }
 
 enum TPriority {
@@ -639,16 +647,17 @@ struct TParquetOptions {
     4: optional string version
 }
 
-enum TInfinityType {
-    NONE_INFINITY = 0,
-    MINIMUM = 1,
-    MAXIMUM = 2,
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
 }
 
 struct TVariant {
     1: optional TTypeDesc type
     2: optional string value
-    3: optional TInfinityType infinity_type
+    3: optional TVariantType variant_type
 }
 
 struct TTuple {

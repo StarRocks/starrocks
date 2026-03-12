@@ -381,7 +381,7 @@ public abstract class MVPCTRefreshPartitioner {
                     return getRefreshNumberByDefaultMode(toRefreshPartitions);
             }
         } catch (Exception e) {
-            logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
+            logger.info("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
                     refreshStrategy, e.getMessage());
             return getRefreshNumberByDefaultMode(toRefreshPartitions);
         }

@@ -16,14 +16,13 @@
 #include <csignal>
 #include <thread>
 
+#include "base/hash/unaligned_access.h"
+#include "base/time/time.h"
 #include "bthread/timer_thread.h"
 #include "butil/resource_pool.h"
-#include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
-#include "util/time.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -125,6 +124,8 @@ private:
     }
 };
 
+int64_t pipeline_poller_timeout_guard_ms();
+
 }; // namespace starrocks
 
 #define WARN_IF_TIMEOUT_MS(timeout_ms, msg_callback) \
@@ -132,6 +133,6 @@ private:
 
 #define WARN_IF_TIMEOUT(timeout_ms, lazy_msg) WARN_IF_TIMEOUT_MS(timeout_ms, [&]() { return lazy_msg; })
 
-#define WARN_IF_POLLER_TIMEOUT(lazy_msg) WARN_IF_TIMEOUT(config::pipeline_poller_timeout_guard_ms, lazy_msg)
+#define WARN_IF_POLLER_TIMEOUT(lazy_msg) WARN_IF_TIMEOUT(starrocks::pipeline_poller_timeout_guard_ms(), lazy_msg)
 
 #define DUMP_TRACE_IF_TIMEOUT(timeout_ms) auto VARNAME_LINENUM(guard) = SignalTimerGuard(timeout_ms)

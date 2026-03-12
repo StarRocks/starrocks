@@ -15,6 +15,11 @@
 #include "storage/lake/lake_replication_txn_manager.h"
 
 #include "agent/master_info.h"
+#include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -28,10 +33,68 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/segment_stream_converter.h"
 #include "util/dynamic_cache.h"
-#include "util/trace.h"
 #include "vacuum.h"
 
 namespace starrocks::lake {
+
+#ifdef USE_STAROS
+std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id) {
+    // S3 URI format: s3://bucket/path...
+    // Starlet URI format: staros://shard_id/path...
+    // We need to replace "s3://bucket/" with "staros://shard_id/"
+    std::string_view path = s3_path;
+    if (path.find("s3://") == 0) {
+        // Remove "s3://" prefix
+        path.remove_prefix(5);
+        // Find the first "/" after bucket name and skip the bucket part
+        size_t first_slash_pos = path.find('/');
+        if (first_slash_pos != std::string_view::npos) {
+            path.remove_prefix(first_slash_pos + 1);
+        } else {
+            path = std::string_view();
+        }
+        // Build starlet URI: staros://shard_id/path...
+        return build_starlet_uri(shard_id, path);
+    }
+
+    // Not a valid S3 path - log warning
+    LOG(WARNING) << "S3 path does not start with 's3://': " << s3_path;
+    return build_starlet_uri(shard_id, path);
+}
+#endif // USE_STAROS
+
+std::string remove_last_path_component(const std::string& path) {
+    // Find the last "/" which separates the directory name (meta or data)
+    size_t last_slash = path.find_last_of('/');
+    if (last_slash == std::string::npos) {
+        return path;
+    }
+
+    // Get the directory name (meta or data)
+    std::string dir_name = path.substr(last_slash + 1);
+
+    // Get the path before the directory name
+    std::string base_path = path.substr(0, last_slash);
+
+    // Find the second-to-last "/"
+    size_t second_last_slash = base_path.find_last_of('/');
+    if (second_last_slash == std::string::npos) {
+        return path;
+    }
+
+    // Remove the component between second_last_slash and last_slash
+    return base_path.substr(0, second_last_slash + 1) + dir_name;
+}
+
+std::string remove_db_id_component(const std::string& path, int64_t db_id) {
+    std::string db_pattern = "/db" + std::to_string(db_id) + "/";
+    size_t pos = path.find(db_pattern);
+    if (pos == std::string::npos) {
+        return path;
+    }
+    // Remove "db{db_id}/" but keep the "/" before it
+    return path.substr(0, pos + 1) + path.substr(pos + db_pattern.length());
+}
 
 Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicateSnapshotRequest& request) {
     auto src_tablet_id = request.src_tablet_id;
@@ -47,11 +110,19 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     auto txn_id = request.transaction_id;
     auto virtual_tablet_id = request.virtual_tablet_id;
 
+    // Check if FE provides full path for S3 storage type
+    // - has_full_path=true: S3 storage type, FE provides full S3 path (supports partitioned prefix)
+    // - has_full_path=false: Non-S3 storage type (OSS/Azure/HDFS/GFS), use RemoteStarletLocationProvider
+    bool has_full_path = request.__isset.src_partition_full_path && !request.src_partition_full_path.empty();
+    std::string src_partition_full_path = has_full_path ? request.src_partition_full_path : "";
+
     LOG(INFO) << "Start to replicate lake remote storage, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
               << ", src_tablet_id: " << src_tablet_id << ", src_db_id: " << src_db_id
               << ", src_table_id: " << src_table_id << ", src_partition_id: " << src_partition_id
               << ", visible_version: " << target_visible_version << ", data_version: " << data_version
-              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version;
+              << ", virtual_tablet_id: " << virtual_tablet_id << ", src_visible_version: " << src_visible_version
+              << ", has_full_path: " << has_full_path
+              << (has_full_path ? ", src_partition_full_path: " + src_partition_full_path : "");
 
     std::vector<Version> missed_versions;
     for (auto v = data_version + 1; v <= src_visible_version; ++v) {
@@ -65,28 +136,59 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
-#if !defined(BE_TEST) && defined(USE_STAROS)
-    auto src_meta_dir =
-            _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
-    auto src_data_dir =
-            _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
-    // `shared_src_fs` is used to access storage of src cluster
-    auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
-    if (shared_src_fs == nullptr) {
-        return Status::Corruption("Failed to create virtual starlet filesystem");
+    std::string src_meta_dir;
+    std::string src_data_dir;
+    std::shared_ptr<FileSystem> shared_src_fs;
+    TabletMetadataPtr src_tablet_meta;
+
+#ifdef USE_STAROS
+    if (has_full_path) {
+        // S3 storage type: FE provides full S3 path (supports partitioned prefix feature)
+        // Use S3 raw path mode - starlet will use the path as-is without normalize_path
+        if (src_partition_full_path.find("s3://") != 0) {
+            return Status::InvalidArgument(
+                    fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
+        }
+        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+
+        // Append metadata and segment directory names
+        src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
+        src_data_dir = join_path(src_partition_starlet_uri, kSegmentDirectoryName);
+
+        VLOG(3) << "S3 storage: converted S3 full path to starlet URI, original: " << src_partition_full_path
+                << ", starlet_uri: " << src_partition_starlet_uri << ", meta_dir: " << src_meta_dir
+                << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with S3 raw path mode enabled
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, true /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         try_build_source_tablet_meta_with_fallback(src_tablet_id, src_visible_version, src_db_id,
+                                                                    txn_id, src_meta_dir, src_data_dir, shared_src_fs));
+    } else {
+        // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
+        // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
+        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                         src_partition_id);
+        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                        src_partition_id);
+
+        LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
+                  << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with normal mode (no S3 raw path)
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, false /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
     }
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
 #else
-    auto src_meta_dir = "test_lake_replication/meta";
-    auto src_data_dir = "test_lake_replication/data";
-    auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
-    if (!shared_src_fs_st_or.ok()) {
-        return Status::Corruption("Failed to create virtual starlet filesystem");
-    }
-    auto shared_src_fs = shared_src_fs_st_or.value();
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
+    return Status::NotSupported("Lake replication remote storage requires build with shared-data support!");
 #endif
 
     VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir
@@ -245,16 +347,89 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
         int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
         const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
-              << ", version: " << version;
+              << ", version: " << version << ", meta_dir: " << meta_dir;
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
     auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
     if (!src_tablet_meta_or.ok()) {
-        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
-                     << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or;
+        VLOG(3) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                << ", src_tablet_id: " << src_tablet_id << ", error: " << src_tablet_meta_or.status();
         return src_tablet_meta_or;
     }
     return src_tablet_meta_or.value();
+}
+
+StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_meta_with_fallback(
+        int64_t src_tablet_id, int64_t version, int64_t src_db_id, TTransactionId txn_id, std::string& src_meta_dir,
+        std::string& src_data_dir, const std::shared_ptr<FileSystem>& shared_src_fs) {
+    // Strategy: Try current format first, then fallback to legacy formats on NotFound error.
+    const std::string original_meta_dir = src_meta_dir;
+    const std::string original_data_dir = src_data_dir;
+
+    // Attempt 1: Try current path format
+    auto result = build_source_tablet_meta(src_tablet_id, version, src_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        return result;
+    }
+
+    // If error is not NotFound, return immediately
+    if (!result.status().is_not_found()) {
+        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                     << ", src_tablet_id: " << src_tablet_id << ", error: " << result.status();
+        return result;
+    }
+
+    LOG(INFO) << "Source tablet meta not found with current path format, trying legacy format without db_id"
+              << ", src_meta_dir: " << src_meta_dir << ", txn_id: " << txn_id;
+
+    // Attempt 2: Try legacy format without db_id (keep partition_id)
+    // Example: db56764/56970/63453/meta -> 56970/63453/meta
+    std::string legacy_meta_dir = remove_db_id_component(original_meta_dir, src_db_id);
+    std::string legacy_data_dir = remove_db_id_component(original_data_dir, src_db_id);
+
+    result = build_source_tablet_meta(src_tablet_id, version, legacy_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        LOG(INFO) << "Source tablet meta found with legacy format (without db_id)"
+                  << ", updated meta_dir: " << legacy_meta_dir << ", data_dir: " << legacy_data_dir
+                  << ", txn_id: " << txn_id;
+        src_meta_dir = legacy_meta_dir;
+        src_data_dir = legacy_data_dir;
+        return result;
+    }
+
+    // If error is not NotFound, return immediately
+    if (!result.status().is_not_found()) {
+        LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta for version: " << version
+                     << ", src_tablet_id: " << src_tablet_id << ", legacy_meta_dir: " << legacy_meta_dir
+                     << ", error: " << result.status();
+        return result;
+    }
+
+    LOG(INFO) << "Source tablet meta not found with legacy format without db_id, "
+              << "trying very old format without db_id and partition_id"
+              << ", legacy_meta_dir: " << legacy_meta_dir << ", txn_id: " << txn_id;
+
+    // Attempt 3: Try very old format without db_id and partition_id
+    // Remove partition_id from legacy1 path
+    // Example: 56970/63453/meta -> 56970/meta
+    std::string very_old_meta_dir = remove_last_path_component(legacy_meta_dir);
+    std::string very_old_data_dir = remove_last_path_component(legacy_data_dir);
+
+    result = build_source_tablet_meta(src_tablet_id, version, very_old_meta_dir, shared_src_fs);
+    if (result.ok()) {
+        LOG(INFO) << "Source tablet meta found with very old format (without db_id and partition_id)"
+                  << ", updated meta_dir: " << very_old_meta_dir << ", data_dir: " << very_old_data_dir
+                  << ", txn_id: " << txn_id;
+        src_meta_dir = very_old_meta_dir;
+        src_data_dir = very_old_data_dir;
+        return result;
+    }
+
+    // All attempts failed, return the last error
+    LOG(WARNING) << "Lake replicate storage task, failed to build source tablet meta after all fallback attempts"
+                 << ", version: " << version << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id
+                 << ", error: " << result.status();
+    return result;
 }
 
 Status LakeReplicationTxnManager::build_existed_filename_uuids_map(

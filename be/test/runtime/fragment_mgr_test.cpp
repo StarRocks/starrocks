@@ -38,11 +38,11 @@
 
 #include <utility>
 
-#include "common/config.h"
+#include "base/time/monotime.h"
+#include "common/config_runtime_fwd.h"
 #include "exec/data_sink.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
-#include "util/monotime.h"
 
 namespace starrocks {
 
@@ -53,6 +53,8 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
 PlanFragmentExecutor::~PlanFragmentExecutor() = default;
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
+    EXPECT_NE(runtime_state(), nullptr);
+    EXPECT_NE(runtime_state()->runtime_filter_port(), nullptr);
     return Status::OK();
 }
 

@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
-#include "date_value.h"
 #include "gutil/strings/substitute.h"
-#include "types/timestamp_value.h"
 
 namespace starrocks {
 

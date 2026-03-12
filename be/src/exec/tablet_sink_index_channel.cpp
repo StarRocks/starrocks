@@ -16,27 +16,31 @@
 
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/brpc_helper.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "common/utils.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -44,7 +48,11 @@ DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
-        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental), _where_clause(where_clause) {
+        : _parent(parent),
+          _node_id(node_id),
+          _enable_colocate_mv_index(config::enable_load_colocate_mv),
+          _is_incremental(is_incremental),
+          _where_clause(where_clause) {
     // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
     _ts_profile = _parent->ts_profile();
@@ -219,8 +227,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
-    const auto& global_dict = _runtime_state->get_load_global_dict_map();
-    const auto& dict_version = _runtime_state->load_dict_versions();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->load_global_dicts();
+    const auto& dict_version = fragment_dict_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -239,7 +249,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(std::min(_rpc_timeout_ms, config::tablet_writer_open_rpc_timeout_sec * 1000));
-    SET_IGNORE_OVERCROWDED(open_closure->cntl, load);
+    set_ignore_overcrowded_for_load(open_closure->cntl);
 
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
@@ -710,7 +720,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(_add_batch_closures[_current_request_index]->cntl, load);
+    set_ignore_overcrowded_for_load(_add_batch_closures[_current_request_index]->cntl);
 
     _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
 
@@ -1111,7 +1121,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    set_ignore_overcrowded_for_load(closure->cntl);
     FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_cancel,
                                TABLET_WRITER_CANCEL_FP_ACTION(_node_info->host, closure, closure->cntl, request));
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
@@ -1135,7 +1145,7 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
     }
     _diagnose_closure = new RefCountClosure<PLoadDiagnoseResult>();
     _diagnose_closure->ref();
-    SET_IGNORE_OVERCROWDED(_diagnose_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_diagnose_closure->cntl);
     _diagnose_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
     PLoadDiagnoseRequest request;
     request.set_allocated_id(&_parent->_load_id);

@@ -28,6 +28,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -116,15 +117,14 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        UserIdentity currentUser;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (authInfo.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, authInfo.getCurrent_user_ident());
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -145,7 +145,7 @@ public class InformationSchemaDataSource {
             }
             authorizedDbs.add(fullName);
         }
-        return new AuthDbRequestResult(authorizedDbs, currentUser);
+        return new AuthDbRequestResult(authorizedDbs, context);
     }
 
     // keywords
@@ -217,10 +217,19 @@ public class InformationSchemaDataSource {
     private static class AuthDbRequestResult {
         public final List<String> authorizedDbs;
         public final UserIdentity currentUser;
+        private final ConnectContext authContext;
 
-        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+        public AuthDbRequestResult(List<String> authorizedDbs, ConnectContext authContext) {
             this.authorizedDbs = authorizedDbs;
-            this.currentUser = currentUser;
+            this.currentUser = authContext.getCurrentUserIdentity();
+            this.authContext = authContext;
+        }
+
+        public ConnectContext buildConnectContext() {
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(authContext.getCurrentUserIdentity());
+            context.setCurrentRoleIds(authContext.getCurrentRoleIds());
+            return context;
         }
     }
 
@@ -241,9 +250,7 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
-                            ConnectContext context = new ConnectContext();
-                            context.setCurrentUserIdentity(result.currentUser);
-                            context.setCurrentRoleIds(result.currentUser);
+                            ConnectContext context = result.buildConnectContext();
                             Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                         } catch (AccessDeniedException e) {
                             LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
@@ -379,9 +386,7 @@ public class InformationSchemaDataSource {
                 continue;
             }
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(result.currentUser);
-                context.setCurrentRoleIds(result.currentUser);
+                ConnectContext context = result.buildConnectContext();
                 Authorizer.checkAnyActionOnTableLikeObject(context, ele.dbName, table);
             } catch (AccessDeniedException e) {
                 LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
@@ -511,9 +516,7 @@ public class InformationSchemaDataSource {
 
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
-        ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(result.currentUser);
-        context.setCurrentRoleIds(result.currentUser);
+        ConnectContext context = result.buildConnectContext();
 
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
@@ -679,9 +682,7 @@ public class InformationSchemaDataSource {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
-        ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(result.currentUser);
-        context.setCurrentRoleIds(result.currentUser);
+        ConnectContext context = result.buildConnectContext();
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -769,8 +770,9 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            totalRowsOfTable = partition.getLatestBaseIndex().getRowCount() + totalRowsOfTable;
-            totalBytesOfTable = partition.getLatestBaseIndex().getDataSize() + totalBytesOfTable;
+            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
+            totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }
         // TABLE_ROWS
         info.setTable_rows(totalRowsOfTable);

@@ -18,18 +18,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
-#include "exec/exec_node.h"
+#include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -211,8 +211,8 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(
-                starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk,
+                                                                           filter, apply_filter));
         auto after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -236,7 +236,7 @@ Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
         }
         size_t before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(selected_vector, chunk, nullptr));
         size_t after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -256,7 +256,7 @@ Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chun
         SCOPED_TIMER(_conjuncts_timer);
         size_t before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(conjuncts, chunk, filter));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(conjuncts, chunk, filter));
         size_t after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -274,7 +274,7 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
 
-    ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
 RuntimeState* Operator::runtime_state() const {
@@ -370,8 +370,7 @@ void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHo
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            DCHECK(filter->opened());
             runtime_in_filters->push_back(filter);
         }
     }

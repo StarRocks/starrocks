@@ -84,6 +84,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -229,6 +230,26 @@ public class RestoreJob extends AbstractJob {
         this.state = RestoreJobState.PENDING;
         this.backupMeta = backupMeta;
         this.mvRestoreContext = mvRestoreContext;
+    }
+
+    protected RestoreJob(RestoreJob job) {
+        super(job);
+
+        this.backupTimestamp = job.backupTimestamp;
+        this.jobInfo = job.jobInfo;
+        this.allowLoad = job.allowLoad;
+        this.state = job.state;
+        this.backupMeta = job.backupMeta;
+        this.fileMapping = job.fileMapping;
+        this.metaPreparedTime = job.metaPreparedTime;
+        this.snapshotFinishedTime = job.snapshotFinishedTime;
+        this.downloadFinishedTime = job.downloadFinishedTime;
+        this.restoreReplicationNum = job.restoreReplicationNum;
+        this.restoredPartitions = job.restoredPartitions;
+        this.restoredTbls = job.restoredTbls;
+        this.restoredVersionInfo = job.restoredVersionInfo;
+        this.snapshotInfos = job.snapshotInfos;
+        this.colocatePersistInfos = job.colocatePersistInfos;
     }
 
     public RestoreJobState getState() {
@@ -500,8 +521,8 @@ public class RestoreJob extends AbstractJob {
                         "Failed to restore external catalog, errmsg: " + e.getMessage());
                 return;
             }
-            state = RestoreJobState.COMMITTING;
-            globalStateMgr.getEditLog().logRestoreJob(this);
+
+            persistStateChange(RestoreJobState.COMMITTING);
             return;
         }
 
@@ -1038,6 +1059,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; ++i) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
@@ -1077,6 +1103,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; i++) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
@@ -1281,6 +1312,7 @@ public class RestoreJob extends AbstractJob {
                         .setBloomFilterColumnNames(bfColumns)
                         .setBloomFilterFpp(bfFpp)
                         .setIndexes(localTbl.getCopiedIndexes())
+                        .setPrimaryKeyEncodingType(localTbl.getPrimaryKeyEncodingType())
                         .build().toTabletSchema();
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
                     globalStateMgr.getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
@@ -1541,7 +1573,7 @@ public class RestoreJob extends AbstractJob {
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         // ensure modify for all physical partitions, not only for the first one (default physical partition)
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
-            for (MaterializedIndex restoreIdx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex restoreIdx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                 TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), physicalPartition.getId(),
                         restoreIdx.getId(), TStorageMedium.HDD);
                 for (Tablet restoreTablet : restoreIdx.getTablets()) {
@@ -1558,9 +1590,8 @@ public class RestoreJob extends AbstractJob {
     private void waitingAllSnapshotsFinished() {
         if (unfinishedSignatureToId.isEmpty()) {
             snapshotFinishedTime = System.currentTimeMillis();
-            state = RestoreJobState.DOWNLOAD;
 
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.DOWNLOAD);
             for (ColocatePersistInfo colocatePersistInfo : colocatePersistInfos) {
                 globalStateMgr.getEditLog().logColocateAddTable(colocatePersistInfo);
             }
@@ -1570,7 +1601,6 @@ public class RestoreJob extends AbstractJob {
 
         LOG.info("waiting {} replicas to make snapshot: [{}]. {}",
                 unfinishedSignatureToId.size(), unfinishedSignatureToId, this);
-        return;
     }
 
     private void downloadSnapshots() {
@@ -1649,9 +1679,7 @@ public class RestoreJob extends AbstractJob {
     protected void waitingAllDownloadFinished() {
         if (unfinishedSignatureToId.isEmpty()) {
             downloadFinishedTime = System.currentTimeMillis();
-            state = RestoreJobState.COMMIT;
-
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.COMMIT);
             LOG.info("finished to download. {}", this);
         }
 
@@ -1819,9 +1847,7 @@ public class RestoreJob extends AbstractJob {
         if (backupMeta != null && !backupMeta.getCatalogs().isEmpty()) {
             if (!isReplay) {
                 finishedTime = System.currentTimeMillis();
-                state = RestoreJobState.FINISHED;
-
-                globalStateMgr.getEditLog().logRestoreJob(this);
+                persistStateChange(RestoreJobState.FINISHED);
             }
             LOG.info("job is finished. is replay: {}. {}", isReplay, this);
             return Status.OK;
@@ -1879,9 +1905,7 @@ public class RestoreJob extends AbstractJob {
             snapshotInfos.clear();
 
             finishedTime = System.currentTimeMillis();
-            state = RestoreJobState.FINISHED;
-
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.FINISHED);
 
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
@@ -2057,7 +2081,7 @@ public class RestoreJob extends AbstractJob {
         for (Partition part : restoreTbl.getPartitions()) {
             // ensure clear all physical partitions, not only for the first one (default physical partition)
             for (PhysicalPartition physicalPartition : part.getSubPartitions()) {
-                for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : idx.getTablets()) {
                         globalStateMgr.getTabletInvertedIndex().deleteTablet(tablet.getId());
                     }
@@ -2159,9 +2183,7 @@ public class RestoreJob extends AbstractJob {
             snapshotInfos.clear();
             RestoreJobState curState = state;
             finishedTime = System.currentTimeMillis();
-            state = RestoreJobState.CANCELLED;
-            // log
-            globalStateMgr.getEditLog().logRestoreJob(this);
+            persistStateChange(RestoreJobState.CANCELLED);
 
             LOG.info("finished to cancel restore job. current state: {}. is replay: {}. {}",
                     curState.name(), isReplay, this);
@@ -2361,6 +2383,18 @@ public class RestoreJob extends AbstractJob {
         intersect.retainAll(anotherTbl.getPartitionNames());
         intersectPartNames.addAll(intersect);
         return Status.OK;
+    }
+
+    public RestoreJob copyForPersist() {
+        return new RestoreJob(this);
+    }
+
+    protected void persistStateChange(RestoreJobState newState) {
+        RestoreJob persistJob = this.copyForPersist();
+        persistJob.state = newState;
+        globalStateMgr.getEditLog().logRestoreJob(persistJob, wal -> {
+            this.state = newState;
+        });
     }
 
     @Override

@@ -16,10 +16,10 @@
 
 #include <vector>
 
-#include "exprs/runtime_filter.h"
+#include "base/testutil/assert.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_filter.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

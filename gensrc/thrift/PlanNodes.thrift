@@ -88,6 +88,8 @@ enum TPlanNodeType {
   RAW_VALUES_NODE,
   FETCH_NODE,
   LOOKUP_NODE,
+  BENCHMARK_SCAN_NODE,
+  LAKE_CACHE_STATS_SCAN_NODE
 }
 
 // phases of an execution node
@@ -438,6 +440,9 @@ struct THdfsScanRange {
     // mapping transformed bucket id, used to schedule scan range
     36: optional i32 bucket_id;
 
+    // Iceberg v3 row lineage: first row id of the data file, used to compute _row_id
+    // as first_row_id + row_position for non-compacted files.
+    // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
 }
 
@@ -449,6 +454,11 @@ struct TBinlogScanRange {
 
   // Start offset of binlog consumption
   11: optional Types.TBinlogOffset offset
+}
+
+struct TBenchmarkScanRange {
+  1: optional i64 start_row
+  2: optional i64 row_count
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -464,6 +474,8 @@ struct TScanRange {
   20: optional THdfsScanRange hdfs_scan_range
 
   30: optional TBinlogScanRange binlog_scan_range
+
+  40: optional TBenchmarkScanRange benchmark_scan_range
 }
 
 struct TMySQLScanNode {
@@ -473,6 +485,13 @@ struct TMySQLScanNode {
   4: required list<string> filters
   5: optional i64 limit
   6: optional string temporal_clause
+}
+
+struct TBenchmarkScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string db_name
+  3: optional string table_name
+  4: optional double scale_factor
 }
 
 struct TFileScanNode {
@@ -642,6 +661,11 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+
+  // This field is only used for flat json to provide a uniq id
+  55: optional i32 next_uniq_id
+
+  56: optional bool enable_global_late_materialization
 }
 
 struct TJDBCScanNode {
@@ -688,6 +712,10 @@ struct TLakeScanNode {
   // inverted index
   44: optional bool enable_prune_column_after_index_filter
   45: optional bool enable_gin_filter
+
+  46: optional i32 next_uniq_id
+
+  56: optional bool enable_global_late_materialization
 }
 
 struct TEqJoinCondition {
@@ -1270,6 +1298,9 @@ struct THdfsScanNode {
 
     // describe distribution of local exchange
     25: optional list<Partitions.TBucketProperty> bucket_properties;
+
+    26: optional bool enable_global_late_materialization
+    27: optional i64 scan_node_id
 }
 
 struct TProjectNode {
@@ -1292,6 +1323,7 @@ struct TMetaScanNode {
     // deprecated. use schema key instead
     5: optional i64 schema_id
     6: optional Descriptors.TTableSchemaKey schema_key
+    7: optional i32 next_uniq_id
 }
 
 struct TDecodeNode {
@@ -1324,8 +1356,28 @@ const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 
+// virtual column names
+const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
+const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+const string RSS_ID_COLUMN_NAME = "_rss_id_";
+const string SOURCE_ID_COLUMN_NAME = "_source_id_";
+const string ROW_ID_COLUMN_NAME = "_row_id_";
+const string ROWSET_ID_COLUMN_NAME = "_rowset_id_";
+const string DYNAMIC_RSS_ID_COLUMN_NAME = "_dynamic_rssid_";
+
+const string CACHE_STATS_TABLET_ID_COLUMN_NAME = "tablet_id";
+const string CACHE_STATS_CACHED_BYTES_COLUMN_NAME = "cached_bytes";
+const string CACHE_STATS_TOTAL_BYTES_COLUMN_NAME = "total_bytes";
+
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
+}
+
+struct TCacheStatsScanNode {
+    1: optional Types.TTupleId tuple_id
+    2: optional map<i32, string> id_to_names
+    3: optional i64 table_id
+    4: optional string table_name
 }
 
 // Union of all stream source nodes, distinguished by type
@@ -1472,6 +1524,10 @@ struct TPlanNode {
   81: optional TSelectNode select_node; 
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
+  // Scan node for benchmark
+  84: optional TBenchmarkScanNode benchmark_scan_node;
+
+  85: optional TCacheStatsScanNode cache_stats_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

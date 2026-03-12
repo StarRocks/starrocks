@@ -36,8 +36,10 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdio>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -47,9 +49,7 @@
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
-#include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -96,9 +96,7 @@ public:
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(3U, size);
-        ASSERT_EQ("Hello", column->get_data()[0]);
-        ASSERT_EQ(",", column->get_data()[1]);
-        ASSERT_EQ("StarRocks", column->get_data()[2]);
+        ASSERT_EQ("['Hello', ',', 'StarRocks']", column->debug_string());
 
         size = 1024;
         auto column1 = BinaryColumn::create();
@@ -106,7 +104,7 @@ public:
         status = page_decoder.next_batch(&size, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, size);
-        ASSERT_EQ("StarRocks", column1->get_data()[0]);
+        ASSERT_EQ("StarRocks", column1->immutable_data()[0]);
 
         auto column2 = BinaryColumn::create();
         ASSERT_OK(page_decoder.seek_to_position_in_page(0));
@@ -116,8 +114,7 @@ public:
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
-        ASSERT_EQ("Hello", column2->get_data()[0]);
-        ASSERT_EQ("StarRocks", column2->get_data()[1]);
+        ASSERT_EQ("['Hello', 'StarRocks']", column2->debug_string());
     }
 };
 
@@ -215,15 +212,53 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         ASSERT_EQ(1, selection[4]);
 
         ASSERT_EQ(3, column->size());
-        ASSERT_EQ("c_300", column->get_data()[0]);
-        ASSERT_EQ("d_400", column->get_data()[1]);
-        ASSERT_EQ("e_500", column->get_data()[2]);
+        ASSERT_EQ("['c_300', 'd_400', 'e_500']", column->debug_string());
     }
 
     // Reset decoder
     ASSERT_TRUE(decoder.seek_to_position_in_page(0).ok());
 
-    // Case 2: With NULLs
+    // Case 2: Nullable destination column but the page has no NULL flags (null_data is nullptr).
+    {
+        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+
+        std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+        std::vector<const ColumnPredicate*> predicates;
+        predicates.push_back(predicate.get());
+
+        SparseRange<> range(0, 5);
+        std::vector<uint8_t> selection(5);
+        std::vector<uint16_t> selected_idx(5);
+
+        for (int i = 0; i < 5; ++i) selection[i] = 1;
+
+        Status st = decoder.next_batch_with_filter(column.get(), range, predicates, nullptr, selection.data(),
+                                                   selected_idx.data());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ASSERT_EQ(0, selection[0]);
+        ASSERT_EQ(0, selection[1]);
+        ASSERT_EQ(1, selection[2]);
+        ASSERT_EQ(1, selection[3]);
+        ASSERT_EQ(1, selection[4]);
+
+        ASSERT_EQ(3, column->size());
+        auto nullable_col = down_cast<NullableColumn*>(column.get());
+        auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
+
+        ASSERT_EQ("['c_300', 'd_400', 'e_500']", binary_col->debug_string());
+
+        ASSERT_EQ(3, nullable_col->null_column_raw_ptr()->size());
+        ASSERT_EQ(0, nullable_col->null_column_data()[0]);
+        ASSERT_EQ(0, nullable_col->null_column_data()[1]);
+        ASSERT_EQ(0, nullable_col->null_column_data()[2]);
+        ASSERT_FALSE(nullable_col->has_null());
+    }
+
+    // Reset decoder
+    ASSERT_TRUE(decoder.seek_to_position_in_page(0).ok());
+
+    // Case 3: With NULLs
     {
         // Use NullableColumn with ByteColumn as data
         auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
@@ -263,7 +298,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         auto nullable_col = down_cast<NullableColumn*>(column.get());
         auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
 
-        ASSERT_EQ("d_400", binary_col->get_data()[0]);
+        ASSERT_EQ("d_400", binary_col->immutable_data()[0]);
     }
 }
 
@@ -294,12 +329,45 @@ TEST_F(BinaryPlainPageTest, TestReadByRowids) {
     Status st = decoder.read_by_rowids(0, rowids, &num_read, column.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(4, num_read);
-    ASSERT_EQ(4, column->size());
+    ASSERT_EQ("['val_1', 'val_3', 'val_5', 'val_8']", column->debug_string());
+}
 
-    ASSERT_EQ("val_1", column->get_data()[0]);
-    ASSERT_EQ("val_3", column->get_data()[1]);
-    ASSERT_EQ("val_5", column->get_data()[2]);
-    ASSERT_EQ("val_8", column->get_data()[3]);
+TEST_F(BinaryPlainPageTest, TestDictFilterSelectionLargeDictSize) {
+    // Ensure dictionary-page predicate evaluation remains correct when dict_size > 65535.
+    // This is required by predicate-late-materialization which evaluates predicates on DICTIONARY_PAGE.
+    constexpr uint32_t kNumDictValues = 70000;
+
+    PageBuilderOptions options;
+    options.data_page_size = 2 * 1024 * 1024; // big enough for 70k small strings + offsets
+    BinaryPlainPageBuilder builder(options);
+
+    char buf[16];
+    for (uint32_t i = 0; i < kNumDictValues; ++i) {
+        // Fixed-width numeric part to keep lexicographic order aligned with numeric order.
+        snprintf(buf, sizeof(buf), "k%06u", i);
+        ASSERT_TRUE(builder.add_slice(Slice(buf)));
+    }
+
+    OwnedSlice dict_page = builder.finish()->build();
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(dict_page.slice());
+    ASSERT_TRUE(decoder.init().ok());
+    ASSERT_EQ(kNumDictValues, decoder.count());
+
+    std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "k065536"));
+    std::vector<const ColumnPredicate*> predicates;
+    predicates.push_back(predicate.get());
+
+    const uint8_t* selection = nullptr;
+    uint32_t dict_size = 0;
+    uint32_t selected_count = 0;
+    ASSERT_OK(decoder.get_dict_filter_selection(predicates, &selection, &dict_size, &selected_count));
+
+    ASSERT_EQ(kNumDictValues, dict_size);
+    ASSERT_NE(nullptr, selection);
+    ASSERT_EQ(kNumDictValues - 65536, selected_count);
+    ASSERT_EQ(0, selection[65535]);
+    ASSERT_EQ(1, selection[65536]);
+    ASSERT_EQ(1, selection[kNumDictValues - 1]);
 }
 
 } // namespace starrocks

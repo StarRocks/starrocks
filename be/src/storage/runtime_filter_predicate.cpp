@@ -16,10 +16,10 @@
 
 #include <cstring>
 
-#include "common/config.h"
+#include "base/simd/simd.h"
+#include "common/config_rowset_fwd.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_tracker.h"
-#include "simd/simd.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
@@ -140,6 +140,7 @@ Status DictColumnRuntimeFilterPredicate::prepare() {
     }
     auto binary_column = BinaryColumn::create();
     std::vector<Slice> data_slice;
+    data_slice.reserve(_dict_words.size());
     for (const auto& word : _dict_words) {
         data_slice.emplace_back(word.data(), word.size());
     }
@@ -353,8 +354,9 @@ Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFil
         std::vector<Slice> all_words;
         RETURN_IF_ERROR(column_iterators[column_id]->fetch_all_dict_words(&all_words));
         std::vector<std::string> dict_words;
+        dict_words.reserve(all_words.size());
         for (const auto& word : all_words) {
-            dict_words.emplace_back(std::string(word.get_data(), word.get_size()));
+            dict_words.emplace_back(word.get_data(), word.get_size());
         }
         predicates[i] = obj_pool->add(new DictColumnRuntimeFilterPredicate(rf_desc, column_id, std::move(dict_words)));
     }

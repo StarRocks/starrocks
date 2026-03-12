@@ -33,9 +33,12 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -130,6 +133,7 @@ import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.TypeFactory;
 
 import java.util.List;
@@ -392,6 +396,29 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("IsSetBadForce", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", StringType.STRING))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", StringType.STRING))
+                .addColumn(new Column("ErrorMsg", StringType.STRING))
                 .build();
     }
 
@@ -768,6 +795,18 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("Type", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("IsMutable", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                          Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(5)))
+                .addColumn(new Column("Interval", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("StorageVolume", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("LastSnapshotTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("NextSnapshotTime", TypeFactory.createVarcharType(20)))
                 .build();
     }
 

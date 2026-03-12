@@ -19,6 +19,7 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -26,7 +27,6 @@
 #include "column/type_traits.h"
 #include "common/logging.h"
 #include "function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -124,10 +124,9 @@ public:
  */
 template <typename OP>
 struct StringUnaryFunction {
-public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
-        auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
+        const auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->immutable_data();
 
         auto result = RunTimeColumnType<TYPE_VARCHAR>::create(std::forward<Args>(args)...);
 

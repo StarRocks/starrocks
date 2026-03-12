@@ -38,35 +38,43 @@
 
 #include <memory>
 
+#include "base/string/utf8.h"
 #include "bitmap_range_iterator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
 using Roaring = roaring::Roaring;
 
-BitmapIndexReader::BitmapIndexReader(int32_t gram_num) : _gram_num(gram_num) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
+BitmapIndexReader::BitmapIndexReader(int32_t gram_num, bool owned_mem_tracker)
+        : _gram_num(gram_num), _owned_mem_tracker(owned_mem_tracker) {
+    if (_owned_mem_tracker) {
+        MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
+    }
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
+    if (_owned_mem_tracker) {
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
+    }
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                     mem_usage() - sizeof(BitmapIndexReader));
+            if (_owned_mem_tracker) {
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                                         mem_usage() - sizeof(BitmapIndexReader));
+            }
         } else {
             _reset();
         }

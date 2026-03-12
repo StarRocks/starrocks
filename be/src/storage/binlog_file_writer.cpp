@@ -14,10 +14,11 @@
 
 #include "storage/binlog_file_writer.h"
 
+#include "base/hash/crc32c.h"
+#include "base/path/filesystem_util.h"
+#include "fs/fs_factory.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/page_io.h"
-#include "util/crc32c.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 
@@ -38,7 +39,7 @@ Status BinlogFileWriter::init() {
     RETURN_IF_ERROR(_check_state(WAITING_INIT));
     // 1. create file
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_file_path))
     WritableFileOptions write_option;
     write_option.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
     ASSIGN_OR_RETURN(_file, fs->new_writable_file(write_option, _file_path))
@@ -89,7 +90,7 @@ Status BinlogFileWriter::init(BinlogFileMetaPB* previous_meta) {
     RETURN_IF_ERROR(_check_state(WAITING_INIT));
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_file_path))
 
     // 1. try to truncate file first
     ASSIGN_OR_RETURN(auto file_size, fs->get_file_size(_file_path));
@@ -523,7 +524,7 @@ Status BinlogFileWriter::_truncate_file(int64_t file_size) {
     //  a method to do it currently. Maybe we can improve it in the future?
     _file.reset();
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_file_path))
     WritableFileOptions write_option;
     // use MUST_EXIST to append to the end of file after opening the file again
     write_option.mode = FileSystem::MUST_EXIST;

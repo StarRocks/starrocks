@@ -37,11 +37,16 @@ StatusOr<FileInfo> LocalPrimaryKeyCompactionConflictResolver::filename() const {
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
     const auto& schema = _rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
     return ChunkHelper::convert_schema(schema, pk_columns);
+}
+
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyCompactionConflictResolver::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
 }
 
 Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
@@ -51,7 +56,8 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     auto pkey_schema = generate_pkey_schema();
     RowsetReleaseGuard guard(_rowset->shared_from_this());
     const auto& schema = _rowset->schema();
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments(), "itrs.size != num_segments");
     // init delvec loader
     auto delvec_loader = std::make_unique<LocalDelvecLoader>(_tablet->data_dir()->get_meta());

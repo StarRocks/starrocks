@@ -36,6 +36,11 @@
 
 #include <functional>
 
+#include "base/template/mustache/mustache.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/util/debug_util.h"
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
@@ -46,11 +51,6 @@
 #include "http/http_response.h"
 #include "http/http_status.h"
 #include "http/utils.h"
-#include "util/cpu_info.h"
-#include "util/debug_util.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
-#include "util/mustache/mustache.h"
 
 using strings::Substitute;
 

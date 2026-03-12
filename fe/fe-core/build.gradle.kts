@@ -478,7 +478,7 @@ tasks.test {
 
 // Checkstyle configuration to match Maven behavior
 checkstyle {
-    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 
@@ -500,9 +500,14 @@ tasks.withType<Checkstyle>().configureEach {
 
 // Bind checkstyle to run before compilation
 tasks.compileJava {
+    dependsOn("checkstyleMain")
     dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
     // Add explicit dependency on hive-udf shadowJar task
     dependsOn(":plugin:hive-udf:shadowJar")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
 }
 
 // Configure JAR task

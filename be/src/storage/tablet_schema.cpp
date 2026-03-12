@@ -43,6 +43,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/metadata_util.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 #include "tablet_meta.h"
@@ -375,6 +376,8 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
+    partial_tablet_schema_pb.set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(src_tablet_schema->primary_key_encoding_type()));
     std::vector<ColumnId> sort_key_idxes;
     // from referenced column name to index, used for build sort key idxes later.
     std::map<std::string, uint32_t> col_name_to_idx;
@@ -429,6 +432,16 @@ TabletSchema::TabletSchema(const TabletSchema& tablet_schema) {
 
 TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
     return std::make_shared<TabletSchema>(tablet_schema);
+}
+
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TabletColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
+    dst_schema->_clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->_generate_sort_key_idxes();
+    return dst_schema;
 }
 
 TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {
@@ -547,6 +560,16 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
     _schema_version = schema.schema_version();
+
+    if (schema.has_primary_key_encoding_type()) {
+        _primary_key_encoding_type = PrimaryKeyEncoder::encoding_type_from_pb(schema.primary_key_encoding_type());
+    } else if (schema.keys_type() == KeysType::PRIMARY_KEYS) {
+        // Compatibility fallback: schemas created before `primary_key_encoding_type` was introduced.
+        // PRIMARY_KEYS tables used V1 encoding historically, so default to V1 when the field is absent.
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    } else {
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    }
 }
 
 Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t version,
@@ -558,6 +581,7 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
     _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
     _compression_type = ori_tablet_schema.compression_type();
     _compression_level = ori_tablet_schema.compression_level();
+    _primary_key_encoding_type = ori_tablet_schema._primary_key_encoding_type;
 
     // todo(yixiu): unique_id
     _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
@@ -640,6 +664,9 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
         auto* tablet_index_pb = tablet_schema_pb->add_table_indices();
         index.to_schema_pb(tablet_index_pb);
     }
+    // for simplicity, we always persist the primary key encoding type even for non-cloud-native tables
+    tablet_schema_pb->set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(_primary_key_encoding_type));
 }
 
 Status TabletSchema::get_indexes_for_column(int32_t col_unique_id,
@@ -693,20 +720,6 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
         if (column.name() == field_name) {
             return ordinal;
         }
-    }
-    return -1;
-}
-
-size_t TabletSchema::field_index(std::string_view field_name, std::string_view extra_column_name) const {
-    int ordinal = -1;
-    for (auto& column : _cols) {
-        ordinal++;
-        if (column.name() == field_name) {
-            return ordinal;
-        }
-    }
-    if (field_name == extra_column_name) {
-        return ordinal + 1;
     }
     return -1;
 }
@@ -781,6 +794,7 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
     if (a._has_bf_fpp) {
         if (std::abs(a._bf_fpp - b._bf_fpp) > 1e-6) return false;
     }
+    if (a._primary_key_encoding_type != b._primary_key_encoding_type) return false;
     return true;
 }
 
@@ -823,6 +837,7 @@ std::string TabletSchema::debug_string() const {
        << ",num_key_columns=" << _num_key_columns << ",num_short_key_columns=" << _num_short_key_columns
        << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",next_column_unique_id=" << _next_column_unique_id
        << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    ss << ",primary_key_encoding_type=" << static_cast<int32_t>(_primary_key_encoding_type);
     return ss.str();
 }
 

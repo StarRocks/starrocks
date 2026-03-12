@@ -170,6 +170,7 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.meta.SqlDigestBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -219,6 +220,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
@@ -271,6 +273,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -282,6 +285,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+@IgnoreMemoryTrack
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
@@ -655,6 +659,8 @@ public class GlobalStateMgr {
     private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
+            // set the global read-only variable again, avoid static variable initialization order chaos
+            GlobalVariable.runMode = Config.run_mode;
         }
 
         if (RunMode.isSharedDataMode()) {
@@ -1378,6 +1384,18 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
+
+        // trigger actions after transferring to leader
+        triggerOnTransferToLeader();
+    }
+
+    private void triggerOnTransferToLeader() {
+        try {
+            // trigger to load mv's plan cache async
+            CachingMvPlanContextBuilder.getInstance().triggerPendingMVPlanCacheLoads();
+        } catch (Throwable t) {
+            LOG.warn("Failed to trigger loading mv's plan cache", t);
+        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1757,7 +1775,14 @@ public class GlobalStateMgr {
 
         // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
         boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
-        for (MaterializedView mv : topoOrder) {
+        int size = topoOrder.size();
+        for (int i = 0; i < size; i++) {
+            MaterializedView mv = topoOrder.get(i);
+            String dbName = Optional.ofNullable(localMetastore.getDb(mv.getDbId()))
+                    .map(Database::getFullName)
+                    .orElse(String.valueOf(mv.getDbId()));
+            LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:{}",
+                    i + 1, size, dbName, mv.getName(), isReloadAsync);
             // set `postLoadImage` flag to true to indicate that this is called after image loading
             mv.onReload(isReloadAsync);
         }
@@ -2371,18 +2396,6 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
-    }
-
-    public void markLeaderTransferred() {
-        // Set isReady to false, so that the leader info will be got from HA protocol, see NodeMgr.getLeaderIpAndRpcPort
-        isReady.set(false);
-        feType = FrontendNodeType.FOLLOWER;
-        journalWriter.setLeaderTransferred();
-    }
-
-    public boolean isLeaderTransferred() {
-        return journalWriter != null
-                && journalWriter.isLeaderTransferred();
     }
 
     public void setSynchronizedTime(long time) {

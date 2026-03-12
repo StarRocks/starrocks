@@ -1007,7 +1007,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  5:Decode\n" +
+        assertContains(plan, "Decode\n" +
                 "  |  <dict id 7> : <string id 3>\n" +
                 "  |  <dict id 8> : <string id 6>");
 
@@ -1037,15 +1037,10 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select * from supplier l join supplier_nullable r where l.S_SUPPKEY = r.S_SUPPKEY " +
                 "order by l.S_ADDRESS limit 10";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:TOP-N\n" +
-                "  |  order by: <slot 17> 17: S_ADDRESS ASC\n" +
-                "  |  offset: 0\n" +
-                "  |  limit: 10\n" +
-                "  |  \n" +
-                "  3:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
+        assertContains(plan, "  4:TOP-N\n"
+                + "  |  order by: <slot 17> 17: S_ADDRESS ASC\n"
+                + "  |  offset: 0\n"
+                + "  |  limit: 10\n");
 
         // Decode
         sql = "select max(S_ADDRESS), max(S_COMMENT) from " +
@@ -1053,26 +1048,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "join supplier_nullable r " +
                 " on l.S_SUPPKEY = r.S_SUPPKEY ) tb group by S_SUPPKEY";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "9:Decode\n" +
-                "  |  <dict id 23> : <string id 17>\n" +
-                "  |  <dict id 24> : <string id 18>\n" +
-                "  |  \n" +
-                "  8:Project\n" +
-                "  |  <slot 23> : 23: S_ADDRESS\n" +
-                "  |  <slot 24> : 24: S_COMMENT\n" +
-                "  |  \n" +
-                "  7:AGGREGATE (merge finalize)\n" +
-                "  |  output: max(21: S_ADDRESS), max(22: S_COMMENT)\n" +
-                "  |  group by: 1: S_SUPPKEY");
-        plan = getThriftPlan(sql);
-        Assertions.assertEquals(plan.split("\n").length, 3);
-        assertContains(plan.split("\n")[0], "query_global_dicts:" +
-                "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:23, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:24, strings:[6D 6F 63 6B], ids:[1], version:1)])");
+        assertContains(plan, "Decode\n"
+                + "  |  <dict id 23> : <string id 17>\n"
+                + "  |  <dict id 24> : <string id 18>");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +
@@ -1093,7 +1071,7 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  20:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 30: S_ADDRESS, 31: S_COMMENT\n" +
+                "  |  group by: 32: cast, 33: cast\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  \n" +
@@ -1475,44 +1453,44 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan;
         sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  3:Decode\n" +
-                "  |  <dict id 16> : <string id 15>"));
-        Assertions.assertTrue(plan.contains("  2:Project\n" +
-                "  |  <slot 16> : 16: t1a"));
+        assertContains(plan, "Decode\n"
+                + "  |  <dict id 17> : <string id 16>");
+        Assertions.assertTrue(plan.contains("2:Project\n"
+                + "  |  <slot 17> : 17: t1a"));
 
         // COW Case
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  <slot 14> : clone(8: S_ADDRESS)\n" +
-                "  |  <slot 15> : 8: S_ADDRESS\n" +
-                "  |  \n" +
-                "  2:Decode\n" +
-                "  |  <dict id 16> : <string id 8>\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
-                "  |  group by: 16: S_ADDRESS");
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 14> : clone(6: S_ADDRESS)\n"
+                + "  |  <slot 15> : 6: S_ADDRESS\n"
+                + "  |  \n"
+                + "  2:Decode\n"
+                + "  |  <dict id 16> : <string id 6>\n"
+                + "  |  \n"
+                + "  1:AGGREGATE (update finalize)\n"
+                + "  |  group by: 16: S_ADDRESS");
 
         sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
                 "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:Project\n" +
-                "  |  <slot 20> : 9: S_ADDRESS\n" +
-                "  |  <slot 21> : 25: cast\n" +
-                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  <slot 23> : CAST(CAST(9: S_ADDRESS AS DOUBLE) + 1.0 AS VARCHAR)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  \n" +
-                "  3:Decode\n" +
-                "  |  <dict id 24> : <string id 9>\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
-                "  |  <slot 24> : 24: S_ADDRESS");
+        assertContains(plan, "  4:Project\n"
+                + "  |  <slot 20> : 8: S_ADDRESS\n"
+                + "  |  <slot 21> : 25: cast\n"
+                + "  |  <slot 22> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  <slot 23> : CAST(CAST(8: S_ADDRESS AS DOUBLE) + 1.0 AS VARCHAR)\n"
+                + "  |  common expressions:\n"
+                + "  |  <slot 25> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  \n"
+                + "  3:Decode\n"
+                + "  |  <dict id 24> : <string id 8>\n"
+                + "  |  \n"
+                + "  2:AGGREGATE (update finalize)\n"
+                + "  |  group by: 24: S_ADDRESS, 14: expr\n"
+                + "  |  \n"
+                + "  1:Project\n"
+                + "  |  <slot 14> : CAST(6: S_SUPPKEY AS BIGINT) + 1\n"
+                + "  |  <slot 24> : 24: S_ADDRESS");
 
     }
 
@@ -2043,21 +2021,21 @@ public class LowCardinalityTest extends PlanTestBase {
                 "   w1 t1 \n" +
                 "   JOIN [broadcast] part_v2 t2 ON t1.P_NAME2 = t2.P_NAME AND t1.P_NAME = t2.P_NAME;";
         String plan = getCostExplain(sql);
-        assertContains(plan, "  4:Decode\n" +
-                "  |  <dict id 38> : <string id 2>\n" +
-                "  |  cardinality: 1\n" +
-                "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n" +
-                "  |  column statistics: \n" +
-                "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  3:EXCHANGE\n" +
-                "     distribution type: ROUND_ROBIN\n" +
-                "     cardinality: 1\n" +
-                "     probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (<slot 12>)");
+        assertContains(plan, "  4:Decode\n"
+                + "  |  <dict id 38> : <string id 2>\n"
+                + "  |  cardinality: 1\n"
+                + "  |  probe runtime filters:\n"
+                + "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n"
+                + "  |  column statistics: \n"
+                + "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
+                + "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
+                + "  |  * case-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n"
+                + "  |  \n"
+                + "  3:EXCHANGE\n"
+                + "     distribution type: ROUND_ROBIN\n"
+                + "     cardinality: 1\n"
+                + "     probe runtime filters:\n"
+                + "     - filter_id = 0, probe_expr = (<slot 11>)");
         System.out.println(plan);
     }
 

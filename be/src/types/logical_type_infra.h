@@ -45,6 +45,13 @@ namespace starrocks {
     M(TYPE_DECIMAL128)               \
     M(TYPE_DECIMAL256)
 
+#define APPLY_FOR_ALL_OBJECT_TYPE(M) \
+    M(TYPE_HLL)                      \
+    M(TYPE_OBJECT)                   \
+    M(TYPE_PERCENTILE)               \
+    M(TYPE_JSON)                     \
+    M(TYPE_VARIANT)
+
 #define APPLY_FOR_ALL_SCALAR_TYPE(M) \
     APPLY_FOR_ALL_NUMBER_TYPE(M)     \
     M(TYPE_DECIMALV2)                \
@@ -125,6 +132,20 @@ namespace starrocks {
     M(TYPE_DECIMAL32)                             \
     M(TYPE_DECIMAL64)                             \
     M(TYPE_DATE)
+
+#define APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M) \
+    M(TYPE_BOOLEAN)                            \
+    M(TYPE_TINYINT)                            \
+    M(TYPE_SMALLINT)                           \
+    M(TYPE_INT)                                \
+    M(TYPE_BIGINT)                             \
+    M(TYPE_LARGEINT)                           \
+    M(TYPE_DATE)                               \
+    M(TYPE_DATETIME)
+
+#define APPLY_FOR_ALL_PK_SUPPORT_TYPE(M)   \
+    APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M) \
+    M(TYPE_VARCHAR)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \

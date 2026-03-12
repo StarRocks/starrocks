@@ -45,9 +45,11 @@ import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.LakeTabletStatus;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
@@ -423,7 +425,7 @@ public class TabletRepairHelperTest {
             TabletMetadataPB metadata = Deencapsulation.invoke(TabletRepairHelper.class, "getValidTabletMetadata", entry);
             Assertions.assertNotNull(metadata);
             Assertions.assertEquals(tabletId11, metadata.id);
-            Assertions.assertEquals(maxVersion, metadata.version);
+            Assertions.assertEquals(-1 * maxVersion, metadata.version);
             Assertions.assertNull(metadata.sstableMeta); // sstableMeta should be cleared
         }
 
@@ -617,7 +619,7 @@ public class TabletRepairHelperTest {
             Assertions.assertEquals(2, tabletToValidMetadata.size());
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId11));
             // Should pick maxVersion - 1 because maxVersion has invalid missing files
-            Assertions.assertEquals(maxVersion - 1, tabletToValidMetadata.get(tabletId11).version);
+            Assertions.assertEquals(-1 * (maxVersion - 1), tabletToValidMetadata.get(tabletId11).version);
             Assertions.assertNull(tabletToValidMetadata.get(tabletId11).sstableMeta); // should be cleared
 
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId12));
@@ -980,4 +982,314 @@ public class TabletRepairHelperTest {
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
                         WarehouseComputeResource.DEFAULT));
     }
+
+    @Test
+    public void testDryRunRepairRecoverable() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, maxVersion, null));
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, minVersion, null));
+
+                TabletResult tr2 = new TabletResult();
+                tr2.tabletId = tabletId12;
+                tr2.status = new StatusPB();
+                tr2.status.statusCode = 0;
+                tr2.metadataEntries = Lists.newArrayList();
+                tr2.metadataEntries.add(createTabletMetadataEntry(tabletId12, maxVersion - 1, null));
+                tr2.metadataEntries.add(createTabletMetadataEntry(tabletId12, minVersion, null));
+
+                response.tabletResults = Lists.newArrayList(tr1, tr2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        stmt.setEnforceConsistentVersion(false);
+        List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
+                WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(1, result.size());
+        
+        List<String> row = result.get(0);
+        Assertions.assertEquals("4", row.get(0)); // PartitionId
+        Assertions.assertEquals("8", row.get(1)); // VisibleVersion
+        Assertions.assertEquals("RECOVERABLE", row.get(2)); // RepairStatus
+        
+        String tabletInfoJson = row.get(3);
+        Assertions.assertTrue(tabletInfoJson.contains("\"tabletId\":11"));
+        Assertions.assertTrue(tabletInfoJson.contains("\"recoverVersion\":8"));
+        
+        Assertions.assertTrue(tabletInfoJson.contains("\"tabletId\":12"));
+        Assertions.assertTrue(tabletInfoJson.contains("\"recoverVersion\":7"));
+        
+        Assertions.assertEquals("", row.get(4)); // ErrorMsg
+    }
+
+    @Test
+    public void testDryRunRepairUnrecoverable() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                // tablet1 with 1 version metadata
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, maxVersion, null));
+
+                // tablet2 with no metadata (UNRECOVERABLE)
+                TabletResult tr2 = new TabletResult();
+                tr2.tabletId = tabletId12;
+                tr2.status = new StatusPB();
+                tr2.status.statusCode = 0;
+                tr2.metadataEntries = Lists.newArrayList();
+
+                response.tabletResults = Lists.newArrayList(tr1, tr2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        stmt.setEnforceConsistentVersion(false);
+        List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
+                WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(1, result.size());
+        
+        List<String> row = result.get(0);
+        Assertions.assertEquals("4", row.get(0)); // PartitionId
+        Assertions.assertEquals("8", row.get(1)); // VisibleVersion
+        Assertions.assertEquals("UNRECOVERABLE", row.get(2)); // RepairStatus
+        
+        String tabletInfoJson = row.get(3);
+        Assertions.assertEquals("[]", tabletInfoJson);
+
+        Assertions.assertTrue(row.get(4).contains("no tablet metadatas were found for tablets"));  // ErrorMsg
+    }
+
+    @Test
+    public void testDryRunRepairNormal() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                // tablet1 with valid metadata
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, maxVersion, null));
+
+                // tablet2 with valid metadata
+                TabletResult tr2 = new TabletResult();
+                tr2.tabletId = tabletId12;
+                tr2.status = new StatusPB();
+                tr2.status.statusCode = 0;
+                tr2.metadataEntries = Lists.newArrayList();
+                tr2.metadataEntries.add(createTabletMetadataEntry(tabletId12, maxVersion, null));
+
+                response.tabletResults = Lists.newArrayList(tr1, tr2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        stmt.setEnforceConsistentVersion(false);
+        List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
+                WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(1, result.size());
+        
+        List<String> row = result.get(0);
+        Assertions.assertEquals("4", row.get(0)); // PartitionId
+        Assertions.assertEquals("8", row.get(1)); // VisibleVersion
+        Assertions.assertEquals("NORMAL", row.get(2)); // RepairStatus
+        
+        String tabletInfoJson = row.get(3);
+        Assertions.assertEquals("[]", tabletInfoJson); // Should be empty for NORMAL
+        
+        Assertions.assertEquals("", row.get(4)); // ErrorMsg
+    }
+
+    @Test
+    public void testDryRunRepairException() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) throws RpcException {
+                throw new RpcException("rpc exception");
+            }
+        };
+
+        AdminRepairTableStmt stmt = new AdminRepairTableStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList("db", "table")),
+                        new PartitionRef(Lists.newArrayList("p1"), false, NodePosition.ZERO),
+                        NodePosition.ZERO),
+                Maps.newHashMap(),
+                NodePosition.ZERO);
+
+        stmt.setEnforceConsistentVersion(false);
+        List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
+                WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(1, result.size());
+
+        List<String> row = result.get(0);
+        Assertions.assertEquals("4", row.get(0)); // PartitionId
+        Assertions.assertEquals("8", row.get(1)); // VisibleVersion
+        Assertions.assertEquals("UNKNOWN", row.get(2)); // RepairStatus
+
+        String tabletInfoJson = row.get(3);
+        Assertions.assertEquals("[]", tabletInfoJson);
+
+        Assertions.assertEquals("ERROR: rpc exception", row.get(4)); // ErrorMsg
+    }
+    @Test
+    public void testGetTabletStatus() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                // tablet1 with valid metadata
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, maxVersion, null));
+
+                // tablet2 with missing data files
+                TabletResult tr2 = new TabletResult();
+                tr2.tabletId = tabletId12;
+                tr2.status = new StatusPB();
+                tr2.status.statusCode = 0;
+                tr2.metadataEntries = Lists.newArrayList();
+                tr2.metadataEntries.add(createTabletMetadataEntry(
+                        tabletId12, maxVersion, Lists.newArrayList("file1.dat", "file2.dat", "file3.dat")));
+
+                response.tabletResults = Lists.newArrayList(tr1, tr2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        // case 1: no filter
+        List<List<String>> result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), null, null, 2, WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(2, result.size());
+
+        List<String> row1 = result.get(0);
+        Assertions.assertEquals("11", row1.get(0)); // tabletId
+        Assertions.assertEquals("4", row1.get(1)); // partitionId
+        Assertions.assertEquals("8", row1.get(2)); // version
+        Assertions.assertEquals("NORMAL", row1.get(3)); // status
+        Assertions.assertEquals("0", row1.get(4)); // missingFileCount
+        Assertions.assertEquals("[]", row1.get(5)); // missingFiles
+
+        List<String> row2 = result.get(1);
+        Assertions.assertEquals("12", row2.get(0));
+        Assertions.assertEquals("4", row2.get(1));
+        Assertions.assertEquals("8", row2.get(2));
+        Assertions.assertEquals("MISSING_DATA", row2.get(3));
+        Assertions.assertEquals("3", row2.get(4));
+        Assertions.assertEquals("[file1.dat, file2.dat, ... 1 more]", row2.get(5));
+
+        // case 2: filter by NORMAL
+        result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), LakeTabletStatus.NORMAL, BinaryType.EQ, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("11", result.get(0).get(0));
+
+        // case 3: filter by MISSING_DATA
+        result = TabletRepairHelper.getTabletStatus(db, table, Lists.newArrayList("p1"), LakeTabletStatus.MISSING_DATA,
+                BinaryType.EQ, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("12", result.get(0).get(0));
+        Assertions.assertEquals("[file1.dat, file2.dat, file3.dat]", result.get(0).get(5)); // check limit=5 works
+        
+        // case 4: filter != NORMAL
+        result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), LakeTabletStatus.NORMAL, BinaryType.NE, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("12", result.get(0).get(0));
+    }
+
 }

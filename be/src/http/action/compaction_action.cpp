@@ -38,6 +38,9 @@
 #include <sstream>
 #include <string>
 
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/tracer.h"
@@ -49,6 +52,7 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -58,10 +62,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -325,6 +326,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
         // do all tablets
         for (auto& itr : tablets_with_small_segment_files) {
             vector<uint32_t> rowsetids;
+            rowsetids.reserve(itr.second.size());
             for (const auto& rowset_segments_pair : itr.second) {
                 rowsetids.emplace_back(rowset_segments_pair.first);
             }

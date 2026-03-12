@@ -30,8 +30,8 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -467,10 +467,10 @@ TEST_F(VectorizedCaseExprTest, whenNullIntCaseElse) {
             for (int j = 0; j < ptr->size(); ++j) {
                 if (j % 2) {
                     ASSERT_FALSE(ptr->is_null(j));
-                    ASSERT_EQ(s3, v->get_data()[j]);
+                    ASSERT_EQ(s3, v->get_slice(j));
                 } else {
                     ASSERT_FALSE(ptr->is_null(j));
-                    ASSERT_EQ(s2, v->get_data()[j]);
+                    ASSERT_EQ(s2, v->get_slice(j));
                 }
             }
         }

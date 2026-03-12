@@ -37,8 +37,11 @@
 #include <string>
 #include <thread>
 
+#include "base/string/utf8.h"
+#include "base/testutil/assert.h"
 #include "column/column_viewer.h"
 #include "fs/fs_memory.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -47,8 +50,6 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
-#include "testutil/assert.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -455,7 +456,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
             auto res = BooleanColumn::create();
             const auto& binary_col = down_cast<const BinaryColumn&>(value_column);
             for (size_t i = 0; i < binary_col.size(); ++i) {
-                Slice s = binary_col.get_data()[i];
+                Slice s = binary_col.get_slice(i);
                 res->append(s.to_string().find('a') != std::string::npos);
             }
             return res;
@@ -569,6 +570,120 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         delete reader;
         delete iter;
     }
+}
+
+// Verify that BitmapIndexReader with owned_mem_tracker=false does NOT affect the
+// bitmap_index_mem_tracker during construction, load, or destruction.
+TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
+    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/owned_false";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    {
+        // Create with owned_mem_tracker=false.
+        BitmapIndexReader reader(-1, false);
+
+        // Construction should NOT change the tracker.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption(), baseline);
+        }
+
+        // Load should succeed.
+        ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+        ASSERT_TRUE(first_load);
+
+        // After load, tracker should still be unchanged because owned_mem_tracker=false.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption(), baseline);
+        }
+
+        // Verify the reader is functional.
+        ASSERT_GT(reader.mem_usage(), sizeof(BitmapIndexReader));
+    }
+    // After destruction, tracker should remain at baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that BitmapIndexReader with owned_mem_tracker=true (default) properly tracks
+// memory via bitmap_index_mem_tracker during construction, load, and destruction.
+TEST_F(BitmapIndexTest, test_owned_mem_tracker_true_tracks_memory) {
+    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/owned_true";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    {
+        // Create with default owned_mem_tracker=true.
+        BitmapIndexReader reader;
+
+        // Construction should consume sizeof(BitmapIndexReader).
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BitmapIndexReader)));
+        }
+
+        // Load should succeed.
+        ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+        ASSERT_TRUE(first_load);
+
+        // After load, tracker should have consumed the full mem_usage.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(reader.mem_usage()));
+            ASSERT_GT(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BitmapIndexReader)));
+        }
+    }
+    // After destruction, tracker should return to baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that BitmapIndexReader's mem_usage() returns sizeof(BitmapIndexReader) before load
+// and includes IndexedColumnReader memory after load.
+TEST_F(BitmapIndexTest, test_mem_usage_before_and_after_load) {
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/mem_usage_check";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    BitmapIndexReader reader;
+
+    // Before load: mem_usage should be sizeof(BitmapIndexReader) since internal readers are null.
+    ASSERT_EQ(reader.mem_usage(), sizeof(BitmapIndexReader));
+    ASSERT_FALSE(reader.loaded());
+
+    ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+    ASSERT_TRUE(first_load);
+    ASSERT_TRUE(reader.loaded());
+
+    // After load: mem_usage should be larger (includes dict and bitmap column readers).
+    ASSERT_GT(reader.mem_usage(), sizeof(BitmapIndexReader));
 }
 
 } // namespace starrocks

@@ -17,17 +17,18 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include "base/testutil/assert.h"
+#include "base/time/monotime.h"
 #include "brpc/controller.h"
+#include "common/config_merge_commit_fwd.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
-#include "testutil/assert.h"
-#include "util/bthreads/executor.h"
-#include "util/monotime.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

@@ -17,10 +17,11 @@
 #include <chrono>
 #include <thread>
 
-#include "compaction_manager.h"
+#include "common/config_compaction_fwd.h"
+#include "common/thread/thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "util/global_metrics_registry.h"
 
 using namespace std::chrono_literals;
 
@@ -42,6 +43,24 @@ void CompactionManager::stop() {
     if (_update_candidate_pool) {
         _update_candidate_pool->shutdown();
     }
+}
+
+bool CompactionManager::check_if_exceed_max_task_num() {
+    bool exceed = false;
+    if (config::max_compaction_concurrency == 0) {
+        LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
+        exceed = true;
+    }
+    std::lock_guard lg(_tasks_mutex);
+    size_t running_tasks_num = 0;
+    for (const auto& it : _running_tasks) {
+        running_tasks_num += it.second.size();
+    }
+    if (running_tasks_num >= _max_task_num) {
+        VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
+        exceed = true;
+    }
+    return exceed;
 }
 
 void CompactionManager::schedule() {

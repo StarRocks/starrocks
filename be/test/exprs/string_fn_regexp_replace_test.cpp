@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <gtest/gtest.h>
 #include <hs/hs.h>
-#include <testutil/assert.h>
 
 #include <memory>
 #include <random>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "bench/bench_util.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/string_functions.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

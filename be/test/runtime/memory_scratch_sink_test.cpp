@@ -51,8 +51,11 @@
 #include <cstdlib>
 #include <iostream>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exprs/expr.h"
@@ -66,7 +69,6 @@
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "types/logical_type.h"
-#include "util/blocking_queue.hpp"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -239,10 +241,9 @@ void MemoryScratchSinkTest::init_desc_tbl() {
         t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::INT));
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
-        t_slot_desc.__set_nullIndicatorByte(0);
-        t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_isNullable(false);
         t_slot_desc.__set_colName("second_column");
         t_slot_desc.__set_parent(0);
 

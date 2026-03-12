@@ -309,6 +309,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_profile_log = true;
+    @ConfField(mutable = true, comment = "Minimum query latency (ms) to log a profile to fe.profile.log. " +
+            "Only queries with latency >= this value are logged. 0 means log all profiles (no threshold).")
+    public static long profile_log_latency_threshold_ms = 0;
     @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
@@ -797,7 +800,7 @@ public class Config extends ConfigBase {
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
      */
     @ConfField
-    public static boolean enable_query_queue_v2 = false;
+    public static boolean enable_query_queue_v2 = true;
     /**
      * Used to calculate the total number of slots the system has,
      * which is equal to the configuration value * BE number * BE cores.
@@ -1321,6 +1324,25 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
+
+    /**
+     * Erase meta at least after this many milliseconds to avoid erase log ahead of drop log.
+     */
+    @ConfField(mutable = true)
+    public static long catalog_recycle_bin_erase_min_latency_ms = 10L * 60L * 1000L; // 10 min
+
+    /**
+     * Maximum number of erase operations per cycle for actually deleting database/table/partition.
+     * The erase operation will be locked, so one batch should not be too large.
+     */
+    @ConfField(mutable = true)
+    public static int catalog_recycle_bin_erase_max_operations_per_cycle = 500;
+
+    /**
+     * Retry interval in milliseconds when an erase operation fails.
+     */
+    @ConfField(mutable = true)
+    public static long catalog_recycle_bin_erase_fail_retry_interval_ms = 60L * 1000L; // 1 min
 
     /**
      * Parallel load fragment instance num in single host
@@ -1905,6 +1927,12 @@ public class Config extends ConfigBase {
     public static boolean enable_metric_calculator = true;
 
     /**
+     * Whether to export table-level metrics in FE.
+     */
+    @ConfField(mutable = true, comment = "Whether to export table-level metrics in FE")
+    public static boolean enable_table_metrics_collect = true;
+
+    /**
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
@@ -2133,6 +2161,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
     public static int max_scalar_operator_flat_children = 10000;
 
+    @ConfField(mutable = true)
+    public static int minmax_n_max_size = 10000;
+
     /**
      * statistic collect flag
      */
@@ -2260,6 +2291,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
             "will not be recorded during query optimization")
     public static boolean enable_predicate_columns_collection = true;
+
+    @ConfField(mutable = true, comment = "If enabled, FE will always collect optimizer timer traces during plan " +
+            "generation and dump them to logs when plan generation fails (e.g. CBO timeout) for diagnosis.")
+    public static boolean enable_dump_optimizer_trace_on_error = false;
 
     /**
      * Num of thread to handle statistic collect(analyze command)
@@ -2740,6 +2775,58 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
+     * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
+     * <p>
+     * Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads
+     * concurrently commit to the same table, conflicts can occur with errors like:
+     * "Cannot commit: Base metadata location is not same as the current table metadata location".
+     * <p>
+     * When enabled, each Iceberg table has its own single-threaded executor for commit operations,
+     * ensuring that commits to the same table are serialized and preventing OCC conflicts.
+     * Different tables can commit concurrently, maintaining overall throughput.
+     * <p>
+     * This is a system-level optimization to improve reliability and should be enabled by default.
+     * If disabled, concurrent commits may fail due to optimistic locking conflicts.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_commit_queue = true;
+
+    /**
+     * The timeout in seconds for waiting for an Iceberg commit operation to complete.
+     * <p>
+     * When using the commit queue (enable_iceberg_commit_queue=true), each commit operation
+     * must complete within this timeout. If a commit takes longer than this timeout,
+     * it will be cancelled and an error will be raised.
+     * <p>
+     * Factors that affect commit time include:
+     * - Number of data files being committed
+     * - Metadata size of the table
+     * - Performance of the underlying storage (e.g., S3, HDFS)
+     * <p>
+     * Default: 300 seconds (5 minutes)
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_commit_queue_timeout_seconds = 300;
+
+    /**
+     * The maximum number of pending commit operations per Iceberg table.
+     * <p>
+     * When using the commit queue (enable_iceberg_commit_queue=true), this limits the number
+     * of commit operations that can be queued for a single table. When the limit is reached,
+     * additional commit operations will execute in the caller thread (blocking until capacity available).
+     * <p>
+     * This configuration is read at FE startup and applies to newly created table executors.
+     * Requires FE restart to take effect.
+     * <p>
+     * Increase this value if you expect many concurrent commits to the same table.
+     * If this value is too low, commits may block in the caller thread during high concurrency.
+     * <p>
+     * Default: 1000
+     */
+    @ConfField(mutable = false)
+    public static int iceberg_commit_queue_max_size = 1000;
+
+    /**
      * paimon metadata cache preheat, default false
      */
     @ConfField(mutable = true)
@@ -3144,6 +3231,10 @@ public class Config extends ConfigBase {
             "will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
+            "table properties. 0 means disable parallel compaction.")
+    public static int lake_compaction_max_parallel_default = 3;
+
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
@@ -3448,6 +3539,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = true;
 
+    /**
+     * Enable pre-resolution of external tables (JDBC, Iceberg, etc.) before acquiring internal table locks.
+     * This avoids holding meta lock while fetching external metadata via RPC.
+     * Set to false to fallback to the original behavior if issues occur.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_external_table_preparse = true;
+
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
@@ -3601,6 +3700,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
     public static boolean enable_active_materialized_view_schema_strict_check = false;
 
+    @ConfField(mutable = true, comment = "MV fast schema evolution (FSE) mode. Values: " +
+            "strict (default) - only allow when isSupportFastSchemaEvolutionInDanger, clear partition entries; " +
+            "force - allow FSE even when isSupportFastSchemaEvolutionInDanger is false, clear partition entries; " +
+            "force_no_clear - allow FSE even when isSupportFastSchemaEvolutionInDanger is false, do not clear.")
+    public static String mv_fast_schema_change_mode = "strict";
+
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
                     "which would refresh the materialized view after creating")
@@ -3680,6 +3785,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 
+    @Deprecated
     @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
     public static int mv_plan_cache_thread_pool_size = 8;
 
@@ -3788,6 +3894,34 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
 
+    @ConfField(mutable = false, comment = "Timeout in milliseconds for HikariCP to acquire a connection from the pool")
+    public static long jdbc_connection_timeout_ms = 10000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC statement query execution")
+    public static long jdbc_query_timeout_ms = 30000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC network operations (socket read)")
+    public static long jdbc_network_timeout_ms = 30000L;
+
+    @ConfField(mutable = false, comment = "Maximum lifetime of a connection in the JDBC connection pool (ms). "
+            + "Connections are recycled before this timeout to prevent stale connections. "
+            + "Should be shorter than the external database's connection timeout. "
+            + "Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes)")
+    public static long jdbc_connection_max_lifetime_ms = 300000L;
+
+    @ConfField(mutable = false, comment = "Keepalive interval for idle JDBC connections (ms). "
+            + "Idle connections are tested at this interval to detect stale connections proactively. "
+            + "Set to 0 to disable keepalive probing. "
+            + "When enabled, must be >= 30000 and less than jdbc_connection_max_lifetime_ms. "
+            + "Invalid enabled values are silently disabled (reset to 0). "
+            + "Default: 30000 (30 seconds)")
+    public static long jdbc_connection_keepalive_time_ms = 30000L;
+
+    @ConfField(mutable = false, comment = "Threshold for JDBC connection leak detection (ms). "
+            + "If a connection is held longer than this, a warning is logged. "
+            + "Set to 0 to disable. Default: 0 (disabled)")
+    public static long jdbc_connection_leak_detection_threshold_ms = 0L;
+
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
@@ -3797,6 +3931,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean show_execution_groups = true;
+
+    @ConfField(mutable = true, comment = "Whether enable virtual columns like _tablet_id_")
+    public static boolean enable_virtual_columns = true;
 
     @ConfField(mutable = true)
     public static long max_bucket_number_per_partition = 1024;
@@ -3848,6 +3985,14 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
+
+    /**
+     * Enable dropping tablet data cache before removing a table or partition in shared-data mode.
+     * This helps to free up cache space proactively when data is being deleted.
+     * Default: true
+     */
+    @ConfField(mutable = true)
+    public static boolean lake_enable_drop_tablet_cache = true;
 
     @ConfField(mutable = true)
     public static int merge_commit_gc_check_interval_ms = 60000;

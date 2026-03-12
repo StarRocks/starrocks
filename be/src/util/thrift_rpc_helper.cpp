@@ -35,15 +35,17 @@
 #include "util/thrift_rpc_helper.h"
 
 #include <sstream>
+#include <utility>
 
+#include "base/network/network_util.h"
+#include "base/time/monotime.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "gen_cpp/FrontendService.h"
-#include "monotime.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/network_util.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -93,6 +95,12 @@ Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>
 
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
+                            std::function<void(ClientConnection<T>&)> callback) {
+    return rpc(ip, port, std::move(callback), config::thrift_rpc_timeout_ms);
+}
+
+template <typename T>
+Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
                             std::function<void(ClientConnection<T>&)> callback, int timeout_ms, int retry_times) {
     if (UNLIKELY(_s_exec_env == nullptr)) {
         return Status::ThriftRpcError(
@@ -128,6 +136,18 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
     } while (i++ < retry_times);
     return status;
 }
+
+template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
+        const std::string& ip, const int32_t port,
+        std::function<void(ClientConnection<FrontendServiceClient>&)> callback);
+
+template Status ThriftRpcHelper::rpc<BackendServiceClient>(
+        const std::string& ip, const int32_t port,
+        std::function<void(ClientConnection<BackendServiceClient>&)> callback);
+
+template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+        const std::string& ip, const int32_t port,
+        std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback);
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
         const std::string& ip, const int32_t port,

@@ -14,17 +14,21 @@
 
 #pragma once
 
+#include <utility>
+
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
-#include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
-#include "fs/fs.h"
-#include "runtime/exec_env.h"
+#include "fs/fs_fwd.h"
 #include "storage/load_chunk_spiller.h"
-#include "util/threadpool.h"
-#include "util/uid_util.h"
+
+namespace starrocks {
+class TupleDescriptor;
+}
 
 namespace starrocks::connector {
 
@@ -46,9 +50,9 @@ struct PartitionChunkWriterContext {
     bool is_default_partition = false;
 };
 
-struct BufferPartitionChunkWriterContext : public PartitionChunkWriterContext {};
+struct BufferPartitionChunkWriterContext : PartitionChunkWriterContext {};
 
-struct SpillPartitionChunkWriterContext : public PartitionChunkWriterContext {
+struct SpillPartitionChunkWriterContext : PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
@@ -98,9 +102,8 @@ public:
 protected:
     Status create_file_writer_if_needed();
 
-    void commit_file();
+    Status commit_file();
 
-protected:
     std::string _partition;
     std::vector<int8_t> _partition_field_null_list;
     std::shared_ptr<formats::FileWriterFactory> _file_writer_factory;
@@ -109,15 +112,19 @@ protected:
     bool _is_default_partition = false;
     AsyncFlushStreamPoller* _io_poller = nullptr;
 
-    std::shared_ptr<formats::FileWriter> _file_writer;
+    // The destruction of _file_writer triggers a flush of _out_stream.
+    // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
+    // Failing to do so will result in a use-after-free error for _out_stream.
+    // TODO: Refactor the file writer and output stream to make them more robust and user-friendly.
     std::shared_ptr<io::AsyncFlushOutputStream> _out_stream;
+    std::shared_ptr<formats::FileWriter> _file_writer;
     CommitFunc _commit_callback;
     std::string _commit_extra_data;
     ErrorHandleFunc _error_handler = nullptr;
     ConnectorSinkProfile* _sink_profile = nullptr;
 };
 
-class BufferPartitionChunkWriter : public PartitionChunkWriter {
+class BufferPartitionChunkWriter final : public PartitionChunkWriter {
 public:
     BufferPartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                const std::shared_ptr<BufferPartitionChunkWriterContext>& ctx)
@@ -140,12 +147,12 @@ public:
     int64_t get_flushable_bytes() override { return _file_writer ? _file_writer->get_written_bytes() : 0; }
 };
 
-class SpillPartitionChunkWriter : public PartitionChunkWriter {
+class SpillPartitionChunkWriter final : public PartitionChunkWriter {
 public:
     SpillPartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                               const std::shared_ptr<SpillPartitionChunkWriterContext>& ctx);
 
-    ~SpillPartitionChunkWriter();
+    ~SpillPartitionChunkWriter() override;
 
     Status init() override;
 
@@ -233,11 +240,11 @@ public:
                                            std::vector<int8_t> partition_field_null_list) const = 0;
 };
 
-class BufferPartitionChunkWriterFactory : public PartitionChunkWriterFactory {
+class BufferPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
-    ~BufferPartitionChunkWriterFactory() = default;
+    ~BufferPartitionChunkWriterFactory() override = default;
 
     Status init() override { return _ctx->file_writer_factory->init(); }
 
@@ -251,11 +258,11 @@ private:
     std::shared_ptr<BufferPartitionChunkWriterContext> _ctx;
 };
 
-class SpillPartitionChunkWriterFactory : public PartitionChunkWriterFactory {
+class SpillPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
-    ~SpillPartitionChunkWriterFactory() = default;
+    ~SpillPartitionChunkWriterFactory() override = default;
 
     Status init() override { return _ctx->file_writer_factory->init(); }
 

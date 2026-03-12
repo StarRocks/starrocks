@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -26,12 +27,11 @@
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "runtime/types.h"
 #include "runtime/user_function_cache.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -104,6 +104,7 @@ Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) c
     RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, TFunctionBinaryType::SRJAR, &libpath));
     // Now we only support one return types
     std::vector<TypeDescriptor> arg_typedescs;
+    arg_typedescs.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
     }
@@ -162,6 +163,15 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         env->PopLocalFrame(nullptr);
     });
     env->PushLocalFrame(num_cols * num_rows + 16);
+
+    // Boundary check: method_desc must have at least num_cols + 1 elements
+    // (index 0 is return type, indices 1..num_cols are parameter types)
+    if (stateUDTF->method_process()->method_desc.size() < num_cols + 1) {
+        state->set_status(
+                Status::InternalError(fmt::format("method_desc size mismatch: need at least {}, got {}", num_cols + 1,
+                                                  stateUDTF->method_process()->method_desc.size())));
+        return {};
+    }
 
     for (int i = 0; i < num_rows; ++i) {
         DeferOp defer = DeferOp([&]() {

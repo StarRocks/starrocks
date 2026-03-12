@@ -53,7 +53,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 continue;
             }
             List<MaterializedIndex> allIndices =
-                    partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition);
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -109,7 +109,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             short replicationNum = table.getPartitionInfo().getReplicationNum(partitionId);
             long version = partitionCommitInfo.getVersion();
             List<MaterializedIndex> allIndices =
-                    partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                    txnState.getPartitionLoadedIndexesWithoutLock(table.getId(), partition);
             List<String> skipUpdateReplicas = Lists.newArrayList();
             for (MaterializedIndex index : allIndices) {
                 for (Tablet tablet : index.getTablets()) {

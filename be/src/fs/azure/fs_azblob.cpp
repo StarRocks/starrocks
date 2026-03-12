@@ -19,14 +19,15 @@
 #include <azure/identity.hpp>
 #include <azure/storage/blobs.hpp>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "fs/azure/azblob_uri.h"
 #include "fs/azure/utils.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_options_helper.h"
 #include "fs/output_stream_adapter.h"
+#include "io/core/output_stream.h"
 #include "io/io_profiler.h"
-#include "io/output_stream.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -480,7 +481,7 @@ AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options)
 
 StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(const AzBlobURI& uri) {
     // Create azure cloud credential from TCloudConfiguration.cloud_properties
-    const auto* t_cloud_configuration = _options.get_cloud_configuration();
+    const auto* t_cloud_configuration = FSOptionsHelper::cloud_configuration(_options);
     if (t_cloud_configuration == nullptr) {
         return Status::InvalidArgument("CloudConfiguration in FSOption is nullptr");
     }

@@ -14,10 +14,10 @@
 
 #include <gtest/gtest.h>
 
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
@@ -56,7 +56,7 @@ StatusOr<std::shared_ptr<RuntimeFilterProbeDescriptor>> OlapRuntimeRangePrunerTe
     desc.__set_filter_id(1);
     desc.__set_has_remote_targets(false);
     desc.__set_build_plan_node_id(_node_id);
-    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
     desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, true);

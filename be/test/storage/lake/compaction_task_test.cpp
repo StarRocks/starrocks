@@ -17,11 +17,13 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_test_utils.h"
@@ -32,8 +34,6 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 #include "testutil/init_test_env.h"
 
 namespace starrocks::lake {

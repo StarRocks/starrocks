@@ -17,17 +17,18 @@
 #include <queue>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/memory/mem_hook_allocator.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/memory/mem_hook_allocator.h"
-#include "runtime/types.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -105,11 +106,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     };
 
 public:
-    ~Analytor() override {
-        if (_state != nullptr) {
-            close(_state);
-        }
-    }
+    ~Analytor() override;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
              bool use_hash_based_partition);
 
@@ -125,7 +122,7 @@ public:
         std::lock_guard<std::mutex> l(_buffer_mutex);
         return _buffer.empty();
     }
-    bool is_chunk_buffer_full() { return _buffer.size() >= config::pipeline_analytic_max_buffer_size; }
+    bool is_chunk_buffer_full();
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {

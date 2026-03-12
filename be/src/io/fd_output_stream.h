@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "io/output_stream.h"
+#include "io/core/output_stream.h"
 
 namespace starrocks::io {
 

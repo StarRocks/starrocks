@@ -18,9 +18,12 @@
 
 #include <thread>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/binary_column.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "common/config_ingest_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -30,12 +33,11 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -101,7 +103,7 @@ protected:
         txn_info.set_txn_id(txn_id);
         txn_info.set_combined_txn_log(false);
         txn_info.set_commit_time(time(nullptr));
-        return publish_version(_tablet_manager.get(), tablet_id, 1, new_version,
+        return publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), 1, new_version,
                                std::span<const TxnInfoPB>(&txn_info, 1), false)
                 .status();
     }

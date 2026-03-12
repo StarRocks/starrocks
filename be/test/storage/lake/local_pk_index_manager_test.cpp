@@ -16,8 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "column/schema.h"
-#include "common/config.h"
 #include "fs/fs.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/join_path.h"
@@ -26,9 +28,6 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 

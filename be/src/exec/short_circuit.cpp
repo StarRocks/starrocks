@@ -17,21 +17,26 @@
 
 #include "exec/short_circuit.h"
 
+#include "base/brpc/brpc.h"
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "connector/connector.h"
+#include "exec/exec_factory.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_sink.h"
-#include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/runtime_profile.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 class MysqlResultMemorySink : public DataSink {
@@ -45,12 +50,12 @@ public:
     Status prepare(RuntimeState* state) override {
         _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
 
-        RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_exprs, &_output_expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_exprs, &_output_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
         return DataSink::prepare(state);
     }
 
-    Status open(RuntimeState* state) override { return Expr::open(_output_expr_ctxs, state); }
+    Status open(RuntimeState* state) override { return ExprExecutor::open(_output_expr_ctxs, state); }
 
     RuntimeProfile* profile() override { return nullptr; }
 
@@ -125,6 +130,9 @@ void ShortCircuitExecutor::close() {
         if (_sink != nullptr) {
             (void)_sink->close(_runtime_state.get(), Status::OK());
         }
+        if (_fragment_dict_state != nullptr) {
+            _fragment_dict_state->close(_runtime_state.get());
+        }
     }
     return;
 }
@@ -135,6 +143,8 @@ ShortCircuitExecutor::ShortCircuitExecutor(ExecEnv* exec_env)
     TQueryGlobals query_globals;
     _runtime_state =
             std::make_shared<RuntimeState>(_query_id, _fragment_instance_id, query_options, query_globals, _exec_env);
+    _fragment_dict_state = std::make_unique<FragmentDictState>();
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     _runtime_state->init_instance_mem_tracker();
     _runtime_profile = _runtime_state->runtime_profile();
 }
@@ -241,7 +251,7 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
     }
     case TPlanNodeType::PROJECT_NODE:
     case TPlanNodeType::UNION_NODE: // values
-        RETURN_IF_ERROR(ExecNode::create_vectorized_node(runtime_state(), pool, t_node, descs, node));
+        RETURN_IF_ERROR(ExecFactory::create_vectorized_node(runtime_state(), pool, t_node, descs, node));
         break;
     default:
         return Status::InternalError(strings::Substitute("Short circuit not support node: $0", t_node.node_type));

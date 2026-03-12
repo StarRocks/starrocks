@@ -27,7 +27,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -146,9 +146,9 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
         if (i == 0) {
             std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
-                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+                parsed_paths->emplace_back("$", std::move(selector));
             } else {
-                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+                parsed_paths->emplace_back("$", std::move(selector));
                 continue;
             }
         }
@@ -160,7 +160,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             // No array selector
             std::unique_ptr<ArraySelector> selector;
             RETURN_IF_ERROR(ArraySelector::parse(array_pieces, &selector));
-            parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+            parsed_paths->emplace_back(variable, std::move(selector));
         } else {
             // Cosume multiple array selector
             re2::StringPiece array_piece(array_pieces);
@@ -168,7 +168,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             while (RE2::Consume(&array_piece, ARRAY_INDEX_PATTERN, &single_piece)) {
                 std::unique_ptr<ArraySelector> selector;
                 RETURN_IF_ERROR(ArraySelector::parse(single_piece, &selector));
-                parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+                parsed_paths->emplace_back(variable, std::move(selector));
                 variable = "";
             }
         }

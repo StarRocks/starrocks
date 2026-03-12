@@ -14,25 +14,20 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
 #include "common/global_types.h"
-#include "exec/exec_node.h"
+#include "exec/pipeline_node.h"
 #include "runtime/descriptors.h"
-#include "runtime/lookup_stream_mgr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class LookUpDispatcher;
 
-class LookUpNode final : public ExecNode {
+class LookUpNode final : public PipelineNode {
 public:
     LookUpNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~LookUpNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override { return Status::OK(); }
-
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override { return Status::OK(); }
 
     Status collect_query_statistics(QueryStatistics* statistics) override { return Status::OK(); }
 
@@ -41,8 +36,10 @@ public:
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
+    void set_num_fetchers(int32_t num_fetchers) { _num_peer_fetchers = num_fetchers; }
+
 private:
+    size_t _num_peer_fetchers = 0;
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
-    std::shared_ptr<LookUpDispatcher> _dispatcher;
 };
 } // namespace starrocks

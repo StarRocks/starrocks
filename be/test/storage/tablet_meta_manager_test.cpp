@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <thread>
 
+#include "common/system/cpu_info.h"
 #include "storage/del_vector.h"
 
 namespace starrocks {

@@ -180,6 +180,22 @@ SELECT '=== Test 1: Basic Type <-> VARIANT Bidirectional Casting ===' as test_se
 SELECT
     id,
     test_case,
+    boolean_val as original_boolean,
+    variant_from_boolean,
+    variant_query(variant_from_boolean, '$') as extracted_variant_boolean,
+    CAST(variant_query(variant_from_boolean, '$') AS BOOLEAN) as extracted_boolean
+FROM variant_test_unified
+WHERE test_scenario = 'basic_types'
+ORDER BY id;
+-- result:
+1	positive_values	1	true	true	1
+2	negative_values	0	false	false	0
+3	zero_and_empty	None	null	null	None
+4	all_null	None	null	null	None
+-- !result
+SELECT
+    id,
+    test_case,
 
     -- INT
     int_val as original_int,
@@ -443,11 +459,6 @@ WHERE test_scenario = 'variant_to_complex' AND id = 7;
 -- result:
 7	variant_to_complex_types	PASS	PASS	PASS	PASS
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_test_unified force;
 -- result:
 -- !result
@@ -456,4 +467,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

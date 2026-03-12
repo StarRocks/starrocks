@@ -17,13 +17,13 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
-#include "util/slice.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -504,6 +504,11 @@ class ClassAnalyzer {
 public:
     ClassAnalyzer() = default;
     ~ClassAnalyzer() = default;
+
+    // Strip generic type parameters from a JNI method signature.
+    // e.g. "(Ljava/util/List<java/lang/String>;)V" -> "(Ljava/util/List;)V"
+    static void strip_jni_generic_types(std::string* sign);
+
     Status has_method(jclass clazz, const std::string& method, bool* has);
     Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
@@ -589,6 +594,12 @@ struct JavaUDAFContext {
 
     std::unique_ptr<UDAFFunction> _func;
 };
+
+// Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
+JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx);
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx);
+void clear_java_udaf_states(FunctionContext* ctx);
+void destroy_java_udaf_context(FunctionContext* ctx);
 
 // Check whether java runtime can work
 Status detect_java_runtime();

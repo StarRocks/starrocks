@@ -17,12 +17,12 @@
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

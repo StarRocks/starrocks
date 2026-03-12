@@ -20,13 +20,14 @@
 #include <mutex>
 #include <string_view>
 
-#include "common/config.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
+#include "common/brpc_helper.h"
+#include "common/config_exec_flow_fwd.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -454,7 +455,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        SET_IGNORE_OVERCROWDED(closure->cntl, query);
+        set_ignore_overcrowded_for_query(closure->cntl);
 
         return _send_rpc(closure, request);
     }

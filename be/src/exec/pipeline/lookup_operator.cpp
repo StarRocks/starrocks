@@ -15,42 +15,25 @@
 #include "exec/pipeline/lookup_operator.h"
 
 #include <memory>
-#include <variant>
 
+#include "base/container/raw_container.h"
+#include "base/statusor.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
-#include "common/status.h"
-#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/fetch_processor.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/operator.h"
-#include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
-#include "exec/workgroup/work_group.h"
-#include "gutil/integral_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "serde/column_array_serde.h"
-#include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_common.h"
-#include "storage/range.h"
-#include "storage/rowset/common.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks::pipeline {
 
@@ -114,9 +97,14 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
 StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr& ctx) {
     auto tuple_id = ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(tuple_id);
-    switch (row_pos_desc->type()) {
-    case RowPositionDescriptor::Type::ICEBERG_V3: {
+    auto row_pos_type = row_pos_desc->type();
+    switch (row_pos_type) {
+    case RowPositionDescriptor::Type::ICEBERG_V3:
         return std::make_shared<IcebergV3LookUpTask>(ctx);
+    case RowPositionDescriptor::Type::LAKE_SCAN:
+    case RowPositionDescriptor::Type::OLAP_SCAN: {
+        ASSIGN_OR_RETURN(auto adaptor, create_look_up_tablet_adaptor(row_pos_type));
+        return std::make_shared<NativeLookUpTask>(ctx, std::move(adaptor));
     }
     default:
         return Status::InternalError("unknown row position descriptor type: " + std::to_string(row_pos_desc->type()));
@@ -206,7 +194,7 @@ bool LookUpOperator::has_output() const {
 }
 
 bool LookUpOperator::is_finished() const {
-    return _is_finished && _num_running_io_tasks == 0;
+    return _is_finished || (_dispatcher->is_finished() && _num_running_io_tasks == 0);
 }
 
 bool LookUpOperator::pending_finish() const {
@@ -234,12 +222,11 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
         bool is_running = processor->is_running();
         if (!is_running &&
             _dispatcher->try_get(_driver_sequence, config::max_lookup_batch_request, lookup_task_ctx.get())) {
-            lookup_task_ctx->row_source_slot_id =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_row_source_slot_id();
-            lookup_task_ctx->lookup_ref_slot_ids =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_lookup_ref_slot_ids();
-            lookup_task_ctx->fetch_ref_slot_ids =
-                    _row_pos_descs.at(lookup_task_ctx->request_tuple_id)->get_fetch_ref_slot_ids();
+            auto row_pos_desc = _row_pos_descs.at(lookup_task_ctx->request_tuple_id);
+            lookup_task_ctx->scan_id = row_pos_desc->get_scan_node_id();
+            lookup_task_ctx->row_source_slot_id = row_pos_desc->get_row_source_slot_id();
+            lookup_task_ctx->lookup_ref_slot_ids = row_pos_desc->get_lookup_ref_slot_ids();
+            lookup_task_ctx->fetch_ref_slot_ids = row_pos_desc->get_fetch_ref_slot_ids();
             lookup_task_ctx->profile = _unique_metrics.get();
             lookup_task_ctx->parent = this;
             processor->set_ctx(lookup_task_ctx);

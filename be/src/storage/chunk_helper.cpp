@@ -33,8 +33,8 @@
 #include "runtime/descriptors.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -122,6 +122,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());
+    f.set_is_virtual(c.is_virtual_column());
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
@@ -253,13 +254,13 @@ struct ColumnPtrBuilder {
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
+            auto elements = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
             auto offsets = UInt32Column::create();
             auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
             return NullableIfNeed(std::move(array));
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
-            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
+            auto keys = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
+            auto values = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(1)));
             auto offsets = get_column_ptr<UInt32Column>();
             auto map = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
             return NullableIfNeed(std::move(map));
@@ -268,7 +269,7 @@ struct ColumnPtrBuilder {
             MutableColumns fields;
             for (auto& sub_field : field.sub_fields()) {
                 names.emplace_back(sub_field.name());
-                fields.emplace_back(sub_field.create_column());
+                fields.emplace_back(ChunkHelper::column_from_field(sub_field));
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
             return NullableIfNeed(std::move(struct_column));
@@ -422,7 +423,7 @@ MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
         MutableColumns fields;
         for (auto& sub_field : field.sub_fields()) {
             names.emplace_back(sub_field.name());
-            fields.emplace_back(sub_field.create_column());
+            fields.emplace_back(ChunkHelper::column_from_field(sub_field));
         }
         auto struct_column = StructColumn::create(std::move(fields), std::move(names));
         return NullableIfNeed(std::move(struct_column));
@@ -859,8 +860,8 @@ public:
         Columns data_columns, null_columns;
         for (auto& column : _segment_column->columns()) {
             NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
-            data_columns.push_back(nullable->data_column());
-            null_columns.push_back(nullable->null_column());
+            data_columns.emplace_back(nullable->data_column());
+            null_columns.emplace_back(nullable->null_column());
         }
 
         auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());

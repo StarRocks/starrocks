@@ -15,8 +15,13 @@
 #include "storage/lake/vertical_compaction_task.h"
 
 #include "agent/master_info.h"
-#include "common/config.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
@@ -31,8 +36,6 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
-#include "util/defer_op.h"
-#include "util/time.h"
 
 namespace starrocks::lake {
 

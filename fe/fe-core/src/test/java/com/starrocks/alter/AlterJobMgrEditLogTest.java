@@ -16,14 +16,29 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MockedLocalMetaStore;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.MockedMetadataMgr;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -31,6 +46,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +54,17 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
 public class AlterJobMgrEditLogTest {
+    private static final long SWAP_TABLE_ID_1 = 91001L;
+    private static final long SWAP_TABLE_ID_2 = 91002L;
+    private static final long SWAP_PARTITION_ID_1 = 92001L;
+    private static final long SWAP_PARTITION_ID_2 = 92002L;
+    private static final long SWAP_PHYSICAL_PARTITION_ID_1 = 93001L;
+    private static final long SWAP_PHYSICAL_PARTITION_ID_2 = 93002L;
+    private static final long SWAP_INDEX_ID_1 = 94001L;
+    private static final long SWAP_INDEX_ID_2 = 94002L;
+    private static final long SWAP_TABLET_ID_1 = 95001L;
+    private static final long SWAP_TABLET_ID_2 = 95002L;
+
     private AlterJobMgr alterJobMgr;
     private MockedLocalMetaStore localMetastore;
 
@@ -180,7 +207,8 @@ public class AlterJobMgrEditLogTest {
         List<Column> newColumns = new ArrayList<>();
         Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
         newColumns.add(newCol1);
-        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment",
+                newViewDef);
 
         // 3. Execute alterView operation (master side)
         alterJobMgr.alterView(alterViewInfo);
@@ -262,7 +290,8 @@ public class AlterJobMgrEditLogTest {
         List<Column> newColumns = new ArrayList<>();
         Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
         newColumns.add(newCol1);
-        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment",
+                newViewDef);
 
         // 3. Mock EditLog.logModifyViewDef to throw exception
         EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
@@ -283,5 +312,112 @@ public class AlterJobMgrEditLogTest {
         Assertions.assertNotNull(unchangedView);
         Assertions.assertEquals(originalViewDef, unchangedView.getInlineViewDef());
     }
-}
 
+    @Test
+    public void testSwapTableNormalCase() throws Exception {
+        localMetastore.createDb("swap_db");
+        Database db = localMetastore.getDb("swap_db");
+        Assertions.assertNotNull(db);
+
+        OlapTable originTable = createHashOlapTable(SWAP_TABLE_ID_1, "swap_table_a",
+                SWAP_PARTITION_ID_1, SWAP_PHYSICAL_PARTITION_ID_1, SWAP_INDEX_ID_1, SWAP_TABLET_ID_1);
+        OlapTable newTable = createHashOlapTable(SWAP_TABLE_ID_2, "swap_table_b",
+                SWAP_PARTITION_ID_2, SWAP_PHYSICAL_PARTITION_ID_2, SWAP_INDEX_ID_2, SWAP_TABLET_ID_2);
+        db.registerTableUnlocked(originTable);
+        db.registerTableUnlocked(newTable);
+
+        SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), originTable.getId(), newTable.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log, wal -> alterJobMgr.swapTableInternal(log));
+
+        Assertions.assertEquals(newTable.getId(), db.getTable("swap_table_a").getId());
+        Assertions.assertEquals(originTable.getId(), db.getTable("swap_table_b").getId());
+
+        SwapTableOperationLog replayInfo = (SwapTableOperationLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_SWAP_TABLE);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(originTable.getId(), replayInfo.getOrigTblId());
+        Assertions.assertEquals(newTable.getId(), replayInfo.getNewTblId());
+
+        MockedLocalMetaStore followerMetastore =
+                new MockedLocalMetaStore(
+                        GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "swap_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+        followerDb.registerTableUnlocked(createHashOlapTable(SWAP_TABLE_ID_1, "swap_table_a",
+                SWAP_PARTITION_ID_1, SWAP_PHYSICAL_PARTITION_ID_1, SWAP_INDEX_ID_1, SWAP_TABLET_ID_1));
+        followerDb.registerTableUnlocked(createHashOlapTable(SWAP_TABLE_ID_2, "swap_table_b",
+                SWAP_PARTITION_ID_2, SWAP_PHYSICAL_PARTITION_ID_2, SWAP_INDEX_ID_2, SWAP_TABLET_ID_2));
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replaySwapTable(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        Assertions.assertEquals(SWAP_TABLE_ID_2, followerDb.getTable("swap_table_a").getId());
+        Assertions.assertEquals(SWAP_TABLE_ID_1, followerDb.getTable("swap_table_b").getId());
+    }
+
+    @Test
+    public void testSwapTableEditLogException() throws Exception {
+        localMetastore.createDb("swap_db_error");
+        Database db = localMetastore.getDb("swap_db_error");
+        Assertions.assertNotNull(db);
+
+        OlapTable originTable = createHashOlapTable(SWAP_TABLE_ID_1 + 100, "swap_table_x",
+                SWAP_PARTITION_ID_1 + 100, SWAP_PHYSICAL_PARTITION_ID_1 + 100, SWAP_INDEX_ID_1 + 100,
+                SWAP_TABLET_ID_1 + 100);
+        OlapTable newTable = createHashOlapTable(SWAP_TABLE_ID_2 + 100, "swap_table_y",
+                SWAP_PARTITION_ID_2 + 100, SWAP_PHYSICAL_PARTITION_ID_2 + 100, SWAP_INDEX_ID_2 + 100,
+                SWAP_TABLET_ID_2 + 100);
+        db.registerTableUnlocked(originTable);
+        db.registerTableUnlocked(newTable);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logSwapTable(any(SwapTableOperationLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), originTable.getId(), newTable.getId());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () ->
+                    GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log, wal -> alterJobMgr.swapTableInternal(log)));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(originTable.getId(), db.getTable("swap_table_x").getId());
+            Assertions.assertEquals(newTable.getId(), db.getTable("swap_table_y").getId());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    private static OlapTable createHashOlapTable(long tableId, String tableName, long partitionId,
+                                                 long physicalPartitionId, long indexId, long tabletId) {
+        List<Column> columns = new ArrayList<>();
+        Column keyColumn = new Column("k1", IntegerType.BIGINT);
+        keyColumn.setIsKey(true);
+        columns.add(keyColumn);
+        columns.add(new Column("v1", IntegerType.BIGINT));
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, List.of(keyColumn));
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId);
+        TabletMeta tabletMeta = new TabletMeta(1L, tableId, partitionId, indexId, TStorageMedium.HDD);
+        baseIndex.addTablet(tablet, tabletMeta);
+        Partition partition = new Partition(partitionId, physicalPartitionId, tableName, baseIndex, distributionInfo);
+
+        OlapTable table = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+        table.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        table.setBaseIndexMetaId(indexId);
+        table.addPartition(partition);
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        return table;
+    }
+}

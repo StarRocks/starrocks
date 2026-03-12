@@ -26,6 +26,125 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.14
+
+Release Date: March 5, 2026
+
+### Improvements
+
+- Added SST read/write failure metrics for Primary Key index in Lake tables. [#69513](https://github.com/StarRocks/starrocks/pull/69513)
+- Added a counter metric for "segment file not found" errors. [#69543](https://github.com/StarRocks/starrocks/pull/69543)
+- Extracted range predicates from scalar-subquery containing `convert_tz`. [#69055](https://github.com/StarRocks/starrocks/pull/69055)
+- Supports complex type for Paimon tables. [#66784](https://github.com/StarRocks/starrocks/pull/66784)
+- Deferred remote load Spill Directory removal. [#68803](https://github.com/StarRocks/starrocks/pull/68803)
+- Supports repairing cloud-native tables. [#67108](https://github.com/StarRocks/starrocks/pull/67108)
+- Supports inserting ARRAY type to Hive table in CSV format. [#67355](https://github.com/StarRocks/starrocks/pull/67355)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Unexpected behavior caused by exceptions of `RowGroupWriter`. [#69568](https://github.com/StarRocks/starrocks/pull/69568)
+- Sort key not including newly added key columns after schema change on Aggregate Key/Unique  Key tables. [#69529](https://github.com/StarRocks/starrocks/pull/69529)
+- Mertic value `g_publish_version_failed_tasks` does not reflect the real situation during the `resource_busy` state. [#69526](https://github.com/StarRocks/starrocks/pull/69526)
+- Rowset files are removed when moving Primary Key tablets to trash. [#69438](https://github.com/StarRocks/starrocks/pull/69438)
+- Lock leak in `addPartitions` caused by name-based table lookup after concurrent SWAP. [#69284](https://github.com/StarRocks/starrocks/pull/69284)
+- `isInternalCancelError` used `equals` instead of `startsWith`. [#69523](https://github.com/StarRocks/starrocks/pull/69523)
+- Pipeline blocks or crashes when `_writer->Close()` throws an exception other than `ParquetStatusException`. [#69492](https://github.com/StarRocks/starrocks/pull/69492)
+- A Hadoop-client lib bug. [#69503](https://github.com/StarRocks/starrocks/pull/69503)
+- Success is mistakenly returned while write operations fails. [#69473](https://github.com/StarRocks/starrocks/pull/69473)
+- CVE-2025-67721. [#69138](https://github.com/StarRocks/starrocks/pull/69138)
+- Issue with RuntimeFilter with low-cardinality optimization in share-data clusters. [#64669](https://github.com/StarRocks/starrocks/pull/64669)
+- Materialized view tablet meta inconsistency between FE leader and follower. [#69428](https://github.com/StarRocks/starrocks/pull/69428)
+- Rollup handler's active transaction ID was not considered in `computeMinActiveTxnId`. [#69285](https://github.com/StarRocks/starrocks/pull/69285)
+- Arrow Flight Proxy issue with multiple FE. [#68300](https://github.com/StarRocks/starrocks/pull/68300)
+- Concurrency bug of function field. [#69315](https://github.com/StarRocks/starrocks/pull/69315)
+- `DROP FUNCTION IF EXISTS` ignored `ifExists` flag. [#69216](https://github.com/StarRocks/starrocks/pull/69216)
+- Lacking case-insensitive username normalization for LDAP authentication. [#67966](https://github.com/StarRocks/starrocks/pull/67966)
+- Certain kinds of partitions cannot be written. [#68221](https://github.com/StarRocks/starrocks/pull/68221)
+- Projection loss in materialized view rewrite due to shared mutable state. [#69063](https://github.com/StarRocks/starrocks/pull/69063)
+- Issue with case-insensitive partition lookup in query table copy. [#69173](https://github.com/StarRocks/starrocks/pull/69173)
+- All-null value handling bug in synchronous materialized views. [#69136](https://github.com/StarRocks/starrocks/pull/69136)
+- `mv onReload` issues when visiting external catalogs. [#68926](https://github.com/StarRocks/starrocks/pull/68926)
+- DISTINCT ORDER BY alias issues for duplicated constants. [#69014](https://github.com/StarRocks/starrocks/pull/69014)
+- Incorrect query results after modifying CHAR column length in shared-data clusters. [#68808](https://github.com/StarRocks/starrocks/pull/68808)
+- Issue with Azure ABFS/WASB FileSystem cache key. [#68901](https://github.com/StarRocks/starrocks/pull/68901)
+- Incorrect predicate rewrite for OUTER JOIN with constant-side column reference. [#67072](https://github.com/StarRocks/starrocks/pull/67072)
+- `IllegalArgumentException` comparator transitivity violation. [#68743](https://github.com/StarRocks/starrocks/pull/68743)
+- Issue caused by the query lifetime being shorter than the fragment in `report_fragment`. [#67219](https://github.com/StarRocks/starrocks/pull/67219)
+- Low-cardinality rewrite NPE caused by shared `DecodeInfo`. [#68799](https://github.com/StarRocks/starrocks/pull/68799)
+- Missing `pcu_upt_cnt` metric. [#68845](https://github.com/StarRocks/starrocks/pull/68845)
+- JSON-flatten array/object conflict on identical paths. [#68804](https://github.com/StarRocks/starrocks/pull/68804)
+- `ClonExpr` nullable bug. [#68800](https://github.com/StarRocks/starrocks/pull/68800)
+
+## 3.5.13
+
+Release Date: February 13, 2026
+
+### Improvements
+
+- Added an FE configuration `enable_table_metrics_collect` to control the collection of table-level metrics. [#68691](https://github.com/StarRocks/starrocks/pull/68691)
+- Supports setting the default Warehouse for Merge Commit at user level. [#68616](https://github.com/StarRocks/starrocks/pull/68616)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Issue with source partition checking in replication transactions. [#68883](https://github.com/StarRocks/starrocks/pull/68883)
+- Used labels were not identified when labels were specified in BEGIN TRANSACTION. [#68660](https://github.com/StarRocks/starrocks/pull/68660)
+- JOIN ON clause bug with CTE scope. [#68809](https://github.com/StarRocks/starrocks/pull/68809)
+- Overlapping range partitions can be created when an explicit lower bound is provided. [#68255](https://github.com/StarRocks/starrocks/pull/68255)
+- Incorrect parser logic when SQL dialect downgrades from Trino to StarRocks. [#68725](https://github.com/StarRocks/starrocks/pull/68725)
+- Issue with pruning projection columns. [#68242](https://github.com/StarRocks/starrocks/pull/68242)
+- Issue with subquery scope check. [#68415](https://github.com/StarRocks/starrocks/pull/68415)
+- Unmatched type cast in the function analyzer. [#66749](https://github.com/StarRocks/starrocks/pull/66749)
+- Incorrect candidate materialized view selection logic. [#68571](https://github.com/StarRocks/starrocks/pull/68571)
+- The Thrift `accept` thread exits on exception. [#68644](https://github.com/StarRocks/starrocks/pull/68644)
+- Inaccurate Iceberg data file size estimation. [#68787](https://github.com/StarRocks/starrocks/pull/68787)
+- Lake table memory leak issue. [#68678](https://github.com/StarRocks/starrocks/pull/68678)
+- Deadlock when the HMS connection pool is full. [#68033](https://github.com/StarRocks/starrocks/pull/68033)
+- Iceberg delete column nullability issue. [#68649](https://github.com/StarRocks/starrocks/pull/68649)
+- Materialized views hold large external tables. [#68171](https://github.com/StarRocks/starrocks/pull/68171)
+- Iceberg table cache memory limit issue. [#67769](https://github.com/StarRocks/starrocks/pull/67769)
+- Wrong timeout parameter is used for PocoHttpClient. [#68765](https://github.com/StarRocks/starrocks/pull/68765)
+- BE compile failure with Clang. [#68805](https://github.com/StarRocks/starrocks/pull/68805)
+- Materialized view was reloaded multiple times during startup. [#62351](https://github.com/StarRocks/starrocks/pull/62351)
+- CVE-2025-27821. [#68529](https://github.com/StarRocks/starrocks/pull/68529)
+- Variadic functions return incorrect date values in certain scenarios. [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+
+## 3.5.12
+
+Release Date: January 22, 2026
+
+### Improvements
+
+- Added a cleaner for BrpcStubCache to clean up unused connections. [#61417](https://github.com/StarRocks/starrocks/pull/61417)
+- Supports batch processing for statistics delete (for dropped tables) and Edit Log write requests. [#67896](https://github.com/StarRocks/starrocks/pull/67896)
+- Preserves SQL comments in Audit Logs when encryption is required. [#63298](https://github.com/StarRocks/starrocks/pull/63298)
+- Added the `warehouse_name` label to the materialized view metrics. [#67715](https://github.com/StarRocks/starrocks/pull/67715)
+- Improved identifier wrapping for JDBC table and column names. [#67853](https://github.com/StarRocks/starrocks/pull/67853)
+- Added the `CLIENT_FACTORY`  property to the Iceberg JDBC catalog. [#67613](https://github.com/StarRocks/starrocks/pull/67613)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Variadic functions return wrong dates when mixing DATE and DATETIME types. [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+- `NormalizePredicateRule` oscillation on non-deterministic expressions. [#67923](https://github.com/StarRocks/starrocks/pull/67923)
+- Low cardinality bugs with the Lambda function. [#67843](https://github.com/StarRocks/starrocks/pull/67843)
+- Subfield expression does not collect children subfields. [#67850](https://github.com/StarRocks/starrocks/pull/67850)
+- NPE in RBO Join reorder when child statistics are missing. [#67693](https://github.com/StarRocks/starrocks/pull/67693)
+- BE crash due to MemTable finalize failed. [#67787](https://github.com/StarRocks/starrocks/pull/67787)
+- Temporary partitions are not cleaned up after FE restart for dynamic overwrite. [#67629](https://github.com/StarRocks/starrocks/pull/67629)
+- Inaccurate I/O statistics of Compaction. [#67524](https://github.com/StarRocks/starrocks/pull/67524)
+- Incorrect logic in physical partition comparison across clusters during replication transaction. [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Issue with SQL Server and Oracle identifier symbol handling. [#67965](https://github.com/StarRocks/starrocks/pull/67965)
+- NPE in the Iceberg metadata table query due to missing configuration propagation. [#67151](https://github.com/StarRocks/starrocks/pull/67151)
+- Issue with the `f``iles()` schema detection for empty Parquet or ORC files. [#67762](https://github.com/StarRocks/starrocks/pull/67762)
+- Inaccurate value of metrics in Profile caused by UNION ALL on Hive tables. [#67912](https://github.com/StarRocks/starrocks/pull/67912)
+- Lacking support for data retrieval from Arrow Flight proxy for FE queries. [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- SIGSEGV crash during automatic partition creation caused by a race condition in `OlapTableSink::is_full()`. [#67566](https://github.com/StarRocks/starrocks/pull/67566)
+
 ## 3.5.11
 
 Release date: January 5, 2026

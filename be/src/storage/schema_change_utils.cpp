@@ -14,17 +14,18 @@
 
 #include "storage/schema_change_utils.h"
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 
@@ -293,15 +294,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 return false;
             }
 
-            if (new_col->only_null()) {
-                // unfold only null columns to avoid no default values.
-                auto unfold_col = new_col->clone_empty();
-                unfold_col->append_nulls(new_col->size());
-                new_col = std::move(unfold_col);
-            } else {
-                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
-                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
-            }
+            const auto& type_desc = _schema_mapping[i].mv_expr_ctx->root()->type();
+            new_col = ColumnHelper::unfold_const_column(type_desc, new_col->size(), new_col);
 
             if (new_schema.field(i)->is_nullable()) {
                 new_col = ColumnHelper::cast_to_nullable_column(std::move(new_col));
@@ -596,8 +590,8 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 if (runtime_state == nullptr) {
                     return Status::InternalError("change materialized view but query_options/query_globals is not set");
                 }
-                RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
-                                                       &(column_mapping->mv_expr_ctx), runtime_state));
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
+                                                              &(column_mapping->mv_expr_ctx), runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->prepare(runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->open(runtime_state));
             }
@@ -766,9 +760,11 @@ Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& ba
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;
     std::vector<int32_t> new_sort_key_unique_ids;
+    base_sort_key_unique_ids.reserve(base_sort_key_idxes.size());
     for (auto idx : base_sort_key_idxes) {
         base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
     }
+    new_sort_key_unique_ids.reserve(new_sort_key_idxes.size());
     for (auto idx : new_sort_key_idxes) {
         new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
     }

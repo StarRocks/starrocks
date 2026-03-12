@@ -36,21 +36,21 @@
 
 #include <bthread/sys_futex.h>
 
+#include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/unaligned_access.h"
+#include "types/type_info.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -508,6 +508,7 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 
     std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    parsed_zonemap.reserve(_page_zone_maps.size());
     for (auto& zonemap : _page_zone_maps) {
         parsed_zonemap.emplace_back(zonemap);
     }
