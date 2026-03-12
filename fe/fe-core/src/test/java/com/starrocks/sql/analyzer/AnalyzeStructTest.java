@@ -114,8 +114,10 @@ public class AnalyzeStructTest {
         ShowCreateTableStmt stmt = (ShowCreateTableStmt) analyzeSuccess("SHOW CREATE TABLE deeper_table");
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         String res = resultSet.getResultRows().get(0).get(1);
-        Assertions.assertTrue(res.contains("`b` struct<b struct<c struct<d struct<e int(11)>>>> NULL COMMENT \"\""));
+        Assertions.assertTrue(res.contains(
+                "`b` struct<`b` struct<`c` struct<`d` struct<`e` int(11)>>>> NULL COMMENT \"\""));
         Assertions.assertTrue(
-                res.contains("`struct_a` struct<struct_a struct<struct_a int(11)>, other int(11)> NULL COMMENT \"\""));
+                res.contains("`struct_a` struct<`struct_a` struct<`struct_a` int(11)>, `other` int(11)> " +
+                        "NULL COMMENT \"\""));
     }
 }

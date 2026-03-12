@@ -257,15 +257,15 @@ public class CreateTableWithAggStateTest {
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
-                            "`k10` struct<col1 array<largeint(40)>> array_agg(largeint(40)) NULL COMMENT \"\", " +
-                            "`k11` struct<col1 array<float>> array_agg(float) NULL COMMENT \"\", " +
-                            "`k12` struct<col1 array<double>> array_agg(double) NULL COMMENT \"\", " +
-                            "`k13` struct<col1 array<DECIMAL128(38,1)>> array_agg(decimal(38, 1)) NULL COMMENT \"\", " +
-                            "`k2` struct<col1 array<datetime>> array_agg(datetime) NULL COMMENT \"\", " +
-                            "`k6` struct<col1 array<tinyint(4)>> array_agg(tinyint(4)) NULL COMMENT \"\", " +
-                            "`k7` struct<col1 array<smallint(6)>> array_agg(smallint(6)) NULL COMMENT \"\", " +
-                            "`k8` struct<col1 array<int(11)>> array_agg(int(11)) NULL COMMENT \"\", " +
-                            "`k9` struct<col1 array<bigint(20)>> array_agg(bigint(20)) NULL COMMENT \"\"]";
+                            "`k10` struct<`col1` array<largeint(40)>> array_agg(largeint(40)) NULL COMMENT \"\", " +
+                            "`k11` struct<`col1` array<float>> array_agg(float) NULL COMMENT \"\", " +
+                            "`k12` struct<`col1` array<double>> array_agg(double) NULL COMMENT \"\", " +
+                            "`k13` struct<`col1` array<DECIMAL128(38,1)>> array_agg(decimal(38, 1)) NULL COMMENT \"\", " +
+                            "`k2` struct<`col1` array<datetime>> array_agg(datetime) NULL COMMENT \"\", " +
+                            "`k6` struct<`col1` array<tinyint(4)>> array_agg(tinyint(4)) NULL COMMENT \"\", " +
+                            "`k7` struct<`col1` array<smallint(6)>> array_agg(smallint(6)) NULL COMMENT \"\", " +
+                            "`k8` struct<`col1` array<int(11)>> array_agg(int(11)) NULL COMMENT \"\", " +
+                            "`k9` struct<`col1` array<bigint(20)>> array_agg(bigint(20)) NULL COMMENT \"\"]";
                     Assertions.assertEquals(expect, columns);
                 });
     }
@@ -294,15 +294,15 @@ public class CreateTableWithAggStateTest {
                             .getTable("test_agg_tbl1");
                     String columns = table.getColumns().toString();
                     String expect = "[`k1` varchar(10) NULL COMMENT \"\", " +
-                            "`k10` struct<col1 array<varchar(1048576)>> group_concat(largeint(40)) NULL COMMENT \"\", " +
-                            "`k11` struct<col1 array<varchar(1048576)>> group_concat(float) NULL COMMENT \"\", " +
-                            "`k12` struct<col1 array<varchar(1048576)>> group_concat(double) NULL COMMENT \"\", " +
-                            "`k13` struct<col1 array<varchar(1048576)>> group_concat(decimal(21, 10)) NULL COMMENT \"\", " +
-                            "`k2` struct<col1 array<varchar(1048576)>> group_concat(datetime) NULL COMMENT \"\", " +
-                            "`k6` struct<col1 array<varchar(1048576)>> group_concat(tinyint(4)) NULL COMMENT \"\", " +
-                            "`k7` struct<col1 array<varchar(1048576)>> group_concat(smallint(6)) NULL COMMENT \"\", " +
-                            "`k8` struct<col1 array<varchar(1048576)>> group_concat(int(11)) NULL COMMENT \"\", " +
-                            "`k9` struct<col1 array<varchar(1048576)>> group_concat(bigint(20)) NULL COMMENT \"\"]";
+                            "`k10` struct<`col1` array<varchar(1048576)>> group_concat(largeint(40)) NULL COMMENT \"\", " +
+                            "`k11` struct<`col1` array<varchar(1048576)>> group_concat(float) NULL COMMENT \"\", " +
+                            "`k12` struct<`col1` array<varchar(1048576)>> group_concat(double) NULL COMMENT \"\", " +
+                            "`k13` struct<`col1` array<varchar(1048576)>> group_concat(decimal(21, 10)) NULL COMMENT \"\", " +
+                            "`k2` struct<`col1` array<varchar(1048576)>> group_concat(datetime) NULL COMMENT \"\", " +
+                            "`k6` struct<`col1` array<varchar(1048576)>> group_concat(tinyint(4)) NULL COMMENT \"\", " +
+                            "`k7` struct<`col1` array<varchar(1048576)>> group_concat(smallint(6)) NULL COMMENT \"\", " +
+                            "`k8` struct<`col1` array<varchar(1048576)>> group_concat(int(11)) NULL COMMENT \"\", " +
+                            "`k9` struct<`col1` array<varchar(1048576)>> group_concat(bigint(20)) NULL COMMENT \"\"]";
                     Assertions.assertEquals(expect, columns);
                 });
     }
