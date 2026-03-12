@@ -3407,6 +3407,13 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
+                // Re-fetch txnState after commit because the COW pattern in DatabaseTransactionMgr
+                // replaces the in-memory state with a deep copy, making the original reference stale.
+                TransactionState freshTxnState = transactionMgr.getTransactionState(
+                        database.getId(), transactionId);
+                if (freshTxnState != null) {
+                    txnState = freshTxnState;
+                }
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
