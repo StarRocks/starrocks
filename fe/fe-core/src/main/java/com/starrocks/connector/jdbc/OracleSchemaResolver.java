@@ -40,10 +40,18 @@ import static java.lang.Math.max;
 
 public class OracleSchemaResolver extends JDBCSchemaResolver {
 
+    public OracleSchemaResolver() {
+        this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
+    }
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null,
-                new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, defaultTableTypes);
+    }
+
+    @Override
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, tblName, defaultTableTypes);
     }
 
     @Override
