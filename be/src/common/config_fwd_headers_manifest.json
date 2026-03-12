@@ -233,6 +233,7 @@
         "merge_commit_thread_pool_queue_size",
         "pipeline_connector_scan_thread_num_per_cpu",
         "pipeline_exec_thread_pool_thread_num",
+        "automatic_partition_thread_pool_thread_num",
         "pipeline_max_num_drivers_per_exec_thread",
         "pipeline_prepare_thread_pool_queue_size",
         "pipeline_prepare_thread_pool_thread_num",
