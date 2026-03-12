@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from alembic.operations import Operations, ops
 from sqlalchemy import MetaData, Table
@@ -179,6 +179,9 @@ class AlterViewOp(ops.MigrateOperation):
             f"existing_security={self.existing_security})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_view", self.schema, self.view_name)
 
 @Operations.register_operation("create_view")
 class CreateViewOp(ops.MigrateOperation):
@@ -267,6 +270,9 @@ class CreateViewOp(ops.MigrateOperation):
             f"kwargs={self.kwargs!r}"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("create_view", self.schema, self.view_name)
 
 @Operations.register_operation("drop_view")
 class DropViewOp(ops.MigrateOperation):
@@ -349,6 +355,9 @@ class DropViewOp(ops.MigrateOperation):
             f"kwargs=({self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("drop_view", self.schema, self.view_name)
 
 @Operations.register_operation("alter_materialized_view")
 class AlterMaterializedViewOp(ops.MigrateOperation):
@@ -428,6 +437,9 @@ class AlterMaterializedViewOp(ops.MigrateOperation):
             f"existing_properties={self.existing_properties!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_materialized_view", self.schema, self.view_name)
 
 @Operations.register_operation("create_materialized_view")
 class CreateMaterializedViewOp(CreateViewOp):
@@ -541,6 +553,9 @@ class CreateMaterializedViewOp(CreateViewOp):
             f"kwargs={self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("create_materialized_view", self.schema, self.view_name)
 
 @Operations.register_operation("drop_materialized_view")
 class DropMaterializedViewOp(DropViewOp):
@@ -618,6 +633,9 @@ class DropMaterializedViewOp(DropViewOp):
             f"kwargs={self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("drop_materialized_view", self.schema, self.view_name)
 
 # Operation classes ordered according to StarRocks grammar:
 # engine → key → (comment) → partition → distribution → order by → properties
@@ -664,7 +682,8 @@ class AlterTableEngineOp(ops.AlterTableOp):
                f"engine={self.engine!r}, schema={self.schema!r}, "
                f"existing_engine={self.existing_engine!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_engine", self.schema, self.table_name, self.engine)
 
 @Operations.register_operation("alter_table_key")
@@ -726,7 +745,8 @@ class AlterTableKeyOp(ops.AlterTableOp):
                f"schema={self.schema!r}, existing_key_type={self.existing_key_type!r}, "
                f"existing_key_columns={self.existing_key_columns!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_key", self.schema, self.table_name, self.key_type, self.key_columns)
 
 @Operations.register_operation("alter_table_partition")
@@ -791,7 +811,8 @@ class AlterTablePartitionOp(ops.AlterTableOp):
                f"partition_method={self.partition_method!r}, schema={self.schema!r}, "
                f"existing_partition_method={self.existing_partition_method!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_partition", self.schema, self.table_name, self.partition_method)
 
 @Operations.register_operation("alter_table_distribution")
@@ -869,7 +890,8 @@ class AlterTableDistributionOp(ops.AlterTableOp):
                f"schema={self.schema!r}, existing_distribution_method={self.existing_distribution_method!r}, "
                f"existing_buckets={self.existing_buckets!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_distribution", self.schema, self.table_name, self.distribution_method, self.buckets)
 
 
@@ -916,7 +938,8 @@ class AlterTableOrderOp(ops.AlterTableOp):
                f"order_by={self.order_by!r}, schema={self.schema!r}, "
                f"existing_order_by={self.existing_order_by!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_order", self.schema, self.table_name, self.order_by)
 
 
@@ -963,5 +986,6 @@ class AlterTablePropertiesOp(ops.AlterTableOp):
                f"properties={self.properties!r}, schema={self.schema!r}, "
                f"existing_properties={self.existing_properties!r})")
 
-    def to_diff_tuple(self):
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
         return ("alter_table_properties", self.schema, self.table_name, self.properties)
