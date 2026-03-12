@@ -29,6 +29,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
