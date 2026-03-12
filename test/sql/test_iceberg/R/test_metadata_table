@@ -108,7 +108,7 @@ select partition_value,record_count,file_count from iceberg_sql_test_${uuid0}.ic
 -- !result
 desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0}$partitions;
 -- result:
-partition_value	struct<p1 int(11), p2 int(11)>	Yes	false	None		
+partition_value	struct<`p1` int(11), `p2` int(11)>	Yes	false	None		
 spec_id	INT	Yes	false	None		
 record_count	BIGINT	Yes	false	None		
 file_count	BIGINT	Yes	false	None		
