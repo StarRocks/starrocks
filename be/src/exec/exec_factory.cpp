@@ -120,13 +120,16 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
     // ExprContext, causing a use-after-free.
     *root = node;
 
-    std::vector<ExecNode*> children;
-    children.reserve(tnode.num_children);
+    node->reserve_children(tnode.num_children);
     for (int i = 0; i < tnode.num_children; i++) {
         ++*node_idx;
         ExecNode* child = nullptr;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node_idx, &child));
-        children.emplace_back(child);
+        if (Status st = create_tree_helper(state, pool, tnodes, descs, node_idx, &child); !st.ok()) {
+            if (child != nullptr) {
+                child->close(state);
+            }
+        }
+        node->add_child(child);
 
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
@@ -135,7 +138,6 @@ Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vect
             return Status::InternalError("Failed to reconstruct plan tree from thrift.");
         }
     }
-    node->set_children(std::move(children));
 
     RETURN_IF_ERROR(node->init(tnode, state));
 
