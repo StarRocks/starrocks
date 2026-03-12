@@ -45,9 +45,8 @@ static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc,
         return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
     }
     if (default_value.empty() && !slot_desc->type().is_string_type()) {
-        return Status::InvalidArgument(
-                fmt::format("empty default value is only supported for string-like columns, col_name={}",
-                            slot_desc->col_name()));
+        return Status::InvalidArgument(fmt::format(
+                "empty default value is only supported for string-like columns, col_name={}", slot_desc->col_name()));
     }
 
     // Parse default value into Datum using TypeInfo::from_string
