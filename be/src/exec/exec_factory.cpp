@@ -342,6 +342,14 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         *node = pool->add(new LookUpNode(pool, tnode, descs));
         return Status::OK();
     }
+    case TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::CACHE_STATS;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }

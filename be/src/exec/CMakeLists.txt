@@ -46,6 +46,7 @@ set(EXEC_FILES
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
     benchmark_scanner.cpp
+    cache_stats_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
