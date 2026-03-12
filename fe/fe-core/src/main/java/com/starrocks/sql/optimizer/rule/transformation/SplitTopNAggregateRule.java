@@ -312,12 +312,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         ReplaceColumnRefRewriter refRewriter = new ReplaceColumnRefRewriter(refMapping);
-<<<<<<< HEAD
-        LogicalOlapScanOperator newScan =
-                LogicalOlapScanOperator.builder().withOperator(scan).setProjection(scanProjection)
-                        .setColRefToColumnMetaMap(refToMeta).setColumnMetaToColRefMap(metaToRef)
-                        .setPredicate(refRewriter.rewrite(scan.getPredicate())).build();
-=======
+
         List<ScalarOperator> newPrunedPredicates = scan.getPrunedPartitionPredicates().stream()
                 .map(refRewriter::rewrite)
                 .collect(Collectors.toList());
@@ -329,7 +324,6 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 .setPredicate(refRewriter.rewrite(scan.getPredicate()))
                 .setPrunedPartitionPredicates(newPrunedPredicates)
                 .build();
->>>>>>> bd8eb161e4 ([BugFix] Fix SplitTopNRule not process prune partition (#70154))
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
 
