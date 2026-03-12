@@ -4003,6 +4003,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
 - Introduced in: v3.2.10, v3.3.3
 
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether `information_schema.tables` is allowed to access external metadata services when resolving tables in external catalogs (such as Hive, Iceberg, JDBC). When set to `false` (default), columns like `TABLE_COMMENT` may be empty for external tables but the query is fast and avoids remote calls. When set to `true`, the FE contacts the corresponding external metadata service and can populate fields like `TABLE_COMMENT` at the cost of additional latency and remote calls per table.
+- Introduced in: -
+
 ##### `enable_materialized_view_concurrent_prepare`
 
 - Default: true
