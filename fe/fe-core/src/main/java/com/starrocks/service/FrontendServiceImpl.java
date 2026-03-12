@@ -476,15 +476,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -532,16 +531,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Database db = metadataMgr.getDb(context, catalogName, params.db);
@@ -819,15 +816,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
