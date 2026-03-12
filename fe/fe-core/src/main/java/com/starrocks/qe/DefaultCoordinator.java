@@ -1008,7 +1008,18 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
-        dealStatusToTryRetry(copyStatus);
+
+        try {
+            dealStatusToTryRetry(copyStatus);
+        } catch (StarRocksException e) {
+            if (null == resultBatch || null == resultBatch.getQueryStatistics()) {
+                throw e;
+            } else {
+                resultBatch.setStatus(copyStatus);
+                resultBatch.setInternalErrorCode(e.getInternalErrorCode());
+                return resultBatch;
+            }
+        }
 
         if (resultBatch.isEos()) {
             this.returnedAllResults = true;
