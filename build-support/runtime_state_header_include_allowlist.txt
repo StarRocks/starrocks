@@ -4,6 +4,7 @@ src/exec/pipeline/exchange/local_exchange.h
 src/exec/pipeline/fragment_context.h
 src/exec/pipeline/group_execution/execution_group.h
 src/exec/union_node.h
+src/exprs/agg/array_agg.h
 src/exprs/agg/group_concat.h
 src/exprs/table_function/generate_series.h
 src/exprs/table_function/unnest_bitmap.h
