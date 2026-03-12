@@ -424,6 +424,11 @@ TEST_F(ColumnConverterTest, FLBATest) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
             check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
         }
+        {
+            // FIXED_LEN_BYTE_ARRAY (UUID) -> VARBINARY: raw 16 bytes pass through without conversion
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY);
+            check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
+        }
     }
     {
         const std::string col_name = "decimal_flba";

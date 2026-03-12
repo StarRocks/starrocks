@@ -486,7 +486,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         switch (col_type) {

@@ -109,7 +109,9 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
                                                               decimal_logical_type->scale());
         } else {
-            *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            // UUID (16B), INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
+            // VARBINARY is the correct SR type for all of these.
+            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
         break;
     }

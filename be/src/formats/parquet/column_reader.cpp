@@ -173,7 +173,9 @@ bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_t
             appliable = true;
         }
     } else if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_VARBINARY) {
-        if (parquet_type == tparquet::Type::type::BYTE_ARRAY) {
+        if (parquet_type == tparquet::Type::type::BYTE_ARRAY ||
+            (parquet_type == tparquet::Type::type::FIXED_LEN_BYTE_ARRAY &&
+             type == LogicalType::TYPE_VARBINARY)) {
             appliable = true;
         }
         //TODO: FLBA type should check the length and pad space.
