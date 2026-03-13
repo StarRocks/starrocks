@@ -41,7 +41,7 @@ public:
     DisposableClosure& operator=(const DisposableClosure& other) = delete;
 
     void addFailureHandler(FailedFunc fn) { _failed_handler = std::move(fn); }
-    void addSuccessHandler(SuccessFunc fn) { _success_handler = fn; }
+    void addSuccessHandler(SuccessFunc fn) { _success_handler = std::move(fn); }
 
     void Run() noexcept override {
         std::unique_ptr<DisposableClosure> self_guard(this);

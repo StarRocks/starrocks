@@ -465,7 +465,7 @@ private:
     }
 
     template <class T>
-    void _restore_inlined_permutation(const CompactChunkPermutation<T> inlined) {
+    void _restore_inlined_permutation(const CompactChunkPermutation<T>& inlined) {
         size_t n = std::min(inlined.size(), _pruned_limit);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;

@@ -35,7 +35,7 @@ public:
 
 private:
     const int _tuple_id;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    [[maybe_unused]] const TupleDescriptor* _tuple_desc = nullptr;
 
     TypeDescriptor _constant_type;
     std::vector<int64_t> _long_values;

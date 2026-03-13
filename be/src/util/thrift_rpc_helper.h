@@ -39,16 +39,16 @@ public:
 
     // for default timeout
     template <typename T>
-    static Status rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback);
+    static Status rpc(const std::string& ip, const int32_t port, const ConnectionCallBack<T>& callback);
 
     template <typename T>
-    static Status rpc(const TNetworkAddress& endpoint, ConnectionCallBack<T> callback, int timeout_ms,
+    static Status rpc(const TNetworkAddress& endpoint, const ConnectionCallBack<T>& callback, int timeout_ms,
                       int retry_times = 2) {
         return rpc(endpoint.hostname, endpoint.port, callback, timeout_ms, retry_times);
     }
 
     template <typename T>
-    static Status rpc(const std::string& ip, const int32_t port, ConnectionCallBack<T> callback, int timeout_ms,
+    static Status rpc(const std::string& ip, const int32_t port, const ConnectionCallBack<T>& callback, int timeout_ms,
                       int retry_times = 2);
 
     template <typename T>

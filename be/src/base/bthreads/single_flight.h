@@ -33,13 +33,13 @@ public:
     // time. If a duplicate comes in, the duplicate caller waits for the
     // original to complete and receives the same results.
     template <typename Func, typename... Args>
-    R Do(K key, Func&& func, Args&&... args) {
+    R Do(const K& key, Func&& func, Args&&... args) {
         auto f = DoFuture(key, std::forward<Func>(func), std::forward<Args>(args)...);
         return f.get();
     }
 
     template <typename Func, typename... Args>
-    SharedFuture<R> DoFuture(K key, Func&& func, Args&&... args) {
+    SharedFuture<R> DoFuture(const K& key, Func&& func, Args&&... args) {
         std::unique_lock lock(_doing_mtx);
 
         auto it = _doing.find(key);
@@ -76,7 +76,7 @@ public:
     // Forget tells the singleflight to forget about a key.  Future calls
     // to Do for this key will call the function rather than waiting for
     // an earlier call to complete.
-    void Forget(K key) {
+    void Forget(const K& key) {
         TEST_SYNC_POINT("singleflight::Group::Forget:1");
         {
             std::lock_guard l(_doing_mtx);

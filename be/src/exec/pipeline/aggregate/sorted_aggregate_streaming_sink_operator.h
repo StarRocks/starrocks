@@ -50,7 +50,7 @@ class SortedAggregateStreamingSinkOperatorFactory final : public OperatorFactory
 public:
     template <class... Args>
     SortedAggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                StreamingAggregatorFactoryPtr aggregator_factory, Args... args)
+                                                StreamingAggregatorFactoryPtr aggregator_factory, const Args&... args)
             : SortedAggregateStreamingSinkOperatorFactory(id, plan_node_id, std::move(aggregator_factory)) {}
 
     SortedAggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id,

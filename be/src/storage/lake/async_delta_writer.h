@@ -17,6 +17,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/runtime_profile.h"
@@ -86,7 +87,7 @@ public:
     // [thread-safe]
     //
     // TODO: Change signature to `Future<Status> finish()`
-    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, cb); }
+    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, std::move(cb)); }
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 

@@ -133,7 +133,7 @@ struct CSVParseOptions {
     bool trim_space;
     char escape;
     char enclose;
-    CSVParseOptions(const std::string row_delimiter_, const std::string column_delimiter_, int64_t skip_header_ = 0,
+    CSVParseOptions(const std::string& row_delimiter_, const std::string& column_delimiter_, int64_t skip_header_ = 0,
                     bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
         row_delimiter = row_delimiter_;
         column_delimiter = column_delimiter_;
