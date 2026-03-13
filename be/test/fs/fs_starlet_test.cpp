@@ -458,7 +458,7 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
 
 TEST_P(StarletFileSystemTest, test_get_cache_stats) {
     auto uri = StarletPath("cache_stats.dat");
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     ASSERT_OK(wf->append("hello"));
     ASSERT_OK(wf->append(" world!"));
