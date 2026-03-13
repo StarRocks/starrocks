@@ -645,6 +645,21 @@ CREATE TABLE site_access1(
 DUPLICATE KEY(event_day,site_id,pv);
 ```
 
+また、ステートメント内で明示的に句を指定することもできます:
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+DISTRIBUTED BY RANDOM BUCKETS;
+```
+
+
 ただし、StarRocksのバケッティングメカニズムに精通している場合、ランダムバケット法を使用してテーブルを作成する際にバケット数を手動で設定することもできます。
 
 ```SQL
