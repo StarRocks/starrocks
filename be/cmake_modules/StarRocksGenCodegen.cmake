@@ -21,9 +21,74 @@ function(starrocks_collect_proto_sources source_root out_var)
 endfunction()
 
 function(starrocks_collect_thrift_sources source_root out_var)
-    file(GLOB _sources "${source_root}/*.thrift")
+    file(GLOB_RECURSE _sources LIST_DIRECTORIES FALSE "${source_root}/*.thrift")
     list(SORT _sources)
     set(${out_var} "${_sources}" PARENT_SCOPE)
+endfunction()
+
+function(_starrocks_get_codegen_source_id source_root source out_var)
+    file(RELATIVE_PATH _relative_path "${source_root}" "${source}")
+    string(REPLACE "\\" "/" _normalized_relative_path "${_relative_path}")
+    string(SHA256 _source_hash "${_normalized_relative_path}")
+    set(_source_id "src_${_source_hash}")
+    set(${out_var} "${_source_id}" PARENT_SCOPE)
+endfunction()
+
+function(_starrocks_validate_unique_codegen_source_ids source_root)
+    set(_entries)
+    foreach(_source IN LISTS ARGN)
+        _starrocks_get_codegen_source_id("${source_root}" "${_source}" _source_id)
+        list(APPEND _entries "${_source_id}|${_source}")
+    endforeach()
+
+    list(SORT _entries)
+    set(_previous_source_id "")
+    set(_previous_source "")
+    foreach(_entry IN LISTS _entries)
+        string(FIND "${_entry}" "|" _separator_index)
+        math(EXPR _source_index "${_separator_index} + 1")
+        string(SUBSTRING "${_entry}" 0 ${_separator_index} _source_id)
+        string(SUBSTRING "${_entry}" ${_source_index} -1 _source)
+
+        if(_source_id STREQUAL _previous_source_id)
+            message(FATAL_ERROR
+                    "Conflicting thrift source id ${_source_id} from ${_previous_source} and ${_source}. "
+                    "Manifest and stamp file ids must be unique within a codegen target.")
+        endif()
+
+        set(_previous_source_id "${_source_id}")
+        set(_previous_source "${_source}")
+    endforeach()
+endfunction()
+
+function(_starrocks_validate_unique_thrift_outputs output_dir)
+    set(_entries)
+    foreach(_source IN LISTS ARGN)
+        starrocks_get_thrift_outputs("${output_dir}" "${_source}" _outputs)
+        foreach(_output IN LISTS _outputs)
+            list(APPEND _entries "${_output}|${_source}")
+        endforeach()
+    endforeach()
+
+    list(SORT _entries)
+    set(_previous_output "")
+    set(_previous_source "")
+    foreach(_entry IN LISTS _entries)
+        string(FIND "${_entry}" "|" _separator_index)
+        math(EXPR _source_index "${_separator_index} + 1")
+        string(SUBSTRING "${_entry}" 0 ${_separator_index} _output)
+        string(SUBSTRING "${_entry}" ${_source_index} -1 _source)
+
+        if(_output STREQUAL _previous_output)
+            message(FATAL_ERROR
+                    "Conflicting thrift output ${_output} from ${_previous_source} and ${_source}. "
+                    "Generated thrift outputs are flat, so thrift basenames and service names must "
+                    "be unique within a codegen target.")
+        endif()
+
+        set(_previous_output "${_output}")
+        set(_previous_source "${_source}")
+    endforeach()
 endfunction()
 
 function(_starrocks_collect_proto_recursive source source_root visited_in result_var visited_out_var)
@@ -69,11 +134,15 @@ function(_starrocks_collect_thrift_recursive source source_root visited_in resul
     else()
         list(APPEND _visited "${source}")
         set(_deps "${source}")
+        get_filename_component(_source_dir "${source}" DIRECTORY)
 
         file(STRINGS "${source}" _include_lines REGEX "^[ \t]*include[ \t]+\"[^\"]+\"")
         foreach(_line IN LISTS _include_lines)
             string(REGEX REPLACE "^[ \t]*include[ \t]+\"([^\"]+)\".*" "\\1" _relative_path "${_line}")
-            set(_dependency "${source_root}/${_relative_path}")
+            get_filename_component(_dependency "${_source_dir}/${_relative_path}" ABSOLUTE)
+            if(NOT EXISTS "${_dependency}")
+                get_filename_component(_dependency "${source_root}/${_relative_path}" ABSOLUTE)
+            endif()
             if(NOT EXISTS "${_dependency}")
                 message(FATAL_ERROR "Missing thrift dependency ${_relative_path} referenced by ${source}")
             endif()
@@ -241,9 +310,12 @@ function(starrocks_define_thrift_codegen_target target_name)
     file(MAKE_DIRECTORY "${ARG_MANIFEST_DIR}")
 
     starrocks_collect_thrift_sources("${ARG_SOURCE_ROOT}" _sources)
+    _starrocks_validate_unique_codegen_source_ids("${ARG_SOURCE_ROOT}" ${_sources})
+    _starrocks_validate_unique_thrift_outputs("${ARG_OUTPUT_DIR}" ${_sources})
     set(_stamps)
     foreach(_source IN LISTS _sources)
         get_filename_component(_base_name "${_source}" NAME_WE)
+        _starrocks_get_codegen_source_id("${ARG_SOURCE_ROOT}" "${_source}" _source_id)
         starrocks_collect_thrift_dependency_closure("${ARG_SOURCE_ROOT}" "${_source}" _dependencies)
         starrocks_get_thrift_outputs("${ARG_OUTPUT_DIR}" "${_source}" _outputs)
 
@@ -255,8 +327,8 @@ function(starrocks_define_thrift_codegen_target target_name)
             list(APPEND _dependencies "${_patch_file}")
         endif()
 
-        set(_stamp "${ARG_OUTPUT_DIR}/.${_base_name}_thrift.stamp")
-        set(_manifest "${ARG_MANIFEST_DIR}/${_base_name}_thrift_manifest.cmake")
+        set(_stamp "${ARG_OUTPUT_DIR}/.${_source_id}_thrift.stamp")
+        set(_manifest "${ARG_MANIFEST_DIR}/${_source_id}_thrift_manifest.cmake")
         _starrocks_write_codegen_manifest(
             "${_manifest}"
             SOURCE "${_source}"
