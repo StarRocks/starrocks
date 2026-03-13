@@ -55,6 +55,9 @@ execute_process(COMMAND bash "-c" "uname -m"
                 OUTPUT_VARIABLE
                 CMAKE_BUILD_TARGET_ARCH
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (APPLE AND CMAKE_BUILD_TARGET_ARCH STREQUAL "arm64")
+    set(CMAKE_BUILD_TARGET_ARCH "aarch64")
+endif()
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # Set dirs
@@ -74,18 +77,18 @@ set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
-if (APPLE)
-    set(MAKE_TEST "ON")
-else()
-    option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
-endif()
+option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
 message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(WITH_STARCACHE "Build binary with starcache library" ON)
+set(WITH_STARCACHE_DEFAULT ON)
+if (APPLE)
+    set(WITH_STARCACHE_DEFAULT OFF)
+endif()
+option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEFAULT})
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
@@ -114,6 +117,10 @@ endif()
 option(ENABLE_MULTI_DYNAMIC_LIBS "Enable dynamic linking of individual StarRocks modules (developer option)" OFF)
 
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
+if (APPLE AND WITH_STARCACHE)
+    message(STATUS "Disable starcache on macOS")
+    set(WITH_STARCACHE OFF CACHE BOOL "Build binary with starcache library" FORCE)
+endif()
 
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -163,7 +170,9 @@ check_function_exists(sched_getcpu HAVE_SCHED_GETCPU)
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
 
 # -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+if (NOT APPLE)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+endif()
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 
 # compiler flags that are common across debug/release builds
@@ -277,6 +286,11 @@ if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
 
+if (APPLE AND STARROCKS_JIT_ENABLE)
+    message(STATUS "Disable JIT on macOS")
+    set(STARROCKS_JIT_ENABLE OFF CACHE BOOL "Enable LLVM JIT support" FORCE)
+endif()
+
 if (STARROCKS_JIT_ENABLE)
     message(STATUS "Enable JIT")
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -DSTARROCKS_JIT_ENABLE")
@@ -373,11 +387,18 @@ message(STATUS "Compiler Flags: ${CMAKE_CXX_FLAGS}")
 add_definitions(-DHAVE_INTTYPES_H -DHAVE_NETINET_IN_H)
 
 # Set include dirs
+if (APPLE)
+    include_directories(
+        BEFORE
+        ${SRC_DIR}/macos_compat
+    )
+endif()
 include_directories(
     BEFORE
     ${SRC_DIR}/formats/orc/apache-orc/c++/include/
 )
 include_directories(
+    BEFORE
     ${SRC_DIR}/
     ${TEST_DIR}/
     ${BE_PROTO_THRIFT_GENSRC_DIR}/
@@ -394,10 +415,21 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
 endif()
 
-set(WL_START_GROUP "-Wl,--start-group")
-set(WL_END_GROUP "-Wl,--end-group")
-set(WL_LINK_STATIC "-Wl,-Bstatic")
-set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+if (APPLE)
+    set(WL_START_GROUP "")
+    set(WL_END_GROUP "")
+    set(WL_LINK_STATIC "")
+    set(WL_LINK_DYNAMIC "")
+    set(WL_WHOLE_ARCHIVE_PREFIX "")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "")
+else()
+    set(WL_START_GROUP "-Wl,--start-group")
+    set(WL_END_GROUP "-Wl,--end-group")
+    set(WL_LINK_STATIC "-Wl,-Bstatic")
+    set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
+    set(WL_WHOLE_ARCHIVE_PREFIX "-Wl,--whole-archive")
+    set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
+endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
@@ -406,7 +438,7 @@ set(STARROCKS_LINK_LIBS
     Column
     Connector
     Exec
-    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
+    ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
     IO
@@ -427,7 +459,7 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
-    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
+    ${WL_WHOLE_ARCHIVE_PREFIX} ExprCore ${WL_WHOLE_ARCHIVE_SUFFIX}
     RuntimeCore
     ChunkCore
     ColumnCore
@@ -541,6 +573,15 @@ set(STARROCKS_DEPENDENCIES
     ${WL_END_GROUP}
 )
 
+if (APPLE)
+    list(REMOVE_ITEM STARROCKS_DEPENDENCIES
+        opentelemetry_trace
+        http_client_curl
+        opentelemetry_resources
+        opentelemetry_common
+        opentelemetry_exporter_jaeger_trace)
+endif()
+
 if (NOT BUILD_FORMAT_LIB)
     set(STARROCKS_DEPENDENCIES
             ${STARROCKS_DEPENDENCIES}
@@ -621,7 +662,11 @@ else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+if (APPLE)
+    set(WRAP_LINKER_FLAGS "")
+else()
+    set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+endif()
 
 FUNCTION(ADD_BE_LIB LIB_NAME)
     IF(ENABLE_MULTI_DYNAMIC_LIBS)
@@ -643,17 +688,38 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
 ENDFUNCTION()
 
 
-set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp)
+set(STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC})
+if (NOT APPLE)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -lgomp)
+endif()
 
-if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+if (NOT APPLE AND NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
     set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
+if (APPLE)
+    set(STARROCKS_SYSTEM_LINK_LIBS
+        -lresolv
+        -lm
+        -pthread
+        "-framework Foundation"
+        "-framework CoreText"
+        "-framework ApplicationServices"
+        "-framework SystemConfiguration"
+    )
+    find_library(MIMALLOC_LIB NAMES mimalloc PATHS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
+    if (MIMALLOC_LIB)
+        list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
+    endif()
+else()
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -liberty -lc -lm -ldl -rdynamic -pthread)
+endif()
+
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
