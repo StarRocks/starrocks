@@ -218,6 +218,8 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Number of parallel file copy threads per tablet during lake replication (0 or 1 = sequential)
+CONF_mInt32(lake_replication_per_tablet_copy_parallelism, "4");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
