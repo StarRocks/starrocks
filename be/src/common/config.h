@@ -209,6 +209,8 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
+// Maximum retry count for non-segment file copy during lake-to-lake replication
+CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
