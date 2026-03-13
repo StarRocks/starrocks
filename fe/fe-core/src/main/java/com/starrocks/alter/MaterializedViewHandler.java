@@ -717,11 +717,16 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
-            // check drop mv index operation
-            long mvIndexMetaId = checkDropMaterializedView(mvName, olapTable);
+            final long mvIndexMetaId;
+            if (dropMaterializedViewStmt.isForceDrop()) {
+                mvIndexMetaId = getMvIndexMetaIdForForceDrop(mvName, olapTable);
+            } else {
+                mvIndexMetaId = checkDropMaterializedView(mvName, olapTable);
+            }
+            boolean forceDrop = dropMaterializedViewStmt.isForceDrop();
             // log drop mv operation
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, false),
+            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, forceDrop),
                     wal -> {
                         // drop mv data in memory
                         dropMaterializedView(mvName, olapTable);
@@ -734,6 +739,24 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw e;
             }
         }
+    }
+
+    /**
+     * When force dropping, skip table state and partition checks. Only validate mv name and existence.
+     * Caller must hold db write lock.
+     */
+    private long getMvIndexMetaIdForForceDrop(String mvName, OlapTable olapTable)
+            throws DdlException, MetaNotFoundException {
+        if (mvName.equals(olapTable.getName())) {
+            throw new DdlException("Cannot drop base index by using DROP ROLLUP or DROP MATERIALIZED VIEW.");
+        }
+        if (!olapTable.hasMaterializedIndex(mvName)) {
+            throw new MetaNotFoundException(
+                    "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
+        }
+        Long indexMetaId = olapTable.getIndexMetaIdByName(mvName);
+        Preconditions.checkState(indexMetaId != null, "index meta id for mv " + mvName);
+        return indexMetaId;
     }
 
     /**
@@ -1112,6 +1135,35 @@ public class MaterializedViewHandler extends AlterHandler {
                 onJobDone(materializedViewJob);
             }
         }
+    }
+
+    /**
+     * Cancel unfinished rollup jobs for a specific MV name on one table.
+     * Returns true if at least one matching unfinished job is found.
+     */
+    public boolean cancelRollupJobsForForceDrop(long tableId, String mvName, String reason) {
+        boolean foundMatchingJob = false;
+        List<AlterJobV2> rollupJobs = getUnfinishedAlterJobV2ByTableId(tableId);
+        for (AlterJobV2 alterJob : rollupJobs) {
+            if (alterJob instanceof RollupJobV2) {
+                if (!((RollupJobV2) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRollupJob) {
+                if (!((LakeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            foundMatchingJob = true;
+            alterJob.cancel(reason);
+            if (alterJob.isDone()) {
+                onJobDone(alterJob);
+            }
+        }
+        return foundMatchingJob;
     }
 
     // just for ut

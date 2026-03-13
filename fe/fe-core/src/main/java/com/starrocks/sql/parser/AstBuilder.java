@@ -2388,9 +2388,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitDropMaterializedViewStatement(
             com.starrocks.sql.parser.StarRocksParser.DropMaterializedViewStatementContext context) {
+        boolean force = context.FORCE() != null;
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableRef tableRef = new TableRef(normalizeName(mvQualifiedName), null, createPos(context.qualifiedName()));
-        return new DropMaterializedViewStmt(context.IF() != null, tableRef, createPos(context));
+        return new DropMaterializedViewStmt(context.IF() != null, force, tableRef, createPos(context));
     }
 
     @Override
