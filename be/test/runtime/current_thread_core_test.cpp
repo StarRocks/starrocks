@@ -105,6 +105,11 @@ TEST_F(CurrentThreadCoreTest, mem_tracker_setter_restores_after_tls_pollution) {
     MemTracker load_tracker(-1, "load", &process_tracker);
     MemTracker query_pool_tracker(-1, "query_pool", &process_tracker);
 
+    // Must initialize env so that mem_tracker() returns tls_mem_tracker instead of nullptr
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+
     // Simulate: outer scope sets load_tracker (LoadChannelMgr::add_chunk)
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&load_tracker);
@@ -123,8 +128,10 @@ TEST_F(CurrentThreadCoreTest, mem_tracker_setter_restores_after_tls_pollution) {
         // NOT the polluted query_pool_tracker
         EXPECT_EQ(tls_mem_tracker, &load_tracker);
     }
-    // After outer guard destructor: nullptr should be restored (original value)
-    EXPECT_EQ(tls_mem_tracker, nullptr);
+    // After outer guard destructor: process_tracker is restored.
+    // When env is initialized and tls_mem_tracker was nullptr, mem_tracker() auto-fills it
+    // with process_tracker, so that becomes the saved "old" value for the outer RAII guard.
+    EXPECT_EQ(tls_mem_tracker, &process_tracker);
 }
 
 // Verify the full two-layer pattern used for the query_pool negative memory fix:
@@ -135,6 +142,11 @@ TEST_F(CurrentThreadCoreTest, two_layer_tracker_pattern_prevents_negative_query_
     MemTracker process_tracker(-1, "process");
     MemTracker load_tracker(-1, "load", &process_tracker);
     MemTracker query_pool_tracker(-1, "query_pool", &process_tracker);
+
+    // Must initialize env so that mem_tracker() returns tls_mem_tracker instead of nullptr
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
 
     // Initial state: no tracker (typical for brpc handler bthread)
     ASSERT_EQ(tls_mem_tracker, nullptr);
@@ -165,7 +177,9 @@ TEST_F(CurrentThreadCoreTest, two_layer_tracker_pattern_prevents_negative_query_
     // Verify: query_pool should NOT have gone negative
     // (In real scenario, alloc under load_tracker and free under load_tracker → net zero on query_pool)
     EXPECT_EQ(query_pool_tracker.consumption(), 0);
-    EXPECT_EQ(tls_mem_tracker, nullptr);
+    // When env is initialized and tls_mem_tracker was nullptr, mem_tracker() auto-fills it
+    // with process_tracker, so the outer RAII guard restores to process_tracker.
+    EXPECT_EQ(tls_mem_tracker, &process_tracker);
 }
 
 } // namespace

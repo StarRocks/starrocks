@@ -375,7 +375,10 @@ TEST_F(LoadChannelMgrTest, add_chunks_sets_load_mem_tracker) {
     load_id.set_hi(888);
     load_id.set_lo(888);
     add_chunks_request.mutable_id()->CopyFrom(load_id);
-    add_chunks_request.set_sender_id(0);
+    auto* inner_request = add_chunks_request.add_requests();
+    inner_request->mutable_id()->CopyFrom(load_id);
+    inner_request->set_index_id(_index_id);
+    inner_request->set_sender_id(0);
     PTabletWriterAddBatchResult add_chunks_result;
     _load_channel_mgr->add_chunks(add_chunks_request, &add_chunks_result);
 
