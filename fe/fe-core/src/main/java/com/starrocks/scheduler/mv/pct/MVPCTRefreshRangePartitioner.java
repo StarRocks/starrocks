@@ -170,6 +170,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
+    public void dropDeferredPartitions() {
+        // For range partitions, partitions are dropped immediately in syncAddOrDropPartitions()
+        // to avoid overlapping partition definitions when adding new partitions.
+        // This is a no-op.
+    }
+
+    @Override
     public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();

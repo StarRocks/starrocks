@@ -122,6 +122,12 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
     /**
+     * Drop deferred partitions after the refresh succeeds. This is used to ensure that if the refresh fails,
+     * the original partitions are preserved.
+     */
+    public abstract void dropDeferredPartitions();
+
+    /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.
      *
      * @param refBaseTable:               ref base table to check.
