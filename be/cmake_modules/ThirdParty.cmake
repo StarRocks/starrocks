@@ -414,12 +414,12 @@ if (${WITH_TENANN} STREQUAL "ON")
 endif()
 
 set(BUNDLED_JAVA_HOME ${THIRDPARTY_DIR}/open_jdk)
-if (EXISTS "${BUNDLED_JAVA_HOME}/include/jni.h" OR
-    EXISTS "${BUNDLED_JAVA_HOME}/Contents/Home/include/jni.h" OR
-    EXISTS "${BUNDLED_JAVA_HOME}/libexec/openjdk.jdk/Contents/Home/include/jni.h")
-    set(JAVA_HOME_CANDIDATE "${BUNDLED_JAVA_HOME}")
-elseif (DEFINED ENV{JAVA_HOME})
+if (DEFINED ENV{JAVA_HOME} AND NOT "$ENV{JAVA_HOME}" STREQUAL "")
     set(JAVA_HOME_CANDIDATE "$ENV{JAVA_HOME}")
+elseif (EXISTS "${BUNDLED_JAVA_HOME}/include/jni.h" OR
+        EXISTS "${BUNDLED_JAVA_HOME}/Contents/Home/include/jni.h" OR
+        EXISTS "${BUNDLED_JAVA_HOME}/libexec/openjdk.jdk/Contents/Home/include/jni.h")
+    set(JAVA_HOME_CANDIDATE "${BUNDLED_JAVA_HOME}")
 else()
     message(FATAL_ERROR "No bundled OpenJDK found under ${BUNDLED_JAVA_HOME} and JAVA_HOME is not set")
 endif()
