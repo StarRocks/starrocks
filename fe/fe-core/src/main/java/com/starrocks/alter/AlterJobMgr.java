@@ -188,7 +188,11 @@ public class AlterJobMgr {
                     boolean foundMvRollupJob = materializedViewHandler.cancelRollupJobsForForceDrop(
                             targetTable.getId(), stmt.getMvName(), "force drop materialized view");
                     if (!foundMvRollupJob) {
-                        throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                        // Re-check state: it may have transitioned to NORMAL by another thread
+                        // (race with rollup job completion) before we could cancel.
+                        if (targetTable.getState() != OlapTableState.NORMAL) {
+                            throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                        }
                     }
                 } else {
                     throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
