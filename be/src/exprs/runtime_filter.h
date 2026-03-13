@@ -588,7 +588,12 @@ class MinMaxRuntimeFilter final : public RuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
+<<<<<<< HEAD:be/src/exprs/runtime_filter.h
     using ContainerType = RunTimeProxyContainerType<Type>;
+=======
+    using ContainerType =
+            std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer, RunTimeImmContainerType<Type>>;
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067)):be/src/runtime/runtime_filter.h
 
     MinMaxRuntimeFilter() { _init_min_max(); }
     MinMaxRuntimeFilter(const MinMaxRuntimeFilter& rhs)
@@ -1233,7 +1238,12 @@ class TRuntimeBloomFilter final : public RuntimeMembershipFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
+<<<<<<< HEAD:be/src/exprs/runtime_filter.h
     using ContainerType = RunTimeProxyContainerType<Type>;
+=======
+    using ContainerType =
+            std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer, RunTimeImmContainerType<Type>>;
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067)):be/src/runtime/runtime_filter.h
 
     TRuntimeBloomFilter() = default;
     explicit TRuntimeBloomFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}
