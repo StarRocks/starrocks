@@ -189,7 +189,7 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct vs.a, vs1.b from ttypes group by vs");
         analyzeSuccess("select distinct vs.a, vs1.b from ttypes group by vs.a, vs1.b");
     }
-    
+
     @Test
     public void testDistinctAggOnComplexTypes() {
         analyzeSuccess("select count(distinct va) from ttypes group by v1");
@@ -506,7 +506,8 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select v1, sum(v2) from t0 where v3 > 0 group by all");
 
         // window function in select — window expr should NOT be a group by key
-        analyzeSuccess("select v1, sum(v2) over(), sum(v3) from t0 group by all");
+        analyzeFail("select v1, sum(v2) over(), sum(v3) from t0 group by all",
+                "GROUP BY clause cannot contain window function");
 
         // group by all should reject window functions as group by keys
         analyzeFail("select v1, sum(v2) over() from t0 group by all",

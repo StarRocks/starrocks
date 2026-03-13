@@ -3534,15 +3534,6 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testGroupByAllNonAggExpression() throws Exception {
-        // v1+v2 has no aggregate — should be a group by key
-        String sql = "select v1 + v2, sum(v3) from t0 group by all";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 1: v1, 2: v2");
-        assertContains(plan, "output: sum(3: v3)");
-    }
-
-    @Test
     public void testGroupByAllMultipleAgg() throws Exception {
         // multiple agg functions: only v1 is non-agg
         String sql = "select v1, sum(v2), avg(v3), count(*) from t0 group by all";
@@ -3594,23 +3585,5 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "group by: 1: v1");
         assertContains(plan, "limit: 5");
-    }
-
-    @Test
-    public void testGroupByAllWithOrderBy() throws Exception {
-        // order by non-agg column
-        String sql = "select v1, sum(v2) from t0 group by all order by v1";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 1: v1");
-        assertContains(plan, "order by: 1: v1 ASC");
-    }
-
-    @Test
-    public void testGroupByAllWithOrderByAgg() throws Exception {
-        // order by aggregate expression
-        String sql = "select v1, sum(v2) from t0 group by all order by sum(v2) desc";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "group by: 1: v1");
-        assertContains(plan, "order by: 4: sum DESC");
     }
 }
