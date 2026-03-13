@@ -23,6 +23,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
+#include "runtime/runtime_state.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 

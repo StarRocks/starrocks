@@ -21,10 +21,15 @@
 #include "base/testutil/sync_point.h"
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "common/status.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/priority_thread_pool.hpp"
+
+namespace starrocks {
+class RuntimeProfile;
+}
 
 namespace starrocks::pipeline {
 
@@ -35,10 +40,7 @@ public:
         return &s_instance;
     }
 
-    int submit(void* (*fn)(void*), void* args) override {
-        bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
-        return ret ? 0 : -1;
-    }
+    int submit(void* (*fn)(void*), void* args) override;
 
 private:
     SinkIOExecutor() = default;

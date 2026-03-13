@@ -34,7 +34,6 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
 #include "storage/range.h"
 
 namespace starrocks {

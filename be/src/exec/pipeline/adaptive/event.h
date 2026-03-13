@@ -20,7 +20,7 @@
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 

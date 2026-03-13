@@ -23,7 +23,7 @@
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller_factory.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 

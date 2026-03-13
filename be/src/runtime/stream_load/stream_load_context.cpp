@@ -37,8 +37,23 @@
 #include <fmt/format.h>
 
 #include "agent/master_info.h"
+#include "runtime/exec_env.h"
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
+
+StreamLoadContext::~StreamLoadContext() noexcept {
+    if (need_rollback) {
+        (void)_exec_env->stream_load_executor()->rollback_txn(this);
+        need_rollback = false;
+    }
+
+    _exec_env->load_stream_mgr()->remove(id);
+    if (_running_loads != nullptr) {
+        _running_loads->increment(-1);
+    }
+}
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
     rapidjson::StringBuffer s;

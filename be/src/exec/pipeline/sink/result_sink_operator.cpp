@@ -23,6 +23,7 @@
 #include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/customized_result_writer.h"
+#include "runtime/exec_env.h"
 #include "runtime/http_result_writer.h"
 #include "runtime/metadata_result_writer.h"
 #include "runtime/mysql_result_writer.h"

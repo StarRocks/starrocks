@@ -77,6 +77,15 @@ SinkBuffer::~SinkBuffer() {
     _sink_ctxs.clear();
 }
 
+DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
+    return DeferOp<std::function<void()>>([this]() {
+        _observable.notify_sink_observers();
+        if (bthread_self()) {
+            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        }
+    });
+}
+
 void SinkBuffer::incr_sinker(RuntimeState* state) {
     for (auto& [_, sink_ctx] : _sink_ctxs) {
         sink_ctx->num_sinker++;
