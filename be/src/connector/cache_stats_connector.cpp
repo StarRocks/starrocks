@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "runtime/descriptors.h"
+
 #include "connector/cache_stats_connector.h"
 
 #include "connector/connector.h"
