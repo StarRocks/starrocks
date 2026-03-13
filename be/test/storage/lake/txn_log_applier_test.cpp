@@ -450,6 +450,29 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     EXPECT_EQ(0, rs.bundle_file_offsets_size());
 }
 
+// Test reverse order: first TxnLog has no offsets, second has offsets.
+// This must also be detected as mixed and drop all offsets.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
+    auto meta = build_non_pk_metadata(10013);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    // First log does NOT have bundle offsets
+    logs.push_back(make_op_write_log(10013, 10, 5, 100, {"seg_a", "seg_b"}));
+    // Second log has bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"seg_c"}, {0}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(3, rs.segments_size());
+    // Mixed offsets (reverse order) should also result in no offsets
+    EXPECT_EQ(0, rs.bundle_file_offsets_size());
+}
+
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 30003);
     auto meta = build_non_pk_metadata(30003);
