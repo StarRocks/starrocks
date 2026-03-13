@@ -226,7 +226,9 @@ namespace std {}     // namespace std
 using namespace std; // Just like VC++, we need a using here.
 
 // Doesn't exist on OSX; used in google.cc for send() to mean "no flags".
+#ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
+#endif
 
 // No SIGPWR on MacOSX.  SIGINFO seems suitably obscure.
 #undef GOOGLE_OBSCURE_SIGNAL

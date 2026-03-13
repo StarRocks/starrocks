@@ -31,7 +31,6 @@ set(COMMON_FILES
   thread/thread.cpp
   thread/threadpool.cpp
   s3_uri.cpp
-  tracer.cpp
   process_exit.cpp
   util/bthreads/executor.cpp
   util/debug_util.cpp
@@ -43,6 +42,12 @@ set(COMMON_FILES
   util/thrift_util.cpp
   vlog_cntl.cpp
 )
+
+if (APPLE)
+    list(APPEND COMMON_FILES tracer_mac_shim.cpp)
+else()
+    list(APPEND COMMON_FILES tracer.cpp)
+endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     list(APPEND COMMON_FILES util/minidump.cpp)
