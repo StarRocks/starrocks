@@ -62,6 +62,8 @@
 
 namespace starrocks {
 
+static int on_connection(struct evhttp_request* req, void* param);
+
 static void on_chunked(struct evhttp_request* ev_req, void* param) {
 #ifdef __APPLE__
     // macOS: use evhttp_request_get_user_data API
@@ -80,8 +82,22 @@ static void on_free(struct evhttp_request* ev_req, void* arg) {
 
 static void on_request(struct evhttp_request* ev_req, void* arg) {
 #ifdef __APPLE__
-    // macOS: use evhttp_request_get_user_data API
-    auto request = (HttpRequest*)evhttp_request_get_user_data(ev_req);
+    auto* server = (EvHttpServer*)arg;
+    auto* request = (HttpRequest*)evhttp_request_get_user_data(ev_req);
+    if (request == nullptr) {
+        // Older libevent lacks evhttp_set_newreqcb(). In that case, defer the
+        // per-request initialization until the generic callback runs.
+        if (on_connection(ev_req, server) < 0 || server->on_header(ev_req) < 0) {
+            return;
+        }
+        request = (HttpRequest*)evhttp_request_get_user_data(ev_req);
+        if (request == nullptr) {
+            return;
+        }
+        if (request->handler()->request_will_be_read_progressively()) {
+            request->handler()->on_chunk_data(request);
+        }
+    }
 #else
     // Linux: directly access on_free_cb_arg field
     auto request = (HttpRequest*)ev_req->on_free_cb_arg;

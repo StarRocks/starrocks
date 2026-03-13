@@ -33,6 +33,8 @@ static inline void evhttp_request_set_user_data(struct evhttp_request* req, void
 
 #ifndef STARROCKS_HAVE_EVHTTP_SET_NEWREQCB
 static inline void evhttp_set_newreqcb(struct evhttp* http, int (*cb)(struct evhttp_request*, void*), void* arg) {
+    // Older libevent lacks a pre-header request hook. EvHttpServer::on_request()
+    // detects this path and runs the connection/header setup lazily instead.
     (void)http;
     (void)cb;
     (void)arg;
