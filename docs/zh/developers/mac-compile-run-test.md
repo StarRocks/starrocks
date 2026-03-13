@@ -81,7 +81,7 @@ cd build-mac
 
 1. 检查和配置环境变量
 2. 编译第三方依赖（protobuf、thrift、brpc 等）
-3. 生成代码（Thrift/Protobuf）
+3. 生成脚本输出，并由 CMake 生成 BE 的 Thrift/Protobuf 代码
 4. 编译 BE 代码
 5. 安装到 `be/output/` 目录
 
@@ -393,7 +393,7 @@ macOS 版本编译的实现遵循以下原则：
 
 **Q: 编译时报错 "protobuf version mismatch"**
 
-A: 确保使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系统或 Homebrew 的 protobuf：
+A: 确保 BE 的 CMake 构建使用 `thirdparty/installed/bin/protoc` (版本 3.14.0)，而不是系统或 Homebrew 的 protobuf：
 
 ```bash
 # 检查 protobuf 版本

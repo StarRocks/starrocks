@@ -216,11 +216,17 @@ else
     echo "Skip Building Java Extensions"
 fi
 
+echo "Build script-generated code"
+cd ${STARROCKS_HOME}/gensrc
+if [ ${CLEAN} -eq 1 ]; then
+    make clean
+fi
+make script
+
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
     export CCACHE_SLOPPINESS="pch_defines,time_macros"
 fi
-
 
 cd ${CMAKE_BUILD_DIR}
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
