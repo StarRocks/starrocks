@@ -29,6 +29,7 @@ import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VariantType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -235,9 +236,11 @@ public class SubfieldAccessPathNormalizer {
                 String path = ((ConstantOperator) call.getArguments().get(1)).getVarchar();
                 return childrenAccessPaths.get(0).map(p -> {
                     List<String> flatPaths = Lists.newArrayList();
-                    formatJsonPath(path, flatPaths); // reuse same JSONPath format: $.a.b.c
+                    boolean isOverflown = formatJsonPath(path, flatPaths); // reuse same JSONPath format: $.a.b.c
                     p.appendFieldNames(flatPaths);
-                    p.setValueType(call.getType());
+                    // If the path is truncated to an intermediate node, keep the leaf as variant
+                    // instead of a typed scalar to avoid incorrect typed subfield reads.
+                    p.setValueType(isOverflown ? VariantType.VARIANT : call.getType());
                     return p;
                 });
             }

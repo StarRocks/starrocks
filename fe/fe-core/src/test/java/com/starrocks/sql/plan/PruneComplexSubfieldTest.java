@@ -1170,6 +1170,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select variant_query(v, '$.profile.rank') from variant0";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/v/profile/rank(variant)]");
+
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
+
+        sql = "select get_variant_int(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        sql = "select get_variant_int(v, '$.a[0]') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
     }
 
     @Test
