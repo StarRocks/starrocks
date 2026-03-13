@@ -263,17 +263,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
         // Wrap file_converters with mutex since it captures files_to_delete by reference
         // and pushes to it internally (not thread-safe without synchronization)
-        auto safe_file_converters = [&file_converters, &mu](const std::string& file_name,
-                                                             uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        auto safe_file_converters = [&file_converters, &mu](
+                                            const std::string& file_name,
+                                            uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
             std::lock_guard lock(mu);
             return file_converters(file_name, file_size);
         };
 
         std::unique_ptr<ThreadPool> copy_pool;
-        RETURN_IF_ERROR(ThreadPoolBuilder("lake_repl_copy")
-                                .set_min_threads(0)
-                                .set_max_threads(parallelism)
-                                .build(&copy_pool));
+        RETURN_IF_ERROR(
+                ThreadPoolBuilder("lake_repl_copy").set_min_threads(0).set_max_threads(parallelism).build(&copy_pool));
 
         for (const auto& pair : filename_map) {
             const auto& src_file_name = pair.first;
@@ -294,7 +293,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             }
 
             auto st = copy_pool->submit_func([&, src_file_name, src_file_location, target_file_location,
-                                               target_file_name, src_file_size, is_seg, encryption_info]() {
+                                              target_file_name, src_file_size, is_seg, encryption_info]() {
                 CountDownOnScopeExit<CountDownLatch> countdown_guard(&latch);
 
                 if (has_error.load(std::memory_order_acquire)) {
@@ -309,9 +308,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                 Status copy_status;
 
                 if (is_seg) {
-                    copy_status = ReplicationUtils::download_lake_segment_file(
-                            src_file_location, src_file_name, src_file_size, shared_src_fs, safe_file_converters,
-                            &final_file_size);
+                    copy_status = ReplicationUtils::download_lake_segment_file(src_file_location, src_file_name,
+                                                                               src_file_size, shared_src_fs,
+                                                                               safe_file_converters, &final_file_size);
                     if (copy_status.ok() && final_file_size > 0 && final_file_size != src_file_size) {
                         std::lock_guard lock(mu);
                         segment_size_changes[target_file_name] = final_file_size;
@@ -320,8 +319,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                                   << ", final size: " << final_file_size;
                     }
                 } else {
-                    WritableFileOptions opts{.sync_on_close = true,
-                                             .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
                     if (config::enable_transparent_data_encryption) {
                         opts.encryption_info = encryption_info;
                     }
@@ -394,9 +392,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             auto start_ts = butil::gettimeofday_us();
             if (is_segment(src_file_name)) {
                 auto src_file_size = segment_name_to_size_map[src_file_name];
-                RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
-                        src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters,
-                        &final_file_size));
+                RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(src_file_location, src_file_name,
+                                                                             src_file_size, shared_src_fs,
+                                                                             file_converters, &final_file_size));
                 if (final_file_size > 0 && final_file_size != src_file_size) {
                     const auto& target_file_name = pair.second.first;
                     segment_size_changes[target_file_name] = final_file_size;
@@ -410,8 +408,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                     opts.encryption_info = pair.second.second.info;
                 }
                 int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
-                ASSIGN_OR_RETURN(final_file_size, copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
-                                                                                   target_file_location, opts, max_retry));
+                ASSIGN_OR_RETURN(final_file_size,
+                                 copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                  target_file_location, opts, max_retry));
                 files_to_delete.push_back(target_file_location);
             }
             total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
