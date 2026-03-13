@@ -18,9 +18,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <random>
+#include <thread>
 
 #include "agent/master_info.h"
+#include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -38,6 +42,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
@@ -438,6 +443,89 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_max_retry_clamped_to_at_least_one) 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 0);
     ASSERT_OK(result.status());
     EXPECT_EQ(*result, content.size());
+}
+
+class Int32ConfigGuard {
+public:
+    explicit Int32ConfigGuard(int32_t* config_ptr) : _config_ptr(config_ptr), _old_value(*config_ptr) {}
+    ~Int32ConfigGuard() { *_config_ptr = _old_value; }
+
+private:
+    int32_t* _config_ptr;
+    int32_t _old_value;
+};
+
+class BoolConfigGuard {
+public:
+    explicit BoolConfigGuard(bool* config_ptr) : _config_ptr(config_ptr), _old_value(*config_ptr) {}
+    ~BoolConfigGuard() { *_config_ptr = _old_value; }
+
+private:
+    bool* _config_ptr;
+    bool _old_value;
+};
+
+class Int64ConfigGuard {
+public:
+    explicit Int64ConfigGuard(int64_t* config_ptr) : _config_ptr(config_ptr), _old_value(*config_ptr) {}
+    ~Int64ConfigGuard() { *_config_ptr = _old_value; }
+
+private:
+    int64_t* _config_ptr;
+    int64_t _old_value;
+};
+
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_basic_gate) {
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(2, nullptr));
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_gate")
+                      .set_min_threads(1)
+                      .set_max_threads(1)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(1, pool.get()));
+    EXPECT_TRUE(LakeReplicationTxnManager::should_use_parallel_copy(2, pool.get()));
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overloaded) {
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_overload")
+                      .set_min_threads(1)
+                      .set_max_threads(1)
+                      .set_max_queue_size(32)
+                      .build(&pool));
+
+    CountDownLatch block(1);
+    ASSERT_OK(pool->submit_func([&]() { block.wait(); }));
+    for (int i = 0; i < 9; ++i) {
+        ASSERT_OK(pool->submit_func([&]() { block.wait(); }));
+    }
+
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(20, pool.get()));
+    block.count_down();
+    pool->wait();
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by_config) {
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 0;
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_disable")
+                      .set_min_threads(1)
+                      .set_max_threads(1)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
+    pool->shutdown();
 }
 
 #ifdef USE_STAROS
@@ -1046,6 +1134,199 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     // The file copy will fail due to the mock filesystem, but that's expected.
     EXPECT_TRUE(before_copy_invoked) << "before_copy SyncPoint should have been reached (fast cancel did not trigger)";
     EXPECT_FALSE(status.is_aborted()) << "Should not abort when min_active_txn_id <= txn_id, status: " << status;
+}
+
+// Test Case 9: Sequential copy with mocked file operations - covers task lambda body,
+// segment download path, non-segment copy path, size tracking, encryption, slow log.
+TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_operations) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Create source metadata with segments (with segment_size) and delvec
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_size(1024); // src_file_size for segment 1
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_size(2048); // src_file_size for segment 2
+    // Add a delvec for non-segment path
+    auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
+    auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
+    delvec_entry.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.delvec");
+    src_meta_v2->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    // Mock segment download: set final_file_size=2048 so seg1 triggers size_changes (1024!=2048)
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) {
+                                              auto* file_size = static_cast<size_t*>(arg);
+                                              *file_size = 2048;
+                                          });
+
+    // Mock non-segment copy
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                          [&](void* arg) {
+                                              auto* file_size = static_cast<size_t*>(arg);
+                                              *file_size = 512;
+                                          });
+
+    // Set slow log threshold to 0 to cover slow log path
+    Int64ConfigGuard slow_log_guard(&config::lake_replication_slow_log_ms);
+    config::lake_replication_slow_log_ms = 0;
+
+    // Disable parallel to ensure sequential path
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 0;
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+
+    (void)update_master_info(original_master_info);
+
+    ASSERT_OK(status);
+}
+
+// Test Case 10: Parallel copy with mocked file operations - covers parallel branch,
+// mutex-guarded segment_size_changes and files_to_delete paths.
+TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_operations) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segment_size(1024);
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    rowset->add_segment_size(2048);
+    auto* delvec_meta = src_meta_v2->mutable_delvec_meta();
+    auto& delvec_entry = (*delvec_meta->mutable_version_to_file())[2];
+    delvec_entry.set_name("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000003.delvec");
+    src_meta_v2->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) {
+                                              auto* file_size = static_cast<size_t*>(arg);
+                                              *file_size = 2048;
+                                          });
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                          [&](void* arg) {
+                                              auto* file_size = static_cast<size_t*>(arg);
+                                              *file_size = 512;
+                                          });
+
+    // Enable parallel copy: min_file_count=2, we have 3 files (2 segments + 1 delvec)
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+
+    // Create thread pool and assign to replication manager
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_test_pool")
+                      .set_min_threads(2)
+                      .set_max_threads(4)
+                      .set_max_queue_size(16)
+                      .build(&pool));
+    _replication_txn_manager->_replicate_file_thread_pool = pool.get();
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+
+    (void)update_master_info(original_master_info);
+    _replication_txn_manager->_replicate_file_thread_pool = nullptr;
+
+    ASSERT_OK(status);
+    pool->shutdown();
+}
+
+// Test Case 11: Parallel copy error handling - covers L370-376 (parallel error logging/return).
+TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
+    src_meta_v2->set_next_rowset_id(2);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+
+    // Do NOT register download_segment callback - actual download will fail with mock FS
+
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_test_err_pool")
+                      .set_min_threads(2)
+                      .set_max_threads(4)
+                      .set_max_queue_size(16)
+                      .build(&pool));
+    _replication_txn_manager->_replicate_file_thread_pool = pool.get();
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+
+    (void)update_master_info(original_master_info);
+    _replication_txn_manager->_replicate_file_thread_pool = nullptr;
+
+    // Parallel copy should fail because download_lake_segment_file fails with mock FS
+    EXPECT_FALSE(status.ok());
+    pool->shutdown();
 }
 #endif // USE_STAROS
 
