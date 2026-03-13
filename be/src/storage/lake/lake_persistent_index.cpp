@@ -130,6 +130,10 @@ bool LakePersistentIndex::too_many_rebuild_rows() const {
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    // Track SST flush stats for publish phase monitoring
+    _publish_sst_flush_count++;
+    _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
+
     bool need_create_new_fileset = false;
     if (_sstable_filesets.empty()) {
         // first fileset

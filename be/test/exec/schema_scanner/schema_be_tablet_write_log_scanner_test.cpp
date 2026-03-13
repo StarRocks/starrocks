@@ -50,10 +50,10 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_normal) {
     // Clear logs
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
-    // Add logs
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000);
+    // Add logs (with SST stats)
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
     mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
-                            1686000030000);
+                            1686000030000, 3, 12288, 1, 4096);
 
     // init and start scanner
     EXPECT_OK(scanner.init(&params, &pool));
@@ -82,6 +82,188 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_normal) {
     chunk->reset();
     EXPECT_OK(scanner.get_next(&chunk, &eos));
     EXPECT_TRUE(eos);
+}
+
+TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_columns_with_values) {
+    SchemaBeTabletWriteLogScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    state.init_instance_mem_tracker();
+
+    auto mgr = lake::TabletWriteLogManager::instance();
+    mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
+
+    // Load with SST output stats
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
+    // Compaction with both SST input and output stats
+    mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
+                            1686000030000, 3, 12288, 1, 4096);
+
+    EXPECT_OK(scanner.init(&params, &pool));
+    EXPECT_OK(scanner.start(&state));
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_EQ(2, chunk->num_rows());
+
+    // Column indices for SST stats: SST_INPUT_FILES=17, SST_INPUT_BYTES=18, SST_OUTPUT_FILES=19, SST_OUTPUT_BYTES=20
+    // LOAD row (index 0): sst_input_files=0 (NULL), sst_output_files=2 (non-NULL)
+    auto sst_input_files_col = chunk->get_column_by_index(17);
+    auto sst_input_bytes_col = chunk->get_column_by_index(18);
+    auto sst_output_files_col = chunk->get_column_by_index(19);
+    auto sst_output_bytes_col = chunk->get_column_by_index(20);
+
+    // LOAD row: no SST input (NULL), has SST output
+    EXPECT_TRUE(sst_input_files_col->is_null(0));
+    EXPECT_TRUE(sst_input_bytes_col->is_null(0));
+    EXPECT_FALSE(sst_output_files_col->is_null(0));
+    EXPECT_FALSE(sst_output_bytes_col->is_null(0));
+    EXPECT_EQ(2, sst_output_files_col->get(0).get_int32());
+    EXPECT_EQ(8192, sst_output_bytes_col->get(0).get_int64());
+
+    // COMPACTION row: has both SST input and output
+    EXPECT_FALSE(sst_input_files_col->is_null(1));
+    EXPECT_FALSE(sst_input_bytes_col->is_null(1));
+    EXPECT_FALSE(sst_output_files_col->is_null(1));
+    EXPECT_FALSE(sst_output_bytes_col->is_null(1));
+    EXPECT_EQ(3, sst_input_files_col->get(1).get_int32());
+    EXPECT_EQ(12288, sst_input_bytes_col->get(1).get_int64());
+    EXPECT_EQ(1, sst_output_files_col->get(1).get_int32());
+    EXPECT_EQ(4096, sst_output_bytes_col->get(1).get_int64());
+}
+
+TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_columns_null_when_zero) {
+    SchemaBeTabletWriteLogScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    state.init_instance_mem_tracker();
+
+    auto mgr = lake::TabletWriteLogManager::instance();
+    mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
+
+    // Load without SST stats (non-PK table)
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label_no_sst", 1686000000000, 1686000010000);
+
+    EXPECT_OK(scanner.init(&params, &pool));
+    EXPECT_OK(scanner.start(&state));
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_EQ(1, chunk->num_rows());
+
+    // All SST columns should be NULL when values are 0
+    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0)); // SST_INPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0)); // SST_INPUT_BYTES
+    EXPECT_TRUE(chunk->get_column_by_index(19)->is_null(0)); // SST_OUTPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(20)->is_null(0)); // SST_OUTPUT_BYTES
+}
+
+TEST_F(SchemaBeTabletWriteLogScannerTest, test_publish_log_type) {
+    SchemaBeTabletWriteLogScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    state.init_instance_mem_tracker();
+
+    auto mgr = lake::TabletWriteLogManager::instance();
+    mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
+
+    mgr->add_publish_log(1001, 300, 30, 10, 20, 1686000000000, 1686000010000, 3, 12288);
+
+    EXPECT_OK(scanner.init(&params, &pool));
+    EXPECT_OK(scanner.start(&state));
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_EQ(1, chunk->num_rows());
+
+    auto row0 = chunk->debug_row(0);
+    EXPECT_TRUE(row0.find("PUBLISH") != std::string::npos);
+
+    // PUBLISH: input_rows/output_rows = 0, label = NULL, compaction fields = NULL
+    // input_segments (col 12) = NULL (not compaction)
+    EXPECT_TRUE(chunk->get_column_by_index(12)->is_null(0));
+    // label (col 14) = NULL (not load)
+    EXPECT_TRUE(chunk->get_column_by_index(14)->is_null(0));
+    // compaction_score (col 15) = NULL
+    EXPECT_TRUE(chunk->get_column_by_index(15)->is_null(0));
+    // compaction_type (col 16) = NULL
+    EXPECT_TRUE(chunk->get_column_by_index(16)->is_null(0));
+
+    // SST output should have values
+    EXPECT_FALSE(chunk->get_column_by_index(19)->is_null(0)); // SST_OUTPUT_FILES
+    EXPECT_FALSE(chunk->get_column_by_index(20)->is_null(0)); // SST_OUTPUT_BYTES
+    EXPECT_EQ(3, chunk->get_column_by_index(19)->get(0).get_int32());
+    EXPECT_EQ(12288, chunk->get_column_by_index(20)->get(0).get_int64());
+    // SST input = NULL (no input for publish)
+    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0)); // SST_INPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0)); // SST_INPUT_BYTES
+}
+
+TEST_F(SchemaBeTabletWriteLogScannerTest, test_mixed_log_types) {
+    SchemaBeTabletWriteLogScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    state.init_instance_mem_tracker();
+
+    auto mgr = lake::TabletWriteLogManager::instance();
+    mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
+
+    // All three log types
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
+    mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
+                            1686000030000, 3, 12288, 1, 4096);
+    mgr->add_publish_log(1001, 300, 32, 12, 22, 1686000040000, 1686000050000, 4, 16384);
+
+    EXPECT_OK(scanner.init(&params, &pool));
+    EXPECT_OK(scanner.start(&state));
+
+    auto chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_EQ(3, chunk->num_rows());
+
+    // Verify log_type column (index 7) for each row
+    auto row0 = chunk->debug_row(0);
+    auto row1 = chunk->debug_row(1);
+    auto row2 = chunk->debug_row(2);
+    EXPECT_TRUE(row0.find("LOAD") != std::string::npos);
+    EXPECT_TRUE(row1.find("COMPACTION") != std::string::npos);
+    EXPECT_TRUE(row2.find("PUBLISH") != std::string::npos);
+
+    // Verify nullable columns across all three types
+    // input_segments: only non-NULL for COMPACTION (row 1)
+    EXPECT_TRUE(chunk->get_column_by_index(12)->is_null(0));
+    EXPECT_FALSE(chunk->get_column_by_index(12)->is_null(1));
+    EXPECT_TRUE(chunk->get_column_by_index(12)->is_null(2));
+
+    // label: only non-NULL for LOAD (row 0)
+    EXPECT_FALSE(chunk->get_column_by_index(14)->is_null(0));
+    EXPECT_TRUE(chunk->get_column_by_index(14)->is_null(1));
+    EXPECT_TRUE(chunk->get_column_by_index(14)->is_null(2));
+
+    // compaction_score: only non-NULL for COMPACTION (row 1)
+    EXPECT_TRUE(chunk->get_column_by_index(15)->is_null(0));
+    EXPECT_FALSE(chunk->get_column_by_index(15)->is_null(1));
+    EXPECT_TRUE(chunk->get_column_by_index(15)->is_null(2));
 }
 
 TEST_F(SchemaBeTabletWriteLogScannerTest, test_get_next_overflow) {
