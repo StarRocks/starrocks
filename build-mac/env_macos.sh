@@ -27,6 +27,16 @@ log_error() {
     echo -e "${RED}[ENV-ERROR]${NC} $1"
 }
 
+detect_parallelism() {
+    local cpu_count=""
+
+    cpu_count="$(sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
+        cpu_count=1
+    fi
+    echo "${cpu_count}"
+}
+
 # ============================================================================
 # BASIC PATHS
 # ============================================================================
@@ -137,7 +147,7 @@ export USE_CCACHE=1
 export CCACHE_SLOPPINESS="pch_defines,time_macros"
 
 # Parallel builds
-export PARALLEL="$(sysctl -n hw.ncpu)"
+export PARALLEL="$(detect_parallelism)"
 export MAKEFLAGS="-j${PARALLEL}"
 
 log_info "Parallel jobs: $PARALLEL"

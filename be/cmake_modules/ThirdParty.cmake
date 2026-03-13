@@ -336,10 +336,27 @@ set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
-set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-find_package(gRPC CONFIG REQUIRED)
+if (APPLE)
+    # Homebrew's exported gRPC targets are not self-contained on Darwin. Import the
+    # shared libraries directly for local development builds and surface the host
+    # dylib requirement explicitly in output/be packaging.
+    add_library(gRPC::grpc SHARED IMPORTED GLOBAL)
+    set_target_properties(gRPC::grpc PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include")
+    add_library(gRPC::grpc++ SHARED IMPORTED GLOBAL)
+    set_target_properties(gRPC::grpc++ PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc++.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "gRPC::grpc")
+    set(gRPC_VERSION "darwin-manual")
+    set(gRPC_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+else()
+    set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+    find_package(gRPC CONFIG REQUIRED)
+    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+endif()
 message(STATUS "Using gRPC ${gRPC_VERSION}")
-get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 add_library(protobuf::libprotobuf ALIAS protobuf)
 add_library(ZLIB::ZLIB ALIAS libz)
@@ -359,9 +376,27 @@ if (${WITH_TENANN} STREQUAL "ON")
     endif()
 endif()
 
-set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
+if (DEFINED ENV{JAVA_HOME} AND EXISTS "$ENV{JAVA_HOME}/include/jni.h")
+    set(JAVA_HOME "$ENV{JAVA_HOME}")
+elseif (EXISTS "${THIRDPARTY_DIR}/open_jdk/Contents/Home/include/jni.h")
+    set(JAVA_HOME "${THIRDPARTY_DIR}/open_jdk/Contents/Home")
+else()
+    set(JAVA_HOME "${THIRDPARTY_DIR}/open_jdk")
+endif()
+
 add_library(jvm SHARED IMPORTED)
-FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/lib/*/libjvm.so)
-set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
+if (APPLE)
+    file(GLOB_RECURSE LIB_JVM "${JAVA_HOME}/lib/*/libjvm.dylib")
+    set(JAVA_INCLUDE_PLATFORM_DIR "darwin")
+else()
+    file(GLOB_RECURSE LIB_JVM "${JAVA_HOME}/lib/*/libjvm.so")
+    set(JAVA_INCLUDE_PLATFORM_DIR "linux")
+endif()
+list(LENGTH LIB_JVM LIB_JVM_COUNT)
+if (LIB_JVM_COUNT EQUAL 0)
+    message(FATAL_ERROR "libjvm was not found under ${JAVA_HOME}")
+endif()
+list(GET LIB_JVM 0 LIB_JVM_PATH)
+set_target_properties(jvm PROPERTIES IMPORTED_LOCATION "${LIB_JVM_PATH}")
 include_directories(${JAVA_HOME}/include)
-include_directories(${JAVA_HOME}/include/linux)
+include_directories(${JAVA_HOME}/include/${JAVA_INCLUDE_PLATFORM_DIR})
