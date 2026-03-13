@@ -129,6 +129,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
+<<<<<<< HEAD
+=======
+                if (value instanceof String stringValue) {
+                    if (stringValue.isEmpty() && af.ignore_empty()) {
+                        continue;
+                    }
+                }
+>>>>>>> 46e144a221 ([BugFix] Fix AuditEventProcessor thread exit caused by OutOfMemoryException (#70206))
 
                 if (Config.audit_log_json_format) {
                     logMap.put(af.value(), value);
