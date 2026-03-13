@@ -111,8 +111,8 @@ public class AuditEventProcessor {
                         LOG.warn("encounter exception when processing audit event.", e);
                     }
                 } catch (Throwable t) {
-                    // TODO: If plugin.exec throw OutOfMemoryError, the audit log will be lost,
-                    // this scene should be considered later
+                    // TODO: If plugin.exec throws OutOfMemoryError, the corresponding audit event
+                    // (i.e., that audit log entry) will be lost; this scenario should be considered later.
                     LOG.warn("Error occurred during processing audit event.", t);
                 }
             }
