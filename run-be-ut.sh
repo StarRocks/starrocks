@@ -20,12 +20,94 @@ set -eo pipefail
 
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
+MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
-. ${STARROCKS_HOME}/env.sh
+is_darwin() {
+    [[ "$OSTYPE" == darwin* ]]
+}
 
-PARALLEL=$[$(nproc)/4+1]
+detect_parallelism() {
+    local cpu_count=""
+
+    if is_darwin; then
+        cpu_count="$(sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    else
+        cpu_count="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+
+    if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
+        cpu_count=1
+    fi
+    echo "${cpu_count}"
+}
+
+resolve_java_home() {
+    local java_home_candidate="$1"
+
+    if [[ -z "${java_home_candidate}" ]]; then
+        return 1
+    fi
+    if [[ -f "${java_home_candidate}/Contents/Home/include/jni.h" ]]; then
+        echo "${java_home_candidate}/Contents/Home"
+        return 0
+    fi
+    if [[ -f "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home/include/jni.h" ]]; then
+        echo "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home"
+        return 0
+    fi
+    if [[ -f "${java_home_candidate}/include/jni.h" ]]; then
+        echo "${java_home_candidate}"
+        return 0
+    fi
+    echo "${java_home_candidate}"
+}
+
+setup_darwin_build_env() {
+    local bundled_java_home=""
+
+    export STARROCKS_ENV_QUIET=1
+    . "${STARROCKS_HOME}/build-mac/env_macos.sh"
+
+    unset STARROCKS_GCC_HOME
+
+    MVN_CMD=${CUSTOM_MVN:-mvn}
+    export MVN_CMD
+    CMAKE_CMD=${CUSTOM_CMAKE:-cmake}
+    export CMAKE_CMD
+    BUILD_SYSTEM=ninja
+    export BUILD_SYSTEM
+
+    bundled_java_home="${STARROCKS_THIRDPARTY}/installed/open_jdk"
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        export JAVA_HOME="$(resolve_java_home "${JAVA_HOME}")"
+    elif [[ -d "${bundled_java_home}" ]]; then
+        export JAVA_HOME="$(resolve_java_home "${bundled_java_home}")"
+    fi
+}
+
+append_runtime_library_path() {
+    local dir="$1"
+
+    if [[ -z "${dir}" || ! -d "${dir}" ]]; then
+        return 0
+    fi
+
+    export LD_LIBRARY_PATH="${dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if is_darwin; then
+        export DYLD_LIBRARY_PATH="${dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+    fi
+}
+
+if is_darwin; then
+    setup_darwin_build_env
+    PARALLEL=$(detect_parallelism)
+else
+    . ${STARROCKS_HOME}/env.sh
+    host_parallelism=$(detect_parallelism)
+    PARALLEL=$[$host_parallelism/4+1]
+fi
 
 # Check args
 usage() {
@@ -79,7 +161,23 @@ append_negative_case() {
 }
 
 # -l run and -l gtest_filter only used for compatibility
-OPTS=$(getopt \
+GETOPT_BIN="getopt"
+if is_darwin; then
+    if command -v brew &> /dev/null; then
+        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
+        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
+            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
+        else
+            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
+            exit 1
+        fi
+    else
+        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
+        exit 1
+    fi
+fi
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o '' \
   -l 'test:' \
@@ -119,7 +217,11 @@ HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
-WITH_STARCACHE=ON
+if is_darwin; then
+    WITH_STARCACHE=OFF
+else
+    WITH_STARCACHE=ON
+fi
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
@@ -175,6 +277,13 @@ fi
 if [[ -z ${USE_AVX512} ]]; then
     # Disable it by default
     USE_AVX512=OFF
+fi
+if [[ -z ${ENABLE_JIT} ]]; then
+    if is_darwin; then
+        ENABLE_JIT=OFF
+    else
+        ENABLE_JIT=ON
+    fi
 fi
 echo "Build Backend UT"
 
@@ -240,7 +349,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
-            -DSTARROCKS_JIT_ENABLE=ON \
+            -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
@@ -265,7 +374,7 @@ split_debug_symbol() {
     objcopy --add-gnu-debuglink="$symbol" "$bin"
 }
 
-if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] ; then
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && ! is_darwin ; then
     if [ "x$WITH_DEBUG_SO_SYMBOL_SPLIT" = "xON" ] ; then
         find "${STARROCKS_TEST_BINARY_BASE_DIR}" -type f -name "*.so*" ! -name "*.debuginfo" | while read -r so; do
             split_debug_symbol "$so"
@@ -295,37 +404,52 @@ mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
-export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/lib64/:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/llvm/lib/:$LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=$(find ${CMAKE_BUILD_DIR} -type f -name "*.so" -exec dirname {} \; | sort -u | tr '\n' ':' | sed 's/:$//'):$LD_LIBRARY_PATH
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+
+while IFS= read -r runtime_lib_dir; do
+    append_runtime_library_path "${runtime_lib_dir}"
+done < <(find "${CMAKE_BUILD_DIR}" -type f \( -name "*.so" -o -name "*.so.*" -o -name "*.dylib" -o -name "*.dylib.*" \) \
+    -exec dirname {} \; | sort -u)
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
 # this is only for starting be
 jvm_arch="amd64"
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
     jvm_arch="aarch64"
 fi
 
-if [ "$JAVA_HOME" = "" ]; then
-    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jvm/$jvm_arch/server:$STARROCKS_HOME/lib/jvm/$jvm_arch:$LD_LIBRARY_PATH
+if is_darwin; then
+    if [[ -z "${JAVA_HOME:-}" ]]; then
+        JAVA_HOME="$(resolve_java_home "${STARROCKS_THIRDPARTY}/installed/open_jdk")"
+    fi
+    append_runtime_library_path "${JAVA_HOME}/lib/server"
+    append_runtime_library_path "${JAVA_HOME}/lib"
+elif [ "${JAVA_HOME:-}" = "" ]; then
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch/server"
+    append_runtime_library_path "$STARROCKS_HOME/lib/jvm/$jvm_arch"
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$JAVA_HOME/lib:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/server"
+        append_runtime_library_path "$JAVA_HOME/lib"
     # JAVA_HOME is jdk
     elif [[ -d "$JAVA_HOME/jre"  ]]; then
-        export LD_LIBRARY_PATH=$JAVA_HOME/jre/lib/$jvm_arch/server:$JAVA_HOME/jre/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/jre/lib/$jvm_arch"
     # JAVA_HOME is jre
     else
-        export LD_LIBRARY_PATH=$JAVA_HOME/lib/$jvm_arch/server:$JAVA_HOME/lib/$jvm_arch:$LD_LIBRARY_PATH
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch/server"
+        append_runtime_library_path "$JAVA_HOME/lib/$jvm_arch"
     fi
 fi
 
-if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+if ! is_darwin && [[ -n "$STARROCKS_GCC_HOME" ]] ; then
     # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
-    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
+    append_runtime_library_path "$(dirname "$($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)")"
 fi
 
 RUN_UT_HADOOP_COMMON_HOME=${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib

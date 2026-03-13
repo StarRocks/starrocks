@@ -336,10 +336,24 @@ set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
-set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-find_package(gRPC CONFIG REQUIRED)
+if (APPLE)
+    add_library(gRPC::grpc SHARED IMPORTED GLOBAL)
+    set_target_properties(gRPC::grpc PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include")
+    add_library(gRPC::grpc++ SHARED IMPORTED GLOBAL)
+    set_target_properties(gRPC::grpc++ PROPERTIES
+        IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc++.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${THIRDPARTY_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "gRPC::grpc")
+    set(gRPC_VERSION "darwin-manual")
+    set(gRPC_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
+else()
+    set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
+    find_package(gRPC CONFIG REQUIRED)
+    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+endif()
 message(STATUS "Using gRPC ${gRPC_VERSION}")
-get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
 include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 add_library(protobuf::libprotobuf ALIAS protobuf)
 add_library(ZLIB::ZLIB ALIAS libz)
