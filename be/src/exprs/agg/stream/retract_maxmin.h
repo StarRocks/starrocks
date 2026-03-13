@@ -20,6 +20,11 @@
 #include <limits>
 #include <type_traits>
 
+<<<<<<< HEAD
+=======
+#include "base/container/raw_container.h"
+#include "column/column_helper.h"
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/maxmin.h"
@@ -140,12 +145,11 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (lt_is_string<LT>) {
-            DCHECK(to->is_binary());
-            auto* column = down_cast<BinaryColumn*>(to);
-            column->append(this->data(state).slice());
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(to->is_binary() || to->is_large_binary());
+            ColumnHelper::append_binary_value(to, this->data(state).slice());
         } else {
-            DCHECK(!to->is_nullable() && !to->is_binary());
+            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
             down_cast<InputColumnType*>(to)->append(this->data(state).result);
         }
     }
@@ -156,12 +160,11 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (lt_is_string<LT>) {
-            DCHECK(to->is_binary());
-            auto* column = down_cast<BinaryColumn*>(to);
-            column->append(this->data(state).slice());
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(to->is_binary() || to->is_large_binary());
+            ColumnHelper::append_binary_value(to, this->data(state).slice());
         } else {
-            DCHECK(!to->is_nullable() && !to->is_binary());
+            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
             down_cast<InputColumnType*>(to)->append(this->data(state).result);
         }
     }
@@ -169,10 +172,10 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        if constexpr (lt_is_string<LT>) {
-            auto* column = down_cast<BinaryColumn*>(dst);
+        if constexpr (lt_is_string_or_binary<LT>) {
+            auto* column = ColumnHelper::get_data_column(dst);
             for (size_t i = start; i < end; ++i) {
-                column->append(this->data(state).slice());
+                ColumnHelper::append_binary_value(column, this->data(state).slice());
             }
         } else {
             auto* column = down_cast<InputColumnType*>(dst);
@@ -193,11 +196,17 @@ public:
     }
 
     T get_row_value(const Column* column, size_t row_num) const {
+<<<<<<< HEAD
         if constexpr (lt_is_string<LT>) {
             DCHECK(column->is_binary());
             return column->get(row_num).get_slice();
+=======
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(column->is_binary() || column->is_large_binary());
+            return ColumnHelper::get_binary_slice(column, row_num);
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         } else {
-            DCHECK(!column->is_nullable() && !column->is_binary());
+            DCHECK(!column->is_nullable() && !column->is_binary() && !column->is_large_binary());
             const auto& col = down_cast<const InputColumnType&>(*column);
             return col.get_data()[row_num];
         }
@@ -272,8 +281,8 @@ public:
 
     void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
-        if constexpr (lt_is_string<LT>) {
-            DCHECK((*to[0]).is_binary());
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK((*to[0]).is_binary() || (*to[0]).is_large_binary());
         } else {
             DCHECK((*to[0]).is_numeric());
         }

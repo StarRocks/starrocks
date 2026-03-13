@@ -366,11 +366,17 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         if constexpr (IsSlice<T>) {
-            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
+            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            this->data(state).update(ctx->mem_pool(), slice);
         } else {
+<<<<<<< HEAD
             this->data(state).update(column->get_data()[row_num]);
+=======
+            const auto* column = down_cast<const ColumnType*>(columns[0]);
+            const auto immutable_data = column->immutable_data();
+            this->data(state).update(immutable_data[row_num]);
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         }
     }
 
@@ -379,7 +385,6 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -387,6 +392,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
+<<<<<<< HEAD
         const auto& container_data = column->get_data();
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
@@ -400,15 +406,44 @@ public:
             if (prefetch_index < chunk_size) {
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
+=======
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{hash_value};
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
             }
-            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto container_data = down_cast<const LargeBinaryColumn*>(data_column)->immutable_data();
+                build_and_update(container_data);
+            } else {
+                const auto container_data = down_cast<const BinaryColumn*>(data_column)->immutable_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
@@ -418,6 +453,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
+<<<<<<< HEAD
         const auto& container_data = column->get_data();
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
@@ -433,8 +469,41 @@ public:
             if (prefetch_index < chunk_size) {
                 cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
+=======
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                AggDataPtr state = states[i] + state_offset;
+                auto& agg_state = this->data(state);
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{&agg_state, hash_value};
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
             }
-            cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto container_data = down_cast<const LargeBinaryColumn*>(data_column)->immutable_data();
+                build_and_update(container_data);
+            } else {
+                const auto container_data = down_cast<const BinaryColumn*>(data_column)->immutable_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
@@ -580,16 +649,24 @@ public:
         if (data_column->is_array()) {
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
+<<<<<<< HEAD
             const auto& off = array_column->offsets().get_data();
             const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {
                     agg_state.update(mem_pool, binary_column->get_slice(i));
+=======
+            const auto off = array_column->offsets().immutable_data();
+            ColumnHelper::with_binary_data_column(column, [&](const auto* typed_column) {
+                for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                    if (!column->is_null(i)) {
+                        agg_state.update(mem_pool, typed_column->get_slice(i));
+                    }
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
                 }
-            }
+            });
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
-            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+            agg_state.update(mem_pool, ColumnHelper::get_binary_slice(data_column, row_num));
         }
 
         agg_state.update_over_limit();
@@ -695,4 +772,167 @@ public:
     std::string get_name() const override { return "dict_merge"; }
 };
 
+<<<<<<< HEAD
+=======
+static constexpr int COMPUTE_SUM_BIT = 0x1;
+static constexpr int COMPUTE_AVG_BIT = 0x2;
+
+static constexpr int compute_bits(const bool compute_sum, const bool compute_avg) {
+    return (COMPUTE_SUM_BIT * compute_sum) | (COMPUTE_AVG_BIT * compute_avg);
+}
+
+static constexpr bool enable_bit_sum(const int bits) {
+    return (bits & COMPUTE_SUM_BIT) != 0;
+}
+
+static constexpr bool enable_bit_avg(const int bits) {
+    return (bits & COMPUTE_AVG_BIT) != 0;
+}
+
+template <LogicalType LT, LogicalType SumLT, int compute_bits,
+          template <LogicalType X, LogicalType Y, bool, typename = guard::Guard> class TDistinctAggState,
+          typename T = RunTimeCppType<LT>>
+struct TFusedMultiDistinctFunction final
+        : public AggregateFunctionBatchHelper<
+                  TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>,
+                  TFusedMultiDistinctFunction<LT, SumLT, compute_bits, TDistinctAggState, T>> {
+    using State = TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>;
+    using InputColumn = RunTimeColumnType<LT>;
+    using SumColumn = RunTimeColumnType<SumLT>;
+    static constexpr auto AvgLT = AvgResultLT<LT>;
+    using AvgColumn = RunTimeColumnType<AvgLT>;
+    using AvgCppType = RunTimeCppType<AvgLT>;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        auto* struct_column = down_cast<StructColumn*>(dst);
+        // compute count
+        {
+            auto* count_column = struct_column->field_column_raw_ptr("count").value();
+            Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_data_column = static_cast<Int64Column*>(count_data_col);
+            const auto count = state_impl.distinct_count();
+            for (auto i = start; i < end; ++i) {
+                count_data_column->get_data()[i] = count;
+            }
+        }
+
+        // compute sum
+        if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
+            auto* sum_column = struct_column->field_column_raw_ptr("sum").value();
+            Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
+            const auto sum = state_impl.sum;
+            for (auto i = start; i < end; ++i) {
+                sum_data_column->get_data()[i] = sum;
+            }
+        }
+
+        // compute avg
+        if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
+            auto* avg_column = struct_column->field_column_raw_ptr("avg").value();
+            Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
+            const auto sum = state_impl.sum;
+            const auto count = state_impl.distinct_count();
+
+            if (count == 0) {
+                DCHECK(avg_column->is_nullable());
+                auto* nullable_avg = down_cast<NullableColumn*>(avg_column);
+                auto& null_data = nullable_avg->null_column_data();
+                for (auto i = start; i < end; ++i) {
+                    null_data[i] = DATUM_NULL;
+                }
+                return;
+            }
+
+            AvgCppType avg;
+            if constexpr (lt_is_arithmetic<LT>) {
+                avg = static_cast<AvgCppType>(static_cast<double>(sum) / static_cast<double>(count));
+            } else if constexpr (lt_is_decimal<LT>) {
+                static_assert(lt_is_decimal128<AvgLT> || lt_is_decimal256<AvgLT>,
+                              "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
+                avg = decimal_div_integer<AvgCppType>(AvgCppType(sum), AvgCppType(count), ctx->get_arg_type(0)->scale);
+            } else {
+                DCHECK(false) << "Invalid LogicalTypes for avg function";
+            }
+            for (auto i = start; i < end; ++i) {
+                avg_data_column->get_data()[i] = avg;
+            }
+        }
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            this->data(state).update(ColumnHelper::get_binary_slice(columns[0], row_num));
+        } else {
+            const auto* column = down_cast<const InputColumn*>(columns[0]);
+            const auto immutable_data = column->immutable_data();
+            this->data(state).update(immutable_data[row_num]);
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            ColumnHelper::with_binary_data_column(columns[0], [&](const auto* typed_column) {
+                for (auto i = frame_start; i < frame_end; ++i) {
+                    this->data(state).update(typed_column->get_slice(i));
+                }
+            });
+        } else {
+            const auto* column = down_cast<const InputColumn*>(columns[0]);
+            const auto* data = column->immutable_data().data();
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                this->data(state).update(data[i]);
+            }
+        }
+    }
+
+    std::string get_name() const override { return "fused_multi_distinct"; }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+};
+
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType DistinctSumLT = SumResultLT<LT>;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal256LTGuard<LT>> = TYPE_DECIMAL256;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal128LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal64LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal32LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT, int compute_bits, typename T = RunTimeCppType<LT>>
+using FusedMultiDistinctFunction =
+        TFusedMultiDistinctFunction<LT, DistinctSumLT<LT>, compute_bits, FusedMultiDistinctAggregateState, T>;
+
+>>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 } // namespace starrocks
