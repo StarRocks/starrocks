@@ -550,7 +550,7 @@ protected:
 
     Status create_test_file(const std::string& path, const std::string& content) {
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
         ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(opts, path));
         RETURN_IF_ERROR(wf->append(content));
         return wf->close();
@@ -566,7 +566,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_success_no_retry_needed) {
     std::string content(4096, 'A');
     ASSERT_OK(create_test_file(src_path, content));
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
@@ -588,7 +588,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_error_retry_succeeds) {
         }
     });
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
@@ -608,7 +608,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_error_exhausts_all_retries) {
         *st = Status::IOError("Persistent copy error");
     });
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
@@ -627,7 +627,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_size_mismatch_exhausts_retries
         *size = *size / 2;
     });
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
@@ -652,7 +652,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_size_mismatch_then_succeeds) {
         }
     });
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
@@ -667,7 +667,7 @@ TEST_F(CopyNonSegmentFileWithRetryTest, test_max_retry_clamped_to_at_least_one) 
     std::string content(1024, 'E');
     ASSERT_OK(create_test_file(src_path, content));
 
-    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    ASSIGN_OR_ABORT(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
 
     auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 0);
