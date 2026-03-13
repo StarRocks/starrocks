@@ -643,6 +643,20 @@ CREATE TABLE site_access1(
 DUPLICATE KEY(event_day,site_id,pv);
 ```
 
+You can also explicitly specify the clause in the statement:
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+DISTRIBUTED BY RANDOM BUCKETS;
+```
+
 However, if you are familiar with StarRocks' bucketing mechanism, you can also manually set the number of buckets when creating a table with random bucketing.
 
 ```SQL
