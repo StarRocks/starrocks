@@ -1375,31 +1375,62 @@ TEST_F(GroupReaderTest, VariantColumnReaderFallbackOnly) {
     ASSERT_NE(st.value(), nullptr);
 }
 
+TEST_F(GroupReaderTest, VariantObjectBindingBuildFromNode) {
+    ShreddedFieldNode salary_node;
+    salary_node.name = "salary";
+    salary_node.full_path = "profile.salary";
+    auto salary_path = VariantPathParser::parse_shredded_path(std::string_view("profile.salary"));
+    ASSERT_TRUE(salary_path.ok()) << salary_path.status().to_string();
+    salary_node.parsed_full_path = std::move(salary_path).value();
+    salary_node.kind = ShreddedFieldNode::Kind::SCALAR;
+    salary_node.typed_value_read_type = std::make_unique<TypeDescriptor>(TYPE_BIGINT_DESC);
+    salary_node.typed_value_column = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    salary_node.typed_value_column->as_mutable_ptr()->append_datum(Datum(int64_t{100}));
+
+    ShreddedFieldNode profile_node;
+    profile_node.name = "profile";
+    profile_node.full_path = "profile";
+    auto profile_path = VariantPathParser::parse_shredded_path(std::string_view("profile"));
+    ASSERT_TRUE(profile_path.ok()) << profile_path.status().to_string();
+    profile_node.parsed_full_path = std::move(profile_path).value();
+    profile_node.children.emplace_back(std::move(salary_node));
+
+    auto built = VariantColumnReader::build_variant_binding_from_node(0, profile_node, std::string_view{});
+    ASSERT_TRUE(built.ok()) << built.status().to_string();
+    ASSERT_TRUE(built->has_value());
+    auto json = (**built).to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    ASSERT_EQ(R"({"salary":100})", json.value());
+}
+
 TEST_F(GroupReaderTest, VariantScalarMaterializeModeKeepsAllNullBinding) {
     ShreddedFieldNode node;
-    node.typed_kind = ShreddedTypedKind::SCALAR;
+    node.kind = ShreddedFieldNode::Kind::SCALAR;
     node.typed_value_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
     node.value_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     node.typed_value_column->as_mutable_ptr()->append_nulls(3);
     node.value_column->as_mutable_ptr()->append_nulls(3);
 
-    ASSERT_EQ(VariantScalarMaterializeMode::KEEP_SCALAR, decide_variant_scalar_materialize_mode(&node, 3));
+    ASSERT_EQ(VariantScalarMaterializeMode::KEEP_SCALAR,
+              VariantColumnReader::decide_variant_scalar_materialize_mode(&node, 3));
 }
 
 TEST_F(GroupReaderTest, VariantScalarMaterializeModeDemotesMixedBinding) {
     ShreddedFieldNode node;
-    node.typed_kind = ShreddedTypedKind::SCALAR;
+    node.kind = ShreddedFieldNode::Kind::SCALAR;
     node.typed_value_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
     node.value_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     node.typed_value_column->as_mutable_ptr()->append_datum(1);
     Slice fallback("S1");
     node.value_column->as_mutable_ptr()->append_datum(fallback);
 
-    ASSERT_EQ(VariantScalarMaterializeMode::DEMOTE_VARIANT, decide_variant_scalar_materialize_mode(&node, 1));
+    ASSERT_EQ(VariantScalarMaterializeMode::DEMOTE_VARIANT,
+              VariantColumnReader::decide_variant_scalar_materialize_mode(&node, 1));
 }
 
 TEST_F(GroupReaderTest, VariantScalarMaterializeModeDropsNullNode) {
-    ASSERT_EQ(VariantScalarMaterializeMode::DROP, decide_variant_scalar_materialize_mode(nullptr, 1));
+    ASSERT_EQ(VariantScalarMaterializeMode::DROP,
+              VariantColumnReader::decide_variant_scalar_materialize_mode(nullptr, 1));
 }
 
 TEST_F(GroupReaderTest, VariantColumnReaderWithArrayShredding) {
