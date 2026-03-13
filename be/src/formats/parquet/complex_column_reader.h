@@ -253,13 +253,11 @@ private:
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 
-enum class ShreddedTypedKind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
-
 // ShreddedFieldNode holds both schema-time reader setup and batch-local column data.
 //
 // Schema-time fields (set once at construction, never modified):
 //   full_path, parsed_full_path, value_reader, typed_value_reader, typed_value_read_type,
-//   scalar_array_layout, array_element_value_reader, typed_kind, children
+//   scalar_array_layout, array_element_value_reader, kind, children
 //
 // Batch-local fields (reset per read_range call):
 //   value_column, typed_value_column, array_element_value_column
@@ -272,6 +270,8 @@ enum class ShreddedTypedKind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 //   be resized after any reader is constructed. Fill the vector fully before calling
 //   any reader construction that captures these addresses.
 struct ShreddedFieldNode {
+    enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
+
     std::string name;
     std::string full_path;
     VariantPath parsed_full_path;
@@ -279,7 +279,7 @@ struct ShreddedFieldNode {
     std::unique_ptr<ColumnReader> typed_value_reader;
     // Heap-allocated to keep a stable address for reader-side pointer capture (ScalarColumnReader holds const TypeDescriptor*).
     std::unique_ptr<TypeDescriptor> typed_value_read_type;
-    ShreddedTypedKind typed_kind = ShreddedTypedKind::NONE;
+    Kind kind = Kind::NONE;
     std::vector<ShreddedFieldNode> children;
     // ARRAY scalar layout: list.element has both {value, typed_value(scalar)}.
     // In this mode, we read element.value as an additional per-element fallback source.
@@ -298,9 +298,13 @@ enum class VariantScalarMaterializeMode : uint8_t {
     DROP = 2,
 };
 
-// Decide how to materialize a scalar shredded binding for the current batch.
-// Exposed for unit tests and reused by VariantColumnReader internal binding selection.
-VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows);
+struct TopBinding {
+    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1 };
+    Kind kind = Kind::SCALAR;
+    std::string path;
+    TypeDescriptor type;
+    const ShreddedFieldNode* node = nullptr;
+};
 
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
 // It uses two ScalarColumnReader instances: one for reading metadata (type information)
@@ -310,7 +314,38 @@ VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const Shredd
 // ShreddedFieldNode::typed_value_column are mutated per read_range() call. Concurrent
 // calls to read_range() on the same instance are not allowed.
 class VariantColumnReader final : public ColumnReader {
+private:
+    // Top-level variant payload readers and batch-local typed buffer.
+    // `metadata` and `value` are required for variant files.
+    // `root_typed_value_*` is optional and used when top-level typed_value is non-STRUCT.
+    struct VariantTopLevelReaders {
+        VariantTopLevelReaders(std::unique_ptr<ScalarColumnReader>&& metadata_reader,
+                               std::unique_ptr<ScalarColumnReader>&& value_reader,
+                               ColumnReaderPtr&& root_typed_value_reader,
+                               std::unique_ptr<TypeDescriptor> root_typed_value_type)
+                : metadata_reader(std::move(metadata_reader)),
+                  value_reader(std::move(value_reader)),
+                  root_typed_value_reader(std::move(root_typed_value_reader)),
+                  root_typed_value_type(std::move(root_typed_value_type)) {}
+
+        std::unique_ptr<ScalarColumnReader> metadata_reader;
+        std::unique_ptr<ScalarColumnReader> value_reader;
+        ColumnReaderPtr root_typed_value_reader;
+        std::unique_ptr<TypeDescriptor> root_typed_value_type;
+        ColumnPtr root_typed_value_column;
+    };
+
 public:
+    static VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node,
+                                                                               size_t num_rows);
+
+    static StatusOr<std::optional<VariantRowValue>> build_variant_binding_from_node(size_t row,
+                                                                                    const ShreddedFieldNode& node,
+                                                                                    std::string_view metadata_raw);
+
+    static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
+                                             const VariantRowRef& full_row, Column* dst);
+
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
@@ -347,26 +382,6 @@ public:
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
 private:
-    // Top-level variant payload readers and batch-local typed buffer.
-    // `metadata` and `value` are required for variant files.
-    // `root_typed_value_*` is optional and used when top-level typed_value is non-STRUCT.
-    struct VariantTopLevelReaders {
-        VariantTopLevelReaders(std::unique_ptr<ScalarColumnReader>&& metadata_reader,
-                               std::unique_ptr<ScalarColumnReader>&& value_reader,
-                               ColumnReaderPtr&& root_typed_value_reader,
-                               std::unique_ptr<TypeDescriptor> root_typed_value_type)
-                : metadata_reader(std::move(metadata_reader)),
-                  value_reader(std::move(value_reader)),
-                  root_typed_value_reader(std::move(root_typed_value_reader)),
-                  root_typed_value_type(std::move(root_typed_value_type)) {}
-
-        std::unique_ptr<ScalarColumnReader> metadata_reader;
-        std::unique_ptr<ScalarColumnReader> value_reader;
-        ColumnReaderPtr root_typed_value_reader;
-        std::unique_ptr<TypeDescriptor> root_typed_value_type;
-        ColumnPtr root_typed_value_column;
-    };
-
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
     std::vector<std::string> _shredded_paths;

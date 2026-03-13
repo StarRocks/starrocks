@@ -244,6 +244,11 @@ MutableColumnPtr VariantColumn::clone() const {
 // typed columns, but avoids schema mismatch when deserializing key columns.
 
 uint32_t VariantColumn::serialize(size_t idx, uint8_t* pos) const {
+    VariantRowRef row_ref;
+    if (try_get_row_ref(idx, &row_ref)) {
+        return static_cast<uint32_t>(row_ref.serialize(pos));
+    }
+
     VariantRowValue row_buffer;
     const VariantRowValue* row = get_row_value(idx, &row_buffer);
     if (UNLIKELY(row == nullptr)) {
@@ -262,6 +267,11 @@ void VariantColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
 }
 
 uint32_t VariantColumn::serialize_size(size_t idx) const {
+    VariantRowRef row_ref;
+    if (try_get_row_ref(idx, &row_ref)) {
+        return row_ref.serialize_size();
+    }
+
     VariantRowValue row_buffer;
     const VariantRowValue* row = get_row_value(idx, &row_buffer);
     if (UNLIKELY(row == nullptr)) {
@@ -319,6 +329,17 @@ const Column* VariantColumn::typed_column_by_index(size_t idx) const {
 }
 
 void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    VariantRowRef row_ref;
+    if (try_get_row_ref(idx, &row_ref)) {
+        auto json = row_ref.to_json();
+        if (!json.ok()) {
+            buf->push_null();
+        } else {
+            buf->push_string(json->data(), json->size(), '\'');
+        }
+        return;
+    }
+
     VariantRowValue row;
     const VariantRowValue* variant = get_row_value(idx, &row);
     if (variant == nullptr) {
@@ -1096,6 +1117,15 @@ bool VariantColumn::align_schema_from(const VariantColumn& src) {
 }
 
 std::string VariantColumn::debug_item(size_t idx) const {
+    VariantRowRef row_ref;
+    if (try_get_row_ref(idx, &row_ref)) {
+        auto json_result = row_ref.to_json(cctz::utc_time_zone());
+        if (!json_result.ok()) {
+            return "";
+        }
+        return json_result.value();
+    }
+
     VariantRowValue row;
     const VariantRowValue* value = get_row_value(idx, &row);
     if (value == nullptr) {
