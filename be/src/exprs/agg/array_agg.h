@@ -81,6 +81,26 @@ struct ArrayAggAggregateState {
         }
     }
 
+    void update_with_slice(MemPool* mem_pool, const Slice& slice) {
+        if constexpr (is_distinct) {
+            if constexpr (lt_is_string_or_binary<PT>) {
+                KeyType key(slice);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                set.lazy_emplace(key, [&](const auto& ctor) {
+#else
+                set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                    assert(pos != nullptr);
+                    memcpy(pos, key.data, key.size);
+                    ctor(pos, key.size, key.hash);
+                });
+            }
+        } else {
+            data_column.append(slice);
+        }
+    }
+
     ColumnType* get_data_column() {
         auto size = set.size();
         if (data_column.size() > 0 || size == 0) {
@@ -167,9 +187,19 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-        this->data(state).update(ctx->mem_pool(), column, row_num, 1);
+        if constexpr (lt_is_string_or_binary<LT>) {
+            MemPool* mem_pool = ctx->mem_pool();
+            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
+                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
+                mem_pool = &this->data(state).mem_pool;
+            }
+            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            this->data(state).update_with_slice(mem_pool, slice);
+        } else {
+            const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+            // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+            this->data(state).update(ctx->mem_pool(), column, row_num, 1);
+        }
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -181,13 +211,32 @@ public:
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
         auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
-        auto* element_data_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
-        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
-        DCHECK_LE(element_null_count, offset_size.second);
+        if constexpr (lt_is_string_or_binary<LT>) {
+            MemPool* mem_pool = ctx->mem_pool();
+            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
+                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
+                mem_pool = &this->data(state).mem_pool;
+            }
+            size_t end = offset_size.first + offset_size.second;
+            ColumnHelper::with_binary_data_column(&array_element, [&](const auto* typed_column) {
+                for (size_t i = offset_size.first; i < end; ++i) {
+                    if (!array_element.is_null(i)) {
+                        this->data(state).update_with_slice(mem_pool, typed_column->get_slice(i));
+                    } else {
+                        this->data(state).append_null();
+                    }
+                }
+            });
+        } else {
+            auto* element_data_column =
+                    down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
+            size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+            DCHECK_LE(element_null_count, offset_size.second);
 
-        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
-                                 offset_size.second - element_null_count);
-        this->data(state).append_null(element_null_count);
+            this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
+                                     offset_size.second - element_null_count);
+            this->data(state).append_null(element_null_count);
+        }
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -242,6 +291,30 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            // For distinct mode, data_column used as a result cache for get_values method, any updates to
+            // this state should invalidate the cache.
+            this->data(state).data_column.resize(0);
+            MemPool* mem_pool = ctx->mem_pool();
+            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
+                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
+                mem_pool = &this->data(state).mem_pool;
+            }
+            // Hoist type checks out of the loop
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            auto update_loop = [&](const auto* typed_column) {
+                for (auto i = frame_start; i < frame_end; ++i) {
+                    this->data(state).update_with_slice(mem_pool, typed_column->get_slice(i));
+                }
+            };
+            if (data_column->is_large_binary()) {
+                update_loop(down_cast<const LargeBinaryColumn*>(data_column));
+            } else {
+                update_loop(down_cast<const BinaryColumn*>(data_column));
+            }
+            this->data(state).check_overflow(ctx);
+            return;
+        }
         // For distinct mode, data_column used as a result cache for get_values method, any updates to
         // this state should invalidate the cache.
         this->data(state).data_column.resize(0);
