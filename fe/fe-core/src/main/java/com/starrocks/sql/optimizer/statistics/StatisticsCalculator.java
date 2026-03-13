@@ -1296,13 +1296,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftStatistics, rightStatistics,
-                        joinStatsBuilder);
+                        eqOnPredicates, joinStatsBuilder);
                 break;
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftStatistics, rightStatistics,
-                        joinStatsBuilder);
+                        eqOnPredicates, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -1323,7 +1323,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, rightRowCount));
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, rightStatistics, leftStatistics,
-                        joinStatsBuilder);
+                        eqOnPredicates, joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1335,9 +1335,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics,
-                        leftStatistics, joinStatsBuilder);
+                        leftStatistics, eqOnPredicates, joinStatsBuilder);
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics,
-                        rightStatistics, joinStatsBuilder);
+                        rightStatistics, eqOnPredicates, joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
@@ -1425,22 +1425,36 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // In an outer join, all rows from the outer (preserved) side are kept, including those with NULLs
     // in the join key. The inner join estimation sets the null fraction to 0 for eq-join columns,
     // which is correct for inner joins but not for the outer side of outer joins.
-    // This method first restores the original null fractions for the outer side's columns, then computes
+    // This method first restores the original null fractions for the outer side's eq-join columns
+    // (the only columns whose null fractions are zeroed by the inner join estimation), then computes
     // the new null fractions for the inner (nullable) side's columns to account for additional null rows.
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,
                                                  Statistics outerSideStatistics, Statistics innerSideStatistics,
+                                                 List<BinaryPredicateOperator> eqOnPredicates,
                                                  Statistics.Builder builder) {
-        // Restore the original null fractions for the outer (preserved) side's columns.
+        // Collect the eq-join column refs that belong to the outer (preserved) side.
+        // Only these columns had their null fractions zeroed during inner join estimation.
+        final var outerColumns = outerSideStatistics.getUsedColumns();
+        Set<ColumnRefOperator> outerEqJoinColumns = new HashSet<>();
+        for (final var eqOnPredicate : eqOnPredicates) {
+            for (final var child : eqOnPredicate.getChildren()) {
+                if (child instanceof ColumnRefOperator colRef && outerColumns.contains(colRef.getId())) {
+                    outerEqJoinColumns.add(colRef);
+                }
+            }
+        }
+
+        // Restore the original null fractions for the outer side's eq-join columns only.
         // When outerTableRowCount < innerJoinRowCount (e.g. one-to-many matches), the output
-        // has more rows than the original outer table.
-        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : outerSideStatistics.getColumnStatistics().entrySet()) {
-            ColumnStatistic originalStat = entry.getValue();
-            ColumnStatistic currentStat = builder.getColumnStatistics(entry.getKey());
+        // has more rows than the original outer table, so scale proportionally.
+        for (final var outerEqJoinColumn : outerEqJoinColumns) {
+            final var originalStat = outerSideStatistics.getColumnStatistic(outerEqJoinColumn);
+            final var currentStat = builder.getColumnStatistics(outerEqJoinColumn);
             if (currentStat != null) {
                 double adjustedNullFraction = (outerTableRowCount < innerJoinRowCount)
                         ? originalStat.getNullsFraction() * outerTableRowCount / Math.max(1, innerJoinRowCount)
                         : originalStat.getNullsFraction();
-                builder.addColumnStatistic(entry.getKey(), buildFrom(currentStat) //
+                builder.addColumnStatistic(outerEqJoinColumn, buildFrom(currentStat) //
                         .setNullsFraction(adjustedNullFraction) //
                         .build());
             }
