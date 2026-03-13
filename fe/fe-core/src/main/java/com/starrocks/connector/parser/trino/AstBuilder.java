@@ -301,32 +301,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-
         Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
                 map(type -> (ExplainType) type).findFirst();
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
-            if (type == ExplainType.Type.LOGICAL)  {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+            if (type == ExplainType.Type.LOGICAL) {
+                explainLevel = StatementBase.ExplainLevel.LOGICAL;
             } else if (type == ExplainType.Type.DISTRIBUTED) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+                explainLevel = StatementBase.ExplainLevel.VERBOSE;
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
-            } else {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+                explainLevel = StatementBase.ExplainLevel.COSTS;
             }
-        } else {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), explainLevel);
     }
 
     @Override
     protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), StatementBase.ExplainLevel.ANALYZE);
+    }
+
+    private StatementBase applyExplain(StatementBase statement, StatementBase.ExplainLevel explainLevel) {
+        if (statement instanceof QueryStatement) {
+            statement.setIsExplain(true, explainLevel);
+            return statement;
+        }
+        if (statement instanceof InsertStmt) {
+            ((InsertStmt) statement).getQueryStatement().setIsExplain(true, explainLevel);
+            return statement;
+        }
+        throw trinoParserUnsupportedException(String.format("Unsupported statement [%s] for EXPLAIN",
+                statement.getClass().getSimpleName()));
     }
 
     @Override
