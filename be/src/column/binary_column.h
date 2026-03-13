@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
 
 #include "base/string/slice.h"
 #include "column/bytes.h"
@@ -29,6 +30,30 @@
 namespace starrocks {
 
 template <typename T>
+class BinaryColumnBase;
+
+class BinaryDataProxyContainer {
+public:
+    BinaryDataProxyContainer() = default;
+
+    template <typename T>
+    explicit BinaryDataProxyContainer(const BinaryColumnBase<T>& column) {
+        init(column);
+    }
+
+    Slice operator[](size_t index) const;
+
+    size_t size() const;
+
+private:
+    template <typename T>
+    void init(const BinaryColumnBase<T>& column);
+
+    const Column* _column = nullptr;
+    bool _is_large = false;
+};
+
+template <typename T>
 class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
     friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
@@ -39,6 +64,8 @@ public:
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+
+    using ProxyContainer = ::starrocks::BinaryDataProxyContainer;
 
     struct ImmContainer {
         ImmContainer() = default;
@@ -321,6 +348,8 @@ public:
 
     ImmContainer immutable_data() const { return ImmContainer(*this); }
 
+    ProxyContainer get_proxy_data() const { return ProxyContainer(*this); }
+
     Bytes& get_bytes() {
         _ensure_materialized();
         return _bytes;
@@ -416,5 +445,23 @@ private:
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
 using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
+
+inline Slice BinaryDataProxyContainer::operator[](size_t index) const {
+    DCHECK(_column != nullptr);
+    if (_is_large) {
+        return down_cast<const LargeBinaryColumn*>(_column)->get_slice(index);
+    }
+    return down_cast<const BinaryColumn*>(_column)->get_slice(index);
+}
+
+inline size_t BinaryDataProxyContainer::size() const {
+    return _column == nullptr ? 0 : _column->size();
+}
+
+template <typename T>
+inline void BinaryDataProxyContainer::init(const BinaryColumnBase<T>& column) {
+    _column = &column;
+    _is_large = std::is_same_v<T, uint64_t>;
+}
 
 } // namespace starrocks
