@@ -41,7 +41,7 @@ IF shouldTrigger("thrift_server_accept_exception")
 DO throw new OutOfMemoryError("failpoint triggered");
 ENDRULE
 
-# Audit event processor throw exception
+# Audit event processor throws OOM exception
 RULE audit_event_processor_oom
 CLASS com.starrocks.qe.AuditLogBuilder
 METHOD exec(AuditEvent)
