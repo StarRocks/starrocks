@@ -31,7 +31,7 @@ public class StructCastTest extends PlanTestBase {
         sql = "select cast(named_struct('key',1,'value',1) as struct<key1 int,value1 int>)";
         plan = getFragmentPlan(sql);
 
-        assertContains(plan, "CAST(named_struct('key', 1, 'value', 1) AS struct<key1 int(11), value1 int(11)>)");
+        assertContains(plan, "CAST(named_struct('key', 1, 'value', 1) AS struct<`key1` int(11), `value1` int(11)>)");
     }
 
     @Test
@@ -51,7 +51,7 @@ public class StructCastTest extends PlanTestBase {
             String plan;
             sql = "select cast(named_struct('k',1,'v',1) as struct<v int,`k` int>)";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "CAST(named_struct('k', 1, 'v', 1) AS struct<v int(11), k int(11)>)");
+            assertContains(plan, "CAST(named_struct('k', 1, 'v', 1) AS struct<`v` int(11), `k` int(11)>)");
 
         } finally {
             sv.setSqlMode(prev);
