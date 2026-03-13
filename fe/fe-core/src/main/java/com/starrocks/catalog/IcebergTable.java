@@ -172,8 +172,9 @@ public class IcebergTable extends Table {
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
             String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
-            return String.join(".", catalogName, catalogDBName, catalogTableName,
+            String fullUUID = String.join(".", catalogName, catalogDBName, catalogTableName,
                     uuid == null ? "" : uuid);
+            return hashUUIDIfTooLong(fullUUID);
         } else {
             return Long.toString(id);
         }
