@@ -23,6 +23,7 @@
 
 namespace starrocks {
 struct FileEncryptionPair;
+struct WritableFileOptions;
 class TabletMetadataPB;
 class FileSystem;
 } // namespace starrocks
@@ -88,6 +89,14 @@ public:
     // This is needed because segment file size may change after footer rewriting
     Status update_tablet_metadata_segment_sizes(const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
                                                 const std::unordered_map<std::string, size_t>& segment_size_changes);
+
+    // Copy a non-segment file (e.g. .del, .sst, .delvec, .cols) with size verification and retry.
+    // Gets source file size first, then copies with retry on failure or size mismatch.
+    // Returns the actual file size after a successful copy.
+    static StatusOr<size_t> copy_non_segment_file_with_retry(const std::string& src_file_location,
+                                                             const std::shared_ptr<FileSystem>& shared_src_fs,
+                                                             const std::string& target_file_location,
+                                                             const WritableFileOptions& opts, int max_retry);
 
 private:
     TabletManager* _tablet_manager;

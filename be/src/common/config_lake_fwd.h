@@ -26,6 +26,9 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 
+// Maximum retry count for non-segment file copy during lake-to-lake replication
+CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+
 // Enable segment metadata filter for lake tables.
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");

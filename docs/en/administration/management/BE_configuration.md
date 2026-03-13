@@ -3337,6 +3337,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The read buffer size used when downloading lake segment files during lake replication. This value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more I/O calls. Tune according to network bandwidth, storage I/O characteristics, and the number of parallel replication threads.
 - Introduced in: -
 
+##### lake_replication_max_file_copy_retry
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
+- Introduced in: -
+
 ##### lake_service_max_concurrency
 
 - Default: 0
