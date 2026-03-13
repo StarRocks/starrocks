@@ -25,13 +25,6 @@ public:
     DistinctStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
 
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
-
-private:
-    void _output_chunk_from_hash_set(ChunkPtr* chunk);
 };
 } // namespace starrocks

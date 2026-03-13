@@ -99,7 +99,7 @@ public class StructField {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toSql(depth) : "...";
         StringBuilder sb = new StringBuilder();
         if (printName) {
-            sb.append(name).append(' ');
+            sb.append(backquoteName(name)).append(' ');
         }
         sb.append(typeSql);
         if (comment != null) {
@@ -111,7 +111,7 @@ public class StructField {
     public String toTypeString(int depth) {
         String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toTypeString(depth) : "...";
         StringBuilder sb = new StringBuilder();
-        sb.append(name).append(' ');
+        sb.append(backquoteName(name)).append(' ');
         sb.append(typeSql);
         return sb.toString();
     }
@@ -124,7 +124,7 @@ public class StructField {
         String leftPadding = Strings.repeat(" ", lpad);
         StringBuilder sb = new StringBuilder(leftPadding);
         if (printName) {
-            sb.append(name).append(' ');
+            sb.append(backquoteName(name)).append(' ');
         }
 
         // Pass in the padding to make sure nested fields are aligned properly,
@@ -137,6 +137,15 @@ public class StructField {
             sb.append(String.format(" COMMENT '%s'", comment));
         }
         return sb.toString();
+    }
+
+    private static String backquoteName(String value) {
+        if (StringUtils.isEmpty(value)) {
+            return value;
+        }
+        // Escape embedded backticks by doubling them so the resulting identifier is always parseable.
+        String escaped = value.replace("`", "``");
+        return "`" + escaped + "`";
     }
 
     @Override

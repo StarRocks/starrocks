@@ -15,10 +15,9 @@
 #pragma once
 
 #include "base/phmap/phmap.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/exec_node.h"
 #include "exec/join/join_hash_table.h"
+#include "exec/pipeline_node.h"
 
 namespace starrocks {
 
@@ -31,7 +30,7 @@ class ExprContext;
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
-class HashJoinNode final : public ExecNode {
+class HashJoinNode final : public PipelineNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~HashJoinNode() override {
@@ -41,9 +40,6 @@ public:
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     void close(RuntimeState* state) override;
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
     bool can_generate_global_runtime_filter() const;
@@ -54,41 +50,6 @@ public:
 private:
     template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
     pipeline::OpFactories _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
-
-    static bool _has_null(const ColumnPtr& column);
-
-    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
-    // local join includes: broadcast join and colocate join.
-    Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
-    void _final_update_profile() {
-        if (_probe_chunk_count > 0) {
-            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(COUNTER_VALUE(_probe_rows_counter) / _probe_chunk_count));
-        } else {
-            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(0));
-        }
-        if (_output_chunk_count > 0) {
-            COUNTER_SET(_avg_output_chunk_size, int64_t(_num_rows_returned / _output_chunk_count));
-        } else {
-            COUNTER_SET(_avg_output_chunk_size, int64_t(0));
-        }
-    }
-    Status _build(RuntimeState* state);
-    Status _probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>& probe_timer, ChunkPtr* chunk, bool& eos);
-    Status _probe_remain(ChunkPtr* chunk, bool& eos);
-
-    Status _evaluate_build_keys(const ChunkPtr& chunk);
-
-    Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
-    static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
-                                                bool filter_all, bool hit_all, const Filter& filter);
-
-    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
-    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
-    Status _process_other_conjunct(ChunkPtr* chunk);
-
-    Status _do_publish_runtime_filters(RuntimeState* state, int64_t limit);
-    Status _push_down_in_filter(RuntimeState* state);
 
     friend ExecNode;
     // _hash_join_node is used to construct HashJoiner, the reference is sound since
@@ -104,10 +65,7 @@ private:
     std::vector<ExprContext*> _probe_equivalence_partition_expr_ctxs;
     std::vector<ExprContext*> _build_equivalence_partition_expr_ctxs;
 
-    std::list<ExprContext*> _runtime_in_filters;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
-    bool _build_runtime_filters_from_planner;
-
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
     std::set<SlotId> _output_slots;
@@ -116,7 +74,6 @@ private:
     ExprContext* _asof_join_condition_probe_expr_ctx = nullptr;
     TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
 
-    bool _is_push_down = false;
     bool _enable_late_materialization = false;
 
     bool _enable_partition_hash_join = false;
@@ -125,46 +82,9 @@ private:
 
     JoinHashTable _ht;
 
-    ChunkPtr _cur_left_input_chunk = nullptr;
-    ChunkPtr _pre_left_input_chunk = nullptr;
-    ChunkPtr _probing_chunk = nullptr;
-
-    Columns _key_columns;
-    size_t _output_probe_column_count = 0;
-    size_t _output_build_column_count = 0;
-    size_t _probe_chunk_count = 0;
-    size_t _output_chunk_count = 0;
-
-    bool _eos = false;
-    // hash table doesn't have reserved data
-    bool _ht_has_remain = false;
-    // right table have not output data for right outer join/right semi join/right anti join/full outer join
-    bool _right_table_has_remain = true;
-    bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     std::map<SlotId, ExprContext*> _common_expr_ctxs;
-
-    RuntimeProfile::Counter* _build_timer = nullptr;
-    RuntimeProfile::Counter* _build_ht_timer = nullptr;
-    RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
-    RuntimeProfile::Counter* _build_push_down_expr_timer = nullptr;
-    RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
-    RuntimeProfile::Counter* _probe_timer = nullptr;
-    RuntimeProfile::Counter* _search_ht_timer = nullptr;
-    RuntimeProfile::Counter* _probe_counter = nullptr;
-    RuntimeProfile::Counter* _output_build_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _build_rows_counter = nullptr;
-    RuntimeProfile::Counter* _probe_rows_counter = nullptr;
-    RuntimeProfile::Counter* _build_buckets_counter = nullptr;
-    RuntimeProfile::Counter* _push_down_expr_num = nullptr;
-    RuntimeProfile::Counter* _avg_input_probe_chunk_size = nullptr;
-    RuntimeProfile::Counter* _avg_output_chunk_size = nullptr;
-    RuntimeProfile::Counter* _build_conjunct_evaluate_timer = nullptr;
-    RuntimeProfile::Counter* _probe_conjunct_evaluate_timer = nullptr;
-    RuntimeProfile::Counter* _other_join_conjunct_evaluate_timer = nullptr;
-    RuntimeProfile::Counter* _where_conjunct_evaluate_timer = nullptr;
 };
 
 } // namespace starrocks

@@ -860,8 +860,8 @@ public:
         Columns data_columns, null_columns;
         for (auto& column : _segment_column->columns()) {
             NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
-            data_columns.push_back(nullable->data_column());
-            null_columns.push_back(nullable->null_column());
+            data_columns.emplace_back(nullable->data_column());
+            null_columns.emplace_back(nullable->null_column());
         }
 
         auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());

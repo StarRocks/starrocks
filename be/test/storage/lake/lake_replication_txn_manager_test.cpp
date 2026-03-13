@@ -34,12 +34,15 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
+#include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/join.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "service/staros_worker.h"
 #include "storage/chunk_helper.h"
@@ -533,6 +536,149 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal_encrypted) {
     // old_rowsets is empty, so compaction_inputs should also be empty.
     EXPECT_EQ(0, status_or.value()->compaction_inputs_size());
 }
+
+// Tests for LakeReplicationTxnManager::copy_non_segment_file_with_retry
+class CopyNonSegmentFileWithRetryTest : public testing::Test {
+protected:
+    void SetUp() override {
+        (void)fs::remove_all(_test_dir);
+        CHECK_OK(fs::create_directories(_test_dir));
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+        (void)fs::remove_all(_test_dir);
+    }
+
+    Status create_test_file(const std::string& path, const std::string& content) {
+        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(opts, path));
+        RETURN_IF_ERROR(wf->append(content));
+        return wf->close();
+    }
+
+    static constexpr const char* kTestDirectory = "test_non_segment_copy_retry";
+    std::string _test_dir = kTestDirectory;
+};
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_success_no_retry_needed) {
+    std::string src_path = lake::join_path(_test_dir, "test.sst");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.sst");
+    std::string content(4096, 'A');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(*result, content.size());
+}
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_error_retry_succeeds) {
+    std::string src_path = lake::join_path(_test_dir, "test.sst");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.sst");
+    std::string content(4096, 'A');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    int call_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("fs::copy_file", [&](void* arg) {
+        auto* st = static_cast<Status*>(arg);
+        if (call_count++ == 0) {
+            *st = Status::IOError("Injected transient copy error");
+        }
+    });
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(*result, content.size());
+    EXPECT_EQ(call_count, 2);
+}
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_error_exhausts_all_retries) {
+    std::string src_path = lake::join_path(_test_dir, "test.delvec");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.delvec");
+    std::string content(4096, 'C');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    SyncPoint::GetInstance()->SetCallBack("fs::copy_file", [&](void* arg) {
+        auto* st = static_cast<Status*>(arg);
+        *st = Status::IOError("Persistent copy error");
+    });
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
+    EXPECT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_io_error()) << result.status();
+}
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_size_mismatch_exhausts_retries) {
+    std::string src_path = lake::join_path(_test_dir, "test.delvec");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.delvec");
+    std::string content(8192, 'B');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    SyncPoint::GetInstance()->SetCallBack("lake_replication_non_segment_copy_size", [&](void* arg) {
+        auto* size = static_cast<size_t*>(arg);
+        *size = *size / 2;
+    });
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+    auto result =
+            LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, max_retry);
+    EXPECT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+    EXPECT_NE(std::string::npos, result.status().message().find("File size mismatch after copy"));
+}
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_copy_size_mismatch_then_succeeds) {
+    std::string src_path = lake::join_path(_test_dir, "test.cols");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.cols");
+    std::string content(2048, 'D');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    int call_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("lake_replication_non_segment_copy_size", [&](void* arg) {
+        if (call_count++ == 0) {
+            auto* size = static_cast<size_t*>(arg);
+            *size = *size / 2;
+        }
+    });
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 3);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(*result, content.size());
+    EXPECT_EQ(call_count, 2);
+}
+
+TEST_F(CopyNonSegmentFileWithRetryTest, test_max_retry_clamped_to_at_least_one) {
+    std::string src_path = lake::join_path(_test_dir, "test.del");
+    std::string dst_path = lake::join_path(_test_dir, "test_copy.del");
+    std::string content(1024, 'E');
+    ASSERT_OK(create_test_file(src_path, content));
+
+    ASSIGN_OR_ABORT(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    auto result = LakeReplicationTxnManager::copy_non_segment_file_with_retry(src_path, src_fs, dst_path, opts, 0);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(*result, content.size());
+}
+
 #ifdef USE_STAROS
 TEST(LakeReplicationTxnManagerTest, test_convert_s3_path_to_starlet_uri) {
     // Test case from user: convert S3 path to starlet URI

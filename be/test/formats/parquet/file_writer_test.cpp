@@ -34,6 +34,7 @@
 #include "fs/fs_memory.h"
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {
 

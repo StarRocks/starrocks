@@ -21,6 +21,7 @@
 #include "exprs/expr.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {

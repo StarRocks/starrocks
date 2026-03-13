@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/column_helper.h"
-#include "exec/exec_node.h"
+#include "exec/pipeline_node.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -24,12 +24,9 @@ class TupleDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
-class RepeatNode final : public ExecNode {
+class RepeatNode final : public PipelineNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     void close(RuntimeState* state) override;
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
@@ -48,8 +45,6 @@ private:
         return ConstColumn::create(std::move(ptr), num_rows);
     }
 
-    void extend_and_update_columns(ChunkPtr* curr_chunk, ChunkPtr* chunk);
-
     // Slot id set used to indicate those slots need to set to null.
     std::vector<std::set<SlotId>> _slot_id_set_list;
     // all slot id
@@ -63,9 +58,6 @@ private:
 
     // repeat timer for chunk. 0 <=  _repeat_times_last < _repeat_times_required.
     uint64_t _repeat_times_last;
-
-    // accessing chunk.
-    ChunkPtr _curr_chunk;
 
     // only null columns for reusing, It has chunk_size rows.
     ColumnPtr _column_null;
@@ -82,17 +74,6 @@ private:
     // Tulple id used for output, it has new slots.
     TupleId _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
-
-    // time to append columns for grouping_id column and grouping()/grouping_id()'s virtual columns.
-    RuntimeProfile::Counter* _extend_column_timer = nullptr;
-
-    // time to copy/assign/move columns between chunk and columns.
-    RuntimeProfile::Counter* _copy_column_timer = nullptr;
-
-    // time to update columns for grouping_id column and grouping()/grouping_id()'s virtual columns.
-    // and
-    // time to set null_column for unneed colums.
-    RuntimeProfile::Counter* _update_column_timer = nullptr;
 };
 
 } // namespace starrocks

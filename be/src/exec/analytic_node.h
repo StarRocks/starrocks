@@ -15,14 +15,14 @@
 #pragma once
 
 #include "analytor.h"
-#include "exec/exec_node.h"
+#include "exec/pipeline_node.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 
-class AnalyticNode final : public ExecNode {
+class AnalyticNode final : public PipelineNode {
 public:
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~AnalyticNode() override {
@@ -32,9 +32,6 @@ public:
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-    Status open(RuntimeState* state) override;
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;

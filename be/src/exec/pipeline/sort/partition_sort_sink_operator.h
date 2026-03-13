@@ -27,7 +27,7 @@
 #include "exec/sort_exec_exprs.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller_factory.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class BufferControlBlock;

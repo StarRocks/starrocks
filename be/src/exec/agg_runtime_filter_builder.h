@@ -28,7 +28,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter/runtime_filter_descriptor.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

@@ -64,7 +64,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -307,10 +306,6 @@ public class UtFrameUtils {
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
-        // TODO: support startBDB = false in shared-data mode
-        if (!startBDB && runMode == RunMode.SHARED_DATA) {
-            throw new NotImplementedException("Have to set 'startBDB = true' when creating a shared-data cluster");
-        }
         // set additional fe config
         if (startBDB) {
             feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
@@ -396,9 +391,7 @@ public class UtFrameUtils {
 
     // create a min starrocks cluster with the given runMode
     public static void createMinStarRocksCluster(RunMode runMode) {
-        // TODO: support creating shared-data cluster without the real BDBJE journal
-        boolean startBdb = (runMode == RunMode.SHARED_DATA);
-        createMinStarRocksCluster(startBdb, runMode);
+        createMinStarRocksCluster(false, runMode);
     }
 
     public static Backend addMockBackend(int backendId, String host, int beThriftPort) throws Exception {
@@ -1351,6 +1344,7 @@ public class UtFrameUtils {
 
     public static void setPartitionVersion(Partition partition, long version) {
         partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setDataVersion(version);
         MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {

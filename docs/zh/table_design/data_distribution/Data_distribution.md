@@ -640,6 +640,20 @@ CREATE TABLE site_access1(
 DUPLICATE KEY(event_day,site_id,pv);
 ```
 
+您也可以在语句中明确指定该子句：
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+DISTRIBUTED BY RANDOM BUCKETS;
+```
+
 当然，如果您比较熟悉 StarRocks 的分桶机制，使用随机分桶建表时，也可以手动设置分桶数量。
 
 ```SQL

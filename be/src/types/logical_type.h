@@ -132,7 +132,7 @@ constexpr bool is_string_type(LogicalType type) {
 
 constexpr bool is_object_type(LogicalType type) {
     return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
-           type == LogicalType::TYPE_PERCENTILE;
+           type == LogicalType::TYPE_PERCENTILE || type == TYPE_VARIANT;
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {

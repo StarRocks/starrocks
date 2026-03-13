@@ -31,7 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/spill/spiller.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 class SpillProcessChannel;

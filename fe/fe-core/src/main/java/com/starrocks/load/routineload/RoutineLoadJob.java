@@ -1032,29 +1032,27 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // paused job or renew task
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         long taskBeId = -1L;
         try {
-            if (txnOperated) {
-                // find task in job
-                Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
-                        entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
-                if (routineLoadTaskInfoOptional.isPresent()) {
-                    RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
-                    taskBeId = routineLoadTaskInfo.getBeId();
-                    executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.COMMITTED, null);
-                    routineLoadTaskInfo.afterCommitted(txnState, txnOperated);
-                }
-                ++committedTaskNum;
-                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-                entity.counterRoutineLoadCommittedTasksTotal.increase(1L);
-                LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
+            // find task in job
+            Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
+                    entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
+            if (routineLoadTaskInfoOptional.isPresent()) {
+                RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
+                taskBeId = routineLoadTaskInfo.getBeId();
+                executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.COMMITTED, null);
+                routineLoadTaskInfo.afterCommitted(txnState);
+            }
+            ++committedTaskNum;
+            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+            entity.counterRoutineLoadCommittedTasksTotal.increase(1L);
+            LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
 
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                        getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
-                if (streamLoadTask != null) {
-                    streamLoadTask.afterCommitted(txnState, txnOperated);
-                }
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                    getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+            if (streamLoadTask != null) {
+                streamLoadTask.afterCommitted(txnState);
             }
         } catch (Throwable e) {
             LOG.warn("after committed failed", e);
@@ -1086,19 +1084,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
      * the corresponding txn is visible, create a new task
      */
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            String msg = String.format(
-                    "should not happen, we find that txnOperated if false when handling afterVisble. job id: %d, txn_id: %d",
-                    id, txnState.getTransactionId());
-            LOG.warn(msg);
-            // print a log and return.
-            // if this really happen, the job will be blocked, and this task can be seen by
-            // "show routine load task" stmt, which is in COMMITTED state for a long time.
-            // so we can find this error and step in.
-            return;
-        }
-
+    public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
             if (state != JobState.RUNNING) {
@@ -1109,7 +1095,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                     getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
             if (streamLoadTask != null) {
-                streamLoadTask.afterVisible(txnState, txnOperated);
+                streamLoadTask.afterVisible(txnState);
             }
 
             Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
@@ -1144,7 +1130,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
 
             try {
-                routineLoadTaskInfo.afterVisible(txnState, txnOperated);
+                routineLoadTaskInfo.afterVisible(txnState);
             } catch (StarRocksException e) {
                 LOG.warn("failed to execute 'routineLoadTaskInfo.afterVisible', txnId {}, label {}. " +
                         "this should not happen", txnState.getTransactionId(), routineLoadTaskInfo.getLabel());
@@ -1177,65 +1163,63 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // progress will be update otherwise the progress will be hung
     // *** Please do not call after individually. It must be combined use with before ***
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReasonString)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReasonString)
             throws StarRocksException {
         long taskBeId = -1L;
         try {
-            if (txnOperated) {
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
-                        getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
-                if (streamLoadTask != null) {
-                    streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
-                }
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                    getSyncSteamLoadTaskByTxnId(txnState.getTransactionId());
+            if (streamLoadTask != null) {
+                streamLoadTask.afterAborted(txnState, txnStatusChangeReasonString);
+            }
 
-                // step0: find task in job
-                Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
-                        entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
-                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-                if (!routineLoadTaskInfoOptional.isPresent()) {
-                    //  The task of the timed-out transaction will be detected by the transaction checker thread
-                    //  and subsequently aborted. Here, we need to update the abortedTaskNum.
-                    ++abortedTaskNum;
-                    entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
-                    // task will not be update when task has been aborted by fe
-                    return;
-                }
-                RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
-                taskBeId = routineLoadTaskInfo.getBeId();
-                // step1: job state will be changed depending on txnStatusChangeReasonString
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, txnState.getLabel())
-                            .add("txn_id", txnState.getTransactionId())
-                            .add("msg", "txn abort with reason " + txnStatusChangeReasonString)
-                            .build());
-                }
-                routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
+            // step0: find task in job
+            Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
+                    entity -> entity.getTxnId() == txnState.getTransactionId()).findFirst();
+            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+            if (!routineLoadTaskInfoOptional.isPresent()) {
+                //  The task of the timed-out transaction will be detected by the transaction checker thread
+                //  and subsequently aborted. Here, we need to update the abortedTaskNum.
                 ++abortedTaskNum;
                 entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
-                setOtherMsg(txnStatusChangeReasonString);
-                TxnStatusChangeReason txnStatusChangeReason = null;
-                if (txnStatusChangeReasonString != null) {
-                    txnStatusChangeReason =
-                            TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
-                    if (txnStatusChangeReason != null) {
-                        switch (txnStatusChangeReason) {
-                            case OFFSET_OUT_OF_RANGE:
-                            case PAUSE:
-                                String msg = "be " + taskBeId + " abort task "
-                                        + "with reason: " + txnStatusChangeReasonString;
-                                updateState(JobState.PAUSED,
-                                        new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
-                                return;
-                            default:
-                                break;
-                        }
-                    }
-                    // TODO(ml): use previous be id depend on change reason
-                }
-                // step2: commit task , update progress, maybe create a new task
-                executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
-                        txnStatusChangeReasonString);
+                // task will not be update when task has been aborted by fe
+                return;
             }
+            RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
+            taskBeId = routineLoadTaskInfo.getBeId();
+            // step1: job state will be changed depending on txnStatusChangeReasonString
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, txnState.getLabel())
+                        .add("txn_id", txnState.getTransactionId())
+                        .add("msg", "txn abort with reason " + txnStatusChangeReasonString)
+                        .build());
+            }
+            routineLoadTaskInfo.afterAborted(txnState, txnStatusChangeReasonString);
+            ++abortedTaskNum;
+            entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
+            setOtherMsg(txnStatusChangeReasonString);
+            TxnStatusChangeReason txnStatusChangeReason = null;
+            if (txnStatusChangeReasonString != null) {
+                txnStatusChangeReason =
+                        TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
+                if (txnStatusChangeReason != null) {
+                    switch (txnStatusChangeReason) {
+                        case OFFSET_OUT_OF_RANGE:
+                        case PAUSE:
+                            String msg = "be " + taskBeId + " abort task "
+                                    + "with reason: " + txnStatusChangeReasonString;
+                            updateState(JobState.PAUSED,
+                                    new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
+                            return;
+                        default:
+                            break;
+                    }
+                }
+                // TODO(ml): use previous be id depend on change reason
+            }
+            // step2: commit task , update progress, maybe create a new task
+            executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
+                    txnStatusChangeReasonString);
         } catch (Exception e) {
             String msg =
                     "be " + taskBeId + " abort task " + txnState.getLabel() + " failed with error " + e.getMessage();

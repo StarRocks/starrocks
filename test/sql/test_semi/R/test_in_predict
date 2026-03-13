@@ -533,15 +533,15 @@ E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 23. 
 -- !result
 select array2 not in (row(2,3)) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 30. Detail message: The input types (array<map<int(11),int(11)>>,struct<col1 tinyint(4), col2 tinyint(4)>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 30. Detail message: The input types (array<map<int(11),int(11)>>,struct<`col1` tinyint(4), `col2` tinyint(4)>) of in predict are not compatible.')
 -- !result
 select array3 in (33,1) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<a int(11), b int(11)>> with type double is invalid.')
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<`a` int(11), `b` int(11)>> with type double is invalid.')
 -- !result
 select array3 not in (2,3) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<a int(11), b int(11)>> with type double is invalid.')
+E: (1064, 'Getting analyzing error at line 1, column 7. Detail message: in predicate type array<struct<`a` int(11), `b` int(11)>> with type double is invalid.')
 -- !result
 select map1 in (map{}), map1 not in (map{}), map2 in (map{}), map2 not in (map{}), map3 in (map{}), map3 not in (map{}) from sc2 order by 1;
 -- result:
@@ -725,11 +725,11 @@ E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 34. 
 -- !result
 select map3 in ([map{}]) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 23. Detail message: The input types (map<int(11),struct<c int(11), b int(11)>>,array<map<NULL_TYPE,NULL_TYPE>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 23. Detail message: The input types (map<int(11),struct<`c` int(11), `b` int(11)>>,array<map<NULL_TYPE,NULL_TYPE>>) of in predict are not compatible.')
 -- !result
 select map3 not in (map{null:2}) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 31. Detail message: The input types (map<int(11),struct<c int(11), b int(11)>>,map<NULL_TYPE,tinyint(4)>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 31. Detail message: The input types (map<int(11),struct<`c` int(11), `b` int(11)>>,map<NULL_TYPE,tinyint(4)>) of in predict are not compatible.')
 -- !result
 select map1 in (2,3) from sc2 order by 1;
 -- result:
@@ -773,19 +773,19 @@ None	None
 -- !result
 select st1 in (row(null, null)), st1 not in (row(null,null)) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 30. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,struct<col1 boolean, col2 boolean>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 30. Detail message: The input types (struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>,struct<`col1` boolean, `col2` boolean>) of in predict are not compatible.')
 -- !result
 select row(null,null) in (st1), row(null,null) not in (st1) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 22 to line 1, column 29. Detail message: The input types (struct<col1 boolean, col2 boolean>,struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 22 to line 1, column 29. Detail message: The input types (struct<`col1` boolean, `col2` boolean>,struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>) of in predict are not compatible.')
 -- !result
 select st1 in (row(null)), st1 not in (row(null)) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,struct<col1 boolean>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>,struct<`col1` boolean>) of in predict are not compatible.')
 -- !result
 select row(null) in (st1), row(null) not in (st1) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 24. Detail message: The input types (struct<col1 boolean>,struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 24. Detail message: The input types (struct<`col1` boolean>,struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>) of in predict are not compatible.')
 -- !result
 select st1 in (row(1, [2,1,3], map{1:1, 2:2}, row(3, 2)), row(12, [2,null,3], map{11:1, 2:2}, row(31, 2))) from sc2 order by 1;
 -- result:
@@ -853,9 +853,9 @@ None
 -- !result
 select st1 in (map{}) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 20. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 20. Detail message: The input types (struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
 -- !result
 select st1 not in (map{}) from sc2 order by 1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
+E: (1064, 'Getting analyzing error from line 1, column 11 to line 1, column 24. Detail message: The input types (struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>>,map<NULL_TYPE,NULL_TYPE>) of in predict are not compatible.')
 -- !result

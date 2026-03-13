@@ -22,6 +22,8 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "storage/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"

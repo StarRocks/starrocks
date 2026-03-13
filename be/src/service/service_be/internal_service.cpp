@@ -43,6 +43,7 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/closure_guard.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"

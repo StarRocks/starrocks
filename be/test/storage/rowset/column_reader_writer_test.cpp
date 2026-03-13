@@ -274,15 +274,25 @@ protected:
                 size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
+                Buffer<uint8_t> buffer;
+                Buffer<Slice> slices;
+                const uint8_t* raw_data = nullptr;
+                if constexpr (is_object_type(type)) {
+                    const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                    data_column->build_slices(buffer, slices);
+                } else {
+                    raw_data = column->raw_data();
+                }
                 for (int j = 0; j < rows_read; ++j) {
                     if (type == TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string())
                                 << "j:" << j;
-                    } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
-                                << "j:" << j;
+                    } else if (type == TYPE_VARCHAR) {
+                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string()) << "j:" << j;
+                    } else if (type == TYPE_OBJECT || type == TYPE_HLL) {
+                        ASSERT_EQ(value, slices[j].to_string());
                     } else {
-                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
+                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
                     }
                 }
             }
@@ -297,15 +307,27 @@ protected:
                     size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
+
+                    Buffer<uint8_t> buffer;
+                    Buffer<Slice> slices;
+                    const uint8_t* raw_data = nullptr;
+                    if constexpr (is_object_type(type)) {
+                        const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
+                        data_column->build_slices(buffer, slices);
+                    } else {
+                        raw_data = column->raw_data();
+                    }
+
                     for (int j = 0; j < rows_read; ++j) {
                         if (type == TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result,
-                                      reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string())
                                     << "j:" << j;
-                        } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
-                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
+                        } else if (type == TYPE_VARCHAR) {
+                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string());
+                        } else if (type == TYPE_HLL || type == TYPE_OBJECT) {
+                            ASSERT_EQ(value, slices[j].to_string());
                         } else {
-                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
+                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
                         }
                     }
                 }

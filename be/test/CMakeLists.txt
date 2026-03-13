@@ -21,6 +21,7 @@ set(EXEC_FILES
         ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
+        ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
@@ -104,6 +105,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
+        ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
@@ -223,6 +225,7 @@ set(EXEC_FILES
         ./formats/parquet/page_reader_test.cpp
         ./formats/parquet/metadata_test.cpp
         ./formats/parquet/group_reader_test.cpp
+        ./formats/parquet/complex_column_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
@@ -490,6 +493,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/column_iterator_decorator_test.cpp
     ./storage/rowset_column_partial_update_test.cpp
     ./storage/rowset/column_reader_writer_test.cpp
+    ./storage/rowset/object_column_writer_test.cpp
     ./storage/rowset_column_update_state_test.cpp
     ./storage/rowset/data_sample_test.cpp
     ./storage/rowset/default_value_column_iterator_test.cpp

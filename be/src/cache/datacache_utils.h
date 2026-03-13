@@ -17,7 +17,7 @@
 #include "cache/cache_metrics.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "gen_cpp/DataCache_types.h"
-#include "storage/options.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
