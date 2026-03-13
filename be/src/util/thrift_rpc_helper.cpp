@@ -101,8 +101,8 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
 
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
-                            const std::function<void(ClientConnection<T>&)>& callback,
-                            int timeout_ms, int retry_times) {
+                            const std::function<void(ClientConnection<T>&)>& callback, int timeout_ms,
+                            int retry_times) {
     if (UNLIKELY(_s_exec_env == nullptr)) {
         return Status::ThriftRpcError(
                 "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
@@ -152,13 +152,11 @@ template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
         const std::string& ip, const int32_t port,
-        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback, int timeout_ms,
-        int retry_times);
+        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback, int timeout_ms, int retry_times);
 
 template Status ThriftRpcHelper::rpc<BackendServiceClient>(
         const std::string& ip, const int32_t port,
-        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback, int timeout_ms,
-        int retry_times);
+        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback, int timeout_ms, int retry_times);
 
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
