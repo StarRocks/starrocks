@@ -152,7 +152,7 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status SchemaTableSink::close(RuntimeState* state, Status exec_status) {
+Status SchemaTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }

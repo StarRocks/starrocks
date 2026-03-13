@@ -17,6 +17,7 @@
 #include <bthread/mutex.h>
 
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 #include "base/bthreads/future.h"
@@ -32,17 +33,24 @@ public:
     // sure that only one execution is in-flight for a given key at a
     // time. If a duplicate comes in, the duplicate caller waits for the
     // original to complete and receives the same results.
-    template <typename Func, typename... Args>
-    R Do(K key, Func&& func, Args&&... args) {
-        auto f = DoFuture(key, std::forward<Func>(func), std::forward<Args>(args)...);
+    template <typename Key, typename Func, typename... Args>
+    requires std::constructible_from<K, Key&&> R Do(Key&& key, Func&& func, Args&&... args) {
+        auto f = DoFuture(std::forward<Key>(key), std::forward<Func>(func), std::forward<Args>(args)...);
         return f.get();
     }
 
-    template <typename Func, typename... Args>
-    SharedFuture<R> DoFuture(K key, Func&& func, Args&&... args) {
+    template <typename Key, typename Func, typename... Args>
+    requires std::constructible_from<K, Key&&> SharedFuture<R> DoFuture(Key&& key, Func&& func, Args&&... args) {
+        std::optional<K> owned_lookup_key;
+        const K* lookup_key = &key;
+        if constexpr (!std::is_lvalue_reference_v<Key&&>) {
+            owned_lookup_key.emplace(key);
+            lookup_key = &owned_lookup_key.value();
+        }
+
         std::unique_lock lock(_doing_mtx);
 
-        auto it = _doing.find(key);
+        auto it = _doing.find(*lookup_key);
         if (it != _doing.end()) {
             auto f = it->second;
             lock.unlock();
@@ -52,7 +60,7 @@ public:
 
         auto promise = bthreads::Promise<R>();
         auto future = promise.get_future().share();
-        _doing.emplace(key, future);
+        _doing.emplace(std::forward<Key>(key), future);
         lock.unlock();
 
         TEST_SYNC_POINT("singleflight::Group::Do:2");
@@ -64,7 +72,7 @@ public:
         TEST_SYNC_POINT("singleflight::Group::Do:3");
 
         lock.lock();
-        it = _doing.find(key);
+        it = _doing.find(*lookup_key);
         if (it != _doing.end() && it->second == future) {
             _doing.erase(it);
         }
@@ -76,7 +84,7 @@ public:
     // Forget tells the singleflight to forget about a key.  Future calls
     // to Do for this key will call the function rather than waiting for
     // an earlier call to complete.
-    void Forget(K key) {
+    void Forget(const K& key) {
         TEST_SYNC_POINT("singleflight::Group::Forget:1");
         {
             std::lock_guard l(_doing_mtx);

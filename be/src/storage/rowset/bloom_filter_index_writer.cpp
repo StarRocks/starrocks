@@ -198,7 +198,7 @@ public:
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
+            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override { return; }
 };
