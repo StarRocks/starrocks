@@ -20,7 +20,7 @@
 #include "exec/aggregator.h"
 #include "exec/stream/aggregate/agg_group_state.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::stream {
 

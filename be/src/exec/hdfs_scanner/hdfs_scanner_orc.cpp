@@ -29,6 +29,7 @@
 #include "formats/orc/orc_min_max_decoder.h"
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

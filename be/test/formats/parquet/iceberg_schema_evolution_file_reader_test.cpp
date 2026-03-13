@@ -37,6 +37,7 @@
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {

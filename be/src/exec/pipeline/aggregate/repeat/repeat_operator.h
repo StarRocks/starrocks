@@ -19,7 +19,7 @@
 #include "common/global_types.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/expr_context.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class TupleDescriptor;

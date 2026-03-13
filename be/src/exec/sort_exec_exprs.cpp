@@ -39,6 +39,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 

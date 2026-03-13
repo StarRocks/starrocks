@@ -16,6 +16,7 @@
 
 #include "exec/olap_scan_node.h"
 #include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {

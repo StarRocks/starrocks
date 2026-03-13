@@ -27,7 +27,7 @@
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
 #include "runtime/runtime_filter.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

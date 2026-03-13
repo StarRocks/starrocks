@@ -2,6 +2,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "gtest/gtest.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class TableFunctionNodeTest : public testing::Test {

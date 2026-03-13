@@ -29,7 +29,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_filter.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 

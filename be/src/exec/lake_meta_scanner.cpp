@@ -18,6 +18,7 @@
 #include "exec/lake_meta_scan_node.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/global_dict/config.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

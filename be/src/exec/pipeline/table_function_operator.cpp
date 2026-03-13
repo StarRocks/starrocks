@@ -14,6 +14,8 @@
 
 #include "table_function_operator.h"
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {

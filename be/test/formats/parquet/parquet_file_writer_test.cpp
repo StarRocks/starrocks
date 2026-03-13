@@ -33,6 +33,7 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks::formats {

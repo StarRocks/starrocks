@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/partition/partition_hash_map.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 

@@ -27,8 +27,14 @@
 #include "storage/load_chunk_spiller.h"
 
 namespace starrocks {
+
 class TupleDescriptor;
-}
+
+namespace pipeline {
+class FragmentContext;
+} // namespace pipeline
+
+} // namespace starrocks
 
 namespace starrocks::connector {
 

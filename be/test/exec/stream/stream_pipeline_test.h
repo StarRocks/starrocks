@@ -24,8 +24,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class ConnectorScanNode;
