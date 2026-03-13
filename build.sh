@@ -424,13 +424,12 @@ done
 
 # Clean and build generated code
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
-    echo "Build generated code"
+    echo "Build script-generated code"
     cd ${STARROCKS_HOME}/gensrc
     if [ ${CLEAN} -eq 1 ]; then
        make clean
     fi
-    # DO NOT using parallel make(-j) for gensrc
-    make
+    make script
 fi
 cd ${STARROCKS_HOME}
 
