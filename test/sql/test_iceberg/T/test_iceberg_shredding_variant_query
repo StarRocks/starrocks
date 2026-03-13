@@ -43,7 +43,7 @@ alter table test_noshredding_variant execute add_files(location='oss://${oss_buc
 -- ========================================
 -- Explain: FE should expose pushed variant access paths
 -- ========================================
-function: assert_explain_verbose_contains("select get_variant_int(data, '$.id') as id, get_variant_string(data, '$.profile.department') as dept from test_shredding_variant", "ColumnAccessPath: [/data/id(int(11)), /data/profile/department(varchar)]")
+function: assert_explain_verbose_contains("select get_variant_int(data, '$.id') as id, get_variant_string(data, '$.profile.department') as dept from test_shredding_variant", "ColumnAccessPath: [/data/id(bigint(20)), /data/profile/department(varchar)]")
 
 -- ========================================
 -- Query 1: Basic field extraction (Shredded)
