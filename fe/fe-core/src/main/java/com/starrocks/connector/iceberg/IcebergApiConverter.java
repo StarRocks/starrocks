@@ -124,7 +124,7 @@ public class IcebergApiConverter {
                 .setResourceName(toResourceName(catalogName, "iceberg"))
                 .setCatalogDBName(remoteDbName)
                 .setCatalogTableName(remoteTableName)
-                .setComment(nativeTbl.properties().getOrDefault("common", ""))
+                .setComment(nativeTbl.properties().getOrDefault("comment", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl.schema(), nativeTbl))
                 .setIcebergProperties(toIcebergProps(
