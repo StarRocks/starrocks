@@ -66,6 +66,9 @@ set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}/installed/")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
+set(BE_PROTO_THRIFT_GENSRC_DIR "${CMAKE_BINARY_DIR}/gensrc")
+set(BE_PROTO_THRIFT_GEN_CPP_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/gen_cpp")
+set(BE_PROTO_THRIFT_CODEGEN_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/codegen")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
@@ -373,6 +376,7 @@ include_directories(
 include_directories(
     ${SRC_DIR}/
     ${TEST_DIR}/
+    ${BE_PROTO_THRIFT_GENSRC_DIR}/
     ${GENSRC_DIR}/
     SYSTEM ${THIRDPARTY_DIR}/include
     SYSTEM ${GPERFTOOLS_HOME}/include

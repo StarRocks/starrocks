@@ -15,13 +15,20 @@
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 
-# Compile generated source if necessary
-message(STATUS "build gensrc if necessary")
-execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
-                RESULT_VARIABLE MAKE_GENSRC_RESULT)
-if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
-    message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
+set(STARROCKS_PROTOC_EXECUTABLE "${THIRDPARTY_DIR}/bin/protoc")
+if(NOT EXISTS "${STARROCKS_PROTOC_EXECUTABLE}")
+    find_program(STARROCKS_PROTOC_EXECUTABLE NAMES protoc REQUIRED)
 endif()
+
+set(STARROCKS_THRIFT_EXECUTABLE "${THIRDPARTY_DIR}/bin/thrift")
+if(NOT EXISTS "${STARROCKS_THRIFT_EXECUTABLE}")
+    find_program(STARROCKS_THRIFT_EXECUTABLE NAMES thrift REQUIRED)
+endif()
+
+set(THRIFT_COMPILER "${STARROCKS_THRIFT_EXECUTABLE}")
+
+message(STATUS "Using protoc compiler: ${STARROCKS_PROTOC_EXECUTABLE}")
+message(STATUS "Using thrift compiler: ${STARROCKS_THRIFT_EXECUTABLE}")
 
 #
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
@@ -277,8 +284,6 @@ set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
-
-find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
 add_library(http_client_curl STATIC IMPORTED GLOBAL)
 set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
