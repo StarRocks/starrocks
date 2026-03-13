@@ -415,7 +415,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
 
     // Verify parquet_field_ids was extended with correct Iceberg reserved field IDs
     ASSERT_EQ(sink_ctx->parquet_field_ids.size(), 3);
-    EXPECT_EQ(sink_ctx->parquet_field_ids[0].field_id, 1);         // c1's field_id
+    EXPECT_EQ(sink_ctx->parquet_field_ids[0].field_id, 1);          // c1's field_id
     EXPECT_EQ(sink_ctx->parquet_field_ids[1].field_id, 2147483540); // _row_id reserved field ID
     EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539); // _last_updated_sequence_number reserved field ID
 }
@@ -425,8 +425,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
 TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_already_present) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 =
-            slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
     auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
                          .column_name("_row_id")
                          .column_pos(1)
@@ -472,8 +471,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context =
-            std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
@@ -507,8 +505,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
 TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_columns) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 =
-            slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
     auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
                          .column_name("_row_id")
                          .column_pos(1)
@@ -558,8 +555,7 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
     tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
     tbl->_tbl_desc_map[0] = ice_table_desc;
 
-    auto context =
-            std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;

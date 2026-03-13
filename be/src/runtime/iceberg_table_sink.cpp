@@ -275,8 +275,8 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     data_sink_ctx->column_names.reserve(num_evaluators);
     data_sink_ctx->parquet_field_ids.reserve(num_evaluators);
     for (size_t i = 0; i < num_evaluators; ++i) {
-        RETURN_IF_ERROR(append_iceberg_sink_column((*slots)[i], field_ids_by_name,
-                                                   &data_sink_ctx->column_names, &data_sink_ctx->parquet_field_ids));
+        RETURN_IF_ERROR(append_iceberg_sink_column((*slots)[i], field_ids_by_name, &data_sink_ctx->column_names,
+                                                   &data_sink_ctx->parquet_field_ids));
     }
 
     if (data_sink_ctx->column_names.size() != num_evaluators ||
