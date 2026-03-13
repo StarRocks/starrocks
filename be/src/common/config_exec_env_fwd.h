@@ -117,6 +117,9 @@ CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 
+// The number of threads for automatic partition thread pool. Queue size is 10x thread count.
+CONF_Int64(automatic_partition_thread_pool_thread_num, "1000");
+
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
