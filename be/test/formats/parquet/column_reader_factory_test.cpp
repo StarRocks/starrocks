@@ -18,7 +18,10 @@
 
 #include <sstream>
 
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -344,6 +347,60 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     SparseRange<uint64_t> sparse_range;
     sparse_range.add(Range<uint64_t>(0, 8));
     st.value()->select_offset_index(sparse_range, 0);
+}
+
+// Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
+class TestColumnReader : public ColumnReader {
+public:
+    explicit TestColumnReader(const ParquetField* field) : ColumnReader(field) {}
+    Status prepare() override { return Status::OK(); }
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void set_need_parse_levels(bool) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+};
+
+class ColumnReaderBloomFilterTest : public testing::Test {
+protected:
+    ParquetField make_field(tparquet::Type::type physical_type) {
+        ParquetField f;
+        f.name = "col";
+        f.type = ColumnType::SCALAR;
+        f.physical_type = physical_type;
+        f.physical_column_index = 0;
+        return f;
+    }
+
+    bool check(LogicalType logical_type, tparquet::Type::type physical_type) {
+        _field = make_field(physical_type);
+        TestColumnReader reader(&_field);
+        TypeDescriptor desc(logical_type);
+        return reader.check_type_can_apply_bloom_filter(desc, _field);
+    }
+
+    ParquetField _field;
+};
+
+// Line 177: FIXED_LEN_BYTE_ARRAY + TYPE_VARBINARY -> true
+TEST_F(ColumnReaderBloomFilterTest, VarbinaryWithFixedLenByteArray) {
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+}
+
+// FIXED_LEN_BYTE_ARRAY + TYPE_VARCHAR -> false (line 177 condition false)
+TEST_F(ColumnReaderBloomFilterTest, VarcharWithFixedLenByteArrayNotApplicable) {
+    EXPECT_FALSE(check(TYPE_VARCHAR, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+}
+
+// BYTE_ARRAY + TYPE_VARBINARY -> true (first OR clause on line 176)
+TEST_F(ColumnReaderBloomFilterTest, VarbinaryWithByteArray) {
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
+}
+
+// BYTE_ARRAY + TYPE_VARCHAR -> true
+TEST_F(ColumnReaderBloomFilterTest, VarcharWithByteArray) {
+    EXPECT_TRUE(check(TYPE_VARCHAR, tparquet::Type::BYTE_ARRAY));
 }
 
 } // namespace starrocks::parquet
