@@ -130,28 +130,39 @@ jobs:
         with:
           filters: |
             be:
-            - 'be/**'
-            - 'gensrc/**'
-            - 'run-be-ut.sh'
-            - 'build.sh'
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+              - 'be/**'
+              - 'gensrc/**'
+              - 'run-be-ut.sh'
+              - 'build.sh'
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
             thirdparty:
-            - 'thirdparty/**'
-            - '!thirdparty/build-thirdparty-darwin.sh'
-            - '!thirdparty/vars-darwin-aarch64.sh'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
+          thirdparty=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty=true
+          fi
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
-          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
     needs: be-checker
-    if: ${{ needs.be-checker.outputs.output1 == 'true' }}
+    if: ${{ needs.be-checker.outputs.output2 == 'true' }}
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -170,7 +181,6 @@ jobs:
 
       - name: Update Image (${{ matrix.linux }})
         id: update-image
-        if: needs.be-checker.outputs.output2  == 'true'
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -189,16 +199,18 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+          if [[ -d ci-tool ]]; then
               cd ci-tool && source lib/init.sh
               ./bin/elastic-cluster.sh --delete
           fi
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [self-hosted, normal]
+    runs-on: ubuntu-latest
     needs:
+      - be-checker
       - thirdparty-update
+    if: always() && needs.be-checker.outputs.output1 == 'true'
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
@@ -212,6 +224,7 @@ jobs:
           fi
 
       - name: Download Thirdparty Artifact
+        if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
@@ -219,12 +232,16 @@ jobs:
 
       - name: Read Info
         id: info
-        if: needs.thirdparty-update.result == 'success'
         run: |
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
-          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
-          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          else
+            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
+          fi
 
   be-ut:
     runs-on: [self-hosted, normal]

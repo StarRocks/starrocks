@@ -195,7 +195,7 @@ jobs:
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
-      thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
+      thirdparty_filter: ${{ steps.prepare-info.outputs.thirdparty_filter }}
       clang_tidy_filter: ${{ steps.path-filter.outputs.clang_tidy }}
       only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
@@ -219,11 +219,6 @@ jobs:
             ut:
               - 'be/test/**'
               - 'run-be-ut.sh'
-            thirdparty:
-              - 'thirdparty/**'
-              - '!thirdparty/build-thirdparty-darwin.sh'
-              - '!thirdparty/vars-darwin-aarch64.sh'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             clang_tidy:
               - 'be/**/*.c'
               - 'be/**/*.cc'
@@ -238,12 +233,30 @@ jobs:
               - 'gensrc/**'
               - '!be/test/**'
 
+      - uses: dorny/paths-filter@v3
+        id: linux-thirdparty-filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            thirdparty:
+              - 'thirdparty/**'
+              - '!thirdparty/build-thirdparty-darwin.sh'
+              - '!thirdparty/vars-darwin-aarch64.sh'
+            dev_env:
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
       - name: Prepare info
+        id: prepare-info
         run: |
+          thirdparty_filter=false
+          if [[ "${{ steps.linux-thirdparty-filter.outputs.thirdparty }}" == 'true' || "${{ steps.linux-thirdparty-filter.outputs.dev_env }}" == 'true' ]]; then
+            thirdparty_filter=true
+          fi
+          echo "thirdparty_filter=${thirdparty_filter}" >> $GITHUB_OUTPUT
           mkdir be-path-filter && cd be-path-filter
           echo ${{ steps.path-filter.outputs.be }} > src_filter.txt
           echo ${{ steps.path-filter.outputs.ut }} > test_filter.txt
-          echo ${{ steps.path-filter.outputs.thirdparty }} > thirdparty_filter.txt
+          echo ${thirdparty_filter} > thirdparty_filter.txt
           echo ${{ steps.path-filter.outputs.clang_tidy }} > clang_tidy_filter.txt
 
       - name: Upload the BE Filter Info
@@ -271,7 +284,7 @@ jobs:
     needs: [be-checker]
     name: Thirdparty Update
     continue-on-error: true
-    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
+    if: needs.be-checker.outputs.thirdparty_filter == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -291,25 +304,8 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Download BE Path Filter Artifact
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          name: be-path-filter
-          path: be-path-filter
-          run_id: ${{ github.run_id }}
-
-      - name: Parsing path-filter file
-        id: parsing-path-filter
-        run: |
-          cd be-path-filter/; ls;
-          echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
-          echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
-          echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
-
       - name: Update Image (${{ matrix.linux }})
         id: update-image
-        if: >
-          steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -328,16 +324,20 @@ jobs:
           if-no-files-found: ignore
 
       - name: Clean ENV
-        if: always() && steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
+        if: always()
         run: |
-          cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --delete
+          if [[ -d ci-tool ]]; then
+            cd ci-tool && source lib/init.sh
+            ./bin/elastic-cluster.sh --delete
+          fi
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [self-hosted, normal]
+    runs-on: ubuntu-latest
     needs:
+      - be-checker
       - thirdparty-update
+    if: always() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
@@ -345,10 +345,13 @@ jobs:
     steps:
       - name: Check Result
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
-          ./scripts/check-thirdparty-result.sh
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error::Thirdparty Update Error!"
+            exit 1
+          fi
 
       - name: Download Thirdparty Artifact
+        if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
@@ -357,10 +360,15 @@ jobs:
       - name: Read Info
         id: info
         run: |
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
-          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
-          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          else
+            echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
+          fi
 
   be-ut:
     runs-on: [self-hosted, normal]
