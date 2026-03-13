@@ -67,9 +67,15 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
                 result_columns[i] = std::move(mutable_col);
             } else if (result_columns[i]->is_constant()) {
                 // Note: we must create a new column every time here,
-                // because result_columns[i] is shared_ptr
-                MutableColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
+                // because result_columns[i] is shared_ptr.
+                // Use clone_empty() instead of create_column(type, false) to preserve
+                // the data column's actual type (e.g., NullableColumn<ArrayColumn<...>>).
+                // create_column(type, false) always creates a non-nullable column, which
+                // causes a type mismatch crash when the const data is nullable — the
+                // down_cast inside ArrayColumn::append would reinterpret NullableColumn
+                // members as ArrayColumn members, leading to SIGSEGV.
                 auto* const_column = down_cast<const ConstColumn*>(result_columns[i].get());
+                auto new_column = const_column->data_column()->clone_empty();
                 new_column->append(*const_column->data_column(), 0, 1);
                 new_column->assign(num_rows, 0);
                 result_columns[i] = std::move(new_column);
