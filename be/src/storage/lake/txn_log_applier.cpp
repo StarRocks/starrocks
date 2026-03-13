@@ -770,6 +770,9 @@ public:
         std::vector<int64_t> all_segment_sizes;
         std::vector<std::string> all_segment_encryption_metas;
         std::vector<SegmentMetadataPB> all_segment_metas;
+        std::vector<int64_t> all_bundle_file_offsets;
+        bool has_bundle_offsets = false;
+        bool mixed_bundle_offsets = false;
         uint32_t assigned_segment_idx = 0;
 
         // Traverse all transaction logs and collect op_write information
@@ -827,6 +830,30 @@ public:
                         all_segment_metas.back().set_segment_idx(assigned_segment_idx + get_segment_idx(rowset, i));
                     }
                     assigned_segment_idx += get_rowset_id_step(rowset);
+
+                    // Collect bundle file offsets for bundled data files.
+                    // Each TxnLog's rowset either has all offsets (bundled) or none (standalone).
+                    if (rowset.bundle_file_offsets_size() > 0) {
+                        if (rowset.bundle_file_offsets_size() != rowset.segments_size()) {
+                            LOG(WARNING) << "bundle_file_offsets size mismatch in txn log for tablet "
+                                         << _tablet.id() << ": offsets=" << rowset.bundle_file_offsets_size()
+                                         << " segments=" << rowset.segments_size();
+                            mixed_bundle_offsets = true;
+                        } else {
+                            has_bundle_offsets = true;
+                            all_bundle_file_offsets.reserve(all_bundle_file_offsets.size() +
+                                                           rowset.bundle_file_offsets_size());
+                            for (int i = 0; i < rowset.bundle_file_offsets_size(); i++) {
+                                all_bundle_file_offsets.emplace_back(rowset.bundle_file_offsets(i));
+                            }
+                        }
+                    } else if (has_bundle_offsets && rowset.segments_size() > 0) {
+                        // Some earlier TxnLogs had bundle offsets but this one doesn't.
+                        // This can happen if bundling was toggled mid-transaction (unlikely but defensive).
+                        LOG(WARNING) << "Inconsistent bundle_file_offsets across txn logs for tablet "
+                                     << _tablet.id() << ": some logs have offsets, some don't";
+                        mixed_bundle_offsets = true;
+                    }
                 }
             } else {
                 return Status::NotSupported(
@@ -866,6 +893,18 @@ public:
         // Set segment metas
         for (const auto& segment_meta : all_segment_metas) {
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
+        }
+
+        // Set bundle file offsets if all TxnLogs consistently have them.
+        // The 1:1 correspondence between segments and bundle_file_offsets must be maintained.
+        if (has_bundle_offsets && !mixed_bundle_offsets) {
+            DCHECK_EQ(all_bundle_file_offsets.size(), static_cast<size_t>(merged_rowset->segments_size()));
+            for (int64_t offset : all_bundle_file_offsets) {
+                merged_rowset->add_bundle_file_offsets(offset);
+            }
+        } else if (mixed_bundle_offsets) {
+            LOG(WARNING) << "Dropping bundle_file_offsets for merged rowset of tablet " << _tablet.id()
+                         << " due to inconsistent bundling across txn logs";
         }
 
         // Set rowset ID and update next_rowset_id
