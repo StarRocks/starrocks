@@ -1,0 +1,110 @@
+-- name: test_partitioned_mv_with_dropped_partitions @slow
+-- description: Test partitioned MV with Iceberg base table when partitions are dropped.
+-- This tests the fix for the bug where MV rewrite would return stale data when
+-- partitions were dropped from the base Iceberg table in LOOSE and FORCE_MV modes.
+
+-- create iceberg catalog
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+set new_planner_optimize_timeout=10000;
+set enable_materialized_view_transparent_union_rewrite = true;
+
+-- create iceberg table with partitions
+set catalog mv_iceberg_${uuid0};
+create database mv_iceberg_db_${uuid0};
+use mv_iceberg_db_${uuid0};
+
+CREATE TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 (
+    num int,
+    dt string
+)
+PARTITION BY (dt);
+
+-- Insert data into multiple partitions
+INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES
+    (1,"2020-06-15"),(2,"2020-06-15"),
+    (2,"2020-06-18"),(3,"2020-06-18"),
+    (3,"2020-06-21"),(4,"2020-06-21");
+
+-- Switch to default catalog and create partitioned MV with LOOSE mode
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create a partitioned MV with LOOSE consistency mode
+CREATE MATERIALIZED VIEW partitioned_mv_loose 
+PARTITION BY (dt)
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1",
+    "query_rewrite_consistency" = "LOOSE"
+)
+AS 
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt;
+
+-- Refresh MV to load all data
+REFRESH MATERIALIZED VIEW partitioned_mv_loose WITH SYNC MODE;
+
+-- Verify MV contains all data
+SELECT * FROM partitioned_mv_loose ORDER BY dt;
+
+-- Verify MV is used for query rewrite
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 WHERE dt='2020-06-15' GROUP BY dt;", "partitioned_mv_loose")
+
+-- Query should hit MV
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+WHERE dt='2020-06-15'
+GROUP BY dt;
+
+-- Now drop a partition from the iceberg table
+set catalog mv_iceberg_${uuid0};
+ALTER TABLE mv_iceberg_db_${uuid0}.t1 DROP PARTITION(dt="2020-06-15");
+
+-- Switch back to default catalog
+set catalog default_catalog;
+use db_${uuid0};
+
+-- After partition drop, MV should NOT be used for rewrite for the dropped partition
+-- The MVTimelinessArbiter.getMVTimelinessUpdateInfoInLoose method should detect the deleted partition
+function: print_no_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 WHERE dt='2020-06-15' GROUP BY dt;", "partitioned_mv_loose")
+
+-- Query for dropped partition should scan base table
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+WHERE dt='2020-06-15'
+GROUP BY dt;
+
+-- Query for existing partitions should still hit MV
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 WHERE dt='2020-06-18' GROUP BY dt;", "partitioned_mv_loose")
+
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+WHERE dt='2020-06-18'
+GROUP BY dt;
+
+-- Refresh MV to sync with the latest base table data
+REFRESH MATERIALIZED VIEW partitioned_mv_loose WITH SYNC MODE;
+
+-- After refresh, query for all remaining partitions should hit MV
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "partitioned_mv_loose")
+
+-- Query should hit MV again
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt 
+ORDER BY dt;
+
+-- Clean up
+drop materialized view partitioned_mv_loose;
+drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;
+drop database db_${uuid0} force;

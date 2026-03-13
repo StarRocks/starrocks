@@ -1,0 +1,100 @@
+-- name: test_non_partitioned_mv_with_dropped_partitions @slow
+-- description: Test non-partitioned MV with Iceberg base table when partitions are dropped.
+-- This tests the fix for the bug where MV rewrite would return stale data when
+-- partitions were dropped from the base Iceberg table.
+
+-- create iceberg catalog
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+set new_planner_optimize_timeout=10000;
+set enable_materialized_view_transparent_union_rewrite = true;
+
+-- create iceberg table with partitions
+set catalog mv_iceberg_${uuid0};
+create database mv_iceberg_db_${uuid0};
+use mv_iceberg_db_${uuid0};
+
+CREATE TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 (
+    num int,
+    dt string
+)
+PARTITION BY (dt);
+
+-- Insert data into multiple partitions
+INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES
+    (1,"2020-06-15"),(2,"2020-06-15"),
+    (2,"2020-06-18"),(3,"2020-06-18"),
+    (3,"2020-06-21"),(4,"2020-06-21");
+
+-- Switch to default catalog and create MV
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create a non-partitioned MV that references a partitioned iceberg table
+CREATE MATERIALIZED VIEW non_partitioned_mv 
+REFRESH DEFERRED MANUAL 
+PROPERTIES (
+    "replication_num" = "1"
+)
+AS 
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt;
+
+-- Refresh MV to load all data
+REFRESH MATERIALIZED VIEW non_partitioned_mv WITH SYNC MODE;
+
+-- Verify MV contains all data
+SELECT * FROM non_partitioned_mv ORDER BY dt;
+
+-- Verify MV is used for query rewrite
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+
+-- Query should hit MV
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt 
+ORDER BY dt;
+
+-- Now drop a partition from the iceberg table
+set catalog mv_iceberg_${uuid0};
+ALTER TABLE mv_iceberg_db_${uuid0}.t1 DROP PARTITION(dt="2020-06-15");
+
+-- Switch back to default catalog
+set catalog default_catalog;
+use db_${uuid0};
+
+-- After partition drop, MV should NOT be used for rewrite since it contains stale data
+-- The MVTimelinessNonPartitionArbiter.shouldRefresh method should detect the deleted partition
+function: print_no_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+
+-- Query should scan base table instead of MV
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt 
+ORDER BY dt;
+
+-- Refresh MV to sync with the latest base table data
+REFRESH MATERIALIZED VIEW non_partitioned_mv WITH SYNC MODE;
+
+-- After refresh, MV should be used for rewrite again
+function: print_hit_materialized_view("SELECT dt, sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "non_partitioned_mv")
+
+-- Query should hit MV again
+SELECT dt, sum(num) as total_num 
+FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 
+GROUP BY dt 
+ORDER BY dt;
+
+-- Clean up
+drop materialized view non_partitioned_mv;
+drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;
+drop database db_${uuid0} force;
