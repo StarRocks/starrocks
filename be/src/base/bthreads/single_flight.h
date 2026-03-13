@@ -34,15 +34,13 @@ public:
     // time. If a duplicate comes in, the duplicate caller waits for the
     // original to complete and receives the same results.
     template <typename Key, typename Func, typename... Args>
-        requires std::constructible_from<K, Key&&>
-    R Do(Key&& key, Func&& func, Args&&... args) {
+    requires std::constructible_from<K, Key&&> R Do(Key&& key, Func&& func, Args&&... args) {
         auto f = DoFuture(std::forward<Key>(key), std::forward<Func>(func), std::forward<Args>(args)...);
         return f.get();
     }
 
     template <typename Key, typename Func, typename... Args>
-        requires std::constructible_from<K, Key&&>
-    SharedFuture<R> DoFuture(Key&& key, Func&& func, Args&&... args) {
+    requires std::constructible_from<K, Key&&> SharedFuture<R> DoFuture(Key&& key, Func&& func, Args&&... args) {
         std::optional<K> owned_lookup_key;
         const K* lookup_key = &key;
         if constexpr (!std::is_lvalue_reference_v<Key&&>) {
