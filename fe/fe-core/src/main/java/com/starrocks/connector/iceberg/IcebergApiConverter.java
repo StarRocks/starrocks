@@ -362,6 +362,9 @@ public class IcebergApiConverter {
             Type srType;
             try {
                 srType = fromIcebergType(field.type());
+            } catch (StarRocksConnectorException e) {
+                throw new StarRocksConnectorException(
+                        "Unsupported Iceberg type for column '%s': %s", field.name(), e.getMessage());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
                 srType = UnknownType.UNKNOWN_TYPE;

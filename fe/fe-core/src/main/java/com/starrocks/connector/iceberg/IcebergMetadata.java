@@ -653,6 +653,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergTable = icebergCatalog.getTable(context, dbName, tblName);
             }
 
+            checkUnsupportedV3Features(icebergTable);
+
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
             if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
@@ -670,6 +672,17 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw e;
         } catch (NoSuchTableException e) {
             return getView(context, dbName, tblName);
+        }
+    }
+
+    static void checkUnsupportedV3Features(org.apache.iceberg.Table icebergTable) {
+        Map<String, String> properties = icebergTable.properties();
+        if (properties.containsKey("encryption.key-metadata") ||
+                properties.containsKey("encryption.default-algorithm") ||
+                properties.containsKey("encryption.column-keys")) {
+            throw new StarRocksConnectorException(
+                    "Iceberg V3 table encryption is not supported. Table '%s' has encryption properties set.",
+                    icebergTable.name());
         }
     }
 
