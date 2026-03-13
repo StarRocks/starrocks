@@ -1308,7 +1308,12 @@ public class UtFrameUtils {
 
     public static void setPartitionVersion(Partition partition, long version) {
         partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
+<<<<<<< HEAD
         MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+=======
+        partition.getDefaultPhysicalPartition().setDataVersion(version);
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+>>>>>>> 4451f5f666 ([BugFix] Fix  possible PartitionColumnMinMaxRewriteRule bugs caused by Partition.hasStorageData (#69751))
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
