@@ -389,9 +389,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             long partitionId = partition.getParentId();
             DataProperty dataProperty = olapTable.getPartitionInfo().getDataProperty(partitionId);
             if (dataProperty == null) {
-                LOG.warn("partition {} in table {} has no DataProperty, skip building tablet inverted index",
+                LOG.warn("partition {} in table {} has no DataProperty, use default HDD",
                         partitionId, tableId);
-                continue;
+                dataProperty = DataProperty.DEFAULT_DATA_PROPERTY;
             }
             TStorageMedium medium = dataProperty.getStorageMedium();
             long physicalPartitionId = partition.getId();
