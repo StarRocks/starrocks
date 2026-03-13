@@ -1682,6 +1682,10 @@ public class HdfsFsManager {
                                 cf.completeExceptionally(t);
                             } finally {
                                 fileSystem.getLock().unlock();
+                                // Clear interrupt status so it does not leak into the next task
+                                // executed by this thread if cancel(true) set it and closeFileSystem()
+                                // did not consume it.
+                                Thread.interrupted();
                             }
                         });
                     } catch (RejectedExecutionException e) {
@@ -1691,8 +1695,13 @@ public class HdfsFsManager {
 
                     cf.orTimeout(fileSystemCloseTimeoutSecs, TimeUnit.SECONDS).whenComplete((res, ex) -> {
                         if (ex instanceof TimeoutException) {
-                            LOG.warn("Closing file system timed out for {}, interrupting...", fileSystem);
+                            LOG.warn("Closing file system timed out for {}, interrupting and evicting from cache",
+                                    fileSystem);
                             closeTask.cancel(true);
+                            // Evict from cache regardless of whether cancel() stops the task,
+                            // so the checker does not keep submitting new close tasks for an
+                            // unresponsive FileSystem.close() that ignores interrupts.
+                            cachedFileSystem.remove(fileSystem.getIdentity(), fileSystem);
                         }
                     });
                 }
