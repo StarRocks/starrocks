@@ -551,7 +551,8 @@ public class InformationSchemaDataSource {
 
                 BasicTable table = null;
                 try {
-                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName,
+                        Config.enable_external_catalog_information_schema_tables_access_full_metadata);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage(), e);
                 }
