@@ -115,14 +115,23 @@ public class ExpressionStatisticCalculator {
             }
             if (caseWhenOperator.hasElse()) {
                 childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            } else {
+                // A missing ELSE is an implicit ELSE that returns NULL.
+                childrenColumnStatistics.add(ColumnStatistic.builder() //
+                        .setNullsFraction(1.0) //
+                        .setDistinctValuesCount(0) //
+                        .build());
             }
             // 2. use sum of then clause and else clause's distinct values as column distinctValues
             double distinctValues = childrenColumnStatistics.stream().mapToDouble(
                     ColumnStatistic::getDistinctValuesCount).sum();
+            // 3. Use the average null fraction of all branches.
+            double nullFractions = childrenColumnStatistics.stream().mapToDouble(ColumnStatistic::getNullsFraction).sum()
+                    / childrenColumnStatistics.size();
             return ColumnStatistic.builder()
                     .setMinValue(Double.NEGATIVE_INFINITY)
                     .setMaxValue(Double.POSITIVE_INFINITY)
-                    .setNullsFraction(0)
+                    .setNullsFraction(nullFractions)
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .build();
