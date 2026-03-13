@@ -157,7 +157,7 @@ public:
     /// prerequisite:
     /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                  SparseRange<>* row_ranges) {
+                                                  SparseRange<>* row_ranges, bool is_conjunction) {
         return Status::OK();
     }
 

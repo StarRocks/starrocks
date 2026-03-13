@@ -3441,7 +3441,7 @@ struct BloomFilterEvaluator {
         const auto& ctx = pred_tree.compound_node_context(node.id());
         const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
-            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &dest_ranges));
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &dest_ranges, true));
         }
 
         for (const auto& child : node.compound_children()) {
@@ -3460,7 +3460,7 @@ struct BloomFilterEvaluator {
         const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
             auto child_ranges = dest_ranges;
-            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &child_ranges));
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_bloom_filter(col_preds, &child_ranges, false));
             cur_dest_ranges |= child_ranges;
         }
 
