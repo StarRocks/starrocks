@@ -128,6 +128,25 @@ public class TempPartitions implements Writable, GsonPostProcessable {
         for (String partName : partNames) {
             dropPartition(partName, true);
         }
+        // Clean up any orphan entries in idToPartition that may not have corresponding
+        // entries in nameToPartition (e.g., caused by name collisions where a later partition
+        // with the same name overwrites an earlier one in nameToPartition, leaving the earlier
+        // one only in idToPartition). Without this, existTempPartitions() would return true
+        // even after dropAll(), blocking schema change operations.
+        if (!idToPartition.isEmpty()) {
+            if (!GlobalStateMgr.isCheckpointThread()) {
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                for (Partition partition : idToPartition.values()) {
+                    for (MaterializedIndex index :
+                            partition.getDefaultPhysicalPartition().getAllMaterializedIndices(IndexExtState.ALL)) {
+                        for (Tablet tablet : index.getTablets()) {
+                            invertedIndex.deleteTablet(tablet.getId());
+                        }
+                    }
+                }
+            }
+            idToPartition.clear();
+        }
     }
 
     @Override

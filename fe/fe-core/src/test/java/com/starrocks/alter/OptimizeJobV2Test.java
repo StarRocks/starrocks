@@ -694,6 +694,42 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
     }
 
+    @Test
+    public void testCancelWithEmptyTmpPartitionIdsFallbackCleanup() throws Exception {
+        // This test simulates the scenario where an optimize job is cancelled after FE restart,
+        // where tmpPartitionIds is empty (WAITING_TXN log was not persisted), but temp partitions
+        // exist in the table. The cancel should fall back to dropAllTempPartitions().
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 optimizeJob = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+
+        // runPendingJob - this creates temp partitions and populates tmpPartitionIds
+        optimizeJob.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+
+        // Verify temp partitions exist
+        Assertions.assertTrue(olapTable.existTempPartitions());
+
+        // Simulate FE restart scenario: clear tmpPartitionIds to simulate lost state
+        optimizeJob.getTmpPartitionIds().clear();
+
+        // Cancel the job - with empty tmpPartitionIds, the per-ID cleanup loop does nothing,
+        // but the fallback should call dropAllTempPartitions()
+        optimizeJob.cancel("simulate FE restart cancel");
+        Assertions.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+
+        // Verify temp partitions are cleaned up by fallback
+        Assertions.assertFalse(olapTable.existTempPartitions());
+        // Verify table state is back to NORMAL
+        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+    }
+
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
         // Detach the job from schema change handler to prevent the background scheduler
         // from mutating its state in parallel with the UT driven state machine, which

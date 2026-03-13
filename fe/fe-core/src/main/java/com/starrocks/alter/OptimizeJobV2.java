@@ -686,6 +686,15 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
+
+            // Fallback cleanup: if tmpPartitionIds is empty (e.g., job cancelled after FE restart
+            // where WAITING_TXN log was not persisted), orphan temp partitions may remain.
+            // Drop all remaining temp partitions to prevent blocking future schema changes.
+            if (targetTable.existTempPartitions()) {
+                LOG.warn("optimize job {} found remaining temp partitions after cleanup, dropping all", jobId);
+                targetTable.dropAllTempPartitions();
+            }
+
             targetTable.setState(OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("exception when cancel optimize job.", e);
