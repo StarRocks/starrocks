@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "base/utility/defer_op.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/s3/poco_common.h"
 #include "io/s3_zero_copy_iostream.h"
@@ -62,7 +63,7 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
             Poco::URI poco_uri(uri);
 
             // URI may changed, because of redirection
-            auto session = makeHTTPSession(poco_uri, timeouts, false);
+            auto session = makeHTTPSession(poco_uri, timeouts, config::object_storage_resolve_host_to_ip);
             DeferOp deal_error([&]() {
                 if (session->networkException() != nullptr) {
                     session.set_not_in_good_condition();

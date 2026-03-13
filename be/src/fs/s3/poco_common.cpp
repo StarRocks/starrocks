@@ -17,12 +17,15 @@
 #include <Poco/Exception.h>
 #include <fmt/format.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
 
+#include "base/network/network_util.h"
+#include "common/logging.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::poco {
@@ -101,21 +104,69 @@ HTTPSessionPools& HTTPSessionPools::instance() {
     return instance;
 }
 
+// Resolve hostname to IP with TTL cache to avoid blocking DNS on every getSession() and to limit
+// _endpoint_pools growth when DNS results change. Caller must not hold _mutex.
+std::string HTTPSessionPools::resolveHostWithCache(const std::string& host) {
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(_mutex);
+        auto it = _resolve_cache.find(host);
+        if (it != _resolve_cache.end() && it->second.expiry > now) {
+            return it->second.resolved_ip;
+        }
+    }
+    std::string resolved_ip;
+    if (!starrocks::hostname_to_ip(host, resolved_ip).ok()) {
+        VLOG(2) << "Failed to resolve S3 endpoint host to IP, using hostname as pool key: " << host;
+        return host;
+    }
+    {
+        std::lock_guard lock(_mutex);
+        _resolve_cache[host] = {
+                resolved_ip,
+                now + std::chrono::seconds(RESOLVE_CACHE_TTL_SEC),
+        };
+    }
+    return resolved_ip;
+}
+
+// When endpoint pool count exceeds cap, evict oldest pools so we don't grow without bound
+// (e.g. when resolve_host is on and DNS returns changing IPs). Caller must hold _mutex.
+void HTTPSessionPools::evictExcessPoolsLocked() {
+    while (_endpoint_pools.size() >= MAX_ENDPOINT_POOLS && !_pool_order.empty()) {
+        const Key& old_key = _pool_order.front();
+        _endpoint_pools.erase(old_key);
+        _pool_order.pop_front();
+    }
+}
+
+// When resolve_host is true, use resolved IP as the session pool key and connection target.
+// Resolved IP is cached with TTL to avoid blocking DNS on every request; pool count is capped
+// with eviction to prevent unbounded growth when DNS results change.
+// Host-to-IP resolving is applied only for HTTP. For HTTPS we keep the hostname so that TLS
+// SNI and certificate hostname verification use the hostname (certs are issued for hostnames,
+// not backend IPs); resolving HTTPS to an IP would break verification.
 PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts,
                                                   bool resolve_host) {
-    const std::string& host = uri.getHost();
+    std::string host = uri.getHost();
     uint16_t port = uri.getPort();
     bool is_https = isHTTPS(uri);
+
+    if (resolve_host && !is_https && !host.empty() && !starrocks::is_valid_ip(host)) {
+        host = resolveHostWithCache(host);
+    }
 
     const Key key = {.host = host, .port = port, .is_https = is_https};
 
     EndpointPoolPtr pool = nullptr;
     {
         std::lock_guard lock(_mutex);
+        evictExcessPoolsLocked();
         auto item = _endpoint_pools.find(key);
         if (item == _endpoint_pools.end()) {
             std::tie(item, std::ignore) =
                     _endpoint_pools.emplace(key, std::make_shared<EndpointHTTPSessionPool>(host, port, is_https));
+            _pool_order.push_back(key);
         }
         pool = item->second;
     }
@@ -129,6 +180,8 @@ PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const Co
 void HTTPSessionPools::shutdown() {
     std::lock_guard lock(_mutex);
     _endpoint_pools.clear();
+    _pool_order.clear();
+    _resolve_cache.clear();
 }
 
 PooledHTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host) {

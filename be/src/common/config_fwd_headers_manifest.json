@@ -570,7 +570,8 @@
         "aws_sdk_logging_trace_enabled",
         "aws_sdk_logging_trace_level",
         "aws_sdk_enable_compliant_rfc3986_encoding",
-        "enable_poco_client_for_aws_sdk"
+        "enable_poco_client_for_aws_sdk",
+        "object_storage_resolve_host_to_ip"
       ]
     },
     {

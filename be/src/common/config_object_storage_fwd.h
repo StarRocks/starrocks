@@ -91,6 +91,11 @@ CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 // use poco client to replace default curl client
 CONF_Bool(enable_poco_client_for_aws_sdk, "true");
 
+// When true, resolve S3 endpoint hostname to IP before creating/reusing HTTP sessions.
+// Use with a VIP or DNS name that resolves to multiple backend IPs so that connections
+// are spread across nodes (each IP gets its own session pool) instead of sticking to one.
+CONF_mBool(object_storage_resolve_host_to_ip, "false");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 

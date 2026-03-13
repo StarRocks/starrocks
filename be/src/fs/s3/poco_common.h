@@ -21,7 +21,10 @@
 #include <Poco/URI.h>
 #include <aws/core/http/HttpRequest.h>
 
+#include <chrono>
+#include <list>
 #include <memory>
+#include <unordered_map>
 
 #include "fs/s3/pool_base.h"
 #include "runtime/mem_tracker.h"
@@ -97,6 +100,19 @@ private:
         }
     };
 
+    // TTL cache for hostname -> resolved IP when resolve_host is enabled, to avoid blocking DNS on every request
+    // and to limit _endpoint_pools growth when DNS results change over time.
+    struct ResolveCacheEntry {
+        std::string resolved_ip;
+        std::chrono::steady_clock::time_point expiry;
+    };
+
+    static constexpr int RESOLVE_CACHE_TTL_SEC = 60;
+    static constexpr size_t MAX_ENDPOINT_POOLS = 2048;
+
+    std::string resolveHostWithCache(const std::string& host);
+    void evictExcessPoolsLocked();
+
 public:
     using EndpointPoolPtr = std::shared_ptr<EndpointHTTPSessionPool>;
     static HTTPSessionPools& instance();
@@ -110,6 +126,8 @@ private:
 
     std::mutex _mutex;
     std::unordered_map<Key, EndpointPoolPtr, Hasher> _endpoint_pools;
+    std::list<Key> _pool_order; // insertion order for eviction when over cap
+    std::unordered_map<std::string, ResolveCacheEntry> _resolve_cache;
 };
 
 } // namespace starrocks::poco
