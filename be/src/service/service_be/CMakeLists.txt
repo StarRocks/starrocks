@@ -17,12 +17,19 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service_be")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/service_be")
 
-ADD_BE_LIB(ServiceBE
+set(SERVICE_BE_FILES
     backend_service.cpp
     http_service.cpp
     internal_service.cpp
-    lake_service.cpp
     starrocks_be.cpp
     arrow_flight_sql_service.cpp
     arrow_flight_auth_server_middleware.cpp
+)
+
+if (NOT APPLE)
+    list(APPEND SERVICE_BE_FILES lake_service.cpp)
+endif()
+
+ADD_BE_LIB(ServiceBE
+    ${SERVICE_BE_FILES}
 )

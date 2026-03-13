@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 
+#include <cinttypes>
 #include <cstdio>
 #include <thread>
 
@@ -69,7 +70,7 @@ uint64_t CpuUsageRecorder::_get_proc_time() {
 
     uint64_t utime = 0;
     uint64_t stime = 0;
-    sscanf(_line_ptr, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &utime, &stime);
+    sscanf(_line_ptr, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %" SCNu64 " %" SCNu64, &utime, &stime);
     return utime + stime;
 }
 
