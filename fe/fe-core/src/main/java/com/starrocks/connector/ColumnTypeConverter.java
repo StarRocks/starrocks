@@ -806,8 +806,12 @@ public class ColumnTypeConverter {
             case VARIANT:
                 return VariantType.VARIANT;
             case FIXED:
-            default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
+                break;
+            default:
+                throw new StarRocksConnectorException(
+                        "Unsupported Iceberg type: " + icebergType.typeId() +
+                        ". This may be an Iceberg V3 extended type that StarRocks does not support yet.");
         }
         return TypeFactory.createType(primitiveType);
     }

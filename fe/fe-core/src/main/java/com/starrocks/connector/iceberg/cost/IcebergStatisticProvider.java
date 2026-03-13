@@ -224,7 +224,13 @@ public class IcebergStatisticProvider {
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = new HashMap<>();
         List<Types.NestedField> columns = nativeTable.schema().columns();
         Map<Integer, String> idToColumnNames = columns.stream().
-                filter(column -> !fromIcebergType(column.type()).isUnknown())
+                filter(column -> {
+                    try {
+                        return !fromIcebergType(column.type()).isUnknown();
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
                 .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
 
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
