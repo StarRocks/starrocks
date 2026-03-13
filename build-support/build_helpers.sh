@@ -81,6 +81,75 @@ starrocks_setup_darwin_build_env() {
     fi
 }
 
+starrocks_validate_darwin_thirdparty() {
+    local tp_root="${STARROCKS_THIRDPARTY}"
+    local tp_installed="${tp_root}/installed"
+
+    if [[ ! -d "${tp_installed}" ]]; then
+        if [[ -d "${tp_root}/bin" || -d "${tp_root}/lib" || -d "${tp_root}/lib64" ]]; then
+            echo "Error: STARROCKS_THIRDPARTY must point to the thirdparty root, not the installed directory: ${tp_root}"
+        else
+            echo "Error: macOS BE build requires STARROCKS_THIRDPARTY to point to a prepared Darwin thirdparty root."
+            echo "Expected directory: ${tp_installed}"
+        fi
+        exit 1
+    fi
+
+    local required_paths=(
+        "${tp_installed}/bin/protoc"
+        "${tp_installed}/bin/thrift"
+    )
+    local required_path=""
+    for required_path in "${required_paths[@]}"; do
+        if [[ ! -e "${required_path}" ]]; then
+            echo "Error: missing macOS thirdparty artifact: ${required_path}"
+            exit 1
+        fi
+    done
+
+    local required_libs=(
+        "libprotobuf.a"
+        "librocksdb.a"
+        "libglog.a"
+        "libbrpc.a"
+    )
+    local required_lib=""
+    for required_lib in "${required_libs[@]}"; do
+        if [[ ! -e "${tp_installed}/lib/${required_lib}" && ! -e "${tp_installed}/lib64/${required_lib}" ]]; then
+            echo "Error: missing macOS thirdparty artifact: ${required_lib} under ${tp_installed}/lib or ${tp_installed}/lib64"
+            exit 1
+        fi
+    done
+
+    local bundled_java_home="$(starrocks_resolve_java_home "${tp_installed}/open_jdk")"
+    local resolved_java_home=""
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        resolved_java_home="$(starrocks_resolve_java_home "${JAVA_HOME}")"
+    fi
+    local bundled_jni_header="${bundled_java_home}/include/jni.h"
+    local java_home_jni_header=""
+    if [[ -n "${resolved_java_home}" ]]; then
+        java_home_jni_header="${resolved_java_home}/include/jni.h"
+    fi
+    if [[ ! -f "${bundled_jni_header}" && ! -f "${java_home_jni_header}" ]]; then
+        echo "Error: missing JNI headers. Expected ${bundled_jni_header} or ${resolved_java_home}/include/jni.h"
+        exit 1
+    fi
+
+    local bundled_libjvm=""
+    local java_home_libjvm=""
+    if [[ -d "${bundled_java_home}/lib" ]]; then
+        bundled_libjvm=$(find "${bundled_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
+    fi
+    if [[ -n "${resolved_java_home}" && -d "${resolved_java_home}/lib" ]]; then
+        java_home_libjvm=$(find "${resolved_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
+    fi
+    if [[ -z "${bundled_libjvm}" && -z "${java_home_libjvm}" ]]; then
+        echo "Error: missing libjvm.dylib under ${bundled_java_home} and ${resolved_java_home:-${JAVA_HOME:-JAVA_HOME}}"
+        exit 1
+    fi
+}
+
 starrocks_resolve_getopt_bin() {
     local gnu_getopt_prefix=""
 
@@ -101,4 +170,81 @@ starrocks_resolve_getopt_bin() {
 
     echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first." >&2
     return 1
+}
+
+starrocks_collect_host_dylib_dependencies() {
+    local scan_path="$1"
+
+    if [[ ! -e "${scan_path}" ]]; then
+        return 0
+    fi
+
+    otool -L "${scan_path}" 2>/dev/null | awk 'NR > 1 {print $1}' | while IFS= read -r dep_path; do
+        case "${dep_path}" in
+            ""|/usr/lib/*|/System/Library/*|@rpath/*|@loader_path/*|@executable_path/*)
+                continue
+                ;;
+            /*)
+                printf '%s\n' "${dep_path}"
+                ;;
+        esac
+    done
+}
+
+starrocks_append_unbundled_host_dylib_dependencies() {
+    local scan_path="$1"
+    local packaged_basename_file="$2"
+    local output_file="$3"
+    local dep_path=""
+    local dep_basename=""
+
+    while IFS= read -r dep_path; do
+        dep_basename="$(basename "${dep_path}")"
+        if [[ -n "${dep_basename}" ]] && grep -Fxq "${dep_basename}" "${packaged_basename_file}"; then
+            continue
+        fi
+        printf '%s\n' "${dep_path}" >> "${output_file}"
+    done < <(starrocks_collect_host_dylib_dependencies "${scan_path}")
+}
+
+starrocks_write_output_be_host_dylib_manifest() {
+    local output_be_dir="$1"
+    local manifest_path="${output_be_dir}/HOST_DYLIB_DEPENDENCIES.txt"
+    local tmp_manifest=""
+    local packaged_basename_file=""
+    local packaged_dylib=""
+
+    tmp_manifest="$(mktemp "${TMPDIR:-/tmp}/starrocks-host-dylibs.XXXXXX")" || {
+        echo "Error: failed to create temporary file for macOS host dylib dependency manifest"
+        exit 1
+    }
+    packaged_basename_file="$(mktemp "${TMPDIR:-/tmp}/starrocks-packaged-dylibs.XXXXXX")" || {
+        rm -f "${tmp_manifest}"
+        echo "Error: failed to create temporary file for packaged macOS dylib names"
+        exit 1
+    }
+
+    find "${output_be_dir}/lib" -type f \( -name '*.dylib' -o -name '*.dylib.*' \) -exec basename {} \; | sort -u > "${packaged_basename_file}"
+
+    starrocks_append_unbundled_host_dylib_dependencies "${output_be_dir}/lib/starrocks_be" "${packaged_basename_file}" "${tmp_manifest}"
+
+    while IFS= read -r -d '' packaged_dylib; do
+        starrocks_append_unbundled_host_dylib_dependencies "${packaged_dylib}" "${packaged_basename_file}" "${tmp_manifest}"
+    done < <(find "${output_be_dir}/lib" -type f \( -name '*.dylib' -o -name '*.dylib.*' \) -print0)
+
+    {
+        echo "# macOS development note for output/be"
+        echo "# This package is not self-contained."
+        echo "# It depends on host dynamic libraries not bundled in output/be."
+        echo "# Rebuild on the target machine or install compatible packages if any path is missing."
+        echo
+        if [[ -s "${tmp_manifest}" ]]; then
+            sort -u "${tmp_manifest}"
+        else
+            echo "# No non-system absolute host dylib dependencies were detected."
+        fi
+    } > "${manifest_path}"
+
+    rm -f "${tmp_manifest}"
+    rm -f "${packaged_basename_file}"
 }

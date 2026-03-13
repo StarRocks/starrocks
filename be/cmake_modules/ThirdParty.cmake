@@ -337,6 +337,9 @@ set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/li
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
 if (APPLE)
+    # Homebrew's exported gRPC targets are not self-contained on Darwin. Import the
+    # shared libraries directly for local development builds and surface the host
+    # dylib requirement explicitly in output/be packaging.
     add_library(gRPC::grpc SHARED IMPORTED GLOBAL)
     set_target_properties(gRPC::grpc PROPERTIES
         IMPORTED_LOCATION "${THIRDPARTY_DIR}/lib/libgrpc.dylib"

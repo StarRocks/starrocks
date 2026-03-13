@@ -97,75 +97,6 @@ else
     PARALLEL=$[$host_parallelism/4+1]
 fi
 
-validate_darwin_thirdparty() {
-    local tp_root="${STARROCKS_THIRDPARTY}"
-    local tp_installed="${tp_root}/installed"
-
-    if [[ ! -d "${tp_installed}" ]]; then
-        if [[ -d "${tp_root}/bin" || -d "${tp_root}/lib" || -d "${tp_root}/lib64" ]]; then
-            echo "Error: STARROCKS_THIRDPARTY must point to the thirdparty root, not the installed directory: ${tp_root}"
-        else
-            echo "Error: macOS BE build requires STARROCKS_THIRDPARTY to point to a prepared Darwin thirdparty root."
-            echo "Expected directory: ${tp_installed}"
-        fi
-        exit 1
-    fi
-
-    local required_paths=(
-        "${tp_installed}/bin/protoc"
-        "${tp_installed}/bin/thrift"
-    )
-    local required_path
-    for required_path in "${required_paths[@]}"; do
-        if [[ ! -e "${required_path}" ]]; then
-            echo "Error: missing macOS thirdparty artifact: ${required_path}"
-            exit 1
-        fi
-    done
-
-    local required_libs=(
-        "libprotobuf.a"
-        "librocksdb.a"
-        "libglog.a"
-        "libbrpc.a"
-    )
-    local required_lib
-    for required_lib in "${required_libs[@]}"; do
-        if [[ ! -e "${tp_installed}/lib/${required_lib}" && ! -e "${tp_installed}/lib64/${required_lib}" ]]; then
-            echo "Error: missing macOS thirdparty artifact: ${required_lib} under ${tp_installed}/lib or ${tp_installed}/lib64"
-            exit 1
-        fi
-    done
-
-    local bundled_java_home="$(starrocks_resolve_java_home "${tp_installed}/open_jdk")"
-    local resolved_java_home=""
-    if [[ -n "${JAVA_HOME:-}" ]]; then
-        resolved_java_home="$(starrocks_resolve_java_home "${JAVA_HOME}")"
-    fi
-    local bundled_jni_header="${bundled_java_home}/include/jni.h"
-    local java_home_jni_header=""
-    if [[ -n "${resolved_java_home}" ]]; then
-        java_home_jni_header="${resolved_java_home}/include/jni.h"
-    fi
-    if [[ ! -f "${bundled_jni_header}" && ! -f "${java_home_jni_header}" ]]; then
-        echo "Error: missing JNI headers. Expected ${bundled_jni_header} or ${resolved_java_home}/include/jni.h"
-        exit 1
-    fi
-
-    local bundled_libjvm=""
-    local java_home_libjvm=""
-    if [[ -d "${bundled_java_home}/lib" ]]; then
-        bundled_libjvm=$(find "${bundled_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
-    fi
-    if [[ -n "${resolved_java_home}" && -d "${resolved_java_home}/lib" ]]; then
-        java_home_libjvm=$(find "${resolved_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
-    fi
-    if [[ -z "${bundled_libjvm}" && -z "${java_home_libjvm}" ]]; then
-        echo "Error: missing libjvm.dylib under ${bundled_java_home} and ${resolved_java_home:-${JAVA_HOME:-JAVA_HOME}}"
-        exit 1
-    fi
-}
-
 # Check args
 usage() {
   echo "
@@ -445,7 +376,7 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
 fi
 
 if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
-    validate_darwin_thirdparty
+    starrocks_validate_darwin_thirdparty
 fi
 
 echo "Get params:
@@ -808,6 +739,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+    fi
+    if starrocks_is_darwin; then
+        starrocks_write_output_be_host_dylib_manifest "${STARROCKS_OUTPUT}/be"
+        echo "Warning: macOS output/be depends on host dylibs not bundled in output/be."
+        echo "See ${STARROCKS_OUTPUT}/be/HOST_DYLIB_DEPENDENCIES.txt for the required host library paths."
     fi
     shopt -u nullglob
 
