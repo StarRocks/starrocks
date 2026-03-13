@@ -4375,3 +4375,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: 関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
+
+##### `transform_type_prefer_string_for_varchar`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: マテリアライズドビューの作成とCTAS操作において、固定長のVARCHAR列に対してSTRING型を優先するかどうか。
+- Introduced in: v3.5.8
+
+<EditionSpecificFEItem />

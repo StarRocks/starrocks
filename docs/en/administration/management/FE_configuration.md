@@ -4179,7 +4179,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
 - Introduced in: v3.3.0
 
-##### `mv_refresh_fail_on_filter_data`
 
 - Default: true
 - Type: Boolean
@@ -4203,7 +4202,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+- Description: The authorization URL. The URL to which the users' browser will be redirected in order to begin the OAuth 2.0 authorization process.
 - Introduced in: v3.5.0
 
 ##### `oauth2_client_id`
@@ -4248,7 +4247,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+- Description: The URL to which the users' browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
 - Introduced in: v3.5.0
 
 ##### `oauth2_required_audience`
@@ -4394,6 +4393,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Maximum number of task run records to retain in memory and to use as a default LIMIT when querying archived task-run history. When `enable_task_history_archive` is false, this value bounds in-memory history: Force GC trims older entries so only the newest `task_runs_max_history_number` remain. When archive history is queried (and no explicit LIMIT is provided), `TaskRunHistoryTable.lookup` uses `"ORDER BY create_time DESC LIMIT <value>"` if this value is greater than 0. Note: setting this to 0 disables the query-side LIMIT (no cap) but will cause in-memory history to be truncated to zero (unless archiving is enabled).
 - Introduced in: v3.2.0
+
+##### `transform_type_prefer_string_for_varchar`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v3.5.8
 
 ##### `tmp_dir`
 
