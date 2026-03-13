@@ -2569,7 +2569,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。
+- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。`datacache_unified_instance_enable` が `false` の場合のみ有効です。
 - 導入バージョン: v3.1
 
 ##### starlet_use_star_cache
@@ -2726,6 +2726,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
 - 導入バージョン: v3.3.0
+
+##### datacache_unified_instance_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: 共有データクラスタで、internal catalog と external catalog のデータキャッシュを統一された Data Cache インスタンスで管理するかどうか。
+- 導入バージョン: v3.4.0
 
 ##### jdbc_connection_idle_timeout_ms
 
