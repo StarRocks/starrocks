@@ -295,13 +295,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
-<<<<<<< HEAD
-            if (type == ExplainType.Type.LOGICAL)  {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
-=======
             if (type == ExplainType.Type.LOGICAL) {
                 explainLevel = StatementBase.ExplainLevel.LOGICAL;
->>>>>>> e30cb4609a ([Enhancement] Add EXPLAIN and EXPLAIN ANALYZE support for INSERT statements in Trino Parser (#70174))
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 explainLevel = StatementBase.ExplainLevel.VERBOSE;
             } else if (type == ExplainType.Type.IO) {
