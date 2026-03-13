@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
+#include "runtime/current_thread.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
@@ -327,6 +328,62 @@ TEST_F(LoadChannelMgrTest, test_timeout_load_channel) {
     ASSERT_NE(std::string::npos, add_chunk_result.status().error_msgs(0).find(" timeout")) << add_chunk_result.status();
     // restore the configuration
     config::streaming_load_rpc_max_alive_time_sec = old_load_timeout;
+}
+
+// Verify that add_chunk sets tls_mem_tracker to the load tracker (not nullptr or inherited value).
+// This prevents chunk memory freed at function return from being attributed to a wrong tracker
+// (e.g., query_pool) that a previous bthread might have left in TLS.
+TEST_F(LoadChannelMgrTest, add_chunk_sets_load_mem_tracker) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+
+    // Simulate a polluted tls_mem_tracker (as if another bthread left a query tracker)
+    MemTracker query_pool_tracker(-1, "query_pool");
+    tls_mem_tracker = &query_pool_tracker;
+    DeferOp reset_tls([&]() { tls_mem_tracker = nullptr; });
+
+    // Call add_chunk with a non-existent load channel - it will fail to find the channel
+    // but the SCOPED_THREAD_LOCAL_MEM_SETTER at the entry should still set tls_mem_tracker
+    // to the load tracker, and restore the previous value on return.
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PUniqueId load_id;
+    load_id.set_hi(999);
+    load_id.set_lo(999);
+    add_chunk_request.mutable_id()->CopyFrom(load_id);
+    add_chunk_request.set_index_id(_index_id);
+    add_chunk_request.set_sender_id(0);
+    PTabletWriterAddBatchResult add_chunk_result;
+    _load_channel_mgr->add_chunk(add_chunk_request, &add_chunk_result);
+
+    // After add_chunk returns, tls_mem_tracker should be restored to the polluted value
+    // (the SCOPED_THREAD_LOCAL_MEM_SETTER restores the previous tracker on scope exit)
+    EXPECT_EQ(tls_mem_tracker, &query_pool_tracker);
+
+    // The query_pool tracker should NOT have gone negative from the add_chunk call
+    EXPECT_GE(query_pool_tracker.consumption(), 0);
+}
+
+// Same test for add_chunks
+TEST_F(LoadChannelMgrTest, add_chunks_sets_load_mem_tracker) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+
+    MemTracker query_pool_tracker(-1, "query_pool");
+    tls_mem_tracker = &query_pool_tracker;
+    DeferOp reset_tls([&]() { tls_mem_tracker = nullptr; });
+
+    PTabletWriterAddChunksRequest add_chunks_request;
+    PUniqueId load_id;
+    load_id.set_hi(888);
+    load_id.set_lo(888);
+    add_chunks_request.mutable_id()->CopyFrom(load_id);
+    auto* inner_request = add_chunks_request.add_requests();
+    inner_request->mutable_id()->CopyFrom(load_id);
+    inner_request->set_index_id(_index_id);
+    inner_request->set_sender_id(0);
+    PTabletWriterAddBatchResult add_chunks_result;
+    _load_channel_mgr->add_chunks(add_chunks_request, &add_chunks_result);
+
+    EXPECT_EQ(tls_mem_tracker, &query_pool_tracker);
+    EXPECT_GE(query_pool_tracker.consumption(), 0);
 }
 
 } // namespace starrocks

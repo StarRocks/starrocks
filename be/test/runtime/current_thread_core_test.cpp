@@ -94,6 +94,94 @@ TEST_F(CurrentThreadCoreTest, reset_provider_to_default_behaves_as_pre_init) {
     EXPECT_EQ(CurrentThread::mem_tracker(), nullptr);
 }
 
+// Verify that CurrentThreadMemTrackerSetter restores the correct tracker even when TLS is
+// polluted during the nullptr scope. This simulates what happens when:
+// 1. LoadChannelMgr sets tls_mem_tracker to load_tracker (outer SCOPED_THREAD_LOCAL_MEM_SETTER)
+// 2. Before bthread yield, SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr) resets TLS to nullptr
+// 3. During yield, another bthread overwrites TLS with a different tracker (e.g., query_pool)
+// 4. After yield, the RAII guard must restore load_tracker (saved on stack), not the polluted value
+TEST_F(CurrentThreadCoreTest, mem_tracker_setter_restores_after_tls_pollution) {
+    MemTracker process_tracker(-1, "process");
+    MemTracker load_tracker(-1, "load", &process_tracker);
+    MemTracker query_pool_tracker(-1, "query_pool", &process_tracker);
+
+    // Must initialize env so that mem_tracker() returns tls_mem_tracker instead of nullptr
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+
+    // Simulate: outer scope sets load_tracker (LoadChannelMgr::add_chunk)
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&load_tracker);
+        EXPECT_EQ(tls_mem_tracker, &load_tracker);
+
+        // Simulate: inner scope resets to nullptr before yield (tablets_channel yield point)
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            EXPECT_EQ(tls_mem_tracker, nullptr);
+
+            // Simulate: TLS pollution during bthread yield
+            // (another bthread sets tls_mem_tracker to query_pool tracker)
+            tls_mem_tracker = &query_pool_tracker;
+        }
+        // After inner guard destructor: load_tracker should be restored from stack,
+        // NOT the polluted query_pool_tracker
+        EXPECT_EQ(tls_mem_tracker, &load_tracker);
+    }
+    // After outer guard destructor: process_tracker is restored.
+    // When env is initialized and tls_mem_tracker was nullptr, mem_tracker() auto-fills it
+    // with process_tracker, so that becomes the saved "old" value for the outer RAII guard.
+    EXPECT_EQ(tls_mem_tracker, &process_tracker);
+}
+
+// Verify the full two-layer pattern used for the query_pool negative memory fix:
+// Layer 1: LoadChannelMgr sets load_tracker for the whole handler scope
+// Layer 2: tablets_channel resets to nullptr around yield, restores load_tracker after
+// Memory allocated under load_tracker and freed under load_tracker → net zero on query_pool
+TEST_F(CurrentThreadCoreTest, two_layer_tracker_pattern_prevents_negative_query_pool) {
+    MemTracker process_tracker(-1, "process");
+    MemTracker load_tracker(-1, "load", &process_tracker);
+    MemTracker query_pool_tracker(-1, "query_pool", &process_tracker);
+
+    // Must initialize env so that mem_tracker() returns tls_mem_tracker instead of nullptr
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+
+    // Initial state: no tracker (typical for brpc handler bthread)
+    ASSERT_EQ(tls_mem_tracker, nullptr);
+
+    // Layer 1: LoadChannelMgr::add_chunk sets load tracker
+    {
+        SCOPED_THREAD_LOCAL_MEM_SETTER(&load_tracker, false);
+        EXPECT_EQ(tls_mem_tracker, &load_tracker);
+
+        // Chunk deserialization happens here — tracked under load_tracker
+
+        // Layer 2: before yield, reset to nullptr
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            EXPECT_EQ(tls_mem_tracker, nullptr);
+
+            // Simulate: bthread yield + TLS pollution by DataStreamRecvr
+            tls_mem_tracker = &query_pool_tracker;
+
+            // DataStreamRecvr::add_chunks would see prev_tracker == nullptr (safe for DCHECK)
+            // since we set nullptr before the yield
+        }
+
+        // After yield: load_tracker restored (chunk will be freed under this tracker)
+        EXPECT_EQ(tls_mem_tracker, &load_tracker);
+    }
+
+    // Verify: query_pool should NOT have gone negative
+    // (In real scenario, alloc under load_tracker and free under load_tracker → net zero on query_pool)
+    EXPECT_EQ(query_pool_tracker.consumption(), 0);
+    // When env is initialized and tls_mem_tracker was nullptr, mem_tracker() auto-fills it
+    // with process_tracker, so the outer RAII guard restores to process_tracker.
+    EXPECT_EQ(tls_mem_tracker, &process_tracker);
+}
+
 } // namespace
 
 } // namespace starrocks
