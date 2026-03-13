@@ -46,6 +46,28 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     @SerializedName(value = "retentionPeriod")
     protected long retentionPeriod = 0L;
 
+    /**
+     * When true, force remove the partition directory even if it's a shared directory.
+     * This is set when the partition is being deleted as part of a table deletion,
+     * where all partitions are being removed and shared directories should also be cleaned up.
+     * This field is transient and not serialized.
+     *
+     * Marked volatile because it is written in synchronized eraseTable() but read by
+     * async delete tasks submitted in erasePartition() on a different thread.
+     */
+    protected transient volatile boolean forceRemoveDirectory = false;
+
+    /**
+     * Whether this partition is generated from table-level deletion flow.
+     * Used to skip partition-level erase edit log because table-level erase log
+     * will be recorded after all related partitions are deleted.
+     * This field is transient and not serialized.
+     *
+     * Marked volatile because it is written in synchronized eraseTable() but read by
+     * async delete tasks submitted in erasePartition() on a different thread.
+     */
+    protected transient volatile boolean fromTableDeletion = false;
+
     public RecyclePartitionInfo() {
         recoverable = true;
     }
@@ -99,6 +121,22 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public long getRetentionPeriod() {
         return retentionPeriod;
+    }
+
+    public boolean isForceRemoveDirectory() {
+        return forceRemoveDirectory;
+    }
+
+    public void setForceRemoveDirectory(boolean forceRemoveDirectory) {
+        this.forceRemoveDirectory = forceRemoveDirectory;
+    }
+
+    public boolean isFromTableDeletion() {
+        return fromTableDeletion;
+    }
+
+    public void setFromTableDeletion(boolean fromTableDeletion) {
+        this.fromTableDeletion = fromTableDeletion;
     }
 
     public boolean delete() {
