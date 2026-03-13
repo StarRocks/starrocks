@@ -174,6 +174,66 @@ public class EliminateConstantValueTest extends PlanTestBase {
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition");
         }
+
+        // left outer join with predicate referencing constant-side column (IS NULL)
+        {
+            String sql = "select t1.L_ORDERKEY, t1.L_PARTKEY, t2.col " +
+                    "from lineitem_partition t1 left outer join (select '2000-01-01' as col) t2 on t1.L_SHIPDATE = t2.col " +
+                    "where t2.col IS NULL";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                    "  |  <slot 2> : 2: L_PARTKEY\n" +
+                    "  |  <slot 19> : CASE WHEN CAST(11: L_SHIPDATE AS DATETIME) = CAST('2000-01-01' AS DATETIME) " +
+                    "THEN '2000-01-01' ELSE NULL END\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: lineitem_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: (11: L_SHIPDATE != '2000-01-01') OR (11: L_SHIPDATE IS NULL)");
+        }
+
+        {
+            String sql = "WITH this_tbl AS (\n" +
+                    "     SELECT 'ST000' AS station\n" +
+                    " ),\n" +
+                    " source_tbl AS (\n" +
+                    "     SELECT 'ST001' AS station\n" +
+                    " ),\n" +
+                    " ranked AS (\n" +
+                    "     SELECT *,\n" +
+                    "            ROW_NUMBER() OVER (PARTITION BY station ORDER BY station) AS rn\n" +
+                    "     FROM source_tbl\n" +
+                    " ),\n" +
+                    " best AS (\n" +
+                    "     SELECT station FROM ranked WHERE rn = 1\n" +
+                    " )\n" +
+                    " SELECT b.station, t.station\n" +
+                    " FROM best b\n" +
+                    " LEFT JOIN this_tbl t ON b.station = t.station\n" +
+                    " WHERE t.station IS NULL";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:Project\n" +
+                    "  |  <slot 5> : 5: station\n" +
+                    "  |  <slot 8> : CASE WHEN 5: station = 'ST000' THEN 'ST000' ELSE NULL END\n" +
+                    "  |  \n" +
+                    "  6:SELECT\n" +
+                    "  |  predicates: 6: row_number() = 1\n" +
+                    "  |  \n" +
+                    "  5:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 5: station\n" +
+                    "  |  order by: 5: station ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  4:SORT\n" +
+                    "  |  order by: <slot 5> 5: station ASC\n" +
+                    "  |  analytic partition by: 5: station\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  3:SELECT\n" +
+                    "  |  predicates: if(5: station = 'ST000', 'ST000', NULL) IS NULL");
+        }
     }
 
     @Test
@@ -223,6 +283,24 @@ public class EliminateConstantValueTest extends PlanTestBase {
                     "  0:OlapScanNode\n" +
                     "     TABLE: lineitem_partition\n" +
                     "     PREAGGREGATION: ON");
+        }
+
+        // right outer join with predicate referencing constant-side column (IS NULL)
+        {
+            String sql = "select t1.L_ORDERKEY, t1.L_PARTKEY, t2.col " +
+                    "from (select '2000-01-01' as col) t2 right outer join lineitem_partition t1 on t1.L_SHIPDATE = t2.col " +
+                    "where t2.col IS NULL";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : CASE WHEN CAST(13: L_SHIPDATE AS DATETIME) = CAST('2000-01-01' AS DATETIME) " +
+                    "THEN '2000-01-01' ELSE NULL END\n" +
+                    "  |  <slot 3> : 3: L_ORDERKEY\n" +
+                    "  |  <slot 4> : 4: L_PARTKEY\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: lineitem_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: (13: L_SHIPDATE != '2000-01-01') OR (13: L_SHIPDATE IS NULL)");
         }
     }
 
