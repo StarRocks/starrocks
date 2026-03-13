@@ -23,19 +23,29 @@ import java.util.List;
  * For example:
  * 'REFRESH EXTERNAL TABLE catalog1.db1.table1'
  * This sql will refresh table1 of db1 in catalog1.
+ *
+ * With FORCE option:
+ * 'REFRESH EXTERNAL TABLE catalog1.db1.table1 FORCE'
+ * This will force clear all cache and reload metadata from remote catalog.
  */
 public class RefreshTableStmt extends DdlStmt {
     private TableRef tableRef;
     private final List<String> partitionNames;
+    private final boolean isForce;
 
     public RefreshTableStmt(TableRef tableRef, List<String> partitionNames) {
-        this(tableRef, partitionNames, NodePosition.ZERO);
+        this(tableRef, partitionNames, false, NodePosition.ZERO);
     }
 
-    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, NodePosition pos) {
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, boolean isForce) {
+        this(tableRef, partitionNames, isForce, NodePosition.ZERO);
+    }
+
+    public RefreshTableStmt(TableRef tableRef, List<String> partitionNames, boolean isForce, NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
         this.partitionNames = partitionNames;
+        this.isForce = isForce;
     }
 
     public TableRef getTableRef() {
@@ -60,6 +70,10 @@ public class RefreshTableStmt extends DdlStmt {
 
     public List<String> getPartitions() {
         return partitionNames;
+    }
+
+    public boolean isForce() {
+        return isForce;
     }
 
     @Override

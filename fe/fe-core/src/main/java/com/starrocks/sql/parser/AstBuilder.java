@@ -1623,11 +1623,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition tablePos = createPos(context.qualifiedName().start, context.qualifiedName().stop);
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, tablePos);
         List<String> partitionNames = null;
-        if (context.string() != null) {
+        if (context.string() != null && !context.string().isEmpty()) {
             partitionNames = context.string().stream()
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
-        return new RefreshTableStmt(tableRef, partitionNames, createPos(context));
+        boolean isForce = context.FORCE() != null;
+        return new RefreshTableStmt(tableRef, partitionNames, isForce, createPos(context));
     }
 
     @Override

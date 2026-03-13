@@ -1,0 +1,17 @@
+-- name: test_refresh_external_table_config
+
+-- Test config options related to external table refresh
+
+-- Test enable_force_refresh_mv_base_table config
+ADMIN SET FRONTEND CONFIG ("enable_force_refresh_mv_base_table" = "true");
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_force_refresh_mv_base_table';
+
+ADMIN SET FRONTEND CONFIG ("enable_force_refresh_mv_base_table" = "false");
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_force_refresh_mv_base_table';
+
+-- Test enable_sync_refresh_follower_fe config
+ADMIN SET FRONTEND CONFIG ("enable_sync_refresh_follower_fe" = "true");
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_sync_refresh_follower_fe';
+
+ADMIN SET FRONTEND CONFIG ("enable_sync_refresh_follower_fe" = "false");
+SELECT * FROM information_schema.be_configs WHERE name = 'enable_sync_refresh_follower_fe';

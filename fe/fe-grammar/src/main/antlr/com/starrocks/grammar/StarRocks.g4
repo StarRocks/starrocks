@@ -615,7 +615,7 @@ showTableStatusStatement
     ;
 
 refreshTableStatement
-    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')? FORCE?
     ;
 
 showAlterStatement

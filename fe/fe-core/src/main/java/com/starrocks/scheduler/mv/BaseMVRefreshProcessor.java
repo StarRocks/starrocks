@@ -557,17 +557,20 @@ public abstract class BaseMVRefreshProcessor {
             }
             final BaseTableSnapshotInfo snapshotInfo = buildBaseTableSnapshotInfo(baseTableInfo, table);
             final PCellSortedSet basePartitions = baseTableCandidatePartitions.get(snapshotInfo);
+            // Determine whether to force refresh based on config
+            // If enable_force_refresh_mv_base_table is true, always clear all cache (force refresh)
+            boolean onlyCachedPartitions = !Config.enable_force_refresh_mv_base_table;
             if (PCellUtils.isNotEmpty(basePartitions)) {
                 // only refresh referenced partitions, to reduce metadata overhead
                 final List<String> realPartitionNames = basePartitions.stream()
                         .flatMap(pCell -> mvContext.getExternalTableRealPartitionName(table, pCell.name()).stream())
                         .collect(Collectors.toList());
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, realPartitionNames, false);
+                        baseTableInfo.getDbName(), table, realPartitionNames, onlyCachedPartitions);
             } else {
                 // refresh the whole table, which may be costly in extreme case
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
+                        baseTableInfo.getDbName(), table, Lists.newArrayList(), onlyCachedPartitions);
             }
             // should clear query cache
             connectContext.getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
