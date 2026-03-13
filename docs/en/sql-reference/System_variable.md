@@ -73,6 +73,9 @@ The following variables only take effect globally. They cannot take effect for a
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
+* enable_reduce_cast_varchar_type_length_mutation
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -700,7 +703,28 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
 * **Default**: 64
 * **Data Type**: int
-* **Introduced in**: v3.5.12
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_type_length_mutation (global)
+
+* **Description**: Chooses the preferred implementation when `enable_reduce_cast_varchar_length_inheritance` is enabled. If this variable is `true`, FE mutates the existing child `VARCHAR` type length in place after reducing the cast. If this variable is `false`, FE replaces the child type reference with a new `VARCHAR(N)` type. The mutation path is the default preferred implementation.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. This variable is mainly used as an alternative fix path when the type-mutation path is disabled.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
 
 ### enable_load_profile
 

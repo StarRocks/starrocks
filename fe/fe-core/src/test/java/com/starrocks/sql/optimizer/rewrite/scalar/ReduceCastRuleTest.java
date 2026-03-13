@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -27,6 +28,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
@@ -111,6 +113,45 @@ public class ReduceCastRuleTest {
 
         assertTrue(result.getType().isChar());
         assertEquals(OperatorType.CONSTANT, result.getOpType());
+    }
+
+    @Test
+    public void testVarcharLengthIsNotInheritedByDefault() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+        ScalarOperator child =
+                new ColumnRefOperator(0, ScalarType.createVarcharType(3), "id_varchar", false);
+        ScalarOperator operator = new CastOperator(ScalarType.createVarcharType(10), child);
+
+        ScalarOperator result = rule.apply(operator, null);
+
+        assertTrue(result instanceof ColumnRefOperator);
+        assertEquals(3, ((ScalarType) result.getType()).getLength());
+        assertEquals(3, ((ScalarType) child.getType()).getLength());
+    }
+
+    @Test
+    public void testVarcharLengthCanBeInheritedAfterReduceCast() {
+        boolean prevInheritance = GlobalVariable.isEnableReduceCastVarcharLengthInheritance();
+        boolean prevTypeLengthMutation = GlobalVariable.isEnableReduceCastVarcharTypeLengthMutation();
+        GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
+        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(true);
+
+        try {
+            ScalarOperatorRewriteRule rule = new ReduceCastRule();
+            ScalarOperator child =
+                    new ColumnRefOperator(0, ScalarType.createVarcharType(3), "id_varchar", false);
+            ScalarOperator operator = new CastOperator(ScalarType.createVarcharType(10), child);
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result instanceof ColumnRefOperator);
+            assertEquals(10, ((ScalarType) result.getType()).getLength());
+            assertEquals(10, ((ScalarType) child.getType()).getLength());
+            Assertions.assertSame(child, result);
+        } finally {
+            GlobalVariable.setEnableReduceCastVarcharLengthInheritance(prevInheritance);
+            GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(prevTypeLengthMutation);
+        }
     }
 
     @Test
