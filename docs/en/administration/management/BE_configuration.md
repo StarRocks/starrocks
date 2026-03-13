@@ -3346,6 +3346,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Maximum number of retry attempts for non-segment file copy (`.sst`, `.delvec`, `.del`, `.cols`) during lake-to-lake (shared-data) cross-cluster replication. Each attempt verifies the copied file size matches the source to detect truncated copies caused by transient object storage issues. Increase this value if experiencing intermittent file corruption during replication over unreliable storage.
 - Introduced in: -
 
+##### lake_replication_per_tablet_copy_parallelism
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Number of parallel file copy threads per tablet during lake-to-lake (shared-data) cross-cluster replication. When a single tablet has many segment files, parallel copy significantly reduces the total replication time by leveraging concurrent object storage IO. Set to 0 or 1 to fall back to sequential copy behavior. Increase on high-bandwidth storage links; decrease if per-tablet parallelism causes excessive memory or connection usage.
+- Introduced in: -
+
 ##### lake_service_max_concurrency
 
 - Default: 0

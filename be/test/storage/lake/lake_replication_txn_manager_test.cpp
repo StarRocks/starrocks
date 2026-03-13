@@ -537,6 +537,40 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal_encrypted) {
     EXPECT_EQ(0, status_or.value()->compaction_inputs_size());
 }
 
+// Test that parallel copy config works with the replicate_lake_remote_storage path.
+// This verifies the parallel code path is exercised when parallelism > 1.
+TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_no_missing_versions_with_parallelism) {
+    // Save original value and set parallelism to 4
+    auto saved_parallelism = config::lake_replication_per_tablet_copy_parallelism;
+    config::lake_replication_per_tablet_copy_parallelism = 4;
+
+    TReplicateSnapshotRequest request;
+    request.__set_transaction_id(_transaction_id);
+    request.__set_table_id(_table_id);
+    request.__set_partition_id(_partition_id);
+    request.__set_tablet_id(_target_tablet_id);
+    request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request.__set_schema_hash(_schema_hash);
+    request.__set_visible_version(_version);
+    request.__set_data_version(_version);
+    // src tablet
+    request.__set_src_tablet_id(_src_tablet_id);
+    request.__set_src_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request.__set_src_visible_version(_version); // same as `data_version`
+    request.__set_src_db_id(_src_db_id);
+    request.__set_src_table_id(_src_tablet_id);
+    request.__set_src_partition_id(_src_partition_id);
+
+    // virtual tablet
+    request.__set_virtual_tablet_id(_virtual_tablet_id);
+
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
+    EXPECT_FALSE(status.ok());
+
+    // Restore original value
+    config::lake_replication_per_tablet_copy_parallelism = saved_parallelism;
+}
+
 // Tests for LakeReplicationTxnManager::copy_non_segment_file_with_retry
 class CopyNonSegmentFileWithRetryTest : public testing::Test {
 protected:

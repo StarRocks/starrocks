@@ -14,12 +14,17 @@
 
 #include "storage/lake/lake_replication_txn_manager.h"
 
+#include <atomic>
+#include <mutex>
+
 #include "agent/master_info.h"
+#include "base/concurrency/countdown_latch.h"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
@@ -244,64 +249,182 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     MonotonicStopWatch watch;
     watch.start();
-    size_t total_file_size = 0;
-    for (const auto& pair : filename_map) {
-        const auto& src_file_name = pair.first;
-        auto src_file_location = join_path(src_data_dir, src_file_name);
-        auto it = file_locations.find(src_file_location);
-        if (it == file_locations.end()) {
-            return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
-        }
-        const auto& target_file_location = it->second;
-        LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
-                  << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
+    std::atomic<size_t> total_file_size{0};
 
-        // Create trace for this file replication
-        scoped_refptr<Trace> file_trace(new Trace);
-        ADOPT_TRACE(file_trace.get());
-        TRACE("Start replicate file, txn_id: $0, tablet_id: $1, src: $2, target: $3", txn_id, target_tablet_id,
-              src_file_location, target_file_location);
-        TRACE_COUNTER_INCREMENT("txn_id", txn_id);
-        TRACE_COUNTER_INCREMENT("tablet_id", target_tablet_id);
+    int32_t parallelism = config::lake_replication_per_tablet_copy_parallelism;
+    if (parallelism > 1 && filename_map.size() > 1) {
+        // Parallel file copy using ThreadPool + CountDownLatch
+        // The file_converters lambda (from build_file_converters) captures files_to_delete by reference
+        // and pushes to it internally, so we must protect all files_to_delete access with the same mutex.
+        std::mutex mu; // protects segment_size_changes, files_to_delete, error_status
+        std::atomic<bool> has_error{false};
+        Status error_status;
+        CountDownLatch latch(filename_map.size());
 
-        size_t final_file_size = 0;
-        auto start_ts = butil::gettimeofday_us();
-        if (is_segment(src_file_name)) {
-            // For segment files, use download_lake_segment_file which supports schema conversion
-            // via SegmentStreamConverter when column_unique_id_map is not empty.
-            // file_size might be available in segment_name_to_size_map
+        // Wrap file_converters with mutex since it captures files_to_delete by reference
+        // and pushes to it internally (not thread-safe without synchronization)
+        auto safe_file_converters = [&file_converters, &mu](
+                                            const std::string& file_name,
+                                            uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+            std::lock_guard lock(mu);
+            return file_converters(file_name, file_size);
+        };
+
+        std::unique_ptr<ThreadPool> copy_pool;
+        RETURN_IF_ERROR(
+                ThreadPoolBuilder("lake_repl_copy").set_min_threads(0).set_max_threads(parallelism).build(&copy_pool));
+
+        for (const auto& pair : filename_map) {
+            const auto& src_file_name = pair.first;
+            auto src_file_location = join_path(src_data_dir, src_file_name);
+            auto it = file_locations.find(src_file_location);
+            if (it == file_locations.end()) {
+                return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
+            }
+            const auto& target_file_location = it->second;
+
+            // Capture values needed by the lambda
             auto src_file_size = segment_name_to_size_map[src_file_name];
-            RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(
-                    src_file_location, src_file_name, src_file_size, shared_src_fs, file_converters, &final_file_size));
-            // Update the segment size map with the actual converted file size
-            if (final_file_size > 0 && final_file_size != src_file_size) {
-                const auto& target_file_name = pair.second.first;
-                segment_size_changes[target_file_name] = final_file_size;
-                LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
-                          << ", target_file: " << target_file_name << ", original size: " << src_file_size
-                          << ", final size: " << final_file_size;
-            }
-        } else {
-            // For non-segment files (.del, .sst, .delvec, .cols), copy with size verification and retry.
-            WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            bool is_seg = is_segment(src_file_name);
+            const auto& target_file_name = pair.second.first;
+            FileEncryptionInfo encryption_info;
             if (config::enable_transparent_data_encryption) {
-                opts.encryption_info = pair.second.second.info;
+                encryption_info = pair.second.second.info;
             }
-            int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
-            ASSIGN_OR_RETURN(final_file_size, copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
-                                                                               target_file_location, opts, max_retry));
-            files_to_delete.push_back(target_file_location);
-        }
-        total_file_size += final_file_size;
-        auto cost = butil::gettimeofday_us() - start_ts;
-        auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
-        TRACE("Finished replicate file, final_size: $0, cost_us: $1", final_file_size, cost);
 
-        if (is_slow) {
-            LOG(INFO) << "Finished replicate src file: " << src_file_location << ", target: " << target_file_location
-                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
-                      << ", cost(s): " << cost / 1000. / 1000. << "\n"
-                      << ",trace: " << file_trace->MetricsAsJSON();
+            auto st = copy_pool->submit_func([&, src_file_name, src_file_location, target_file_location,
+                                              target_file_name, src_file_size, is_seg, encryption_info]() {
+                CountDownOnScopeExit<CountDownLatch> countdown_guard(&latch);
+
+                if (has_error.load(std::memory_order_acquire)) {
+                    return; // skip if another task already failed
+                }
+
+                LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
+                          << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
+
+                size_t final_file_size = 0;
+                auto start_ts = butil::gettimeofday_us();
+                Status copy_status;
+
+                if (is_seg) {
+                    copy_status = ReplicationUtils::download_lake_segment_file(src_file_location, src_file_name,
+                                                                               src_file_size, shared_src_fs,
+                                                                               safe_file_converters, &final_file_size);
+                    if (copy_status.ok() && final_file_size > 0 && final_file_size != src_file_size) {
+                        std::lock_guard lock(mu);
+                        segment_size_changes[target_file_name] = final_file_size;
+                        LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
+                                  << ", target_file: " << target_file_name << ", original size: " << src_file_size
+                                  << ", final size: " << final_file_size;
+                    }
+                } else {
+                    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                    if (config::enable_transparent_data_encryption) {
+                        opts.encryption_info = encryption_info;
+                    }
+                    int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+                    auto result = copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                   target_file_location, opts, max_retry);
+                    if (result.ok()) {
+                        final_file_size = result.value();
+                        std::lock_guard lock(mu);
+                        files_to_delete.push_back(target_file_location);
+                    } else {
+                        copy_status = result.status();
+                    }
+                }
+
+                if (!copy_status.ok()) {
+                    bool expected = false;
+                    if (has_error.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+                        std::lock_guard lock(mu);
+                        error_status = std::move(copy_status);
+                    }
+                    return;
+                }
+
+                total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
+                auto cost = butil::gettimeofday_us() - start_ts;
+                auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
+                if (is_slow) {
+                    LOG(INFO) << "Finished replicate src file: " << src_file_location
+                              << ", target: " << target_file_location << ", txn_id: " << txn_id
+                              << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
+                              << ", cost(s): " << cost / 1000. / 1000.;
+                }
+            });
+
+            if (!st.ok()) {
+                return st;
+            }
+        }
+
+        latch.wait();
+        copy_pool->shutdown();
+
+        if (has_error.load(std::memory_order_acquire)) {
+            std::lock_guard lock(mu);
+            return error_status;
+        }
+    } else {
+        // Sequential file copy (original behavior)
+        for (const auto& pair : filename_map) {
+            const auto& src_file_name = pair.first;
+            auto src_file_location = join_path(src_data_dir, src_file_name);
+            auto it = file_locations.find(src_file_location);
+            if (it == file_locations.end()) {
+                return Status::Corruption("Found invalid file location, src file location: " + src_file_location);
+            }
+            const auto& target_file_location = it->second;
+            LOG(INFO) << "Start replicate src file: " << src_file_location << ", target: " << target_file_location
+                      << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
+
+            // Create trace for this file replication
+            scoped_refptr<Trace> file_trace(new Trace);
+            ADOPT_TRACE(file_trace.get());
+            TRACE("Start replicate file, txn_id: $0, tablet_id: $1, src: $2, target: $3", txn_id, target_tablet_id,
+                  src_file_location, target_file_location);
+            TRACE_COUNTER_INCREMENT("txn_id", txn_id);
+            TRACE_COUNTER_INCREMENT("tablet_id", target_tablet_id);
+
+            size_t final_file_size = 0;
+            auto start_ts = butil::gettimeofday_us();
+            if (is_segment(src_file_name)) {
+                auto src_file_size = segment_name_to_size_map[src_file_name];
+                RETURN_IF_ERROR(ReplicationUtils::download_lake_segment_file(src_file_location, src_file_name,
+                                                                             src_file_size, shared_src_fs,
+                                                                             file_converters, &final_file_size));
+                if (final_file_size > 0 && final_file_size != src_file_size) {
+                    const auto& target_file_name = pair.second.first;
+                    segment_size_changes[target_file_name] = final_file_size;
+                    LOG(INFO) << "Segment file size changed after conversion, src_file: " << src_file_name
+                              << ", target_file: " << target_file_name << ", original size: " << src_file_size
+                              << ", final size: " << final_file_size;
+                }
+            } else {
+                WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+                if (config::enable_transparent_data_encryption) {
+                    opts.encryption_info = pair.second.second.info;
+                }
+                int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+                ASSIGN_OR_RETURN(final_file_size,
+                                 copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                  target_file_location, opts, max_retry));
+                files_to_delete.push_back(target_file_location);
+            }
+            total_file_size.fetch_add(final_file_size, std::memory_order_relaxed);
+            auto cost = butil::gettimeofday_us() - start_ts;
+            auto is_slow = cost >= config::lake_replication_slow_log_ms * 1000;
+            TRACE("Finished replicate file, final_size: $0, cost_us: $1", final_file_size, cost);
+
+            if (is_slow) {
+                LOG(INFO) << "Finished replicate src file: " << src_file_location
+                          << ", target: " << target_file_location << ", txn_id: " << txn_id
+                          << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size
+                          << ", cost(s): " << cost / 1000. / 1000. << "\n"
+                          << ",trace: " << file_trace->MetricsAsJSON();
+            }
         }
     }
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
@@ -310,8 +433,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id;
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, parallelism: " << parallelism
+              << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {
