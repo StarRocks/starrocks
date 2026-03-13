@@ -43,8 +43,8 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
-import com.starrocks.type.VariantType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -524,9 +524,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             }
             MockIcebergTable t = tableInfo.icebergTable;
             MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
-                        t.getCatalogDBName(), t.getCatalogTableName(),
-                        t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
-                        t.getComment());
+                    t.getCatalogDBName(), t.getCatalogTableName(),
+                    t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
+                    t.getComment());
             ConnectorTableInfo info = GlobalStateMgr.getCurrentState()
                     .getConnectorTblMetaInfoMgr()
                     .getConnectorTableInfo(t.getCatalogName(), t.getCatalogDBName(), t.getTableIdentifier());
