@@ -34,14 +34,17 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <unordered_map>
 
+#include "common/status.h"
 #include "http/http_handler.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
+
+class ExecEnv;
 
 // Update BE config.
 class UpdateConfigAction : public HttpHandler {

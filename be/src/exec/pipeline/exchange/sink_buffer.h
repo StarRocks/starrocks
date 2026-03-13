@@ -26,6 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/disposable_closure.h"

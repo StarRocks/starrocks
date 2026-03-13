@@ -27,6 +27,7 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {

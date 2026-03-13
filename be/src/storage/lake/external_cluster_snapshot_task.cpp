@@ -35,6 +35,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "glog/logging.h"

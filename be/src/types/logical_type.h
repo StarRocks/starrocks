@@ -14,13 +14,11 @@
 
 #pragma once
 
-#include <iostream>
+#include <iosfwd>
 
 #include "base/utility/guard.h"
-#include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 

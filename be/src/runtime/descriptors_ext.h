@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+#include "common/statusor.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {

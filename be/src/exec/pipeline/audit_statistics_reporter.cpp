@@ -18,6 +18,7 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "common/config_rpc_client_fwd.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"

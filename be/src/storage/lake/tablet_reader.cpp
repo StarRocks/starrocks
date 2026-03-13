@@ -17,6 +17,7 @@
 #include <future>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"

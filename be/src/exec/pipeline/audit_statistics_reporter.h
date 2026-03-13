@@ -14,14 +14,19 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 
+#include "common/status.h"
 #include "common/thread/threadpool.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class ExecEnv;
+
+namespace pipeline {
+
 class AuditStatisticsReporter {
 public:
     AuditStatisticsReporter();
@@ -34,4 +39,5 @@ public:
 private:
     std::unique_ptr<ThreadPool> _thread_pool;
 };
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks

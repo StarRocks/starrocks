@@ -27,6 +27,7 @@
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
 #include "udf/java/utils.h"

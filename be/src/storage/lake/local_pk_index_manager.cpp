@@ -18,6 +18,7 @@
 #include <chrono>
 
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/fs_util.h"
