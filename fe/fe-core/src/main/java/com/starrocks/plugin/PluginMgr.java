@@ -231,7 +231,6 @@ public class PluginMgr implements Writable {
      * For built-in Plugin register
      */
     public boolean registerBuiltinPlugin(PluginInfo pluginInfo, Plugin plugin) {
-        LOG.error("LXH register plugin");
         if (Objects.isNull(pluginInfo) || Objects.isNull(plugin) || Objects.isNull(pluginInfo.getType())
                 || Strings.isNullOrEmpty(pluginInfo.getName())) {
             return false;
