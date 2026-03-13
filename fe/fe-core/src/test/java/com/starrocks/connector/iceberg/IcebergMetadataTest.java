@@ -3160,4 +3160,41 @@ public class IcebergMetadataTest extends TableTestBase {
                     Mockito.times(1));
         }
     }
+
+    @Test
+    public void testListTableDeltaTraitsSkipsReplaceSnapshots() {
+        // Step 1: APPEND FILE_A
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("append", snap1.operation());
+
+        // Step 2: REPLACE (rewrite FILE_A -> FILE_A_1, simulating compaction)
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap2.operation());
+
+        // Step 3: APPEND FILE_A_2
+        mockedNativeTableA.newAppend().appendFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("append", snap3.operation());
+
+        // Build IcebergTable wrapping the native table
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        // Query delta traits from snap1 (exclusive) to snap3 (inclusive)
+        // This range includes snap2 (REPLACE) and snap3 (APPEND)
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap3.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+
+        // REPLACE snapshot should be skipped, only APPEND (snap3) should remain
+        Assertions.assertEquals(1, traits.size());
+        Assertions.assertTrue(traits.get(0).isAppendOnly());
+    }
 }
