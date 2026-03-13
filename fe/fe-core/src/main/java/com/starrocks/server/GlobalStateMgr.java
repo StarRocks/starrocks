@@ -2477,13 +2477,17 @@ public class GlobalStateMgr {
         boolean isForce = stmt.isForce();
         refreshExternalTable(context, tableName, partitionNames, isForce);
 
-        // Sync to other FEs based on config or force flag
-        boolean syncRefresh = isForce || Config.enable_sync_refresh_follower_fe;
-        refreshOthersFeTable(tableName, partitionNames, syncRefresh);
+        // Sync to other FEs based on config
+        if (Config.enable_sync_refresh_follower_fe) {
+            refreshOthersFeTable(tableName, partitionNames, isForce);
+        }
     }
 
-    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
+    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isForce) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        if (allFrontends.size() == 0) {
+            return;
+        }
         Map<String, Future<TStatus>> resultMap = Maps.newHashMapWithExpectedSize(allFrontends.size() - 1);
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
@@ -2491,9 +2495,10 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(
-                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions, isForce));
         }
 
+        // Wait for all results and throw exception on error
         String errMsg = "";
         for (Map.Entry<String, Future<TStatus>> entry : resultMap.entrySet()) {
             try {
@@ -2511,16 +2516,12 @@ public class GlobalStateMgr {
         }
 
         if (!errMsg.equals("")) {
-            if (isSync) {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
-            } else {
-                LOG.error("Background refresh others fe failed, {}", errMsg);
-            }
+            ErrorReport.reportDdlException(ErrorCode.ERROR_REFRESH_EXTERNAL_TABLE_FAILED, errMsg);
         }
     }
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
-                                                List<String> partitions) {
+                                                List<String> partitions, boolean isForce) {
         int timeout;
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
@@ -2534,6 +2535,7 @@ public class GlobalStateMgr {
             request.setDb_name(tableName.getDb());
             request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
+            request.setIs_force(isForce);
             try {
                 TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
