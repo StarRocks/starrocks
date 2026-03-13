@@ -3837,7 +3837,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
 - Introduced in: v4.0.1, v3.5.8
 
-<<<<<<< HEAD
 ##### `enable_colocate_restore`
 
 - Default: false
@@ -3875,9 +3874,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 ##### `enable_mv_post_image_reload_cache`
-=======
-##### enable_mv_post_image_reload_cache
->>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
 
 - Default: true
 - Type: Boolean
@@ -3931,7 +3927,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
 - Introduced in: v3.5.1
 
-<<<<<<< HEAD
 ##### `es_state_sync_interval_second`
 
 - Default: 10
@@ -4184,16 +4179,11 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The default timeout for the planning phase of the optimizer when refresh materialized views.
 - Introduced in: v3.3.0
 
-##### `mv_refresh_fail_on_filter_data`
-=======
-##### transform_type_prefer_string_for_varchar
->>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-<<<<<<< HEAD
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
 
@@ -4212,7 +4202,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
+- Description: The authorization URL. The URL to which the users' browser will be redirected in order to begin the OAuth 2.0 authorization process.
 - Introduced in: v3.5.0
 
 ##### `oauth2_client_id`
@@ -4257,7 +4247,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
+- Description: The URL to which the users' browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
 - Introduced in: v3.5.0
 
 ##### `oauth2_required_audience`
@@ -4404,6 +4394,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Maximum number of task run records to retain in memory and to use as a default LIMIT when querying archived task-run history. When `enable_task_history_archive` is false, this value bounds in-memory history: Force GC trims older entries so only the newest `task_runs_max_history_number` remain. When archive history is queried (and no explicit LIMIT is provided), `TaskRunHistoryTable.lookup` uses `"ORDER BY create_time DESC LIMIT <value>"` if this value is greater than 0. Note: setting this to 0 disables the query-side LIMIT (no cap) but will cause in-memory history to be truncated to zero (unless archiving is enabled).
 - Introduced in: v3.2.0
 
+##### `transform_type_prefer_string_for_varchar`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Introduced in: v3.5.8
+
 ##### `tmp_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/temp_dir"
@@ -4414,9 +4413,3 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Introduced in: -
 
 <EditionSpecificFEItem />
-=======
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
-- Introduced in: v4.0.0
-
-<EditionSpecificFEItem />
->>>>>>> 6faba17ef6 ([Enhancement] Change transform type prefer string for fixed length varchar (#62476))
