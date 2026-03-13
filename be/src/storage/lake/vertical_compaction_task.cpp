@@ -194,6 +194,26 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+
+    // Apply range filter for range-split parallel compaction.
+    // Must apply to ALL column groups (key and non-key) so that segment iterators
+    // produce the same row subsets. The key group's heap_merge_iterator records
+    // RowSourceMasks, and non-key groups' mask_merge_iterator replays them.
+    // If only key group has range filter, non-key iterators read from row 0 while
+    // mask expects range-filtered rows, causing key-value misalignment.
+    if (_context->has_range_split) {
+        if (_context->has_lower_bound && !_context->range_start_key.empty()) {
+            reader_params.start_key = _context->range_start_key;
+            reader_params.range = _context->range_lower_inclusive ? TabletReaderParams::RangeStartOperation::GE
+                                                                  : TabletReaderParams::RangeStartOperation::GT;
+        }
+        if (_context->has_upper_bound && !_context->range_end_key.empty()) {
+            reader_params.end_key = _context->range_end_key;
+            reader_params.end_range = _context->range_upper_inclusive ? TabletReaderParams::RangeEndOperation::LE
+                                                                      : TabletReaderParams::RangeEndOperation::LT;
+        }
+    }
+
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
