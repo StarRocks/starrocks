@@ -19,6 +19,7 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {

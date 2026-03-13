@@ -23,6 +23,7 @@
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

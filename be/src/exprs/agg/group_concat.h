@@ -27,6 +27,7 @@
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>

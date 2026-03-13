@@ -51,6 +51,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter/runtime_filter_helper.h"
+#include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"

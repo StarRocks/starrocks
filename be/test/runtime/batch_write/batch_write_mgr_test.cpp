@@ -27,6 +27,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
+#include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 

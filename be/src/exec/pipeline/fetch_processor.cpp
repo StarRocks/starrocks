@@ -32,6 +32,7 @@
 #include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 
 namespace starrocks::pipeline {

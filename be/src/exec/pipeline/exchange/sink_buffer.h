@@ -17,6 +17,7 @@
 #include <bthread/mutex.h>
 
 #include <atomic>
+#include <functional>
 #include <list>
 #include <memory>
 #include <queue>
@@ -26,7 +27,6 @@
 #include "base/utility/defer_op.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_fwd.h"
 #include "util/disposable_closure.h"
@@ -98,14 +98,7 @@ public:
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_sink_observers(); }
-    auto defer_notify() {
-        return DeferOp([this]() {
-            _observable.notify_sink_observers();
-            if (bthread_self()) {
-                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
-            }
-        });
-    }
+    DeferOp<std::function<void()>> defer_notify();
 
     int64_t get_sent_bytes() const { return _bytes_sent; }
 

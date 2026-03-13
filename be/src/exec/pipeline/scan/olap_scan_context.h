@@ -26,7 +26,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {

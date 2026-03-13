@@ -21,7 +21,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
