@@ -35,6 +35,7 @@
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/closure_guard.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
@@ -394,7 +395,13 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     auto start_wait_writer_ts = watch.elapsed_time();
     // This will only block the bthread, will not block the pthread
-    count_down_latch.wait();
+    // Temporarily reset tls_mem_tracker to nullptr before yielding to prevent exposing the load
+    // tracker to other bthreads. The RAII guard saves the current tracker on the bthread stack
+    // (immune to TLS pollution) and restores it after the yield.
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        count_down_latch.wait();
+    }
     FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
         int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
         if (timeout_ms > 0) {

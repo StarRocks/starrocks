@@ -46,6 +46,7 @@
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
@@ -232,6 +233,12 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+    // Set load mem_tracker for the entire brpc handler scope to prevent bthread TLS corruption.
+    // Without this, after bthread yields at count_down_latch.wait() inside tablets_channel::add_chunk(),
+    // tls_mem_tracker may be overwritten by other bthreads (e.g., DataStreamRecvr::add_chunks sets
+    // instance_mem_tracker under query_pool). When this bthread resumes, chunk memory freed at function
+    // return would be attributed to query_pool instead of load tracker, causing query_pool to go negative.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     UniqueId load_id(request.id());
     auto channel = _find_load_channel(load_id);
@@ -243,6 +250,7 @@ void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTab
 }
 
 void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     UniqueId load_id(request.id());
     auto channel = _find_load_channel(load_id);
