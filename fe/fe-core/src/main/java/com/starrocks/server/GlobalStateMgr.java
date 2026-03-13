@@ -2545,8 +2545,10 @@ public class GlobalStateMgr {
         boolean isForce = stmt.isForce();
         refreshExternalTable(context, tableName, partitionNames, isForce);
 
-        // Sync to other FEs
-        refreshOthersFeTable(tableName, partitionNames, isForce);
+        // Sync to other FEs based on config
+        if (Config.enable_sync_refresh_follower_fe) {
+            refreshOthersFeTable(tableName, partitionNames, isForce);
+        }
     }
 
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isForce) throws DdlException {
