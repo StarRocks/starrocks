@@ -336,4 +336,256 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_delete_sink) {
     EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
 }
 
+// Test that row lineage columns are appended to column_names and parquet_field_ids
+// when output expressions have more columns than the table descriptor (compaction mode)
+TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
+    // Create tuple descriptor with 3 slots: c1 (user col) + _row_id + _last_updated_sequence_number
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_row_id")
+                         .column_pos(1)
+                         .nullable(true)
+                         .build();
+    auto slot3 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_last_updated_sequence_number")
+                         .column_pos(2)
+                         .nullable(true)
+                         .build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.add_slot(slot3);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    // Table descriptor only has 1 column (c1) - simulates that toThrift() only sends user columns
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("c1");
+    t_iceberg_table.__set_columns({t_column});
+
+    // Iceberg schema also only has 1 field (c1)
+    TIcebergSchemaField schema_field;
+    schema_field.__set_field_id(1);
+    schema_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({schema_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("s3://bucket/table-location");
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    // 3 output expressions (c1 + _row_id + _last_updated_sequence_number)
+    std::vector<TExpr> exprs;
+    TExpr expr1, expr2, expr3;
+    exprs.push_back(expr1);
+    exprs.push_back(expr2);
+    exprs.push_back(expr3);
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+    // Verify column_names was extended with row lineage columns
+    ASSERT_EQ(sink_ctx->column_names.size(), 3);
+    EXPECT_EQ(sink_ctx->column_names[0], "c1");
+    EXPECT_EQ(sink_ctx->column_names[1], "_row_id");
+    EXPECT_EQ(sink_ctx->column_names[2], "_last_updated_sequence_number");
+
+    // Verify parquet_field_ids was extended with correct Iceberg reserved field IDs
+    ASSERT_EQ(sink_ctx->parquet_field_ids.size(), 3);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[0].field_id, 1);          // c1's field_id
+    EXPECT_EQ(sink_ctx->parquet_field_ids[1].field_id, 2147483540); // _row_id reserved field ID
+    EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539); // _last_updated_sequence_number reserved field ID
+}
+
+// Test that parquet_field_ids is extended even when column_names already includes
+// row lineage columns but iceberg_schema still only contains user columns.
+TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_already_present) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_row_id")
+                         .column_pos(1)
+                         .nullable(true)
+                         .build();
+    auto slot3 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_last_updated_sequence_number")
+                         .column_pos(2)
+                         .nullable(true)
+                         .build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.add_slot(slot3);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    // Simulate FE already including row lineage columns in TIcebergTable.columns,
+    // while Iceberg schema still only describes user columns.
+    TIcebergTable t_iceberg_table;
+    TColumn col1;
+    col1.__set_column_name("c1");
+    TColumn col2;
+    col2.__set_column_name("_row_id");
+    TColumn col3;
+    col3.__set_column_name("_last_updated_sequence_number");
+    t_iceberg_table.__set_columns({col1, col2, col3});
+
+    TIcebergSchemaField schema_field;
+    schema_field.__set_field_id(1);
+    schema_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({schema_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("s3://bucket/table-location");
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs;
+    TExpr expr1, expr2, expr3;
+    exprs.push_back(expr1);
+    exprs.push_back(expr2);
+    exprs.push_back(expr3);
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+    ASSERT_EQ(sink_ctx->column_names.size(), 3);
+    ASSERT_EQ(sink_ctx->parquet_field_ids.size(), 3);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[0].field_id, 1);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[1].field_id, 2147483540);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539);
+}
+
+// Test that sink schema is rebuilt from tuple/output columns when TIcebergTable.columns
+// still contains hidden metadata columns that are not written by compaction.
+TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_columns) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    auto slot2 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_row_id")
+                         .column_pos(1)
+                         .nullable(true)
+                         .build();
+    auto slot3 = slot_desc_builder.type(LogicalType::TYPE_BIGINT)
+                         .column_name("_last_updated_sequence_number")
+                         .column_pos(2)
+                         .nullable(true)
+                         .build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.add_slot(slot2);
+    tuple_desc_builder.add_slot(slot3);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    // Simulate current FE thrift table schema ordering:
+    // user columns first, then hidden metadata columns such as _file/_pos, then row lineage columns.
+    TIcebergTable t_iceberg_table;
+    TColumn col1;
+    col1.__set_column_name("c1");
+    TColumn col2;
+    col2.__set_column_name("_file");
+    TColumn col3;
+    col3.__set_column_name("_pos");
+    TColumn col4;
+    col4.__set_column_name("_row_id");
+    TColumn col5;
+    col5.__set_column_name("_last_updated_sequence_number");
+    t_iceberg_table.__set_columns({col1, col2, col3, col4, col5});
+
+    TIcebergSchemaField schema_field;
+    schema_field.__set_field_id(1);
+    schema_field.__set_name("c1");
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({schema_field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    TDataSink data_sink;
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("s3://bucket/table-location");
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> exprs;
+    TExpr expr1, expr2, expr3;
+    exprs.push_back(expr1);
+    exprs.push_back(expr2);
+    exprs.push_back(expr3);
+    IcebergTableSink sink(&_pool, exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+    EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+    auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+    ASSERT_EQ(sink_ctx->column_names.size(), 3);
+    EXPECT_EQ(sink_ctx->column_names[0], "c1");
+    EXPECT_EQ(sink_ctx->column_names[1], "_row_id");
+    EXPECT_EQ(sink_ctx->column_names[2], "_last_updated_sequence_number");
+
+    ASSERT_EQ(sink_ctx->parquet_field_ids.size(), 3);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[0].field_id, 1);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[1].field_id, 2147483540);
+    EXPECT_EQ(sink_ctx->parquet_field_ids[2].field_id, 2147483539);
+}
+
 } // namespace starrocks
