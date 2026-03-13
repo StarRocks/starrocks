@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,6 +88,119 @@ public class TabletInvertedIndexTest {
                 "Replica on backend 1001 should match");
         Assertions.assertTrue(replicas.stream().anyMatch(replica -> replica.equals(replica3)),
                 "Replica on backend 1002 should match");
+    }
+
+    @Test
+    public void testDeleteTabletsBatch() {
+        // Given: Add 3 tablets with replicas on different backends
+        long tabletId1 = 2001L;
+        long tabletId2 = 2002L;
+        long tabletId3 = 2003L;
+
+        TabletMeta meta1 = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
+        TabletMeta meta2 = new TabletMeta(1L, 2L, 3L, 5L, TStorageMedium.HDD);
+        TabletMeta meta3 = new TabletMeta(1L, 2L, 3L, 6L, TStorageMedium.HDD);
+
+        tabletInvertedIndex.addTablet(tabletId1, meta1);
+        tabletInvertedIndex.addTablet(tabletId2, meta2);
+        tabletInvertedIndex.addTablet(tabletId3, meta3);
+
+        tabletInvertedIndex.addReplica(tabletId1, replica1);
+        tabletInvertedIndex.addReplica(tabletId2, replica2);
+        tabletInvertedIndex.addReplica(tabletId3, replica3);
+
+        // Verify tablets and replicas exist
+        Assertions.assertNotNull(tabletInvertedIndex.getTabletMeta(tabletId1));
+        Assertions.assertNotNull(tabletInvertedIndex.getTabletMeta(tabletId2));
+        Assertions.assertNotNull(tabletInvertedIndex.getTabletMeta(tabletId3));
+
+        // When: Batch delete tablets 1 and 3
+        tabletInvertedIndex.deleteTablets(Arrays.asList(tabletId1, tabletId3));
+
+        // Then: Tablets 1 and 3 should be gone, tablet 2 should remain
+        Assertions.assertNull(tabletInvertedIndex.getTabletMeta(tabletId1));
+        Assertions.assertNotNull(tabletInvertedIndex.getTabletMeta(tabletId2));
+        Assertions.assertNull(tabletInvertedIndex.getTabletMeta(tabletId3));
+
+        // Replicas should also be cleaned up
+        Assertions.assertEquals(0, tabletInvertedIndex.getReplicasByTabletId(tabletId1).size());
+        Assertions.assertEquals(1, tabletInvertedIndex.getReplicasByTabletId(tabletId2).size());
+        Assertions.assertEquals(0, tabletInvertedIndex.getReplicasByTabletId(tabletId3).size());
+
+        // Backend-to-tablet mapping should be updated
+        List<Long> backend1000Tablets = tabletInvertedIndex.getTabletIdsByBackendId(1000L);
+        Assertions.assertFalse(backend1000Tablets.contains(tabletId1));
+        List<Long> backend1002Tablets = tabletInvertedIndex.getTabletIdsByBackendId(1002L);
+        Assertions.assertFalse(backend1002Tablets.contains(tabletId3));
+        // Backend 1001 still has tablet 2
+        List<Long> backend1001Tablets = tabletInvertedIndex.getTabletIdsByBackendId(1001L);
+        Assertions.assertTrue(backend1001Tablets.contains(tabletId2));
+    }
+
+    @Test
+    public void testDeleteTabletsEmptyCollection() {
+        // Given: Add a tablet
+        long tabletId = 3001L;
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+        tabletInvertedIndex.addReplica(tabletId, replica1);
+
+        // When: Batch delete with empty collection
+        tabletInvertedIndex.deleteTablets(Collections.emptyList());
+
+        // Then: Tablet should still exist
+        Assertions.assertNotNull(tabletInvertedIndex.getTabletMeta(tabletId));
+        Assertions.assertEquals(1, tabletInvertedIndex.getReplicasByTabletId(tabletId).size());
+    }
+
+    @Test
+    public void testDeleteTabletsConsistentWithSingleDelete() {
+        // Verify batch delete produces same result as sequential single deletes
+        long tabletId1 = 4001L;
+        long tabletId2 = 4002L;
+
+        // Setup two identical indexes
+        TabletInvertedIndex batchIndex = new TabletInvertedIndex();
+        TabletInvertedIndex singleIndex = new TabletInvertedIndex();
+
+        TabletMeta meta = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
+        Replica r1 = new Replica(200L, 2000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2 = new Replica(201L, 2001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        // Need separate replica instances for the second index
+        Replica r1Copy = new Replica(200L, 2000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2Copy = new Replica(201L, 2001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+
+        for (TabletInvertedIndex idx : new TabletInvertedIndex[] {batchIndex, singleIndex}) {
+            idx.addTablet(tabletId1, meta);
+            idx.addTablet(tabletId2, meta);
+        }
+        batchIndex.addReplica(tabletId1, r1);
+        batchIndex.addReplica(tabletId2, r2);
+        singleIndex.addReplica(tabletId1, r1Copy);
+        singleIndex.addReplica(tabletId2, r2Copy);
+
+        // Batch delete
+        batchIndex.deleteTablets(Arrays.asList(tabletId1, tabletId2));
+
+        // Single deletes
+        singleIndex.deleteTablet(tabletId1);
+        singleIndex.deleteTablet(tabletId2);
+
+        // Both should produce same result
+        Assertions.assertNull(batchIndex.getTabletMeta(tabletId1));
+        Assertions.assertNull(batchIndex.getTabletMeta(tabletId2));
+        Assertions.assertNull(singleIndex.getTabletMeta(tabletId1));
+        Assertions.assertNull(singleIndex.getTabletMeta(tabletId2));
+
+        Assertions.assertEquals(
+                batchIndex.getTabletIdsByBackendId(2000L),
+                singleIndex.getTabletIdsByBackendId(2000L));
+        Assertions.assertEquals(
+                batchIndex.getTabletIdsByBackendId(2001L),
+                singleIndex.getTabletIdsByBackendId(2001L));
     }
 
     @Test
