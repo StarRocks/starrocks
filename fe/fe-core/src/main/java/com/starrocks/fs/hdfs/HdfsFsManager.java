@@ -67,6 +67,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -368,12 +369,11 @@ public class HdfsFsManager {
     private final ExecutorService fileSystemClosePool = createFileSystemClosePool();
 
     private static ThreadPoolExecutor createFileSystemClosePool() {
-        String name = "hdfs-fs-close";
         ThreadPoolExecutor pool = ThreadPoolManager.newDaemonThreadPool(
                 5, 5, 60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(1024),
-                new ThreadPoolManager.LogDiscardPolicy(name),
-                name, true);
+                new ThreadPoolExecutor.AbortPolicy(),
+                "hdfs-fs-close", true);
         pool.allowCoreThreadTimeOut(true);
         return pool;
     }
@@ -1657,31 +1657,37 @@ public class HdfsFsManager {
 
                 for (HdfsFs fileSystem : expiredFsList) {
                     CompletableFuture<Void> cf = new CompletableFuture<>();
-                    Future<?> closeTask = fileSystemClosePool.submit(() -> {
-                        fileSystem.getLock().lock();
-                        try {
-                            // check expired again
-                            if (!fileSystem.isExpired(expireSeconds)) {
-                                cf.complete(null);
-                                return;
-                            }
-                            if (!cachedFileSystem.containsKey(fileSystem.getIdentity())) {
-                                cf.complete(null);
-                                return;
-                            }
+                    Future<?> closeTask;
+                    try {
+                        closeTask = fileSystemClosePool.submit(() -> {
+                            fileSystem.getLock().lock();
+                            try {
+                                // check expired again, and verify this is still the same instance in cache
+                                if (!fileSystem.isExpired(expireSeconds)) {
+                                    cf.complete(null);
+                                    return;
+                                }
+                                if (cachedFileSystem.get(fileSystem.getIdentity()) != fileSystem) {
+                                    cf.complete(null);
+                                    return;
+                                }
 
-                            LOG.info("file system {} is expired, close and remove it", fileSystem);
-                            fileSystem.closeFileSystem();
-                            cachedFileSystem.remove(fileSystem.getIdentity());
-                            cf.complete(null);
-                        } catch (Throwable t) {
-                            LOG.error("errors while close file system", t);
-                            cachedFileSystem.remove(fileSystem.getIdentity());
-                            cf.completeExceptionally(t);
-                        } finally {
-                            fileSystem.getLock().unlock();
-                        }
-                    });
+                                LOG.info("file system {} is expired, close and remove it", fileSystem);
+                                fileSystem.closeFileSystem();
+                                cachedFileSystem.remove(fileSystem.getIdentity(), fileSystem);
+                                cf.complete(null);
+                            } catch (Throwable t) {
+                                LOG.error("errors while close file system", t);
+                                cachedFileSystem.remove(fileSystem.getIdentity(), fileSystem);
+                                cf.completeExceptionally(t);
+                            } finally {
+                                fileSystem.getLock().unlock();
+                            }
+                        });
+                    } catch (RejectedExecutionException e) {
+                        LOG.warn("Close pool is saturated, will retry closing file system {} on next run", fileSystem);
+                        continue;
+                    }
 
                     cf.orTimeout(fileSystemCloseTimeoutSecs, TimeUnit.SECONDS).whenComplete((res, ex) -> {
                         if (ex instanceof TimeoutException) {
@@ -1691,7 +1697,9 @@ public class HdfsFsManager {
                     });
                 }
             } finally {
-                HdfsFsManager.this.handleManagementPool.schedule(this, 60, TimeUnit.SECONDS);
+                if (!HdfsFsManager.this.handleManagementPool.isShutdown()) {
+                    HdfsFsManager.this.handleManagementPool.schedule(this, 60, TimeUnit.SECONDS);
+                }
             }
         }
 

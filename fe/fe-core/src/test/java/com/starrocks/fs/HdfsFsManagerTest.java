@@ -39,6 +39,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -284,6 +287,10 @@ public class HdfsFsManagerTest {
     @Test
     public void testFileSystemExpirationChecker() throws Exception {
         HdfsFsManager hdfsFsManager = new HdfsFsManager();
+        // Shut down the auto-scheduled background checker so it cannot race with our manual run
+        ScheduledExecutorService mgmtPool = Deencapsulation.getField(hdfsFsManager, "handleManagementPool");
+        mgmtPool.shutdownNow();
+
         ReentrantLock lock = new ReentrantLock();
         CountDownLatch closeLatch = new CountDownLatch(1);
 
@@ -316,15 +323,15 @@ public class HdfsFsManagerTest {
 
         checker.run();
 
-        // Wait for closeFileSystem(), then poll until the subsequent cache.remove() also completes
+        // closeFileSystem() and cache.remove() run sequentially in the same worker thread;
+        // once the latch fires, spin-wait briefly for the remove() that immediately follows.
         Assertions.assertTrue(closeLatch.await(5, TimeUnit.SECONDS), "closeFileSystem was not called in time");
-        long deadline = System.currentTimeMillis() + 2000;
+        long deadline = System.currentTimeMillis() + 5000;
         while (cache.containsKey(expiredIdentity) && System.currentTimeMillis() < deadline) {
             Thread.sleep(10);
         }
-
         // Verify expired fs is removed and closed
-        Assertions.assertFalse(cache.containsKey(expiredIdentity));
+        Assertions.assertFalse(cache.containsKey(expiredIdentity), "cache.remove() did not complete in time");
         Mockito.verify(expiredFs, Mockito.times(1)).closeFileSystem();
 
         // Verify normal fs is still there and not closed
@@ -335,6 +342,9 @@ public class HdfsFsManagerTest {
     @Test
     public void testFileSystemExpirationCheckerBranches() throws Exception {
         HdfsFsManager hdfsFsManager = new HdfsFsManager();
+        // Shut down the auto-scheduled background checker so it cannot race with our manual run
+        ScheduledExecutorService mgmtPool = Deencapsulation.getField(hdfsFsManager, "handleManagementPool");
+        mgmtPool.shutdownNow();
         Deencapsulation.setField(hdfsFsManager, "fileSystemCloseTimeoutSecs", 1L);
 
         Map<HdfsFsIdentity, HdfsFs> cache = Deencapsulation.getField(hdfsFsManager, "cachedFileSystem");
@@ -423,6 +433,35 @@ public class HdfsFsManagerTest {
         // Verify case 4
         Mockito.verify(fs4, Mockito.times(1)).closeFileSystem();
         Assertions.assertFalse(cache.containsKey(id4));
+    }
+
+    @Test
+    public void testClosePoolRejection() throws Exception {
+        HdfsFsManager hdfsFsManager = new HdfsFsManager();
+        ScheduledExecutorService mgmtPool = Deencapsulation.getField(hdfsFsManager, "handleManagementPool");
+        mgmtPool.shutdownNow();
+
+        // Replace fileSystemClosePool with a terminated executor to simulate pool saturation
+        ExecutorService saturatedPool = Executors.newSingleThreadExecutor();
+        saturatedPool.shutdown();
+        Deencapsulation.setField(hdfsFsManager, "fileSystemClosePool", saturatedPool);
+
+        Map<HdfsFsIdentity, HdfsFs> cache = Deencapsulation.getField(hdfsFsManager, "cachedFileSystem");
+
+        HdfsFs fs = Mockito.mock(HdfsFs.class);
+        Mockito.when(fs.isExpired(Mockito.anyLong())).thenReturn(true);
+        HdfsFsIdentity id = new HdfsFsIdentity("hdfs://rejected", "user");
+        Mockito.when(fs.getIdentity()).thenReturn(id);
+        cache.put(id, fs);
+
+        Class<?> checkerClass = Class.forName("com.starrocks.fs.hdfs.HdfsFsManager$FileSystemExpirationChecker");
+        Runnable checker = (Runnable) Deencapsulation.newInstance(checkerClass, hdfsFsManager);
+
+        checker.run();
+
+        // fs should remain in cache — rejected tasks are retried on the next checker run
+        Assertions.assertTrue(cache.containsKey(id));
+        Mockito.verify(fs, Mockito.never()).closeFileSystem();
     }
 
 }
