@@ -25,7 +25,10 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+<<<<<<< HEAD
 #include "column/chunk.h"
+=======
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -147,7 +150,11 @@ TEST_F(LeadLagWindowTest, test_basic_lag) {
     }
 }
 
+<<<<<<< HEAD
 TEST_F(LeadLagWindowTest, test_default_value_is_col_and_ignore_nulls) {
+=======
+TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     // lag_in (ignoreNulls=true) with non-constant default column [1, 2, 3, 4]
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -172,7 +179,11 @@ TEST_F(LeadLagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
+<<<<<<< HEAD
     Columns args = build_lead_lag_args(value_col, offset, default_col);
+=======
+    Columns args = build_lag_args(value_col, offset, default_col);
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -199,7 +210,11 @@ TEST_F(LeadLagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     }
 }
 
+<<<<<<< HEAD
 TEST_F(LeadLagWindowTest, test_lag_ignore_nulls) {
+=======
+TEST_F(LagWindowTest, test_lag_ignore_nulls) {
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -294,7 +309,11 @@ TEST_F(LeadLagWindowTest, test_default_value_is_col) {
     }
 }
 
+<<<<<<< HEAD
 TEST_F(LeadLagWindowTest, test_lag_large_binary) {
+=======
+TEST_F(LagWindowTest, test_lag_large_binary) {
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     auto data_col = LargeBinaryColumn::create();
     auto null_col = NullColumn::create();
 
@@ -1151,7 +1170,11 @@ TEST_F(LeadLagWindowTest, test_array_non_const_default_out_of_range_sets_null_ig
     ASSERT_TRUE(s->is_null);
 }
 
+<<<<<<< HEAD
 TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
+=======
+TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     // LargeBinaryColumn as value, regular BinaryColumn as non-const default.
     // This tests the fix for wrong down_cast on columns[2] when columns[0] is LargeBinaryColumn.
     auto data_col = LargeBinaryColumn::create();
@@ -1179,7 +1202,11 @@ TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
 
     const int64_t offset = 1;
 
+<<<<<<< HEAD
     Columns args = build_lead_lag_args(value_col, offset, default_col);
+=======
+    Columns args = build_lag_args(value_col, offset, default_col);
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
@@ -1205,6 +1232,7 @@ TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
     }
 }
 
+<<<<<<< HEAD
 TEST_F(LeadLagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -1828,4 +1856,6 @@ TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_multi_partition) {
     }
 }
 
+=======
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 } // namespace starrocks

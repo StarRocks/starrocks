@@ -17,6 +17,10 @@
 #include <limits>
 #include <type_traits>
 
+<<<<<<< HEAD
+=======
+#include "base/container/raw_container.h"
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -653,7 +657,11 @@ public:
         if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
             return;
         }
+<<<<<<< HEAD
         Slice rhs = GetContainer<LT>::get_data(columns[1], row_num);
+=======
+        Slice rhs = ColumnHelper::get_binary_slice(columns[1], row_num);
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 

@@ -20,6 +20,10 @@
 #include <limits>
 #include <type_traits>
 
+<<<<<<< HEAD
+=======
+#include "base/container/raw_container.h"
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
@@ -143,7 +147,17 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+<<<<<<< HEAD
         ColumnHelper::append_column_value<LT>(to, this->data(state).get_result());
+=======
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(to->is_binary() || to->is_large_binary());
+            ColumnHelper::append_binary_value(to, this->data(state).slice());
+        } else {
+            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
+            down_cast<InputColumnType*>(to)->append(this->data(state).result);
+        }
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -152,15 +166,31 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+<<<<<<< HEAD
         ColumnHelper::append_column_value<LT>(to, this->data(state).get_result());
+=======
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(to->is_binary() || to->is_large_binary());
+            ColumnHelper::append_binary_value(to, this->data(state).slice());
+        } else {
+            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
+            down_cast<InputColumnType*>(to)->append(this->data(state).result);
+        }
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
         if constexpr (lt_is_string_or_binary<LT>) {
+<<<<<<< HEAD
             for (size_t i = start; i < end; ++i) {
                 ColumnHelper::append_column_value<LT>(dst, this->data(state).get_result());
+=======
+            auto* column = ColumnHelper::get_data_column(dst);
+            for (size_t i = start; i < end; ++i) {
+                ColumnHelper::append_binary_value(column, this->data(state).slice());
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
             }
         } else {
             auto* column = down_cast<InputColumnType*>(dst);
@@ -180,7 +210,20 @@ public:
         }
     }
 
+<<<<<<< HEAD
     T get_row_value(const Column* column, size_t row_num) const { return GetContainer<LT>::get_data(column, row_num); }
+=======
+    T get_row_value(const Column* column, size_t row_num) const {
+        if constexpr (lt_is_string_or_binary<LT>) {
+            DCHECK(column->is_binary() || column->is_large_binary());
+            return ColumnHelper::get_binary_slice(column, row_num);
+        } else {
+            DCHECK(!column->is_nullable() && !column->is_binary() && !column->is_large_binary());
+            const auto& col = down_cast<const InputColumnType&>(*column);
+            return col.immutable_data()[row_num];
+        }
+    }
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
@@ -252,7 +295,11 @@ public:
     void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
+<<<<<<< HEAD
             DCHECK(to[0]->is_binary() || to[0]->is_large_binary());
+=======
+            DCHECK((*to[0]).is_binary() || (*to[0]).is_large_binary());
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         } else {
             DCHECK(to[0]->is_numeric());
         }

@@ -499,8 +499,14 @@ private:
     }
 
     template <typename DataArrayType>
+<<<<<<< HEAD
     static bool _check_overlap_nullable(const HashSet& hash_set, const DataArrayType& data, const NullData& null_data,
                                         uint32_t start, uint32_t end, bool has_null, size_t index) {
+=======
+    static bool _check_overlap_nullable(const HashSet& hash_set, const DataArrayType& data,
+                                        const ImmutableNullData& null_data, uint32_t start, uint32_t end, bool has_null,
+                                        size_t index) {
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         for (auto i = start; i < end; i++) {
             if (null_data[i] == 1) {
                 if (has_null) {

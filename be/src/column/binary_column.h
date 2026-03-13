@@ -43,8 +43,11 @@ public:
 
     size_t size() const;
 
+<<<<<<< HEAD
     size_t immutable_bytes_size() const;
 
+=======
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 private:
     template <typename T>
     void init(const BinaryColumnBase<T>& column);
@@ -63,7 +66,25 @@ public:
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
+<<<<<<< HEAD
     using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+=======
+    using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+
+    using ProxyContainer = ::starrocks::BinaryDataProxyContainer;
+
+    struct ImmContainer {
+        ImmContainer() = default;
+        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
+
+        Slice operator[](size_t index) const { return _column->get_slice(index); }
+
+        size_t size() const { return _column->size(); }
+
+    private:
+        const BinaryColumnBase* _column = nullptr;
+    };
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 
     using Container = Buffer<Slice>;
     using BinaryDataProxyContainer = starrocks::BinaryDataProxyContainer;
@@ -319,7 +340,16 @@ public:
 
     const ProxyContainer& get_proxy_data() const { return _immuable_container; }
 
+<<<<<<< HEAD
     Bytes& get_bytes() { return _bytes; }
+=======
+    ProxyContainer get_proxy_data() const { return ProxyContainer(*this); }
+
+    Bytes& get_bytes() {
+        _ensure_materialized();
+        return _bytes;
+    }
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 
     const Bytes& get_bytes() const { return _bytes; }
 
@@ -406,6 +436,7 @@ inline size_t BinaryDataProxyContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
 }
 
+<<<<<<< HEAD
 inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
     if (_column == nullptr) {
         return 0;
@@ -416,6 +447,8 @@ inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
     return down_cast<const BinaryColumn*>(_column)->get_bytes().size();
 }
 
+=======
+>>>>>>> 09d0568 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
 template <typename T>
 inline void BinaryDataProxyContainer::init(const BinaryColumnBase<T>& column) {
     _column = &column;
