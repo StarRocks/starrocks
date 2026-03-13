@@ -38,10 +38,7 @@ FORCE:
 ${BUILD_DIR}/gen_cpp/.%_proto.stamp: ${CURDIR}/%.proto FORCE | ${BUILD_DIR}/gen_cpp
 	@set -e; \
 	checksum="$$( (command -v sha256sum >/dev/null 2>&1 && sha256sum "$<" || shasum -a 256 "$<") | awk '{print $$1}')"; \
-	protoc_path="$$(command -v ${PROTOC} 2>/dev/null || printf '%s' '${PROTOC}')"; \
-	protoc_version="$$( ${PROTOC} --version 2>/dev/null || echo unknown )"; \
-	stamp_value="$$checksum|$$protoc_path|$$protoc_version"; \
-	if [ -f "$@" ] && [ "$$(cat "$@")" = "$$stamp_value" ]; then \
+	if [ -f "$@" ] && [ "$$(cat "$@")" = "$$checksum" ]; then \
 		base="$$(basename "$<" .proto)"; \
 		if [ -f "${BUILD_DIR}/gen_cpp/$${base}.pb.h" ] && [ -f "${BUILD_DIR}/gen_cpp/$${base}.pb.cc" ]; then \
 			touch "$@"; \
@@ -50,7 +47,7 @@ ${BUILD_DIR}/gen_cpp/.%_proto.stamp: ${CURDIR}/%.proto FORCE | ${BUILD_DIR}/gen_
 	fi; \
 	echo "Generating proto $<"; \
 	${PROTOC} --proto_path=${CURDIR} --cpp_out=${BUILD_DIR}/gen_cpp "$<"; \
-	echo "$$stamp_value" > "$@"
+	echo "$$checksum" > "$@"
 
 ${BUILD_DIR}/gen_cpp/%.pb.h ${BUILD_DIR}/gen_cpp/%.pb.cc: ${BUILD_DIR}/gen_cpp/.%_proto.stamp ;
 
