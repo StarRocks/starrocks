@@ -309,6 +309,8 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'run-java-exts-ut.sh'
+              - 'java-extensions/**'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
