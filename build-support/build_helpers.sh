@@ -121,6 +121,33 @@ starrocks_validate_darwin_thirdparty() {
         fi
     done
 
+    local required_darwin_dylibs=(
+        "libgrpc.dylib"
+        "libgrpc++.dylib"
+        "libkrb5support.dylib"
+        "libkrb5.dylib"
+        "libcom_err.dylib"
+        "libk5crypto.dylib"
+        "libgssapi_krb5.dylib"
+        "libsasl2.dylib"
+        "libxml2.dylib"
+    )
+    local required_darwin_dylib=""
+    for required_darwin_dylib in "${required_darwin_dylibs[@]}"; do
+        if [[ ! -e "${tp_installed}/lib/${required_darwin_dylib}" &&
+              ! -e "${tp_installed}/lib64/${required_darwin_dylib}" ]]; then
+            echo "Error: missing macOS thirdparty dylib: ${required_darwin_dylib} under ${tp_installed}/lib or ${tp_installed}/lib64"
+            exit 1
+        fi
+    done
+
+    local jemalloc_shared_lib=""
+    jemalloc_shared_lib=$(find "${tp_installed}/jemalloc/lib-shared" -maxdepth 1 -name 'libjemalloc*.dylib' -print -quit 2>/dev/null)
+    if [[ -z "${jemalloc_shared_lib}" ]]; then
+        echo "Error: missing macOS thirdparty jemalloc dylib under ${tp_installed}/jemalloc/lib-shared"
+        exit 1
+    fi
+
     local bundled_java_home="$(starrocks_resolve_java_home "${tp_installed}/open_jdk")"
     local resolved_java_home=""
     if [[ -n "${JAVA_HOME:-}" ]]; then
