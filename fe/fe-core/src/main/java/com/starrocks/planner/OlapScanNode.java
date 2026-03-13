@@ -95,6 +95,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNormalOlapScanNode;
@@ -201,6 +202,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     private boolean enableGlobalLateMaterialization = false;
+    private List<Expr> partitionConjuncts = Lists.newArrayList();
+
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -244,6 +247,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public boolean isPreAggregation() {
         return isPreAggregation;
+    }
+
+    public List<Expr> getPartitionConjuncts() {
+        return partitionConjuncts;
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
@@ -554,6 +561,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
+                                      List<TKeyRange> partitionRanges,
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
@@ -595,6 +603,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(physicalPartition.getId());
+            internalRange.setPartition_column_ranges(partitionRanges);
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
@@ -793,7 +802,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 }
                 totalTabletsNum += selectedIndex.getTablets().size();
                 selectedTabletsNum += tablets.size();
-                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
+                addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, List.of(), localBeId);
             }
         }
     }
@@ -1197,6 +1206,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setSample_options(sampleOptions);
                 sample.toThrift(sampleOptions);
             }
+            msg.olap_scan_node.setPartition_conjuncts(ExprToThrift.treesToThrift(partitionConjuncts));
         }
     }
 
