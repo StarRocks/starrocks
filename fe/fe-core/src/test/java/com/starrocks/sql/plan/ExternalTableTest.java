@@ -266,6 +266,7 @@ public class ExternalTableTest extends PlanTestBase {
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            partition.getDefaultPhysicalPartition().setDataVersion(2);
             for (MaterializedIndex mIndex : partition.getDefaultPhysicalPartition()
                     .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
