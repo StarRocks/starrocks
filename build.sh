@@ -54,11 +54,30 @@ is_aarch64_host() {
     [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]
 }
 
+detect_parallelism() {
+    local cpu_count=""
+
+    if is_darwin; then
+        cpu_count="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+    else
+        cpu_count="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+
+    if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
+        cpu_count=1
+    fi
+    echo "${cpu_count}"
+}
+
 resolve_java_home() {
     local java_home_candidate="$1"
 
     if [[ -z "${java_home_candidate}" ]]; then
         return 1
+    fi
+    if [[ -f "${java_home_candidate}/Contents/Home/include/jni.h" ]]; then
+        echo "${java_home_candidate}/Contents/Home"
+        return 0
     fi
     if [[ -f "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home/include/jni.h" ]]; then
         echo "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home"
@@ -69,6 +88,29 @@ resolve_java_home() {
         return 0
     fi
     echo "${java_home_candidate}"
+}
+
+setup_darwin_build_env() {
+    local bundled_java_home=""
+
+    export STARROCKS_ENV_QUIET=1
+    . "${STARROCKS_HOME}/build-mac/env_macos.sh"
+
+    unset STARROCKS_GCC_HOME
+
+    MVN_CMD=${CUSTOM_MVN:-mvn}
+    export MVN_CMD
+    CMAKE_CMD=${CUSTOM_CMAKE:-cmake}
+    export CMAKE_CMD
+    BUILD_SYSTEM=ninja
+    export BUILD_SYSTEM
+
+    bundled_java_home="${STARROCKS_THIRDPARTY}/installed/open_jdk"
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        export JAVA_HOME="$(resolve_java_home "${JAVA_HOME}")"
+    elif [[ -d "${bundled_java_home}" ]]; then
+        export JAVA_HOME="$(resolve_java_home "${bundled_java_home}")"
+    fi
 }
 
 export STARROCKS_HOME=${ROOT}
@@ -99,20 +141,22 @@ if [ -z $STARROCKS_COMMIT_HASH ] ; then
 fi
 
 set -eo pipefail
-. ${STARROCKS_HOME}/env.sh
-if is_darwin && [[ -n "${JAVA_HOME:-}" ]]; then
-    export JAVA_HOME="$(resolve_java_home "${JAVA_HOME}")"
+if is_darwin; then
+    setup_darwin_build_env
+else
+    . ${STARROCKS_HOME}/env.sh
 fi
 
 if [[ $OSTYPE == darwin* ]] ; then
-    PARALLEL=$(sysctl -n hw.ncpu)
+    PARALLEL=$(detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
-    PARALLEL=$[$(nproc)/4+1]
+    host_parallelism=$(detect_parallelism)
+    PARALLEL=$[$host_parallelism/4+1]
 fi
 
 validate_darwin_thirdparty() {
@@ -155,7 +199,7 @@ validate_darwin_thirdparty() {
         fi
     done
 
-    local bundled_java_home="${tp_installed}/open_jdk"
+    local bundled_java_home="$(resolve_java_home "${tp_installed}/open_jdk")"
     local resolved_java_home=""
     if [[ -n "${JAVA_HOME:-}" ]]; then
         resolved_java_home="$(resolve_java_home "${JAVA_HOME}")"
