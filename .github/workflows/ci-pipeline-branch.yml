@@ -309,8 +309,8 @@ jobs:
               - 'fe/**'
               - 'gensrc/**'
               - 'run-fe-ut.sh'
+              - 'run-java-exts-ut.sh'
               - 'java-extensions/**'
-              - 'build.sh'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
@@ -338,7 +338,7 @@ jobs:
         with:
           filters: |
             java:
-              - '**.java'
+              - 'fe/**/*.java'
 
       - run: echo ${{ steps.java-file.outputs.java }}
 

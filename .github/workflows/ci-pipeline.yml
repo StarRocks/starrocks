@@ -495,17 +495,20 @@ jobs:
               - 'fe/!(**/test/**)**'
               - 'gensrc/**'
               - 'java-extensions/**'
-              - 'build.sh'
-              - '**/pom.xml'
             ut:
               - 'fe/**/test/**'
               - 'run-fe-ut.sh'
+              - 'run-java-exts-ut.sh'
             java:
-              - '**.java'
+              - 'fe/**/*.java'
             extension:
               - 'java-extensions/**'
+              - 'run-java-exts-ut.sh'
             pom:
-              - '**/pom.xml'
+              - 'fe/pom.xml'
+              - 'fe/**/pom.xml'
+              - 'java-extensions/pom.xml'
+              - 'java-extensions/**/pom.xml'
 
       - name: Prepare info
         run: |
