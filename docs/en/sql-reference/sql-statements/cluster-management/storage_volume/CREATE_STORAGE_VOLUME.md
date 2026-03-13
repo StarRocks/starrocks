@@ -11,6 +11,9 @@ A storage volume consists of the properties and credential information of the re
 > **CAUTION**
 >
 > Only users with the CREATE STORAGE VOLUME privilege on the SYSTEM level can perform this operation.
+>
+> In shared-data mode, StarRocks performs a storage accessibility check for each `LOCATION` during `CREATE STORAGE VOLUME`.
+> If credential, endpoint, or network access is invalid, the statement fails immediately.
 
 ## Syntax
 

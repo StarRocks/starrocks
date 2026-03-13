@@ -3514,6 +3514,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
 
+##### `enable_storage_volume_access_check`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to validate storage volume accessibility before `CREATE STORAGE VOLUME` and `ALTER STORAGE VOLUME` persist metadata in shared-data mode. Keep this parameter enabled to fail fast on invalid credentials or endpoints. You can temporarily disable it for emergency rollback if object storage connectivity is unstable.
+- Introduced in: v4.1.0, v4.0.7, v3.5.15
+
 ##### `gcp_gcs_impersonation_service_account`
 
 - Default: Empty string
