@@ -33,6 +33,11 @@
 # compiled and installed correctly.
 ##############################################################
 startTime=$(date +%s)
+ROOT=`dirname "$0"`
+ROOT=`cd "$ROOT"; pwd`
+export STARROCKS_HOME=${ROOT}
+
+. "${STARROCKS_HOME}/build-support/build_helpers.sh"
 
 format_time() {
     local epoch="$1"
@@ -42,78 +47,11 @@ format_time() {
         date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
     fi
 }
-ROOT=`dirname "$0"`
-ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
-
-is_darwin() {
-    [[ "$OSTYPE" == darwin* ]]
-}
 
 is_aarch64_host() {
     [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]
 }
-
-detect_parallelism() {
-    local cpu_count=""
-
-    if is_darwin; then
-        cpu_count="$(sysctl -n hw.ncpu 2>/dev/null || true)"
-    else
-        cpu_count="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
-    fi
-
-    if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
-        cpu_count=1
-    fi
-    echo "${cpu_count}"
-}
-
-resolve_java_home() {
-    local java_home_candidate="$1"
-
-    if [[ -z "${java_home_candidate}" ]]; then
-        return 1
-    fi
-    if [[ -f "${java_home_candidate}/Contents/Home/include/jni.h" ]]; then
-        echo "${java_home_candidate}/Contents/Home"
-        return 0
-    fi
-    if [[ -f "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home/include/jni.h" ]]; then
-        echo "${java_home_candidate}/libexec/openjdk.jdk/Contents/Home"
-        return 0
-    fi
-    if [[ -f "${java_home_candidate}/include/jni.h" ]]; then
-        echo "${java_home_candidate}"
-        return 0
-    fi
-    echo "${java_home_candidate}"
-}
-
-setup_darwin_build_env() {
-    local bundled_java_home=""
-
-    export STARROCKS_ENV_QUIET=1
-    . "${STARROCKS_HOME}/build-mac/env_macos.sh"
-
-    unset STARROCKS_GCC_HOME
-
-    MVN_CMD=${CUSTOM_MVN:-mvn}
-    export MVN_CMD
-    CMAKE_CMD=${CUSTOM_CMAKE:-cmake}
-    export CMAKE_CMD
-    BUILD_SYSTEM=ninja
-    export BUILD_SYSTEM
-
-    bundled_java_home="${STARROCKS_THIRDPARTY}/installed/open_jdk"
-    if [[ -n "${JAVA_HOME:-}" ]]; then
-        export JAVA_HOME="$(resolve_java_home "${JAVA_HOME}")"
-    elif [[ -d "${bundled_java_home}" ]]; then
-        export JAVA_HOME="$(resolve_java_home "${bundled_java_home}")"
-    fi
-}
-
-export STARROCKS_HOME=${ROOT}
 
 if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
@@ -141,21 +79,21 @@ if [ -z $STARROCKS_COMMIT_HASH ] ; then
 fi
 
 set -eo pipefail
-if is_darwin; then
-    setup_darwin_build_env
+if starrocks_is_darwin; then
+    starrocks_setup_darwin_build_env
 else
     . ${STARROCKS_HOME}/env.sh
 fi
 
-if [[ $OSTYPE == darwin* ]] ; then
-    PARALLEL=$(detect_parallelism)
+if starrocks_is_darwin ; then
+    PARALLEL=$(starrocks_detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
-    host_parallelism=$(detect_parallelism)
+    host_parallelism=$(starrocks_detect_parallelism)
     PARALLEL=$[$host_parallelism/4+1]
 fi
 
@@ -199,10 +137,10 @@ validate_darwin_thirdparty() {
         fi
     done
 
-    local bundled_java_home="$(resolve_java_home "${tp_installed}/open_jdk")"
+    local bundled_java_home="$(starrocks_resolve_java_home "${tp_installed}/open_jdk")"
     local resolved_java_home=""
     if [[ -n "${JAVA_HOME:-}" ]]; then
-        resolved_java_home="$(resolve_java_home "${JAVA_HOME}")"
+        resolved_java_home="$(starrocks_resolve_java_home "${JAVA_HOME}")"
     fi
     local bundled_jni_header="${bundled_java_home}/include/jni.h"
     local java_home_jni_header=""
@@ -285,22 +223,7 @@ Usage: $0 <options>
   exit 1
 }
 
-GETOPT_BIN="getopt"
-if [[ "$OSTYPE" == darwin* ]]; then
-    # Try to detect gnu-getopt path dynamically
-    if command -v brew &> /dev/null; then
-        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
-        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
-            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
-        else
-            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
-            exit 1
-        fi
-    else
-        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
-        exit 1
-    fi
-fi
+GETOPT_BIN="$(starrocks_resolve_getopt_bin)" || exit 1
 
 OPTS=$(${GETOPT_BIN} \
   -n $0 \
@@ -351,7 +274,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
-if is_darwin; then
+if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
     WITH_STARCACHE=ON
@@ -360,7 +283,7 @@ WITH_PCH=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-if is_darwin; then
+if starrocks_is_darwin; then
     WITH_TENANN=OFF
 else
     WITH_TENANN=ON
@@ -398,7 +321,7 @@ if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
-    if is_darwin; then
+    if starrocks_is_darwin; then
         ENABLE_JIT=OFF
     else
         ENABLE_JIT=ON
@@ -521,7 +444,7 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     BUILD_JAVA_EXT=OFF
 fi
 
-if is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
+if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
     validate_darwin_thirdparty
 fi
 
@@ -591,7 +514,7 @@ fi
 cd ${STARROCKS_HOME}
 
 JAVA_LIBRARY_PATH=""
-if is_darwin; then
+if starrocks_is_darwin; then
     if [[ -d "${JAVA_HOME}/lib/server" ]]; then
         JAVA_LIBRARY_PATH="${JAVA_HOME}/lib/server:${JAVA_HOME}/lib"
     fi
@@ -813,7 +736,7 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] && ! is_darwin ; then
+    if [ "${ibuildtype}" == "release" ] && ! starrocks_is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
         FORMAT_LIB=libstarrocks_format.so
         FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
@@ -854,13 +777,13 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
     shopt -s nullglob
     be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
-    if is_darwin; then
+    if starrocks_is_darwin; then
         be_shared_libs+=(${STARROCKS_HOME}/be/output/lib/*.dylib ${STARROCKS_HOME}/be/output/lib/*.dylib.*)
     fi
     if (( ${#be_shared_libs[@]} > 0 )); then
         cp -r -p "${be_shared_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/
     fi
-    if is_darwin; then
+    if starrocks_is_darwin; then
         if [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib && ! -e ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib ]]; then
             cp -p ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib
         fi
@@ -871,7 +794,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     fi
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
-    if is_darwin; then
+    if starrocks_is_darwin; then
         jemalloc_release_libs=(${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib.*)
         if (( ${#jemalloc_release_libs[@]} > 0 )); then
             cp -r -p "${jemalloc_release_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/jemalloc/
@@ -896,7 +819,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] && ! is_darwin ; then
+    if [ "${ibuildtype}" == "release" ] && ! starrocks_is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
         BE_BIN=starrocks_be
         BE_BIN_DEBUGINFO=starrocks_be.debuginfo
