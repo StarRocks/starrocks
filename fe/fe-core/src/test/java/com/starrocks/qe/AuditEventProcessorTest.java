@@ -38,14 +38,29 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
+import com.starrocks.plugin.AuditPlugin;
+import com.starrocks.plugin.Plugin;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.plugin.PluginInfo.PluginType;
+import com.starrocks.plugin.PluginMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+=======
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+>>>>>>> 46e144a221 ([BugFix] Fix AuditEventProcessor thread exit caused by OutOfMemoryException (#70206))
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class AuditEventProcessorTest {
 
@@ -158,6 +173,61 @@ public class AuditEventProcessorTest {
             }
             long total = System.currentTimeMillis() - start;
             System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+        }
+    }
+
+    // A plugin that throws OOM on the first exec() call, succeeds afterwards.
+    private static class OomOnFirstExecPlugin extends Plugin implements AuditPlugin {
+        private final CountDownLatch processedLatch;
+        private boolean firstCall = true;
+
+        OomOnFirstExecPlugin(CountDownLatch processedLatch) {
+            this.processedLatch = processedLatch;
+        }
+
+        @Override
+        public boolean eventFilter(AuditEvent.EventType type) {
+            return true;
+        }
+
+        @Override
+        public void exec(AuditEvent event) {
+            if (firstCall) {
+                firstCall = false;
+                throw new OutOfMemoryError("simulated OOM in audit plugin");
+            }
+            processedLatch.countDown();
+        }
+    }
+
+    @Test
+    public void testWorkerSurvivesOOMInPluginExec(@Mocked PluginMgr mockPluginMgr) throws Exception {
+        CountDownLatch processedLatch = new CountDownLatch(2);
+        try (OomOnFirstExecPlugin fakePlugin = new OomOnFirstExecPlugin(processedLatch)) {
+            new Expectations() {{
+                    mockPluginMgr.getActivePluginList(PluginType.AUDIT);
+                    result = Collections.singletonList(fakePlugin);
+                }};
+
+            AuditEventProcessor processor = new AuditEventProcessor(mockPluginMgr);
+            processor.start();
+            try {
+                AuditEvent event = new AuditEvent.AuditEventBuilder()
+                        .setEventType(EventType.AFTER_QUERY)
+                        .setTimestamp(System.currentTimeMillis())
+                        .setClientIp("127.0.0.1")
+                        .setUser("user1")
+                        .setDb("db1")
+                        .setStmt("select 1")
+                        .build();
+                for (int i = 0; i < 5; i++) {
+                    processor.handleAuditEvent(event);
+                }
+                Assertions.assertTrue(processedLatch.await(10, TimeUnit.SECONDS),
+                        "Worker should survive OOM and continue processing subsequent events");
+            } finally {
+                processor.stop();
+            }
         }
     }
 
