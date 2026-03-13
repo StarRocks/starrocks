@@ -110,9 +110,8 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
-                if (value instanceof String) {
-                    String stringValue = (String) value;
-                    if ((stringValue == null || stringValue.isEmpty()) && af.ignore_empty()) {
+                if (value instanceof String stringValue) {
+                    if (stringValue.isEmpty() && af.ignore_empty()) {
                         continue;
                     }
                 }
