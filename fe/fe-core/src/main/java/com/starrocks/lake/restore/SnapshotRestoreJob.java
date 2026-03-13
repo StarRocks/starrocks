@@ -429,7 +429,7 @@ public class SnapshotRestoreJob extends AbstractJob {
 
             String storageVolumeId = tableForRestore.getTableProperty() != null
                     ? tableForRestore.getTableProperty().getStorageVolume() : null;
-            CreateTableInfoEPack createInfo = new CreateTableInfoEPack(targetDatabase.getFullName(),
+            CreateTableInfoEPack createInfo = new CreateTableInfoEPack(targetDatabase,
                     tableForRestore, storageVolumeId, null, null);
             globalStateMgr.getEditLog().logCreateTable(createInfo, wal -> {
                 targetDatabase.registerTableUnlocked(tableForRestore);

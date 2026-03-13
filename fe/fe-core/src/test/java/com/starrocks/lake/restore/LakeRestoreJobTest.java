@@ -34,6 +34,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.KeysType;
@@ -55,7 +56,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 
 public class LakeRestoreJobTest {
@@ -188,7 +189,11 @@ public class LakeRestoreJobTest {
         local.getLocalMetastore().replayCreateDb(new CreateDbInfo(dbId, "target_db"));
 
         EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logCreateTable(any(), any());
+        doAnswer(invocation -> {
+            WALApplier applier = invocation.getArgument(1);
+            applier.apply(invocation.getArgument(0));
+            return null;
+        }).when(editLog).logCreateTable(any(), any());
         local.setEditLog(editLog);
 
         SnapshotRestoreJob job = new SnapshotRestoreJob(1L, "job_register", dbId, tableId, Lists.newArrayList(), table);

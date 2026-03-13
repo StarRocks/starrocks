@@ -99,6 +99,10 @@ public class TableUID {
         return new TableUID(catalogId, databaseUUID, tblUUID);
     }
 
+    public static TableUID generate(Database database, Table table) {
+        return new TableUID(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID, database.getUUID(), table.getUUID());
+    }
+
     public long getCatalogId() {
         return catalogId;
     }

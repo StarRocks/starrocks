@@ -41,6 +41,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
+import com.starrocks.epack.authorization.TableUID;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
@@ -49,6 +51,7 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.TruncateTableAnalyzer;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -240,6 +243,31 @@ public class LocalMetaStoreTest {
 
         // No invocation at all
         Assertions.assertEquals(0, invokeCount.get());
+    }
+
+    @Test
+    public void testCreateTableWithRowAccessPolicy() throws Exception {
+        String policyName = "rp_local_metastore_ut";
+        String tableName = "t_row_access_policy_ut";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create row access policy " + policyName + " as (col bigint) returns boolean -> true",
+                connectContext), connectContext);
+
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test." + tableName + " ("
+                + "k1 bigint"
+                + ") DUPLICATE KEY(k1) "
+                + "WITH ROW ACCESS POLICY " + policyName + " on (k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 3 "
+                + "PROPERTIES('replication_num' = '1')");
+
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Assertions.assertNotNull(table);
+
+        TableUID tableUID = TableUID.generate(db, table);
+        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+        Assertions.assertTrue(securityPolicyMgr.hasTableAppliedPolicy(tableUID));
+        Assertions.assertEquals(1, securityPolicyMgr.getTableAppliedPolicyInfo(tableUID).getRowAccessPolicyApply().size());
     }
 
     @Test

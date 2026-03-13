@@ -2188,12 +2188,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
 
-            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+            // NOTE: The table metadata has been prepared, and the remaining steps should not fail.
             LOG.info("Successfully create table: {}-{}, in database: {}-{}",
                     table.getName(), table.getId(), db.getFullName(), db.getId());
 
             CreateTableInfoEPack createTableInfo =
-                    new CreateTableInfoEPack(db.getFullName(), table, storageVolumeId,
+                    new CreateTableInfoEPack(db, table, storageVolumeId,
                             columnMaskingPolicyMap, rowAccessPolicies);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo, wal -> {
                 db.registerTableUnlocked(table);
