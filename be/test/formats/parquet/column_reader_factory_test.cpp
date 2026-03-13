@@ -362,45 +362,29 @@ public:
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
 };
 
-class ColumnReaderBloomFilterTest : public testing::Test {
-protected:
-    ParquetField make_field(tparquet::Type::type physical_type) {
-        ParquetField f;
-        f.name = "col";
-        f.type = ColumnType::SCALAR;
-        f.physical_type = physical_type;
-        f.physical_column_index = 0;
-        return f;
-    }
+// Covers the FIXED_LEN_BYTE_ARRAY condition added to check_type_can_apply_bloom_filter.
+TEST(ColumnReaderTest, CheckTypeCanApplyBloomFilterFixedLenByteArray) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::SCALAR;
+    field.physical_column_index = 0;
 
-    bool check(LogicalType logical_type, tparquet::Type::type physical_type) {
-        _field = make_field(physical_type);
-        TestColumnReader reader(&_field);
-        TypeDescriptor desc(logical_type);
-        return reader.check_type_can_apply_bloom_filter(desc, _field);
-    }
+    auto check = [&](LogicalType logical, tparquet::Type::type physical) -> bool {
+        field.physical_type = physical;
+        TestColumnReader reader(&field);
+        return reader.check_type_can_apply_bloom_filter(TypeDescriptor(logical), field);
+    };
 
-    ParquetField _field;
-};
-
-// Line 177: FIXED_LEN_BYTE_ARRAY + TYPE_VARBINARY -> true
-TEST_F(ColumnReaderBloomFilterTest, VarbinaryWithFixedLenByteArray) {
+    // VARBINARY + FIXED_LEN_BYTE_ARRAY is applicable (the new condition)
     EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
-}
 
-// FIXED_LEN_BYTE_ARRAY + TYPE_VARCHAR -> false (line 177 condition false)
-TEST_F(ColumnReaderBloomFilterTest, VarcharWithFixedLenByteArrayNotApplicable) {
+    // VARCHAR + FIXED_LEN_BYTE_ARRAY is not applicable
+    // UUID is stored as FIXED_LEN_BYTE_ARRAY and typically read as VARCHAR
     EXPECT_FALSE(check(TYPE_VARCHAR, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
-}
 
-// BYTE_ARRAY + TYPE_VARBINARY -> true (first OR clause on line 176)
-TEST_F(ColumnReaderBloomFilterTest, VarbinaryWithByteArray) {
-    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
-}
-
-// BYTE_ARRAY + TYPE_VARCHAR -> true
-TEST_F(ColumnReaderBloomFilterTest, VarcharWithByteArray) {
+    // BYTE_ARRAY baseline: both VARCHAR and VARBINARY remain applicable
     EXPECT_TRUE(check(TYPE_VARCHAR, tparquet::Type::BYTE_ARRAY));
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
 }
 
 } // namespace starrocks::parquet
