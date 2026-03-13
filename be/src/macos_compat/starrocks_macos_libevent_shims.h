@@ -19,20 +19,19 @@
 #include <event2/http.h>
 #include <event2/http_struct.h>
 
-#ifndef EVHTTP_REQUEST_NEEDS_SHIM
-#define EVHTTP_REQUEST_NEEDS_SHIM
-
+#ifndef STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA
 static inline void* evhttp_request_get_user_data(struct evhttp_request* req) {
     return req->on_complete_cb_arg;
 }
+#endif
 
+#ifndef STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA
 static inline void evhttp_request_set_user_data(struct evhttp_request* req, void* data) {
     req->on_complete_cb_arg = data;
 }
-
 #endif
 
-#ifndef evhttp_set_newreqcb
+#ifndef STARROCKS_HAVE_EVHTTP_SET_NEWREQCB
 static inline void evhttp_set_newreqcb(struct evhttp* http, int (*cb)(struct evhttp_request*, void*), void* arg) {
     (void)http;
     (void)cb;
@@ -40,7 +39,7 @@ static inline void evhttp_set_newreqcb(struct evhttp* http, int (*cb)(struct evh
 }
 #endif
 
-#ifndef evhttp_request_set_on_free_cb
+#ifndef STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB
 static inline void evhttp_request_set_on_free_cb(struct evhttp_request* req, void (*cb)(struct evhttp_request*, void*),
                                                  void* arg) {
     evhttp_request_set_on_complete_cb(req, cb, arg);

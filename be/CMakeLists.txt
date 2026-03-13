@@ -41,6 +41,8 @@ endmacro()
 
 project(starrocks CXX C)
 
+include(CheckSymbolExists)
+
 # set CMAKE_BUILD_TYPE
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RELEASE)
@@ -76,6 +78,37 @@ set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
+
+if (APPLE)
+    set(_STARROCKS_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES}")
+    set(_STARROCKS_REQUIRED_QUIET "${CMAKE_REQUIRED_QUIET}")
+    list(APPEND CMAKE_REQUIRED_INCLUDES "${THIRDPARTY_DIR}/include" "${THIRDPARTY_DIR}/include/event")
+    set(CMAKE_REQUIRED_QUIET TRUE)
+
+    check_symbol_exists(evhttp_request_get_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+    check_symbol_exists(evhttp_request_set_user_data "event2/http.h" STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+    check_symbol_exists(evhttp_set_newreqcb "event2/http.h" STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+    check_symbol_exists(evhttp_request_set_on_free_cb "event2/http.h"
+                        STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+
+    set(CMAKE_REQUIRED_INCLUDES "${_STARROCKS_REQUIRED_INCLUDES}")
+    set(CMAKE_REQUIRED_QUIET "${_STARROCKS_REQUIRED_QUIET}")
+    unset(_STARROCKS_REQUIRED_INCLUDES)
+    unset(_STARROCKS_REQUIRED_QUIET)
+
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_GET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_USER_DATA=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_SET_NEWREQCB=1)
+    endif()
+    if (STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB)
+        add_compile_definitions(STARROCKS_HAVE_EVHTTP_REQUEST_SET_ON_FREE_CB=1)
+    endif()
+endif()
 
 option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
 message(STATUS "make test: ${MAKE_TEST}")
@@ -420,6 +453,8 @@ if (APPLE)
     set(WL_END_GROUP "")
     set(WL_LINK_STATIC "")
     set(WL_LINK_DYNAMIC "")
+    # Darwin has no GNU whole-archive/group flags. Force-load the static
+    # registrar libraries on executable targets via STARROCKS_FORCE_LOAD_LIBS().
     set(WL_WHOLE_ARCHIVE_PREFIX "")
     set(WL_WHOLE_ARCHIVE_SUFFIX "")
 else()
@@ -687,6 +722,14 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
+function(STARROCKS_FORCE_LOAD_LIBS TARGET_NAME)
+    if (APPLE)
+        foreach(FORCE_LOAD_TARGET IN LISTS ARGN)
+            target_link_options(${TARGET_NAME} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${FORCE_LOAD_TARGET}>")
+        endforeach()
+    endif()
+endfunction()
+
 
 set(STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC})
 if (NOT APPLE)
@@ -781,6 +824,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} Exprs ExprCore)
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -801,6 +845,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")

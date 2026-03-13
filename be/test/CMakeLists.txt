@@ -368,6 +368,7 @@ SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
 
 
 SET(DW_TEST_FILES
@@ -571,6 +572,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs>)
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
 
 
 # =================================================
