@@ -1872,9 +1872,12 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                     "MV should retain original data after refresh failure");
                         } finally {
                             com.starrocks.failpoint.FailPoint.removeTriggerPolicy("MV_REFRESH_INJECT_FAILURE");
+                            com.starrocks.failpoint.FailPoint.enable();
                         }
 
                         // Now do a successful refresh and verify data is updated
+                        // Need to create a new taskRun since the old one may be in failed state
+                        taskRun = TaskRunBuilder.newBuilder(task).build();
                         execPlan = getExecPlan(taskRun);
                         Assertions.assertNotNull(execPlan);
 

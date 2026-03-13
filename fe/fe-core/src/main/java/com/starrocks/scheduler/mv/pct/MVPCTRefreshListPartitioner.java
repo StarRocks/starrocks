@@ -184,15 +184,23 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         logger.info("The process of dropping deferred partitions for materialized view [{}] partitions list [{}]",
                 mv.getName(), deferredDropPartitions);
+        Exception lastException = null;
         for (String mvPartitionName : deferredDropPartitions.getPartitionNames()) {
             try {
                 dropPartition(db, mv, mvPartitionName);
             } catch (Exception e) {
-                logger.warn("Failed to drop deferred partition {} for mv {}, skip",
+                logger.warn("Failed to drop deferred partition {} for mv {}, will retry on next refresh",
                         mvPartitionName, mv.getName(), e);
+                lastException = e;
             }
         }
         deferredDropPartitions = null;
+        // If any partition failed to drop, throw exception to mark refresh as failed
+        // This ensures metadata consistency - we don't mark refresh complete if cleanup failed
+        if (lastException != null) {
+            throw new DmlException("Failed to drop some deferred partitions for mv " + mv.getName() +
+                    ", please retry the refresh", lastException);
+        }
     }
 
     @Override
