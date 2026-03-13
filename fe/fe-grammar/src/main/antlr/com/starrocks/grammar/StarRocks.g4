@@ -2452,6 +2452,7 @@ groupingElement
     | CUBE '(' (expressionList)? ')'                                                    #cube
     | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
     | expressionList                                                                    #singleGroupingSet
+    | ALL                                                                               #groupByAll
     ;
 
 groupingSet

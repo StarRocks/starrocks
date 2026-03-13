@@ -255,6 +255,9 @@ public class GroupByClause implements ParseNode {
                     strBuilder.append(")");
                 }
                 break;
+            case GROUP_BY_ALL:
+                strBuilder.append("ALL");
+                break;
             default:
                 break;
         }
@@ -306,6 +309,9 @@ public class GroupByClause implements ParseNode {
                     strBuilder.append(")");
                 }
                 break;
+            case GROUP_BY_ALL:
+                strBuilder.append("ALL");
+                break;
             default:
                 break;
         }
@@ -318,6 +324,9 @@ public class GroupByClause implements ParseNode {
     }
 
     public boolean isEmpty() {
+        if (groupingType == GroupingType.GROUP_BY_ALL) {
+            return false;
+        }
         return CollectionUtils.isEmpty(groupingExprs);
     }
 
@@ -325,7 +334,8 @@ public class GroupByClause implements ParseNode {
         GROUP_BY,
         GROUPING_SETS,
         ROLLUP,
-        CUBE
+        CUBE,
+        GROUP_BY_ALL
     }
 
     @Override
