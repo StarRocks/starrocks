@@ -1,0 +1,52 @@
+-- name: test_bitmap_max_filter_ratio @sequential
+
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+create table t_bitmap_ratio (
+    id int null,
+    v varchar(20) null,
+    index v_bitmap (v) using bitmap
+) engine=olap
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t_bitmap_ratio
+select
+    generate_series as id,
+    case when generate_series <= 20 then 'hot' else concat('v', generate_series) end as v
+from table(generate_series(1, 100));
+-- result:
+-- !result
+create view profile_bitmap_filter_rows as
+select trim(unnest) as line
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%- BitmapIndexFilterRows:%'
+order by unnest;
+-- result:
+-- !result
+select count(*) from t_bitmap_ratio where v = 'hot';
+-- result:
+20
+-- !result
+select cast(regexp_extract(line, ".*- BitmapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as int) = 0
+from profile_bitmap_filter_rows;
+-- result:
+1
+-- !result
+select /*+SET_VAR(bitmap_max_filter_ratio=600)*/ count(*) from t_bitmap_ratio where v = 'hot';
+-- result:
+20
+-- !result
+select cast(regexp_extract(line, ".*- BitmapIndexFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as int) > 0
+from profile_bitmap_filter_rows;
+-- result:
+1
+-- !result
