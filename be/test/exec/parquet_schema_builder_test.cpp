@@ -114,14 +114,15 @@ TEST_F(ParquetSchemaBuilderTest, FixedLenByteArrayTypes) {
     TypeDescriptor type_desc;
     Status st;
 
-    // FIXED_LEN_BYTE_ARRAY with UUID annotation -> VARBINARY
+    // FIXED_LEN_BYTE_ARRAY with UUID annotation -> VARCHAR(36)
     {
         auto node = ::parquet::schema::PrimitiveNode::Make("uuid_col", ::parquet::Repetition::REQUIRED,
                                                            ::parquet::LogicalType::UUID(),
                                                            ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16);
         st = get_parquet_type(node, &type_desc);
         ASSERT_TRUE(st.ok());
-        ASSERT_EQ(TYPE_VARBINARY, type_desc.type);
+        ASSERT_EQ(TYPE_VARCHAR, type_desc.type);
+        ASSERT_EQ(36, type_desc.len);
     }
 
     // FIXED_LEN_BYTE_ARRAY without annotation -> VARBINARY

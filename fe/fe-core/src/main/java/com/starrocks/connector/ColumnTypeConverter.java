@@ -799,8 +799,9 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
-            case UUID:
                 return VarbinaryType.VARBINARY;
+            case UUID:
+                return TypeFactory.createVarcharType(36);
             case TIME:
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
