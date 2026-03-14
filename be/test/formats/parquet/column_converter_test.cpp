@@ -424,6 +424,11 @@ TEST_F(ColumnConverterTest, FLBATest) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
             check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
         }
+        {
+            // FIXED_LEN_BYTE_ARRAY (UUID) -> VARBINARY: raw 16 bytes pass through without conversion
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY);
+            check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
+        }
     }
     {
         const std::string col_name = "decimal_flba";
@@ -462,6 +467,24 @@ TEST_F(ColumnConverterTest, FLBATest) {
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
             check(file_path, col_type, col_name, "[6809.6]", expected_rows, true);
+        }
+    }
+}
+
+// Tests FIXED_LEN_BYTE_ARRAY with UUID logical type annotation.
+// The parquet column carries raw 16-byte UUIDs; the converter must format them
+// as "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" strings.
+TEST_F(ColumnConverterTest, FLBAUUIDTest) {
+    const std::string file_path =
+            "./be/test/formats/parquet/test_data/column_converter/fixed_len_byte_array_uuid.parquet";
+    const size_t expected_rows = 5;
+
+    {
+        const std::string col_name = "uuid";
+        // UUID logical type -> VARCHAR: bytes formatted as xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            check(file_path, col_type, col_name, "['b4f20d71-755e-572f-95c1-518871b9ca71']", expected_rows);
         }
     }
 }
