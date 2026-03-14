@@ -100,6 +100,10 @@ public:
 
     int64_t estimate_cardinality() const;
 
+    // Returns the composite estimate of cardinality using get_composite_estimate()
+    // which provides more stable estimation results.
+    int64_t estimate_cardinality_composite() const;
+
     // No need to check is_valid for datasketches HLL,
     // return ture for compatibility.
     static bool is_valid(const Slice& slice);

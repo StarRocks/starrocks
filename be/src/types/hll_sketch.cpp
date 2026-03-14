@@ -116,6 +116,13 @@ int64_t DataSketchesHll::estimate_cardinality() const {
     return _sketch_union->get_estimate();
 }
 
+int64_t DataSketchesHll::estimate_cardinality_composite() const {
+    if (_sketch_union == nullptr) {
+        return 0;
+    }
+    return _sketch_union->get_composite_estimate();
+}
+
 std::string DataSketchesHll::to_string() const {
     if (_sketch_union == nullptr) {
         return "";
