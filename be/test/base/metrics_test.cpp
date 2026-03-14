@@ -132,7 +132,7 @@ TEST_F(MetricsTest, CounterPerf) {
             updaters[i].join();
         }
         LOG(INFO) << "IntCounter multi-thread elapsed: " << used_time.load()
-                  << "ns, ns/iter:" << used_time.load() / (8 * 1000000L);
+                  << "ns, ns/iter:" << used_time.load() / (8 * 10000L);
         ASSERT_EQ(8 * 10000L, mt_counter.value());
     }
     // multi-thread for IntAtomicCounter
