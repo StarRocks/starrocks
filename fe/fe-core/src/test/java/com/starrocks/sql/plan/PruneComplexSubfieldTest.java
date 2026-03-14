@@ -103,6 +103,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `variant0` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `v` VARIANT NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS t1(\n" +
                 "    tenant_id BIGINT NOT NULL,\n" +
                 "    id BIGINT NOT NULL,\n" +
@@ -753,7 +764,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  <slot 15> : row(1, 2, 3).col2[true] IS NULL");
     }
 
-
     @Test
     public void testForceReuseCTE1() throws Exception {
         String sql = "with cte1 as (select array_map((x -> uuid()), t.a1) c1, t.map1 c2 from pc0 t) " +
@@ -1015,7 +1025,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "from js0;";
         plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
-        
+
         sql = "select " +
                 "get_json_int(j1, '$.') " +
                 "from js0;";
@@ -1145,6 +1155,45 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select get_json_bool(j1, 'a') from js0";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testVariantSubfieldPruning() throws Exception {
+        String sql = "select get_variant_int(v, '$.a.b'), get_variant_string(v, '$.c') from variant0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(bigint(20)), /v/c(varchar)]");
+
+        sql = "select get_variant_int(v, '$.a'), get_variant_string(v, '$.a') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        sql = "select variant_query(v, '$.profile.rank') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/profile/rank(variant)]");
+
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
+
+        sql = "select get_variant_int(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        sql = "select get_variant_int(v, '$.a[0]') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a(variant)]");
+
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+
+        sql = "select get_variant_int(v, 'a.b'), get_variant_string(v, '$.\"profile.name\".first') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/\"profile.name\"/first(varchar), /v/a/b(bigint(20))]");
+
+        sql = "select variant_query(v, '$.a.b'), get_variant_string(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
+
+        sql = "select get_variant_int(v, '$.a.b'), get_variant_double(v, '$.a.b') from variant0";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/v/a/b(variant)]");
     }
 
     @Test

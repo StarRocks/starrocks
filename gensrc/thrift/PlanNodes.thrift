@@ -1301,6 +1301,8 @@ struct THdfsScanNode {
 
     26: optional bool enable_global_late_materialization
     27: optional i64 scan_node_id
+
+    28: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TProjectNode {
