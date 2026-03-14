@@ -88,6 +88,8 @@ enum TPlanNodeType {
   RAW_VALUES_NODE,
   FETCH_NODE,
   LOOKUP_NODE,
+  BENCHMARK_SCAN_NODE,
+  LAKE_CACHE_STATS_SCAN_NODE
 }
 
 // phases of an execution node
@@ -1330,8 +1332,19 @@ const string BINLOG_VERSION_COLUMN_NAME = "_binlog_version";
 const string BINLOG_SEQ_ID_COLUMN_NAME = "_binlog_seq_id";
 const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 
+const string CACHE_STATS_TABLET_ID_COLUMN_NAME = "tablet_id";
+const string CACHE_STATS_CACHED_BYTES_COLUMN_NAME = "cached_bytes";
+const string CACHE_STATS_TOTAL_BYTES_COLUMN_NAME = "total_bytes";
+
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
+}
+
+struct TCacheStatsScanNode {
+    1: optional Types.TTupleId tuple_id
+    2: optional map<i32, string> id_to_names
+    3: optional i64 table_id
+    4: optional string table_name
 }
 
 // Union of all stream source nodes, distinguished by type
@@ -1478,6 +1491,10 @@ struct TPlanNode {
   81: optional TSelectNode select_node; 
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
+  // Scan node for benchmark
+  // 84: optional TBenchmarkScanNode benchmark_scan_node;
+
+  85: optional TCacheStatsScanNode cache_stats_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
