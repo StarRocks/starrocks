@@ -93,6 +93,8 @@ public class AuditEvent {
     public String state = "";
     @AuditField(value = "ErrorCode")
     public String errorCode = "";
+    @AuditField(value = "ErrorMsg")
+    public String errorMsg = "";
     @AuditField(value = "Time")
     public long queryTime = -1;
     @AuditField(value = "ScanBytes")
@@ -263,6 +265,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setErrorCode(String errorCode) {
             auditEvent.errorCode = errorCode;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorMsg(String errorMsg) {
+            auditEvent.errorMsg = errorMsg;
             return this;
         }
 
