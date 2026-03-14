@@ -73,6 +73,7 @@ public class CallStubGenerator {
         // int numRows, FunctionCallClz obj, FunctionCall.State state, Integer[] a
         private void genBatchUpdateSingle() {
             final Parameter[] parameters = udafUpdate.getParameters();
+            final boolean isVarArgs = udafUpdate.isVarArgs();
             StringBuilder desc = new StringBuilder("(");
             desc.append("I");
             desc.append(Type.getDescriptor(udafClazz));
@@ -81,7 +82,7 @@ public class CallStubGenerator {
                 if (type.isPrimitive()) {
                     throw new UnsupportedOperationException("Unsupported Primitive Type:" + type.getTypeName());
                 }
-                if (i > 0) {
+                if (i > 0 || (isVarArgs && i == parameters.length - 1)) {
                     desc.append("[");
                 }
                 desc.append(Type.getDescriptor(type));
