@@ -44,6 +44,7 @@ import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.rest.auth.OAuth2Properties;
+import org.apache.iceberg.rest.auth.RefreshingAuthManager;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
@@ -126,6 +127,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate = new RESTSessionCatalog();
             configureHadoopConf(delegate, conf);
             delegate.initialize(name, restCatalogProperties);
+            if (delegate.authManager() instanceof RefreshingAuthManager) {
+                ((RefreshingAuthManager) delegate.authManager()).keepRefreshed(true);
+            }
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
             throw new StarRocksConnectorException("Failed to load rest catalog",
