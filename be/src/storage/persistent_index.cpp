@@ -4073,7 +4073,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     // decrease kv num and usage, the value in add_usage_and_size is less than 0
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
-            _size--;
+            if (_size > 0) _size--;
             _usage -= keys[i].size + kIndexValueSize;
             int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
             add_usage_and_size[len].first -= keys[i].size + kIndexValueSize;
