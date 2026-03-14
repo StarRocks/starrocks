@@ -51,14 +51,37 @@ public class ColumnIdExpr {
         return new ColumnIdExpr(expr);
     }
 
+    /**
+     * Convert the expression to use column names instead of column IDs.
+     * This method clones the expression before modification to avoid mutating
+     * the original stored expression.
+     *
+     * <p>This is important for nested materialized views: when the base MV goes through
+     * an INACTIVE -> ACTIVE cycle, the partition expression's SlotRef should not be
+     * mutated in place, as this could cause validation failures when nested MVs
+     * try to reactivate.
+     *
+     * @param idToColumn mapping from column ID to column
+     * @return a cloned expression with column names set
+     */
     public Expr convertToColumnNameExpr(Map<ColumnId, Column> idToColumn) {
-        setColumnName(idToColumn, expr);
-        return expr;
+        Expr clonedExpr = expr.clone();
+        setColumnName(idToColumn, clonedExpr);
+        return clonedExpr;
     }
 
+    /**
+     * Convert the expression to use column names instead of column IDs.
+     * This method clones the expression before modification to avoid mutating
+     * the original stored expression.
+     *
+     * @param schema the table schema
+     * @return a cloned expression with column names set
+     */
     public Expr convertToColumnNameExpr(List<Column> schema) {
-        setColumnName(MetaUtils.buildIdToColumn(schema), expr);
-        return expr;
+        Expr clonedExpr = expr.clone();
+        setColumnName(MetaUtils.buildIdToColumn(schema), clonedExpr);
+        return clonedExpr;
     }
 
     public Expr getExpr() {
