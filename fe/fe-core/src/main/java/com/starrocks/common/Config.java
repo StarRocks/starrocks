@@ -3336,6 +3336,18 @@ public class Config extends ConfigBase {
     public static boolean lake_enable_fullvacuum = false;
 
     @ConfField(mutable = true, comment =
+            "Enable query-time version pinning to prevent vacuum from deleting metadata files " +
+                    "referenced by in-flight queries in shared-data mode.\n" +
+                    "When enabled, the query coordinator pins the partition versions it plans to read, " +
+                    "and vacuum respects these pins by not deleting .meta files for pinned versions.\n")
+    public static boolean lake_enable_query_version_pinning = true;
+
+    @ConfField(mutable = true, comment =
+            "Maximum age in seconds for a query version pin before it is considered stale and cleaned up.\n" +
+                    "This is a safety net against leaked pins from crashed or abandoned queries.\n")
+    public static long lake_query_version_pin_max_age_seconds = 3600;
+
+    @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean lake_enable_ingest_slowdown = true;
