@@ -47,8 +47,7 @@ Status LookUpNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (const auto& [tuple_id, row_pos_desc] : _row_pos_descs) {
         tuple_ids.emplace_back(tuple_id);
     }
-    _dispatcher =
-            state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state, state->query_id(), id(), tuple_ids);
+    _dispatcher = state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state->query_id(), id(), tuple_ids);
 
     return Status::OK();
 }

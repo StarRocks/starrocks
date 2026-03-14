@@ -347,7 +347,7 @@ WITH BROKER
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
 -- !result
--- name: test_sys_temp_tables
+-- name: test_sys_temp_tables @native
 create temporary table `t` (
     `c1` int,
     `c2` int,
