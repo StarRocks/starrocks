@@ -346,7 +346,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
             try {
-                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor, false);
             } catch (Exception exception) {
                 LOG.error("Failed to refresh caching iceberg table.");
                 icebergCatalog.invalidateCache(dbName, tableName);
@@ -1146,9 +1146,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getCatalogDBName();
             String tableName = icebergTable.getCatalogTableName();
-            tables.remove(TableIdentifier.of(dbName, tableName));
+            tables.remove(TableIdentifier.of(srDbName, table.getName()));
             try {
-                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+                // onlyCachedPartitions=false means force refresh for Iceberg
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor, !onlyCachedPartitions);
             } catch (Exception e) {
                 LOG.error("Failed to refresh table {}.{}.{}. invalidate cache", catalogName, dbName, tableName, e);
                 icebergCatalog.invalidateCache(dbName, tableName);
@@ -1179,7 +1180,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                     " may have been dropped. You should re-create the external table. cause %s",
                     nativeTable.name(), ei.getMessage());
         }
-
     }
 
     @Override

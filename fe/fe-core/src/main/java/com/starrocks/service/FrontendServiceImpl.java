@@ -1715,10 +1715,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String db = request.getDb_name();
             String table = request.getTable_name();
             List<String> partitions = request.getPartitions() == null ? new ArrayList<>() : request.getPartitions();
-            LOG.info("Start to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
+            // is_force is optional, default to false for backward compatibility
+            boolean isForce = request.isSetIs_force() && request.isIs_force();
+            LOG.info("Start to refresh external table {}.{}.{}.{}, isForce: {}", catalog, db, table, partitions, isForce);
             GlobalStateMgr.getCurrentState().refreshExternalTable(new ConnectContext(),
-                    new TableName(catalog, db, table), partitions);
-            LOG.info("Finish to refresh external table {}.{}.{}.{}", catalog, db, table, partitions);
+                    new TableName(catalog, db, table), partitions, isForce);
+            LOG.info("Finish to refresh external table {}.{}.{}.{}, isForce: {}", catalog, db, table, partitions, isForce);
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
