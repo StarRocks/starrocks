@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 
 #include <boost/lexical_cast.hpp>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <random>
@@ -115,6 +116,36 @@ void test_float_value(const std::string& s, StringParser::ParseResult exp_result
         result == exp_result) {
         T exp_val = strtod(s.c_str(), nullptr);
         EXPECT_EQ(exp_val, val);
+    }
+}
+
+template <typename T>
+void test_float_value_out_of_range_overflow(const std::string& s) {
+    StringParser::ParseResult result;
+    T val = StringParser::string_to_float<T>(s.data(), s.length(), &result);
+    EXPECT_TRUE(result == StringParser::PARSE_OVERFLOW || result == StringParser::PARSE_FAILURE);
+    if (result == StringParser::PARSE_OVERFLOW) {
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_EQ(!s.empty() && s[0] == '-', std::signbit(val));
+    } else {
+        EXPECT_EQ(0, val);
+    }
+}
+
+template <typename T>
+void test_float_value_out_of_range_underflow(const std::string& s) {
+    StringParser::ParseResult result;
+    T val = StringParser::string_to_float<T>(s.data(), s.length(), &result);
+    EXPECT_NE(StringParser::PARSE_OVERFLOW, result);
+    EXPECT_FALSE(std::isinf(val));
+
+    if ((result == StringParser::PARSE_SUCCESS || result == StringParser::PARSE_UNDERFLOW)) {
+        T exp_val = strtod(s.c_str(), nullptr);
+        EXPECT_EQ(exp_val, val);
+        EXPECT_EQ(std::signbit(exp_val), std::signbit(val));
+    } else {
+        EXPECT_EQ(StringParser::PARSE_FAILURE, result);
+        EXPECT_EQ(0, val);
     }
 }
 
@@ -502,10 +533,16 @@ TEST(StringToFloat, Basic) {
     test_float_value_is_nan<float>("nnaN", StringParser::PARSE_FAILURE);
 
     // Overflow.
-    test_float_value<float>(float_max + "11111", StringParser::PARSE_OVERFLOW);
-    test_float_value<double>(double_max + "11111", StringParser::PARSE_OVERFLOW);
-    test_float_value<float>("-" + float_max + "11111", StringParser::PARSE_OVERFLOW);
-    test_float_value<double>("-" + double_max + "11111", StringParser::PARSE_OVERFLOW);
+    test_float_value_out_of_range_overflow<float>(float_max + "11111");
+    test_float_value_out_of_range_overflow<double>(double_max + "11111");
+    test_float_value_out_of_range_overflow<float>("-" + float_max + "11111");
+    test_float_value_out_of_range_overflow<double>("-" + double_max + "11111");
+
+    // Underflow.
+    test_float_value_out_of_range_underflow<float>("1e-10000");
+    test_float_value_out_of_range_underflow<double>("1e-10000");
+    test_float_value_out_of_range_underflow<float>("-1e-10000");
+    test_float_value_out_of_range_underflow<double>("-1e-10000");
 
     // Precision limits
     // Regression test for IMPALA-1622 (make sure we get correct result with many digits
