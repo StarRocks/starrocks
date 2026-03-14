@@ -6,9 +6,7 @@ displayed_sidebar: docs
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
 
-## 説明
-
-StarRocks ユーザーを作成します。StarRocks では、「user_identity」はユーザーを一意に識別します。v3.3.3 から、ユーザー作成時にユーザーのプロパティを設定することができます。
+CREATE USER は StarRocks ユーザーを作成します。StarRocks では、"user_identity" がユーザーを一意に識別します。v3.3.3 から、ユーザー作成時にユーザーのプロパティを設定することができます。
 
 <UserManagementPriv />
 
@@ -23,11 +21,11 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 ## パラメータ
 
-- `user_identity` は「user_name」と「host」の2つの部分から成り、`username@'userhost'` の形式です。「host」部分には `%` を使用してあいまい一致を行うことができます。「host」が指定されていない場合、デフォルトで "%" が使用され、ユーザーは任意のホストから StarRocks に接続できます。
+- `user_identity` は "user_name" と "host" の2つの部分からなり、`username@'userhost'` の形式です。"host" 部分には `%` を使用してあいまい一致が可能です。"host" が指定されていない場合、デフォルトで "%" が使用され、ユーザーは任意のホストから StarRocks に接続できます。
 
-  ユーザー名の命名規則については、[システム制限](../../System_limit.md)を参照してください。
+  ユーザー名の命名規則については、 [System limits](../../System_limit.md) を参照してください。
 
-- `auth_option` は認証方法を指定します。現在、5 つの認証方法がサポートされています：StarRocks ネイティブパスワード、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token (JWT) 認証、OAuth 2.0 認証です。StarRocks ネイティブパスワードは `mysql_native_password` と論理的には同じですが、構文がわずかに異なります。1つのユーザーアイデンティティは 1 つの認証方法しか使用できません。
+- `auth_option` は認証方法を指定します。現在、5つの認証方法がサポートされています: StarRocks ネイティブパスワード、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token (JWT) 認証、および OAuth 2.0 認証。StarRocks ネイティブパスワードは `mysql_native_password` と論理的に同じですが、構文がわずかに異なります。1つのユーザーアイデンティティは1つの認証方法しか使用できません。
 
     ```SQL
     auth_option: {
@@ -48,16 +46,16 @@ CREATE USER [IF NOT EXISTS] <user_identity>
     | `authentication_ldap_simple` | プレーンテキスト               | プレーンテキスト            |
 
     :::note
-    StarRocks はユーザーのパスワードを暗号化して保存します。
+    StarRocks はユーザーのパスワードを保存する前に暗号化します。
     :::
 
-    JSON Web Token (JWT) 認証および OAuth 2.0 認証における `auth_properties` の詳細については、対応するドキュメントを参照してください：
-    - [JSON Web Token 認証](../../../administration/user_privs/authentication/jwt_authentication.md)
-    - [OAuth 2.0 認証](../../../administration/user_privs/authentication/oauth2_authentication.md)
+    JSON Web Token (JWT) 認証と OAuth 2.0 認証の `auth_properties` の詳細については、対応するドキュメントを参照してください:
+    - [JSON Web Token Authentication](../../../administration/user_privs/authentication/jwt_authentication.md)
+    - [OAuth 2.0 Authentication](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
-- `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ロールはユーザーに自動的に割り当てられ、ユーザーがログインするとデフォルトで有効になります。指定されていない場合、このユーザーには特権がありません。指定されたすべてのロールが既に存在していることを確認してください。
+- `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ロールは自動的にユーザーに割り当てられ、ユーザーがログインしたときにデフォルトでアクティブになります。指定されていない場合、このユーザーには特権がありません。指定されたすべてのロールが既に存在することを確認してください。
 
-- `PROPERTIES` はユーザープロパティを設定し、最大ユーザー接続数 (`max_user_connections`)、catalog、データベースまたはセッション変数をユーザーレベルで設定します。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
+- `PROPERTIES` はユーザーのプロパティを設定し、最大ユーザー接続数 (`max_user_connections`)、catalog、データベース、またはユーザーレベルのセッション変数を含みます。ユーザーレベルのセッション変数はユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
 
   ```SQL
   -- 最大ユーザー接続数を設定します。
@@ -71,15 +69,14 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   :::tip
-  - `PROPERTIES` はユーザーに対して機能し、ユーザーアイデンティティには機能しません。
-  - グローバル変数と読み取り専用変数は特定のユーザーに設定することはできません。
+  - グローバル変数と読み取り専用変数は特定のユーザーに設定できません。
   - 変数は次の順序で有効になります: SET_VAR > セッション > ユーザープロパティ > グローバル。
-  - 特定のユーザーのプロパティを表示するには、[SHOW PROPERTY](./SHOW_PROPERTY.md) を使用できます。
+  - 特定のユーザーのプロパティを表示するには [SHOW PROPERTY](./SHOW_PROPERTY.md) を使用できます。
   :::
 
 ## 例
 
-例 1: ホストを指定せずにプレーンテキストパスワードを使用してユーザーを作成します。これは `jack@'%'` と同等です。
+例 1: ホストが指定されていないプレーンテキストパスワードを使用してユーザーを作成します。これは `jack@'%'` と同等です。
 
 ```SQL
 CREATE USER 'jack' IDENTIFIED BY '123456';
@@ -98,7 +95,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568D
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
 ```
 
-> 注: 暗号化されたパスワードは password() 関数を使用して取得できます。
+> 注: password() 関数を使用して暗号化されたパスワードを取得できます。
 
 例 4: ドメイン名 'example_domain' からログインできるユーザーを作成します。
 
@@ -118,7 +115,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple;
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
 ```
 
-例 7: '192.168' サブネットからログインできるユーザーを作成し、`db_admin` と `user_admin` をユーザーのデフォルトロールとして設定します。
+例 7: '192.168' サブネットからログインできるユーザーを作成し、`db_admin` と `user_admin` をデフォルトロールとして設定します。
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
@@ -136,7 +133,7 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ("max_user_connections" = "600");
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'hive_catalog');
 ```
 
-例 10: ユーザーを作成し、デフォルト catalog のデータベースを `test_db` に設定します。
+例 10: ユーザーを作成し、デフォルトの catalog 内のデータベースを `test_db` に設定します。
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
@@ -148,7 +145,7 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
-例 12: JSON Web Token 認証を使用したユーザーを作成します。
+例 12: JSON Web Token 認証を使用してユーザーを作成します。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_jwt AS
@@ -160,7 +157,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-例 12: OAuth 2.0 認証を使用したユーザーを作成します。
+例 13: OAuth 2.0 認証を使用してユーザーを作成します。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
