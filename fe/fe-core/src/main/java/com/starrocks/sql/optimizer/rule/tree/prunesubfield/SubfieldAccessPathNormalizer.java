@@ -31,9 +31,10 @@ import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VariantType;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang.text.StrTokenizer;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +48,51 @@ import java.util.stream.Collectors;
 public class SubfieldAccessPathNormalizer {
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
+
+    static class PathToken {
+        final String value;
+        final boolean wasQuoted;
+
+        PathToken(String value, boolean wasQuoted) {
+            this.value = value;
+            this.wasQuoted = wasQuoted;
+        }
+    }
+
+    // Tokenize a JSON path by '.', respecting '"' as quoting character.
+    // Preserves whether each token was originally quoted.
+    // e.g.:
+    //   $.foo."bar[0]".baz  ->  [$, foo, "bar[0]"(quoted), baz]
+    //   $."a.b".c           ->  [$, "a.b"(quoted), c]
+    static List<PathToken> tokenizeJsonPath(String path) {
+        List<PathToken> tokens = new ArrayList<>();
+        int i = 0;
+        int len = path.length();
+        while (i < len) {
+            if (path.charAt(i) == '"') {
+                int end = path.indexOf('"', i + 1);
+                if (end == -1) {
+                    return Collections.emptyList();
+                }
+                tokens.add(new PathToken(path.substring(i + 1, end), true));
+                i = end + 1;
+                if (i < len && path.charAt(i) == '.') {
+                    i++;
+                }
+            } else {
+                int end = path.indexOf('.', i);
+                if (end == -1) {
+                    end = len;
+                }
+                String token = path.substring(i, end);
+                if (!token.isEmpty()) {
+                    tokens.add(new PathToken(token, false));
+                }
+                i = end + 1;
+            }
+        }
+        return tokens;
+    }
 
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
@@ -258,6 +304,7 @@ public class SubfieldAccessPathNormalizer {
         //  $.a.b -> [a, b]
         //  $.a[0].b -> [a] -- don't support array index
         //  $."a.b".c -> ["a.b", c]
+        //  $."bar[0]".c -> ["bar[0]", c] -- quoted brackets are literal field names
         //  $.a#b.c -> [a#b, c]
         //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
         //  a.b.c -> [a, b, c]
@@ -271,41 +318,45 @@ public class SubfieldAccessPathNormalizer {
                 return false;
             }
 
-            StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
-            String[] tokens = tokenizer.getTokenArray();
-
-            if (tokens.length < 1) {
+            List<PathToken> tokens = tokenizeJsonPath(path);
+            if (tokens.isEmpty()) {
                 return false;
             }
+
             int size = jsonFlattenDepth;
             int i = 0;
-            if (tokens[0].equals("$")) {
+            if (tokens.get(0).value.equals("$")) {
                 size++;
                 i++;
             }
-            size = Math.min(tokens.length, size);
+            size = Math.min(tokens.size(), size);
+
             for (; i < size; i++) {
-                if (tokens[i].contains(".")) {
-                    result.add("\"" + tokens[i] + "\"");
+                PathToken token = tokens.get(i);
+
+                if (token.wasQuoted) {
+                    // Quoted token is a literal field name, no array pattern matching needed.
+                    // This handles cases like "bar[0]" and "my.inner.term" correctly.
+                    result.add("\"" + token.value + "\"");
                     continue;
                 }
-                // unsupported path, should stop match
-                Matcher matcher = JSON_ARRAY_PATTEN.matcher(tokens[i]);
+
+                // For unquoted tokens, apply the original regex logic
+                Matcher matcher = JSON_ARRAY_PATTEN.matcher(token.value);
                 if (!matcher.matches()) {
                     return true;
                 }
-                // only extract name, don't needed index
                 String name = matcher.group(1);
                 if (StringUtils.isBlank(name)) {
                     return true;
                 }
                 result.add(name);
-                if (tokens[i].replaceFirst(name, "").contains("[")) {
+                if (token.value.replaceFirst(Pattern.quote(name), "").contains("[")) {
                     // can't support flatten array index
                     return true;
                 }
             }
-            return size < tokens.length;
+            return size < tokens.size();
         }
 
         private Optional<AccessPath> process(ScalarOperator scalarOperator, Deque<AccessPath> accessPaths) {
@@ -335,6 +386,7 @@ public class SubfieldAccessPathNormalizer {
     //  $.a.b -> [a, b]
     //  $.a[0].b -> [a[0], b] -- don't support array index
     //  $."a.b".c -> ["a.b", c]
+    //  $."bar[0]".c -> ["bar[0]", c] -- quoted brackets are literal field names
     //  $.a#b.c -> [a#b, c]
     //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
     //  a.b.c -> [a, b, c]
@@ -348,22 +400,21 @@ public class SubfieldAccessPathNormalizer {
             return result;
         }
 
-        StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
-        String[] tokens = tokenizer.getTokenArray();
-
-        if (tokens.length < 1) {
+        List<PathToken> tokens = tokenizeJsonPath(path);
+        if (tokens.isEmpty()) {
             return result;
         }
+
         int i = 0;
-        if (tokens[0].equals("$")) {
+        if (tokens.get(0).value.equals("$")) {
             i++;
         }
-        for (; i < tokens.length; i++) {
-            if (tokens[i].contains(".")) {
-                result.add("\"" + tokens[i] + "\"");
-                continue;
+        for (; i < tokens.size(); i++) {
+            PathToken token = tokens.get(i);
+            if (token.wasQuoted || token.value.contains(".")) {
+                result.add("\"" + token.value + "\"");
             } else {
-                result.add(tokens[i]);
+                result.add(token.value);
             }
         }
         return result;
