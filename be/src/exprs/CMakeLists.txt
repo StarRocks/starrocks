@@ -127,6 +127,7 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   ai_functions.cpp
+  http_request_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
