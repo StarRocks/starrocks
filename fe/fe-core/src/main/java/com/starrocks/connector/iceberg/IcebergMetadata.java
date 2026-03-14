@@ -1703,11 +1703,16 @@ public class IcebergMetadata implements ConnectorMetadata {
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Transaction transaction = nativeTbl.newTransaction();
 
-            // Check if this is a delete operation (any file is marked as POSITION_DELETES)
-            boolean isDeleteOperation = dataFiles.stream().anyMatch(dataFile ->
+            boolean hasDeleteFiles = dataFiles.stream().anyMatch(dataFile ->
                     dataFile.isSetFile_content() &&
                             (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
-            if (isDeleteOperation) {
+            boolean hasDataFiles = dataFiles.stream().anyMatch(dataFile ->
+                    !dataFile.isSetFile_content() ||
+                            (dataFile.getFile_content() != TIcebergFileContent.POSITION_DELETES));
+
+            if (hasDeleteFiles && hasDataFiles) {
+                commitMergeOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra, context);
+            } else if (hasDeleteFiles) {
                 commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra, context);
             } else {
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra,
@@ -1875,6 +1880,109 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
         }
 
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    private void commitMergeOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
+                                      List<TIcebergDataFile> dataFiles, String branch,
+                                      String dbName, String tableName, Object extra,
+                                      ConnectContext context) {
+        RowDelta rowDelta = transaction.newRowDelta();
+        if (branch != null) {
+            rowDelta.toBranch(branch);
+        }
+
+        PartitionSpec partitionSpec = nativeTbl.spec();
+        ImmutableSet.Builder<String> referencedDataFiles = ImmutableSet.builder();
+
+        for (TIcebergDataFile dataFile : dataFiles) {
+            if (dataFile.isSetFile_content() &&
+                    dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES) {
+                // Build and add position delete file
+                FileMetadata.Builder builder = FileMetadata.deleteFileBuilder(partitionSpec)
+                        .ofPositionDeletes()
+                        .withPath(dataFile.path)
+                        .withFormat(FileFormat.PARQUET)
+                        .withFileSizeInBytes(dataFile.file_size_in_bytes)
+                        .withRecordCount(dataFile.record_count)
+                        .withPartition(partitionSpec.isPartitioned() ?
+                                IcebergPartitionData.partitionDataFromPath(
+                                        getIcebergRelativePartitionPath(
+                                                IcebergUtil.tableDataLocation(nativeTbl),
+                                                dataFile.partition_path),
+                                        dataFile.isSetPartition_null_fingerprint() ?
+                                                dataFile.getPartition_null_fingerprint() :
+                                                "0".repeat(partitionSpec.fields().size()),
+                                        partitionSpec) : null)
+                        .withMetrics(dataFile.isSetColumn_stats() ?
+                                IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl) : null);
+
+                if (dataFile.isSetReferenced_data_file()) {
+                    String referencedFile = dataFile.getReferenced_data_file();
+                    builder.withReferencedDataFile(referencedFile);
+                    referencedDataFiles.add(referencedFile);
+                }
+
+                rowDelta.addDeletes(builder.build());
+            } else {
+                // Build and add data file
+                Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
+                DataFiles.Builder builder = DataFiles.builder(partitionSpec)
+                        .withMetrics(metrics)
+                        .withPath(dataFile.path)
+                        .withFormat(dataFile.format)
+                        .withRecordCount(dataFile.record_count)
+                        .withFileSizeInBytes(dataFile.file_size_in_bytes)
+                        .withSplitOffsets(dataFile.split_offsets);
+
+                if (partitionSpec.isPartitioned()) {
+                    String relativePartitionLocation = getIcebergRelativePartitionPath(
+                            IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
+                    String nullFingerprint = dataFile.isSetPartition_null_fingerprint() ?
+                            dataFile.getPartition_null_fingerprint() :
+                            "0".repeat(partitionSpec.fields().size());
+                    IcebergPartitionData partitionData = IcebergPartitionData.partitionDataFromPath(
+                            relativePartitionLocation, nullFingerprint, partitionSpec);
+                    builder.withPartition(partitionData);
+                }
+
+                rowDelta.addRows(builder.build());
+            }
+        }
+
+        // Validate from snapshot if table has current snapshot
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (currentSnapshot != null) {
+            rowDelta.validateFromSnapshot(currentSnapshot.snapshotId());
+        }
+
+        // Validate that referenced data files exist
+        rowDelta.validateDataFilesExist(referencedDataFiles.build());
+        rowDelta.validateDeletedFiles();
+
+        // Set conflict detection filter if available
+        if (extra instanceof IcebergSinkExtra) {
+            Expression conflictDetectionFilterObj = ((IcebergSinkExtra) extra).getConflictDetectionFilter();
+            if (conflictDetectionFilterObj != null) {
+                rowDelta.conflictDetectionFilter(conflictDetectionFilterObj);
+            }
+        }
+
+        IsolationLevel isolationLevel = IsolationLevel.fromName(nativeTbl.properties().
+                getOrDefault(DELETE_ISOLATION_LEVEL, DELETE_ISOLATION_LEVEL_DEFAULT));
+        if (isolationLevel == IsolationLevel.SERIALIZABLE) {
+            rowDelta.validateNoConflictingDataFiles();
+        }
+
+        // Set audit info for the commit
+        if (context != null) {
+            updateCommitInfo(rowDelta, context);
+        }
+
+        commitWithCleanup(() -> {
+            rowDelta.commit();
+            transaction.commitTransaction();
+        }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 

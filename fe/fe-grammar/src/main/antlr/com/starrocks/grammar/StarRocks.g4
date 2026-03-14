@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeIntoStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -1343,6 +1344,19 @@ updateStatement
 
 deleteStatement
     : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    ;
+
+mergeIntoStatement
+    : explainDesc? MERGE INTO qualifiedName (AS? identifier)?
+      USING relation
+      ON expression
+      mergeClause+
+    ;
+
+mergeClause
+    : WHEN MATCHED (AND expression)? THEN UPDATE SET assignmentList                                        #mergeUpdateClause
+    | WHEN MATCHED (AND expression)? THEN DELETE                                                           #mergeDeleteClause
+    | WHEN NOT MATCHED (AND expression)? THEN INSERT ('(' identifier (',' identifier)* ')')? VALUES expressionsWithDefault  #mergeInsertClause
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -3294,7 +3308,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MATCH_ANY | MATCH_ALL | MATCHED | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTIPLE
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

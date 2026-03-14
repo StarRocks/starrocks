@@ -197,6 +197,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -3020,6 +3021,81 @@ public class StmtExecutor {
         return extra;
     }
 
+    private void handleMergeIntoStmt(ExecPlan primaryExecPlan, MergeIntoStmt stmt) throws Exception {
+        TableRef tableRef = stmt.getTableRef();
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
+
+        List<TSinkCommitInfo> allCommitInfos = new ArrayList<>();
+        int timeout = getExecTimeout();
+
+        if (stmt.getDeletePlan() != null) {
+            ExecPlan deletePlan = stmt.getDeletePlan();
+            Coordinator deleteCoord = getCoordinatorFactory().createInsertScheduler(
+                    context, deletePlan.getFragments(), deletePlan.getScanNodes(),
+                    deletePlan.getDescTbl().toThrift(), deletePlan);
+            deleteCoord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+
+            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(
+                    context, originStmt.originStmt, deleteCoord);
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
+
+            deleteCoord.exec();
+            deleteCoord.join(timeout);
+
+            if (!deleteCoord.isDone()) {
+                deleteCoord.cancel(ErrorCode.ERR_TIMEOUT.formatErrorMsg("MERGE INTO delete phase", timeout, ""));
+                ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "MERGE INTO delete phase", timeout, "");
+            }
+            if (!deleteCoord.getExecStatus().ok()) {
+                String errMsg = deleteCoord.getExecStatus().getErrorMsg();
+                LOG.warn("MERGE INTO delete phase failed: {}", errMsg);
+                ErrorReport.reportDdlException("%s", ErrorCode.ERR_FAILED_WHEN_INSERT, errMsg);
+            }
+
+            allCommitInfos.addAll(deleteCoord.getSinkCommitInfos());
+        }
+
+        if (stmt.getInsertPlan() != null) {
+            ExecPlan insertPlan = stmt.getInsertPlan();
+
+            UUID newQueryId = UUID.randomUUID();
+            context.setExecutionId(UUIDUtil.toTUniqueId(newQueryId));
+
+            Coordinator insertCoord = getCoordinatorFactory().createInsertScheduler(
+                    context, insertPlan.getFragments(), insertPlan.getScanNodes(),
+                    insertPlan.getDescTbl().toThrift(), insertPlan);
+            insertCoord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+
+            QeProcessorImpl.QueryInfo queryInfo = new QeProcessorImpl.QueryInfo(
+                    context, originStmt.originStmt, insertCoord);
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
+
+            insertCoord.exec();
+            insertCoord.join(timeout);
+
+            if (!insertCoord.isDone()) {
+                insertCoord.cancel(ErrorCode.ERR_TIMEOUT.formatErrorMsg("MERGE INTO insert phase", timeout, ""));
+                ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "MERGE INTO insert phase", timeout, "");
+            }
+            if (!insertCoord.getExecStatus().ok()) {
+                String errMsg = insertCoord.getExecStatus().getErrorMsg();
+                LOG.warn("MERGE INTO insert phase failed: {}", errMsg);
+                ErrorReport.reportDdlException("%s", ErrorCode.ERR_FAILED_WHEN_INSERT, errMsg);
+            }
+
+            allCommitInfos.addAll(insertCoord.getSinkCommitInfos());
+        }
+
+        if (!allCommitInfos.isEmpty()) {
+            context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                    catalogName, dbName, tableName, allCommitInfos, null);
+        }
+
+        context.getState().setOk();
+    }
+
     /**
      * `handleDMLStmt` only executes DML statement and no write profile at the end.
      */
@@ -3051,6 +3127,12 @@ public class StmtExecutor {
                 }
                 context.setState(e.getQueryState());
             }
+            return;
+        }
+
+        // Handle MERGE INTO for Iceberg tables
+        if (stmt instanceof MergeIntoStmt) {
+            handleMergeIntoStmt(execPlan, (MergeIntoStmt) stmt);
             return;
         }
 
