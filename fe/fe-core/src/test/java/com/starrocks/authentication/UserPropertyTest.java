@@ -230,7 +230,7 @@ public class UserPropertyTest {
             GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                     "grant CREATE DATABASE on CATALOG myCatalog to role r1",
                     starRocksAssert.getCtx());
-            authorizationMgr.grant(grantPrivilegeStmt);
+            authorizationMgr.grant(grantPrivilegeStmt, starRocksAssert.getCtx());
 
             // Set Default Role
             UserIdentity testUser = authenticationManager.getUserIdentityByName("test");
