@@ -438,6 +438,86 @@ public class IcebergExprVisitorTest {
     }
 
     @Test
+    public void testConvertWithDetails() {
+        ScalarOperatorToIcebergExpr.IcebergContext context =
+                new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // pushable: k1 > 5
+        BinaryPredicateOperator pushable = new BinaryPredicateOperator(
+                BinaryType.GT, K1, ConstantOperator.createInt(5));
+        // non-pushable: k6 LIKE '%suffix' (mid-match LIKE not supported by Iceberg)
+        LikePredicateOperator nonPushable = new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, K6, ConstantOperator.createVarchar("%suffix"));
+
+        // Case 1: Mixed pushed and failed
+        ScalarOperatorToIcebergExpr.ConvertResult result =
+                converter.convertWithDetails(Lists.newArrayList(pushable, nonPushable), context);
+        Assertions.assertEquals(1, result.getPushedOperators().size());
+        Assertions.assertEquals(1, result.getFailedOperators().size());
+        Assertions.assertSame(pushable, result.getPushedOperators().get(0));
+        Assertions.assertSame(nonPushable, result.getFailedOperators().get(0));
+
+        // Case 2: All pushable
+        ScalarOperatorToIcebergExpr.ConvertResult allPushed =
+                converter.convertWithDetails(Lists.newArrayList(pushable), context);
+        Assertions.assertEquals(1, allPushed.getPushedOperators().size());
+        Assertions.assertEquals(0, allPushed.getFailedOperators().size());
+
+        // Case 3: All failed
+        ScalarOperatorToIcebergExpr.ConvertResult allFailed =
+                converter.convertWithDetails(Lists.newArrayList(nonPushable), context);
+        Assertions.assertEquals(0, allFailed.getPushedOperators().size());
+        Assertions.assertEquals(1, allFailed.getFailedOperators().size());
+
+        // Case 4: Empty input
+        ScalarOperatorToIcebergExpr.ConvertResult empty =
+                converter.convertWithDetails(Lists.newArrayList(), context);
+        Assertions.assertEquals(0, empty.getPushedOperators().size());
+        Assertions.assertEquals(0, empty.getFailedOperators().size());
+        Assertions.assertEquals(Expressions.alwaysTrue(), empty.getIcebergExpression());
+    }
+
+    @Test
+    public void testConvertWithDetailsExpressionCorrectness() {
+        ScalarOperatorToIcebergExpr.IcebergContext context =
+                new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // Two pushable predicates: k1 > 5 AND k1 < 10
+        BinaryPredicateOperator gt = new BinaryPredicateOperator(
+                BinaryType.GT, K1, ConstantOperator.createInt(5));
+        BinaryPredicateOperator lt = new BinaryPredicateOperator(
+                BinaryType.LT, K1, ConstantOperator.createInt(10));
+
+        ScalarOperatorToIcebergExpr.ConvertResult result =
+                converter.convertWithDetails(Lists.newArrayList(gt, lt), context);
+
+        // Both should be pushed, expression should be AND of the two
+        Assertions.assertEquals(2, result.getPushedOperators().size());
+        Assertions.assertEquals(0, result.getFailedOperators().size());
+        Expression expr = result.getIcebergExpression();
+        Assertions.assertNotEquals(Expressions.alwaysTrue(), expr);
+        Assertions.assertEquals(Expression.Operation.AND, expr.op());
+    }
+
+    @Test
+    public void testConvertDelegatesToConvertWithDetails() {
+        ScalarOperatorToIcebergExpr.IcebergContext context =
+                new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        BinaryPredicateOperator pred = new BinaryPredicateOperator(
+                BinaryType.EQ, K1, ConstantOperator.createInt(5));
+
+        // convert() and convertWithDetails() should produce the same expression
+        Expression fromConvert = converter.convert(Lists.newArrayList(pred), context);
+        Expression fromDetails = converter.convertWithDetails(Lists.newArrayList(pred), context)
+                .getIcebergExpression();
+        Assertions.assertEquals(fromConvert.toString(), fromDetails.toString());
+    }
+
+    @Test
     public void testToIcebergExpressionDotColumn() {
         ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
         ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
