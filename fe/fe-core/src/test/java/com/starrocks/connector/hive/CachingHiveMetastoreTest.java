@@ -514,6 +514,6 @@ public class CachingHiveMetastoreTest {
             Thread.sleep(1000);
         }
         Assertions.assertEquals(partition.getParameters().get(TASK), mangedTableMark);
-        Assertions.assertNotEquals(externalPartition.getParameters().get(TASK), externalTableMark);
+        Assertions.assertEquals(externalPartition.getParameters().get(TASK), externalTableMark);
     }
 }

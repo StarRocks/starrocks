@@ -155,9 +155,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
                     @GwtIncompatible
                     public ListenableFuture<Partition> reload(
                             @NotNull HivePartitionName key, @NotNull Partition oldValue) {
-                        if (isCachedExternalTable(key.getDatabaseTableName())) {
-                            return Futures.immediateFuture(loadPartition(key));
-                        }
+                        // Do not reload partitions individually on cache refresh.
+                        // Guava Cache's refreshAfterWrite calls reload() per key, which would
+                        // trigger one get_partition RPC per cached partition (e.g. 7000+ RPCs/min
+                        // for large tables), overwhelming HMS. Batch refresh is handled by
+                        // refreshTableBackground() via loadPartitionsByNames() instead.
                         return Futures.immediateFuture(oldValue);
                     }
 
