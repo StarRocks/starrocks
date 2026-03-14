@@ -17,20 +17,17 @@ package com.starrocks.qe.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +45,11 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 public class DefaultWorkerProviderTest {
     private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new, false);
@@ -95,60 +97,58 @@ public class DefaultWorkerProviderTest {
         Set<Long> nonAvailableWorkerId = ImmutableSet.of(deadBEId, deadCNId, inBlacklistBEId, inBlacklistCNId);
         id2Backend.get(deadBEId).setAlive(false);
         id2ComputeNode.get(deadCNId).setAlive(false);
-        new MockUp<SimpleScheduler>() {
-            @Mock
-            public boolean isInBlocklist(long backendId) {
-                return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
-            }
-        };
 
-        Reference<Integer> nextComputeNodeIndex = new Reference<>(0);
-        new MockUp<DefaultWorkerProvider>() {
-            @Mock
-            int getNextComputeNodeIndex(ComputeResource computeResource) {
-                int next = nextComputeNodeIndex.getRef();
-                nextComputeNodeIndex.setRef(next + 1);
-                return next;
-            }
-        };
+        // Create mock SystemInfoService
+        SystemInfoService mockSystemInfoService = mock(SystemInfoService.class);
+        when(mockSystemInfoService.getIdToBackend()).thenReturn((ImmutableMap) id2Backend);
+        when(mockSystemInfoService.getIdComputeNode()).thenReturn((ImmutableMap) id2ComputeNode);
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getIdToBackend() {
-                return id2Backend;
-            }
+        try (var mockedGlobalStateMgr = mockStatic(GlobalStateMgr.class);
+                var mockedSimpleScheduler = mockStatic(SimpleScheduler.class)) {
 
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-                return id2ComputeNode;
-            }
-        };
+            // Mock GlobalStateMgr chain
+            GlobalStateMgr mockState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            mockedGlobalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(mockState);
+            when(mockState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getClusterInfo()).thenReturn(mockSystemInfoService);
 
-        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
-        DefaultWorkerProvider workerProvider;
-        List<Integer> numUsedComputeNodesList = ImmutableList.of(100, 0, -1, 1, 2, 3, 4, 5, 6);
-        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            // Reset nextComputeNodeIndex.
-            nextComputeNodeIndex.setRef(0);
+            mockedSimpleScheduler.when(() -> SimpleScheduler.isInBlocklist(anyLong()))
+                    .thenAnswer(invocation -> {
+                        long backendId = invocation.getArgument(0);
+                        return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
+                    });
 
-            workerProvider =
-                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_RESOURCE);
+            // Mock getNextComputeNodeIndex to return incrementing values
+            DefaultWorkerProvider.getNextComputeNodeIndexer().set(0);
 
-            int numAvailableComputeNodes = 0;
-            for (long id = 0; id < 15; id++) {
-                ComputeNode worker = workerProvider.getWorkerById(id);
-                if (nonAvailableWorkerId.contains(id)
-                        // Exceed the limitation of numUsedComputeNodes.
-                        || (numUsedComputeNodes > 0 && numAvailableComputeNodes >= numUsedComputeNodes)) {
-                    Assertions.assertNull(worker);
-                } else {
-                    Assertions.assertNotNull(worker, "numUsedComputeNodes=" + numUsedComputeNodes + ",id=" + id);
-                    Assertions.assertEquals(id, worker.getId());
+            DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+            DefaultWorkerProvider workerProvider;
+            List<Integer> numUsedComputeNodesList = ImmutableList.of(100, 0, -1, 1, 2, 3, 4, 5, 6);
+            for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+                // Reset nextComputeNodeIndex.
+                DefaultWorkerProvider.getNextComputeNodeIndexer().set(0);
 
-                    if (id2ComputeNode.containsKey(id)) {
-                        numAvailableComputeNodes++;
+                workerProvider =
+                        workerProviderFactory.captureAvailableWorkers(
+                                mockSystemInfoService,
+                                true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                                WarehouseManager.DEFAULT_RESOURCE);
+
+                int numAvailableComputeNodes = 0;
+                for (long id = 0; id < 15; id++) {
+                    ComputeNode worker = workerProvider.getWorkerById(id);
+                    if (nonAvailableWorkerId.contains(id)
+                            // Exceed the limitation of numUsedComputeNodes.
+                            || (numUsedComputeNodes > 0 && numAvailableComputeNodes >= numUsedComputeNodes)) {
+                        Assertions.assertNull(worker);
+                    } else {
+                        Assertions.assertNotNull(worker, "numUsedComputeNodes=" + numUsedComputeNodes + ",id=" + id);
+                        Assertions.assertEquals(id, worker.getId());
+
+                        if (id2ComputeNode.containsKey(id)) {
+                            numAvailableComputeNodes++;
+                        }
                     }
                 }
             }
@@ -160,64 +160,70 @@ public class DefaultWorkerProviderTest {
      */
     @Test
     public void testSelectBackendAndComputeNode() {
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getIdToBackend() {
-                return availableId2Backend;
-            }
+        // Create mock SystemInfoService
+        SystemInfoService mockSystemInfoService = mock(SystemInfoService.class);
+        when(mockSystemInfoService.getIdToBackend()).thenReturn((ImmutableMap) availableId2Backend);
+        when(mockSystemInfoService.getIdComputeNode()).thenReturn((ImmutableMap) availableId2ComputeNode);
 
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
-                return availableId2ComputeNode;
-            }
-        };
+        try (var mockedGlobalStateMgr = mockStatic(GlobalStateMgr.class)) {
 
-        DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
-        DefaultWorkerProvider workerProvider;
-        List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 3, 5, 8, 10);
+            // Mock GlobalStateMgr chain
+            GlobalStateMgr mockState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            mockedGlobalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(mockState);
+            when(mockState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getClusterInfo()).thenReturn(mockSystemInfoService);
 
-        // test ComputeNode only
-        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            workerProvider =
-                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_RESOURCE);
-            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            for (Long selectedWorkerId : selectedWorkerIdsList) {
-                Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerId),
-                        "selectedWorkerId:" + selectedWorkerId);
+            DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
+            DefaultWorkerProvider workerProvider;
+            List<Integer> numUsedComputeNodesList = ImmutableList.of(-1, 0, 2, 3, 5, 8, 10);
+
+            // test ComputeNode only
+            for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+                workerProvider =
+                        workerProviderFactory.captureAvailableWorkers(
+                                mockSystemInfoService,
+                                true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                                WarehouseManager.DEFAULT_RESOURCE);
+                List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+                for (Long selectedWorkerId : selectedWorkerIdsList) {
+                    Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerId),
+                            "selectedWorkerId:" + selectedWorkerId);
+                }
             }
-        }
-        // test Backend only
-        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            workerProvider =
-                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
-                            WarehouseManager.DEFAULT_RESOURCE);
-            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            Assertions.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
-            for (Long selectedWorkerId : selectedWorkerIdsList) {
-                Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerId),
-                        "selectedWorkerId:" + selectedWorkerId);
+            // test Backend only
+            for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+                workerProvider =
+                        workerProviderFactory.captureAvailableWorkers(
+                                mockSystemInfoService,
+                                false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                                WarehouseManager.DEFAULT_RESOURCE);
+                List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+                Assertions.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
+                for (Long selectedWorkerId : selectedWorkerIdsList) {
+                    Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerId),
+                            "selectedWorkerId:" + selectedWorkerId);
+                }
             }
-        }
-        // test Backend and ComputeNode
-        for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
-            workerProvider =
-                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
-                            WarehouseManager.DEFAULT_RESOURCE);
-            List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
-            Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
-            //test ComputeNode
-            for (int i = 0; i < availableId2ComputeNode.size() && i < selectedWorkerIdsList.size(); i++) {
-                Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)),
-                        "selectedWorkerId:" + selectedWorkerIdsList.get(i));
-            }
-            //test Backend
-            for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
-                Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerIdsList.get(i)),
-                        "selectedWorkerId:" + selectedWorkerIdsList.get(i));
+            // test Backend and ComputeNode
+            for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
+                workerProvider =
+                        workerProviderFactory.captureAvailableWorkers(
+                                mockSystemInfoService,
+                                true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
+                                WarehouseManager.DEFAULT_RESOURCE);
+                List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
+                Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
+                //test ComputeNode
+                for (int i = 0; i < availableId2ComputeNode.size() && i < selectedWorkerIdsList.size(); i++) {
+                    Assertions.assertTrue(availableId2ComputeNode.containsKey(selectedWorkerIdsList.get(i)),
+                            "selectedWorkerId:" + selectedWorkerIdsList.get(i));
+                }
+                //test Backend
+                for (int i = availableId2ComputeNode.size(); i < selectedWorkerIdsList.size(); i++) {
+                    Assertions.assertTrue(availableId2Backend.containsKey(selectedWorkerIdsList.get(i)),
+                            "selectedWorkerId:" + selectedWorkerIdsList.get(i));
+                }
             }
         }
     }
@@ -405,39 +411,45 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
-    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedDataMode(@Mocked ComputeResource computeResource) {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
+    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedDataMode() {
         AtomicInteger mockIndex = new AtomicInteger(5);
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public AtomicInteger getNextComputeNodeIndexFromWarehouse(ComputeResource resource) {
-                return mockIndex;
-            }
-        };
 
-        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
-        Assertions.assertEquals(5, result);
-        Assertions.assertEquals(6, mockIndex.get());
+        // Create mock ComputeResource
+        ComputeResource mockComputeResource = mock(ComputeResource.class);
+        when(mockComputeResource.getWarehouseId()).thenReturn(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        // Create mock WarehouseManager
+        WarehouseManager mockWarehouseManager = mock(WarehouseManager.class);
+        when(mockWarehouseManager.getNextComputeNodeIndexFromWarehouse(any(ComputeResource.class)))
+                .thenReturn(mockIndex);
+
+        try (var mockedRunMode = mockStatic(RunMode.class);
+                var mockedGlobalStateMgr = mockStatic(GlobalStateMgr.class)) {
+
+            GlobalStateMgr mockState = mock(GlobalStateMgr.class);
+            mockedGlobalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(mockState);
+            when(mockState.getWarehouseMgr()).thenReturn(mockWarehouseManager);
+
+            mockedRunMode.when(RunMode::getCurrentRunMode)
+                    .thenReturn(RunMode.SHARED_DATA);
+
+            int result = DefaultWorkerProvider.getNextComputeNodeIndex(mockComputeResource);
+            Assertions.assertEquals(5, result);
+            Assertions.assertEquals(6, mockIndex.get());
+        }
     }
 
     @Test
-    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedNothingMode(@Mocked ComputeResource computeResource) {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_NOTHING;
-            }
-        };
+    public void getNextComputeNodeIndex_returnsIncrementedValueInSharedNothingMode() {
+        try (var mockedRunMode = mockStatic(RunMode.class)) {
+            mockedRunMode.when(RunMode::getCurrentRunMode)
+                    .thenReturn(RunMode.SHARED_NOTHING);
 
-        int initialIndex = DefaultWorkerProvider.getNextComputeNodeIndexer().get();
-        int result = DefaultWorkerProvider.getNextComputeNodeIndex(computeResource);
-        Assertions.assertEquals(initialIndex, result);
-        Assertions.assertEquals(initialIndex + 1, DefaultWorkerProvider.getNextComputeNodeIndexer().get());
+            int initialIndex = DefaultWorkerProvider.getNextComputeNodeIndexer().get();
+            int result = DefaultWorkerProvider.getNextComputeNodeIndex(null);
+            Assertions.assertEquals(initialIndex, result);
+            Assertions.assertEquals(initialIndex + 1, DefaultWorkerProvider.getNextComputeNodeIndexer().get());
+        }
     }
 
     @Test
