@@ -157,7 +157,7 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration);
 
 int64_t Aggregator::get_two_level_threahold() {
     if (config::two_level_memory_threshold < 0) {
@@ -300,7 +300,7 @@ Status Aggregator::open(RuntimeState* state) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
                     auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i]);
+                                                _agg_fn_ctxs[i], fn.cloud_configuration);
                     if (!st.ok()) {
                         for (int idx : attached_udaf_idx) {
                             destroy_java_udaf_context(_agg_fn_ctxs[idx]);

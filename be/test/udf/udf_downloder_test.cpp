@@ -12,23 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "udf/udf_downloder.h"
 
-#include <fs/fs.h>
+#include <gtest/gtest.h>
 
-#include <string>
-
-#include "common/status.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 
 namespace starrocks {
-class DownloadUtil {
+
+class UDFDownloaderTest : public testing::Test {
 public:
-    static Status download(const std::string& url, const std::string& target_file, const std::string& expected_checksum,
-                           const TCloudConfiguration& cloud_configuration);
+    std::unique_ptr<udf_downloder> downloader;
 
-private:
-    static Status get_real_url(const std::string& url, std::string* real_url, const FSOptions& options);
-
-    static Status get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options);
+    void SetUp() override { downloader = std::make_unique<udf_downloder>(); }
+    void TearDown() override { downloader.reset(); }
 };
+
+TEST_F(UDFDownloaderTest, TestDownloadFromCloudRegularStorageEngine) {
+    std::string localPath = "/tmp/test.jar";
+
+    Status status =
+            downloader->download_remote_file_2_local("s3://test-bucket/starrocks/udf/test.jar", localPath, FSOptions{});
+
+    EXPECT_FALSE(status.ok());
+}
+
 } // namespace starrocks
