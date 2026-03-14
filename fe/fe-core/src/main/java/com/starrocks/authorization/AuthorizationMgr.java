@@ -1088,6 +1088,13 @@ public class AuthorizationMgr {
      * requires role lock
      */
     protected void invalidateRolesInCacheRoleUnlocked(long roleId) throws PrivilegeException {
+        // PUBLIC_ROLE is implicitly granted to all users but is not included in users' explicit roleIds.
+        // When PUBLIC_ROLE privileges change, we must invalidate all cached privilege collections.
+        if (roleId == PrivilegeBuiltinConstants.PUBLIC_ROLE_ID) {
+            ctxToMergedPrivilegeCollections.invalidateAll();
+            return;
+        }
+
         Set<Long> badRoles = getAllDescendantsUnlocked(roleId);
         List<UserPrivKey> badKeys = new ArrayList<>();
         for (UserPrivKey pair : ctxToMergedPrivilegeCollections.asMap().keySet()) {
