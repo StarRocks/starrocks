@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -44,6 +45,8 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCell;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
@@ -64,6 +67,7 @@ import static com.starrocks.sql.optimizer.rule.transformation.partition.Partitio
  */
 public abstract class MVPCTRefreshPartitioner {
     protected  static final int CREATE_PARTITION_BATCH_SIZE = 64;
+    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPartitioner.class);
 
     protected final MvTaskRunContext mvContext;
     protected final TaskRunContext context;
@@ -273,9 +277,55 @@ public abstract class MVPCTRefreshPartitioner {
     }
 
     /**
+     * Check if any partitions have been deleted from the base table for non-partitioned MV.
+     * For non-partitioned MVs with external tables, if partitions that were previously
+     * refreshed no longer exist in the base table, the MV needs a full refresh.
+     */
+    private static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
+        // Only check for external tables (Iceberg, Hive, etc.)
+        if (table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+
+        try {
+            // Get current partitions from the base table
+            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
+            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+                    traits.getPartitionNameWithPartitionInfo();
+
+            // Get the partitions that were previously refreshed
+            Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
+
+            if (MapUtils.isEmpty(versionMap)) {
+                return false;
+            }
+
+            // Check if any previously refreshed partitions no longer exist
+            Set<String> currentPartitions = latestPartitionInfo.keySet();
+            for (String refreshedPartition : versionMap.keySet()) {
+                if (!currentPartitions.contains(refreshedPartition)) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // If we can't determine partition info (e.g., connector doesn't support partition metadata APIs),
+            // skip the deleted partition check rather than forcing a refresh. This avoids regressing MV refresh
+            // for connectors that don't implement full partition metadata support.
+            LOG.debug("Cannot check for deleted partitions for table {}.{}.{}, skipping check: {}",
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                    e.getMessage());
+            return false;
+        }
+
+        return false;
+    }
+
+    /**
      * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
      * - its base table is not supported refresh by partition.
      * - its base table has updated.
+     * - its base table has deleted partitions.
      */
     public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                           MaterializedView mv) {
@@ -286,6 +336,10 @@ public abstract class MVPCTRefreshPartitioner {
             }
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable,
                     MVTimelinessArbiter.QueryRewriteParams.ofRefresh())) {
+                return true;
+            }
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
                 return true;
             }
         }

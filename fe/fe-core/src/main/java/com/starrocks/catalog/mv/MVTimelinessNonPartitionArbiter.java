@@ -24,12 +24,16 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
@@ -39,6 +43,57 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
 
     public MVTimelinessNonPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
         super(mv, queryRewriteParams);
+    }
+
+    /**
+     * Check if any partitions have been deleted from the base table.
+     * For non-partitioned MVs with external tables, if partitions that were previously
+     * refreshed no longer exist in the base table, the MV needs a full refresh.
+     *
+     * @param baseTableInfo the base table info
+     * @param table the base table
+     * @return true if partitions have been deleted from the base table
+     */
+    private boolean hasDeletedPartitions(BaseTableInfo baseTableInfo, Table table) {
+        // Only check for external tables (Iceberg, Hive, etc.)
+        if (table.isNativeTableOrMaterializedView()) {
+            return false;
+        }
+
+        try {
+            // Get current partitions from the base table
+            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
+            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+                    traits.getPartitionNameWithPartitionInfo();
+
+            // Get the partitions that were previously refreshed
+            Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
+
+            if (MapUtils.isEmpty(versionMap)) {
+                return false;
+            }
+
+            // Check if any previously refreshed partitions no longer exist
+            Set<String> currentPartitions = latestPartitionInfo.keySet();
+            for (String refreshedPartition : versionMap.keySet()) {
+                if (!currentPartitions.contains(refreshedPartition)) {
+                    logMVPrepare(mv, String.format(
+                            "Base table partition %s has been deleted, need refresh totally.", refreshedPartition));
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // If we can't determine partition info (e.g., connector doesn't support partition metadata APIs),
+            // skip the deleted partition check rather than forcing a refresh. This avoids regressing MV rewrite
+            // for connectors that don't implement full partition metadata support.
+            LOG.debug("Cannot check for deleted partitions for table {}.{}.{}, skipping check: {}",
+                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName(),
+                    e.getMessage());
+            return false;
+        }
+
+        return false;
     }
 
     /**
@@ -73,6 +128,12 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             if (mvBaseTableUpdateInfo != null &&
                     CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(tableInfo, table)) {
+                logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }
         }
