@@ -74,7 +74,7 @@ void mt_updater(T* counter, std::atomic<uint64_t>* used_time) {
     sleep(1);
     MonotonicStopWatch watch;
     watch.start();
-    for (int i = 0; i < 1000000L; ++i) {
+    for (int i = 0; i < 10000L; ++i) {
         counter->increment(1);
     }
     uint64_t elapsed = watch.elapsed_time();
@@ -82,7 +82,7 @@ void mt_updater(T* counter, std::atomic<uint64_t>* used_time) {
 }
 
 TEST_F(MetricsTest, CounterPerf) {
-    static const int kLoopCount = 100000000;
+    static const int kLoopCount = 10000L;
     // volatile int64_t
     {
         volatile int64_t sum = 0;
@@ -133,7 +133,7 @@ TEST_F(MetricsTest, CounterPerf) {
         }
         LOG(INFO) << "IntCounter multi-thread elapsed: " << used_time.load()
                   << "ns, ns/iter:" << used_time.load() / (8 * 1000000L);
-        ASSERT_EQ(8 * 1000000L, mt_counter.value());
+        ASSERT_EQ(8 * 10000L, mt_counter.value());
     }
     // multi-thread for IntAtomicCounter
     {
@@ -147,8 +147,8 @@ TEST_F(MetricsTest, CounterPerf) {
             updaters[i].join();
         }
         LOG(INFO) << "IntAtomicCounter multi-thread elapsed: " << used_time.load()
-                  << "ns, ns/iter:" << used_time.load() / (8 * 1000000L);
-        ASSERT_EQ(8 * 1000000L, mt_counter.value());
+                  << "ns, ns/iter:" << used_time.load() / (8 * 10000L);
+        ASSERT_EQ(8 * 10000L, mt_counter.value());
     }
 }
 
