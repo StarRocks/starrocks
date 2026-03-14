@@ -552,6 +552,11 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         return negative ? (T)-val : (T)val;
     }
 
+    if (res.ec == std::errc::result_out_of_range) {
+        *result = PARSE_OVERFLOW;
+        return negative ? -std::numeric_limits<T>::infinity() : std::numeric_limits<T>::infinity();
+    }
+
     *result = PARSE_FAILURE;
     return 0;
 }
