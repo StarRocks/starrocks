@@ -1,0 +1,91 @@
+-- name: test_multi_stmt_txn_dup_table_with_bundling @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_dup (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+
+set enable_sql_transaction = true;
+begin;
+insert into t_dup values(1, 'a'), (2, 'b');
+insert into t_dup values(3, 'c'), (4, 'd');
+insert into t_dup values(5, 'e');
+commit;
+
+select * from t_dup order by k1;
+
+set enable_sql_transaction = false;
+drop database db_${uuid0} force;
+
+-- name: test_multi_stmt_txn_pk_table_with_bundling @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_pk (k1 int, v1 string)
+    primary key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+
+set enable_sql_transaction = true;
+begin;
+insert into t_pk values(1, 'a'), (2, 'b');
+insert into t_pk values(3, 'c'), (4, 'd');
+insert into t_pk values(5, 'e');
+commit;
+
+select * from t_pk order by k1;
+
+-- Verify update within same transaction
+begin;
+insert into t_pk values(6, 'f');
+insert into t_pk values(2, 'b_updated'), (7, 'g');
+commit;
+
+select * from t_pk order by k1;
+
+set enable_sql_transaction = false;
+drop database db_${uuid0} force;
+
+-- name: test_multi_stmt_txn_rollback_with_bundling @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_rollback (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+
+insert into t_rollback values(1, 'original');
+
+set enable_sql_transaction = true;
+begin;
+insert into t_rollback values(2, 'should_disappear');
+insert into t_rollback values(3, 'also_disappear');
+rollback;
+
+select * from t_rollback order by k1;
+
+set enable_sql_transaction = false;
+drop database db_${uuid0} force;
+
+-- name: test_multi_stmt_txn_bundling_disabled @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t_nobundle (k1 int, v1 string)
+    duplicate key(k1)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'false');
+
+set enable_sql_transaction = true;
+begin;
+insert into t_nobundle values(1, 'a'), (2, 'b');
+insert into t_nobundle values(3, 'c');
+commit;
+
+select * from t_nobundle order by k1;
+
+set enable_sql_transaction = false;
+drop database db_${uuid0} force;

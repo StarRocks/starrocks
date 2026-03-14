@@ -891,6 +891,11 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
             // Remap segment_idx to the merged rowset's local segment id space.
             segment_meta->set_segment_idx(_pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
+        // Merge bundle_file_offsets for bundled data files.
+        // Must maintain 1:1 correspondence with segments.
+        for (int i = 0; i < rowset_pb.bundle_file_offsets_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_bundle_file_offsets(rowset_pb.bundle_file_offsets(i));
+        }
     }
 
     // Merge replace_segments
@@ -924,6 +929,16 @@ void MetaFileBuilder::set_final_rowset() {
     LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
             << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
             << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    // Validate bundle_file_offsets 1:1 correspondence with segments before applying replace_segments.
+    // During batch apply of multiple opwrites, some may have offsets and some may not, leading to
+    // inconsistent counts. Drop offsets if they don't match to maintain invariant.
+    if (rowset->bundle_file_offsets_size() > 0 && rowset->bundle_file_offsets_size() != rowset->segments_size()) {
+        LOG(WARNING) << "bundle_file_offsets count mismatch in merged rowset for tablet " << _tablet.id()
+                     << ": offsets=" << rowset->bundle_file_offsets_size()
+                     << " segments=" << rowset->segments_size() << ", clearing offsets";
+        rowset->clear_bundle_file_offsets();
+    }
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
