@@ -189,6 +189,11 @@ public class SetVarTest extends PlanTestBase {
             if (attr == null) {
                 continue;
             }
+            // Skip set catalog = xxx;
+            // As it will set database empty.
+            if (SessionVariable.CATALOG.equals(attr.name())) {
+                continue;
+            }
             field.setAccessible(true);
             Object value = field.get(sessionVariable);
 
