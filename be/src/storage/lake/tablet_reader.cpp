@@ -146,6 +146,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             rss.emplace_back(rowset);
         }
 
+        // Do not split if tablet has no rowsets (empty tablet)
+        if (_rowsets.empty()) {
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
             // set _need_split false to make iterator can get data this round if split do not happen,
