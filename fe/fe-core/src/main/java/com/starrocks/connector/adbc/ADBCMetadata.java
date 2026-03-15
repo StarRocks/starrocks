@@ -48,9 +48,10 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -112,13 +113,19 @@ public class ADBCMetadata implements ConnectorMetadata {
         // TLS options
         String uri = properties.get(ADBCConnector.PROP_URL);
         if (uri != null && uri.toLowerCase().startsWith("grpc+tls://")) {
+            // Read cert/key files into byte arrays and wrap in resettable streams.
+            // The ADBC driver stores the params map and reads the InputStream on every
+            // adbcDatabase.connect() call. A plain FileInputStream (or ByteArrayInputStream)
+            // is consumed on the first read, causing "does not contain valid certificates"
+            // on subsequent connections. Auto-resetting before each read fixes this.
             String caCertFile = properties.get(ADBCConnector.PROP_TLS_CA_CERT_FILE);
             if (caCertFile != null) {
                 try {
-                    FlightSqlConnectionProperties.TLS_ROOT_CERTS.set(params, new FileInputStream(caCertFile));
-                } catch (FileNotFoundException e) {
+                    FlightSqlConnectionProperties.TLS_ROOT_CERTS.set(params,
+                            rereadableStream(Files.readAllBytes(Paths.get(caCertFile))));
+                } catch (IOException e) {
                     throw new StarRocksConnectorException(
-                            "Cannot open CA cert file: " + caCertFile + ": " + e.getMessage(), e);
+                            "Cannot read CA cert file: " + caCertFile + ": " + e.getMessage(), e);
                 }
             }
 
@@ -126,11 +133,13 @@ public class ADBCMetadata implements ConnectorMetadata {
             String clientKeyFile = properties.get(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE);
             if (clientCertFile != null && clientKeyFile != null) {
                 try {
-                    FlightSqlConnectionProperties.MTLS_CERT_CHAIN.set(params, new FileInputStream(clientCertFile));
-                    FlightSqlConnectionProperties.MTLS_PRIVATE_KEY.set(params, new FileInputStream(clientKeyFile));
-                } catch (FileNotFoundException e) {
+                    FlightSqlConnectionProperties.MTLS_CERT_CHAIN.set(params,
+                            rereadableStream(Files.readAllBytes(Paths.get(clientCertFile))));
+                    FlightSqlConnectionProperties.MTLS_PRIVATE_KEY.set(params,
+                            rereadableStream(Files.readAllBytes(Paths.get(clientKeyFile))));
+                } catch (IOException e) {
                     throw new StarRocksConnectorException(
-                            "Cannot open mTLS cert/key file: " + e.getMessage(), e);
+                            "Cannot read mTLS cert/key file: " + e.getMessage(), e);
                 }
             }
 
@@ -151,6 +160,20 @@ public class ADBCMetadata implements ConnectorMetadata {
                             + ". Check that the server is running and the URL is correct. Detail: "
                             + e.getMessage(), e);
         }
+    }
+
+    // Returns a ByteArrayInputStream that auto-resets before the ADBC driver reads it.
+    // The driver calls available() to size a buffer, then readFully() to fill it.
+    // Each adbcDatabase.connect() re-reads the same stream from the params map,
+    // so we must reset to position 0 before each available() call.
+    private static ByteArrayInputStream rereadableStream(byte[] data) {
+        return new ByteArrayInputStream(data) {
+            @Override
+            public synchronized int available() {
+                reset();
+                return super.available();
+            }
+        };
     }
 
     private ADBCSchemaResolver createSchemaResolver(String driver) {
