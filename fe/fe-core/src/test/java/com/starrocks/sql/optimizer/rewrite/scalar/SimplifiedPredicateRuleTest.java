@@ -119,12 +119,12 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
 
         // pattern with backslash escape should NOT be simplified to EQ,
         // because LIKE treats '\\' as an escaped literal '\', while EQ treats it as two backslashes
-        operator = new LikePredicateOperator(new ColumnRefOperator(1, VarcharType.VARCHAR, "name", true),
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("star\\\\"));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());
 
-        operator = new LikePredicateOperator(new ColumnRefOperator(1, VarcharType.VARCHAR, "name", true),
+        operator = new LikePredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("abc\\\\def"));
         result = rule.apply(operator, null);
         assertEquals(OperatorType.LIKE, result.getOpType());
