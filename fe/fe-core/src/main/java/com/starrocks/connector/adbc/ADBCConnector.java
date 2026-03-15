@@ -23,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.util.Map;
+import java.util.Set;
 
 public class ADBCConnector implements Connector {
 
@@ -35,6 +36,9 @@ public class ADBCConnector implements Connector {
     public static final String PROP_TLS_CLIENT_KEY_FILE = "adbc.tls.client_key_file";
     public static final String PROP_TLS_VERIFY = "adbc.tls.verify";
 
+    private static final Set<String> SUPPORTED_DRIVERS = Set.of("flight_sql");
+    private static final Set<String> SUPPORTED_URI_SCHEMES = Set.of("grpc://", "grpc+tls://");
+
     private final Map<String, String> properties;
     private final String catalogName;
     private ConnectorMetadata metadata;
@@ -44,6 +48,8 @@ public class ADBCConnector implements Connector {
         this.properties = context.getProperties();
         validate(PROP_DRIVER);
         validate(PROP_URL);
+        validateDriver();
+        validateUriScheme();
 
         // TLS validation
         String uri = properties.get(PROP_URL);
@@ -107,6 +113,24 @@ public class ADBCConnector implements Connector {
         String value = properties.get(propertyKey);
         if (value == null) {
             throw new StarRocksConnectorException("Missing " + propertyKey + " in properties");
+        }
+    }
+
+    private void validateDriver() {
+        String driver = properties.get(PROP_DRIVER);
+        if (!SUPPORTED_DRIVERS.contains(driver.toLowerCase())) {
+            throw new StarRocksConnectorException(
+                    "Unsupported ADBC driver: '" + driver + "'. Supported drivers: " + SUPPORTED_DRIVERS);
+        }
+    }
+
+    private void validateUriScheme() {
+        String uri = properties.get(PROP_URL).toLowerCase();
+        boolean valid = SUPPORTED_URI_SCHEMES.stream().anyMatch(uri::startsWith);
+        if (!valid) {
+            throw new StarRocksConnectorException(
+                    "Invalid ADBC URI scheme in '" + properties.get(PROP_URL)
+                            + "'. Supported schemes: " + SUPPORTED_URI_SCHEMES);
         }
     }
 

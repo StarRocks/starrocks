@@ -177,12 +177,11 @@ public class ADBCMetadata implements ConnectorMetadata {
     }
 
     private ADBCSchemaResolver createSchemaResolver(String driver) {
-        // Only flight_sql supported in Phase 1; more drivers added in future
         if ("flight_sql".equalsIgnoreCase(driver)) {
             return new FlightSQLSchemaResolver();
         }
-        LOG.warn("Unknown ADBC driver '{}', falling back to FlightSQLSchemaResolver", driver);
-        return new FlightSQLSchemaResolver();
+        throw new StarRocksConnectorException(
+                "Unsupported ADBC driver: '" + driver + "'. Supported drivers: [flight_sql]");
     }
 
     @Override

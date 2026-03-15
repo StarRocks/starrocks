@@ -102,12 +102,14 @@ public class ADBCScanNodeTest {
     }
 
     @Test
-    public void testGetADBCDriverName_Custom() {
-        tableProperties.put("adbc.driver", "my_custom_driver");
+    public void testGetADBCDriverName_UnknownFallsBack() {
+        // At the ScanNode level, unknown drivers fall back to the raw string.
+        // In practice, ADBCConnector rejects unsupported drivers at catalog creation time.
+        tableProperties.put("adbc.driver", "unknown_driver");
         PlanNodeId planNodeId = new PlanNodeId(1);
         when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
         ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
-        assertEquals("my_custom_driver", node.getADBCDriverName());
+        assertEquals("unknown_driver", node.getADBCDriverName());
     }
 
     @Test

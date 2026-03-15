@@ -53,7 +53,7 @@ public class ADBCConnectorTest {
     @Test
     public void testMissingUrlThrows() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "org.apache.arrow.adbc.driver.flightsql.FlightSqlDriverFactory");
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
 
         assertThrows(StarRocksConnectorException.class, () -> {
             new ADBCConnector(createContext(props));
@@ -63,7 +63,7 @@ public class ADBCConnectorTest {
     @Test
     public void testValidPropsDoNotThrow() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "org.apache.arrow.adbc.driver.flightsql.FlightSqlDriverFactory");
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
         props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
 
         ADBCConnector connector = new ADBCConnector(createContext(props));
@@ -73,7 +73,7 @@ public class ADBCConnectorTest {
     @Test
     public void testGetMetadataReturnsNonNull() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "org.apache.arrow.adbc.driver.flightsql.FlightSqlDriverFactory");
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
         props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
 
         ADBCConnector connector = new ADBCConnector(createContext(props));
@@ -84,7 +84,7 @@ public class ADBCConnectorTest {
     @Test
     public void testShutdownDoesNotThrow() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "org.apache.arrow.adbc.driver.flightsql.FlightSqlDriverFactory");
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
         props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
 
         ADBCConnector connector = new ADBCConnector(createContext(props));
@@ -158,6 +158,44 @@ public class ADBCConnectorTest {
         );
         ADBCTable table = new ADBCTable(1L, "t", columns, "db", "cat", new HashMap<>());
         assertTrue(table.isSupported());
+    }
+
+    // Driver and URI validation tests
+
+    @Test
+    public void testUnsupportedDriverThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "asd");
+        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("Unsupported ADBC driver"),
+                "Expected 'Unsupported ADBC driver' in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testInvalidUriSchemeThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "http://localhost:31337");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("Invalid ADBC URI scheme"),
+                "Expected 'Invalid ADBC URI scheme' in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testDriverCaseInsensitive() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "Flight_SQL");
+        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+
+        ADBCConnector connector = new ADBCConnector(createContext(props));
+        assertNotNull(connector);
     }
 
     // TLS validation tests
