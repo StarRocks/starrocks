@@ -469,42 +469,63 @@ public class IcebergExprVisitorTest {
         ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
 
         Expression convertedExpr;
+        Expression expectedExpr;
 
         // TINYINT literal vs LONG column (k7) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createTinyInt((byte) 1))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "TINYINT -> LONG widening should allow pushdown");
+        expectedExpr = Expressions.equal("k7", 1L);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "TINYINT -> LONG widening should produce correct equal expression");
 
         // SMALLINT literal vs LONG column (k7) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createSmallInt((short) 100))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "SMALLINT -> LONG widening should allow pushdown");
+        expectedExpr = Expressions.equal("k7", 100L);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "SMALLINT -> LONG widening should produce correct equal expression");
 
         // INT literal vs LONG column (k7) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.LT, K7, ConstantOperator.createInt(1000))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "INT -> LONG widening should allow pushdown");
+        expectedExpr = Expressions.lessThan("k7", 1000L);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "INT -> LONG widening should produce correct lessThan expression");
 
         // FLOAT literal vs DOUBLE column (k9) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K9, ConstantOperator.createFloat(1.5))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "FLOAT -> DOUBLE widening should allow pushdown");
+        expectedExpr = Expressions.equal("k9", 1.5D);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "FLOAT -> DOUBLE widening should produce correct equal expression");
 
         // INT literal vs DOUBLE column (k9) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K9, ConstantOperator.createInt(42))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "INT -> DOUBLE widening should allow pushdown");
+        expectedExpr = Expressions.equal("k9", 42.0D);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "INT -> DOUBLE widening should produce correct equal expression");
 
         // BIGINT literal vs DOUBLE column (k9) -> should push down
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.GE, K9, ConstantOperator.createBigint(123456789L))), context);
-        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
-                "BIGINT -> DOUBLE widening should allow pushdown");
+        expectedExpr = Expressions.greaterThanOrEqual("k9", 123456789.0D);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "BIGINT -> DOUBLE widening should produce correct greaterThanOrEqual expression");
+
+        // Boundary: Byte.MAX_VALUE vs LONG column
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createTinyInt(Byte.MAX_VALUE))), context);
+        expectedExpr = Expressions.equal("k7", (long) Byte.MAX_VALUE);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "TINYINT max value should widen to LONG correctly");
+
+        // Boundary: Integer.MAX_VALUE vs LONG column
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createInt(Integer.MAX_VALUE))), context);
+        expectedExpr = Expressions.equal("k7", (long) Integer.MAX_VALUE);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "INT max value should widen to LONG correctly");
     }
 
     @Test

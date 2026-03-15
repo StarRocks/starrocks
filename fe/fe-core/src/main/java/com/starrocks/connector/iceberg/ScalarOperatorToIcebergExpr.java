@@ -405,11 +405,7 @@ public class ScalarOperatorToIcebergExpr {
                     return null;
                 case DOUBLE:
                     // Safe widening: TINYINT/SMALLINT/INT/BIGINT -> DOUBLE, FLOAT -> DOUBLE
-                    if (operator.getType().isIntegerType()) {
-                        res = operator.castTo(FloatType.DOUBLE);
-                        break;
-                    }
-                    if (operator.getType().isFloat()) {
+                    if (operator.getType().isIntegerType() || operator.getType().isFloat()) {
                         res = operator.castTo(FloatType.DOUBLE);
                         break;
                     }
