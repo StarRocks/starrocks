@@ -215,7 +215,7 @@ public class SelectStmtWithMultiLikeTest {
                 {"region like '\\\\b%' or region like '\\\\d%' or region like '\\\\S+'",
                         "region LIKE '\\\\b%'",
                         "region LIKE '\\\\d%'",
-                        "region = '\\\\S+'"
+                        "region LIKE '\\\\S+'"
                 }
         };
 
