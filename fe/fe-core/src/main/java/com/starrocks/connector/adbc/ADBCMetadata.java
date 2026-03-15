@@ -365,6 +365,22 @@ public class ADBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        ADBCTable adbcTable = (ADBCTable) table;
+        ADBCTableName tableName = ADBCTableName.of(catalogName, adbcTable.getDbName(), adbcTable.getName());
+        if (!onlyCachedPartitions) {
+            tableInstanceCache.invalidate(tableName);
+        }
+    }
+
+    @Override
+    public void clear() {
+        tableInstanceCache.invalidateAll();
+        dbNamesCache.invalidateAll();
+        tableNamesCache.invalidateAll();
+    }
+
+    @Override
     public void shutdown() {
         try {
             if (adbcDatabase != null) {

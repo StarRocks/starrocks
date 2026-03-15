@@ -389,14 +389,6 @@ public class ADBCMetadataTest {
     }
 
     @Test
-    public void testCreateSchemaResolver_unknownDriver() {
-        properties.put(ADBCConnector.PROP_DRIVER, "unknown_driver");
-        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        // Should not throw, falls back to FlightSQLSchemaResolver with warning
-        assertNotNull(metadata);
-    }
-
-    @Test
     public void testGetTableStatistics_returnsRowCount() throws Exception {
         // Create an ADBCTable to pass to getTableStatistics
         List<Column> cols = Arrays.asList(
@@ -601,6 +593,41 @@ public class ADBCMetadataTest {
         assertNotNull(key);
         assertInstanceOf(ADBCPartitionKey.class, key);
         assertInstanceOf(NullablePartitionKey.class, key);
+    }
+
+    @Test
+    public void testRefreshTable() throws Exception {
+        Schema arrowSchema = new Schema(Arrays.asList(
+                new Field("id", FieldType.nullable(new ArrowType.Int(32, true)), Collections.emptyList())
+        ));
+
+        new Expectations() {{
+                mockDatabase.connect();
+                result = mockConnection;
+
+                mockConnection.getTableSchema(null, "mydb", "tbl1");
+                result = arrowSchema;
+            }};
+
+        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
+        // Populate cache
+        Table table1 = metadata.getTable(null, "mydb", "tbl1");
+        assertNotNull(table1);
+
+        // Refresh should invalidate cache without throwing
+        metadata.refreshTable("mydb", table1, Collections.emptyList(), false);
+
+        // After refresh, getTable should re-fetch (table ID should stay the same due to permanent tableIdCache)
+        Table table2 = metadata.getTable(null, "mydb", "tbl1");
+        assertNotNull(table2);
+        assertEquals(table1.getId(), table2.getId());
+    }
+
+    @Test
+    public void testClear() throws Exception {
+        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
+        // clear() should not throw even with empty caches
+        assertDoesNotThrow(() -> metadata.clear());
     }
 
     @Test

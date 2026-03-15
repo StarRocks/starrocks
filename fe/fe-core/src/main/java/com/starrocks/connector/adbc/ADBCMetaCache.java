@@ -81,6 +81,12 @@ public class ADBCMetaCache<K, V> {
         }
     }
 
+    public void invalidateAll() {
+        if (this.metaCache != null) {
+            this.metaCache.invalidateAll();
+        }
+    }
+
     public V getIfPresent(@NonNull K key) {
         if (this.metaCache != null && this.enableCache) {
             return this.metaCache.getIfPresent(key);
