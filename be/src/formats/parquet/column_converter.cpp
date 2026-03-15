@@ -102,6 +102,14 @@ private:
     cctz::time_zone _ctz;
 };
 
+class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
+public:
+    FixedLenByteArrayToUUIDConverter() = default;
+    ~FixedLenByteArrayToUUIDConverter() override = default;
+
+    Status convert(const Column* src, Column* dst) override;
+};
+
 class Int64ToDateTimeConverter final : public ColumnConverter {
 public:
     Int64ToDateTimeConverter() = default;
@@ -357,6 +365,61 @@ private:
     int32_t _type_length = 0;
 };
 
+Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
+    auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
+    auto* dst_nullable = down_cast<NullableColumn*>(dst);
+    auto* src_col = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable->data_column());
+    auto* dst_col = ColumnHelper::as_raw_column<BinaryColumn>(dst_nullable->data_column_raw_ptr());
+
+    const auto& src_null = src_nullable->null_column()->get_data();
+    auto& dst_null = dst_nullable->null_column_raw_ptr()->get_data();
+
+    size_t n = src_col->size();
+    dst_null.resize(n);
+    memcpy(dst_null.data(), src_null.data(), n);
+
+    static constexpr char HEX[] = "0123456789abcdef";
+    char buf[36];
+
+    for (size_t i = 0; i < n; i++) {
+        if (src_null[i]) {
+            dst_col->append_default();
+            continue;
+        }
+        Slice s = src_col->get_slice(i);
+        DCHECK_EQ(s.size, 16);
+        const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
+        int p = 0;
+        for (int j = 0; j < 4; j++) {
+            buf[p++] = HEX[bytes[j] >> 4];
+            buf[p++] = HEX[bytes[j] & 0xf];
+        }
+        buf[p++] = '-';
+        for (int j = 4; j < 6; j++) {
+            buf[p++] = HEX[bytes[j] >> 4];
+            buf[p++] = HEX[bytes[j] & 0xf];
+        }
+        buf[p++] = '-';
+        for (int j = 6; j < 8; j++) {
+            buf[p++] = HEX[bytes[j] >> 4];
+            buf[p++] = HEX[bytes[j] & 0xf];
+        }
+        buf[p++] = '-';
+        for (int j = 8; j < 10; j++) {
+            buf[p++] = HEX[bytes[j] >> 4];
+            buf[p++] = HEX[bytes[j] & 0xf];
+        }
+        buf[p++] = '-';
+        for (int j = 10; j < 16; j++) {
+            buf[p++] = HEX[bytes[j] >> 4];
+            buf[p++] = HEX[bytes[j] & 0xf];
+        }
+        dst_col->append(Slice(buf, 36));
+    }
+    dst_nullable->set_has_null(src_nullable->has_null());
+    return Status::OK();
+}
+
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
@@ -486,7 +549,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        bool is_uuid = schema_element.__isset.logicalType && schema_element.logicalType.__isset.UUID;
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         switch (col_type) {
@@ -505,6 +570,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
                                                                                      type_length);
+            break;
+        case LogicalType::TYPE_VARCHAR:
+        case LogicalType::TYPE_CHAR:
+            if (is_uuid) {
+                need_convert = true;
+                *converter = std::make_unique<FixedLenByteArrayToUUIDConverter>();
+            }
             break;
         default:
             break;
