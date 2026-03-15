@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <cmath>
+#include <ostream>
 #include <string>
 #include <type_traits>
 

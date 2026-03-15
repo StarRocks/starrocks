@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <iosfwd>
+#include <ostream>
 
 #include "base/utility/guard.h"
 #include "gen_cpp/Opcodes_types.h"

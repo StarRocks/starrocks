@@ -97,6 +97,10 @@ private:
             RETURN_IF_ERROR(convert_null(field_name, is_object, builder));
             break;
         }
+        default: {
+            auto err_msg = strings::Substitute("Unsupported simdjson value type. field_name=$0", field_name);
+            return Status::InvalidArgument(err_msg);
+        }
         }
         return Status::OK();
     }
@@ -189,10 +193,11 @@ private:
 
     static inline Status convert(std::string_view str, std::string_view field_name, bool is_object,
                                  vpack::Builder* builder) {
+        auto value = vpack::ValuePair(toStringRef(str), vpack::ValueType::String);
         if (is_object) {
-            builder->add(toStringRef(field_name), vpack::Value(str));
+            builder->add(toStringRef(field_name), value);
         } else {
-            builder->add(vpack::Value(str));
+            builder->add(value);
         }
         return Status::OK();
     }
@@ -216,7 +221,9 @@ private:
     }
 
 private:
-    static inline vpack::StringRef toStringRef(std::string_view view) { return {view.data(), view.length()}; }
+    static inline vpack::StringRef toStringRef(std::string_view view) {
+        return {view.empty() ? "" : view.data(), view.length()};
+    }
 };
 
 // Convert SIMD-JSON object/value to a JsonValue
