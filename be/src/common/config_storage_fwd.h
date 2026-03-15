@@ -57,7 +57,7 @@ CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 
 // BE process will exit if the percentage of error disk reach this value.
-CONF_mInt32(max_percentage_of_error_disk, "0");
+CONF_mInt32(max_percentage_of_error_disk, "100");
 
 // pending data policy
 CONF_mInt32(pending_data_expire_time_sec, "1800");

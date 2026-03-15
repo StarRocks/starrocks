@@ -19,7 +19,7 @@
 #include "common/status.h"
 #include "exec/meta_scanner.h"
 #include "exec/olap_utils.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/lake_meta_reader.h"
 
 namespace starrocks {

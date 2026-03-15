@@ -20,7 +20,7 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_llm_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exprs/ai_functions.h"
 #include "http/http_client.h"

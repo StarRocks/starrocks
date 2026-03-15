@@ -3,11 +3,10 @@
 
 src/common/config.cpp
 src/http/action/update_config_action.cpp
-src/runtime/exec_env.cpp
-src/service/staros_worker.cpp
-src/util/llm_query_service.cpp
 
 src/agent/agent_server.cpp
 src/fs/key_cache.cpp
+src/runtime/exec_env.cpp
+src/service/staros_worker.cpp
 src/storage/lake/tablet_warmup_manager.cpp
 test/common/path/path_util_test.cpp
