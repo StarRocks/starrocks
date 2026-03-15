@@ -18,6 +18,6 @@ set(STARROCKS_DARWIN_LLVM_HOME "/opt/homebrew/opt/llvm")
 starrocks_set_env_default(STARROCKS_HOME "${STARROCKS_HOME_DIR}" "repo root")
 starrocks_set_env_default(STARROCKS_THIRDPARTY "${STARROCKS_DARWIN_THIRDPARTY}" "repo-local thirdparty")
 
-if (EXISTS "${STARROCKS_DARWIN_LLVM_HOME}/bin/clang")
+if (NOT STARROCKS_HAS_CMAKE_COMPILER_OVERRIDE AND EXISTS "${STARROCKS_DARWIN_LLVM_HOME}/bin/clang")
     starrocks_set_env_default(STARROCKS_LLVM_HOME "${STARROCKS_DARWIN_LLVM_HOME}" "Homebrew LLVM")
 endif()
