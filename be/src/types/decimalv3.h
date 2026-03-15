@@ -101,13 +101,6 @@ public:
         Type carry = ((a ^ b) >> (sizeof(Type) * 8 - 1)) | 1;
         bool need_carry = false;
         if constexpr (std::is_same_v<Type, int128_t>) {
-            auto abs_as_uint128 = [](int128_t value) {
-                uint128_t abs_value = static_cast<uint128_t>(value);
-                if (value < 0) {
-                    abs_value = ~abs_value + 1;
-                }
-                return abs_value;
-            };
             uint128_t abs_b = abs_as_uint128(b);
             uint128_t abs_r = abs_as_uint128(r);
             need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;

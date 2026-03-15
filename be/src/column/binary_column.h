@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <sstream>
 #include <type_traits>
 
 #include "base/string/slice.h"
