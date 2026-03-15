@@ -17,10 +17,18 @@
 // TODO: remove this wrapper once base_test links the standard Util wrapper.
 extern "C" {
 #ifdef __clang__
+#ifdef __APPLE__
+void __cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
+void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*)) {
+    __cxa_throw(thrown_exception, info, dest);
+}
+void MallocExtension_ReleaseFreeMemory() {}
+#else
 void __real___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));
 void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*)) {
     __real___cxa_throw(thrown_exception, info, dest);
 }
+#endif
 #elif defined(__GNUC__)
 void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
 void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)) {
