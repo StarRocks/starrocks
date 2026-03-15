@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <sstream>
 
 #include "column/column.h"
 #include "column/vectorized_fwd.h"

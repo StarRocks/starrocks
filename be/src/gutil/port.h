@@ -12,7 +12,7 @@
 #include <cstring> // for memcpy()
 
 #if defined(__APPLE__)
-#include <unistd.h> // for getpagesize() on mac
+#include <unistd.h> // for sysconf() on mac
 #elif defined(OS_CYGWIN)
 #include <malloc.h> // for memalign()
 #endif
@@ -620,7 +620,8 @@ inline void* aligned_malloc(size_t size, int minimum_alignment) {
     // mac allocs are already 16-byte aligned.
     if (minimum_alignment <= 16) return malloc(size);
     // next, try to return page-aligned memory. perhaps overkill
-    if (minimum_alignment <= getpagesize()) return valloc(size);
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size > 0 && minimum_alignment <= page_size) return valloc(size);
     // give up
     return NULL;
 #elif defined(OS_CYGWIN)
