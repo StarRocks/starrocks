@@ -527,6 +527,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
 
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
+                  -DSTARROCKS_PRECONFIG_MODE=OFF                       \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
