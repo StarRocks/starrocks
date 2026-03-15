@@ -462,4 +462,68 @@ public class IcebergExprVisitorTest {
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
+
+    @Test
+    public void testNumericWideningCast() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+
+        // TINYINT literal vs LONG column (k7) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createTinyInt((byte) 1))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "TINYINT -> LONG widening should allow pushdown");
+
+        // SMALLINT literal vs LONG column (k7) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K7, ConstantOperator.createSmallInt((short) 100))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "SMALLINT -> LONG widening should allow pushdown");
+
+        // INT literal vs LONG column (k7) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.LT, K7, ConstantOperator.createInt(1000))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "INT -> LONG widening should allow pushdown");
+
+        // FLOAT literal vs DOUBLE column (k9) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K9, ConstantOperator.createFloat(1.5))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "FLOAT -> DOUBLE widening should allow pushdown");
+
+        // INT literal vs DOUBLE column (k9) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K9, ConstantOperator.createInt(42))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "INT -> DOUBLE widening should allow pushdown");
+
+        // BIGINT literal vs DOUBLE column (k9) -> should push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, K9, ConstantOperator.createBigint(123456789L))), context);
+        Assertions.assertNotEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "BIGINT -> DOUBLE widening should allow pushdown");
+    }
+
+    @Test
+    public void testNumericNarrowingCastNotPushedDown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr;
+
+        // BIGINT literal vs INTEGER column (k1) -> narrowing, should NOT push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K1, ConstantOperator.createBigint(100L))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "BIGINT -> INTEGER narrowing should NOT be pushed down");
+
+        // DOUBLE literal vs FLOAT column (k8) -> narrowing, should NOT push down
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, K8, ConstantOperator.createDouble(1.5))), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "DOUBLE -> FLOAT narrowing should NOT be pushed down");
+    }
 }

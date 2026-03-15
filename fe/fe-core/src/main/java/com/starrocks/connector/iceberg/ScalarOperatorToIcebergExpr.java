@@ -36,6 +36,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;
@@ -389,19 +391,34 @@ public class ScalarOperatorToIcebergExpr {
                 case BINARY:
                     res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
-                    // num usually don't need cast, and num and string has different comparator
-                    // cast is dangerous.
+                    // Numeric widening casts (e.g., TINYINT -> LONG, FLOAT -> DOUBLE) are safe
+                    // for comparison predicates. Narrowing casts are not supported.
                 case DECIMAL:
                     res = operator.castTo(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
                     break;
-                case INTEGER:
                 case LONG:
-                case FLOAT:
+                    // Safe widening: TINYINT/SMALLINT/INT -> LONG
+                    if (operator.getType().isIntegerType() && !operator.getType().isBigint()) {
+                        res = operator.castTo(IntegerType.BIGINT);
+                        break;
+                    }
+                    return null;
                 case DOUBLE:
+                    // Safe widening: TINYINT/SMALLINT/INT/BIGINT -> DOUBLE, FLOAT -> DOUBLE
+                    if (operator.getType().isIntegerType()) {
+                        res = operator.castTo(FloatType.DOUBLE);
+                        break;
+                    }
+                    if (operator.getType().isFloat()) {
+                        res = operator.castTo(FloatType.DOUBLE);
+                        break;
+                    }
+                    return null;
+                case INTEGER:
+                case FLOAT:
                 case STRUCT:
                 case LIST:
                 case MAP:
-                    // not supported
                 case FIXED:
                 case TIME:
                     return null;
