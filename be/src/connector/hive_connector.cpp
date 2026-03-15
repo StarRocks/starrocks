@@ -703,7 +703,8 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
             std::stringstream ss;
             ss << "slot_id: " << slot->id() << " global dict: ";
             for (const auto& kv : dict_map) {
-                ss << "<" << kv.first << " " << kv.second << ">" << ", ";
+                ss << "<" << kv.first << " " << kv.second << ">"
+                   << ", ";
             }
             LOG(INFO) << ss.str();
 #endif
