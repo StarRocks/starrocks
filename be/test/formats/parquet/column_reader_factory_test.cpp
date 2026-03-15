@@ -18,7 +18,10 @@
 
 #include <sstream>
 
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -344,6 +347,44 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     SparseRange<uint64_t> sparse_range;
     sparse_range.add(Range<uint64_t>(0, 8));
     st.value()->select_offset_index(sparse_range, 0);
+}
+
+// Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
+class TestColumnReader : public ColumnReader {
+public:
+    explicit TestColumnReader(const ParquetField* field) : ColumnReader(field) {}
+    Status prepare() override { return Status::OK(); }
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void set_need_parse_levels(bool) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+};
+
+// Covers the FIXED_LEN_BYTE_ARRAY condition added to check_type_can_apply_bloom_filter.
+TEST(ColumnReaderTest, CheckTypeCanApplyBloomFilterFixedLenByteArray) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::SCALAR;
+    field.physical_column_index = 0;
+
+    auto check = [&](LogicalType logical, tparquet::Type::type physical) -> bool {
+        field.physical_type = physical;
+        TestColumnReader reader(&field);
+        return reader.check_type_can_apply_bloom_filter(TypeDescriptor(logical), field);
+    };
+
+    // VARBINARY + FIXED_LEN_BYTE_ARRAY is applicable (the new condition)
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // VARCHAR + FIXED_LEN_BYTE_ARRAY is not applicable
+    // UUID is stored as FIXED_LEN_BYTE_ARRAY and typically read as VARCHAR
+    EXPECT_FALSE(check(TYPE_VARCHAR, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // BYTE_ARRAY baseline: both VARCHAR and VARBINARY remain applicable
+    EXPECT_TRUE(check(TYPE_VARCHAR, tparquet::Type::BYTE_ARRAY));
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
 }
 
 } // namespace starrocks::parquet
