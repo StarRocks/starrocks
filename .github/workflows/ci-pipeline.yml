@@ -201,9 +201,6 @@ jobs:
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
       pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
-      pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
-      pre_clang_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_clang_conclusion }}
-      pre_thirdparty_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_thirdparty_conclusion }}
       be_change: ${{ needs.basic-checker.outputs.BE_CHANGE }}
     steps:
       - uses: dorny/paths-filter@v3
@@ -266,18 +263,6 @@ jobs:
           path: ./be-path-filter/
           retention-days: 7
           overwrite: true
-
-      - name: check pre-commit conclusion
-        id: check_pre_commit_conclusion
-        if: (steps.path-filter.outputs.be == 'true' || steps.path-filter.outputs.ut == 'true') && needs.basic-checker.outputs.ONLY_BE_TEST == 'true' && env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
-        run: |
-          pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
-          pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
-          pre_clang_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Tidy"')
-          pre_thirdparty_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Thirdparty Info"')
-          echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
-          echo "pre_clang_conclusion=${pre_clang_conclusion}" >> $GITHUB_OUTPUT
-          echo "pre_thirdparty_conclusion=${pre_thirdparty_conclusion}" >> $GITHUB_OUTPUT
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
@@ -377,6 +362,12 @@ jobs:
       - be-checker
     timeout-minutes: 150
     name: BE UT
+    if: >
+      always() &&
+      needs.be-checker.result == 'success' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled' &&
+      (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -385,7 +376,6 @@ jobs:
     steps:
       - name: INIT ECI & RUN UT
         id: run_ut
-        if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_ut_conclusion != 'success' 
         shell: bash
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -421,7 +411,12 @@ jobs:
   clang-tidy:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
-    if: success() && needs.be-checker.outputs.clang_tidy_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
+    if: >
+      always() &&
+      needs.be-checker.result == 'success' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled' &&
+      needs.be-checker.outputs.clang_tidy_filter == 'true'
     timeout-minutes: 90
     name: Clang-Tidy
     env:
