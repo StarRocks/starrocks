@@ -703,8 +703,7 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
             std::stringstream ss;
             ss << "slot_id: " << slot->id() << " global dict: ";
             for (const auto& kv : dict_map) {
-                ss << "<" << kv.first << " " << kv.second << ">"
-                   << ", ";
+                ss << "<" << kv.first << " " << kv.second << ">" << ", ";
             }
             LOG(INFO) << ss.str();
 #endif
@@ -742,6 +741,16 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     HdfsScannerParams scanner_params;
+    if (hdfs_scan_node.__isset.column_access_paths && _column_access_paths.empty()) {
+        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
+            auto st = ColumnAccessPath::create(thrift_path, state, state->obj_pool());
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: " << st.status();
+            }
+        }
+    }
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -811,6 +820,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_min_max_opt = _use_min_max_opt;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
+    if (!_column_access_paths.empty()) {
+        scanner_params.column_access_paths = &_column_access_paths;
+    }
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

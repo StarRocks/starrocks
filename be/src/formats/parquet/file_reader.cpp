@@ -268,6 +268,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
     _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
+    _group_reader_param.column_access_paths = fd_scanner_ctx.column_access_paths;
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
