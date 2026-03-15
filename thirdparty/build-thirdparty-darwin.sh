@@ -1169,6 +1169,12 @@ build_formula_libevent() {
     local prefix
     prefix="$(formula_prefix libevent)"
     link_if_missing "${prefix}/include/event2" "${TP_INCLUDE_DIR}/event2"
+    link_matching_if_missing "${TP_INCLUDE_DIR}" \
+        "${prefix}/include/event.h" \
+        "${prefix}/include/evdns.h" \
+        "${prefix}/include/evhttp.h" \
+        "${prefix}/include/evrpc.h" \
+        "${prefix}/include/evutil.h"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libevent*.a" "${prefix}/lib/libevent*.dylib"
     link_formula_metadata "${prefix}"
     sync_lib64_links
@@ -1369,11 +1375,22 @@ build_formula_fmt_shared() {
 
 build_formula_aws_cpp_sdk() {
     ensure_formula aws-sdk-cpp
+    ensure_formula aws-crt-cpp
     local prefix
+    local crt_prefix
     prefix="$(formula_prefix aws-sdk-cpp)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
+    crt_prefix="$(formula_prefix aws-crt-cpp)"
+    if [[ -L "${TP_INCLUDE_DIR}/aws" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/aws"
+    fi
+    mkdir -p "${TP_INCLUDE_DIR}/aws"
+    link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
+    link_formula_metadata "${crt_prefix}"
     sync_lib64_links
 }
 
@@ -1626,6 +1643,10 @@ build_jemalloc() {
     mkdir -p "${TP_INSTALL_DIR}/jemalloc/lib-shared" "${TP_INSTALL_DIR}/jemalloc/lib-static"
     move_matching_files "${TP_INSTALL_DIR}/jemalloc/lib-shared" "${TP_INSTALL_DIR}/jemalloc/lib/"*.dylib* "${TP_INSTALL_DIR}/jemalloc/lib/"*.so*
     move_matching_files "${TP_INSTALL_DIR}/jemalloc/lib-static" "${TP_INSTALL_DIR}/jemalloc/lib/"*.a
+    if [[ -f "${TP_INSTALL_DIR}/jemalloc/lib-shared/libjemalloc.2.dylib" ]]; then
+        ln -sfn ../lib-shared/libjemalloc.2.dylib "${TP_INSTALL_DIR}/jemalloc/lib/libjemalloc.2.dylib"
+        ln -sfn libjemalloc.2.dylib "${TP_INSTALL_DIR}/jemalloc/lib/libjemalloc.dylib"
+    fi
 
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
         ./configure --prefix="${TP_INSTALL_DIR}/jemalloc-debug" --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl ${addition_opts}
