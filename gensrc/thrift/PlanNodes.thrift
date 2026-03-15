@@ -1526,10 +1526,6 @@ struct TPlanNode {
   59: optional bool need_create_tuple_columns;
   // Scan node for jdbc
   60: optional TJDBCScanNode jdbc_scan_node;
-
-  // Scan node for adbc
-  85: optional TADBCScanNode adbc_scan_node;
-
   // generic scan node with connector.
   61: optional TConnectorScanNode connector_scan_node;
 
@@ -1552,6 +1548,8 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+  // Scan node for adbc
+  86: optional TADBCScanNode adbc_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
