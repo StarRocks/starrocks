@@ -1400,6 +1400,7 @@ build_formula_streamvbyte() {
     prefix="$(formula_prefix streamvbyte)"
     link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libstreamvbyte.a" "${prefix}/lib/libstreamvbyte"*.dylib
+    link_if_missing "${prefix}/lib/libstreamvbyte.a" "${TP_INSTALL_DIR}/lib/libstreamvbyte_static.a"
     sync_lib64_links
 }
 
