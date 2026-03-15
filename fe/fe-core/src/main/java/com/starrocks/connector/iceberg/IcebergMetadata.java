@@ -779,6 +779,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
             // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
             if (DataOperations.REPLACE.equals(snapshot.operation())) {
+                lastSnapshotId = snapshot.snapshotId();
                 continue;
             }
             long currentSnapshotId = snapshot.snapshotId();
