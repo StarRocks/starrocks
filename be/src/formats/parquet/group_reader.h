@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -29,6 +30,7 @@
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
@@ -111,6 +113,7 @@ struct GroupReaderParam {
     const std::vector<SlotDescriptor*>* reserved_field_slots = nullptr;
     // used for global low cardinality optimization
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
@@ -160,6 +163,7 @@ private:
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
     StatusOr<int64_t> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
+    VariantShreddedReadHints _get_variant_shredded_hints(const std::string& column_name) const;
     Status _prepare_column_readers() const;
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices, bool ignore_reserved_field = false);
     // Extract dict filter columns and conjuncts
