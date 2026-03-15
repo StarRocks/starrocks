@@ -17,18 +17,11 @@ package com.starrocks.connector.adbc;
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.arrow.adbc.core.AdbcConnection;
 import org.apache.arrow.adbc.core.AdbcDatabase;
 import org.apache.arrow.adbc.core.AdbcDriver;
@@ -38,7 +31,6 @@ import org.apache.arrow.adbc.driver.flightsql.FlightSqlConnectionProperties;
 import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.complex.ListVector;
@@ -316,52 +308,6 @@ public class ADBCMetadata implements ConnectorMetadata {
                 return reader.getVectorSchemaRoot().getSchema();
             }
         }
-    }
-
-    @Override
-    public Statistics getTableStatistics(OptimizerContext session,
-                                         Table table,
-                                         Map<ColumnRefOperator, Column> columns,
-                                         List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate,
-                                         long limit,
-                                         TvrVersionRange tableVersionRange) {
-        Statistics.Builder builder = Statistics.builder();
-
-        // Default: unknown stats for all columns
-        for (ColumnRefOperator colRef : columns.keySet()) {
-            builder.addColumnStatistic(colRef, ColumnStatistic.unknown());
-        }
-
-        // Try to get row count from remote via COUNT(*)
-        ADBCTable adbcTable = (ADBCTable) table;
-        try {
-            long rowCount = getRemoteRowCount(adbcTable);
-            builder.setOutputRowCount(rowCount);
-        } catch (Exception e) {
-            LOG.warn("Failed to get row count for ADBC table {}: {}",
-                    adbcTable.getName(), e.getMessage());
-            builder.setOutputRowCount(1);  // Fallback
-        }
-
-        return builder.build();
-    }
-
-    private long getRemoteRowCount(ADBCTable table) throws Exception {
-        String sql = "SELECT COUNT(*) FROM \"" + table.getDbName() + "\".\"" + table.getName() + "\"";
-        try (AdbcConnection conn = adbcDatabase.connect()) {
-            try (AdbcStatement stmt = conn.createStatement()) {
-                stmt.setSqlQuery(sql);
-                AdbcStatement.QueryResult result = stmt.executeQuery();
-                try (ArrowReader reader = result.getReader()) {
-                    if (reader.loadNextBatch()) {
-                        BigIntVector countVec = (BigIntVector) reader.getVectorSchemaRoot().getVector(0);
-                        return countVec.get(0);
-                    }
-                }
-            }
-        }
-        throw new IOException("No result returned from COUNT(*) query");
     }
 
     @Override

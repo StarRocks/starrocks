@@ -23,21 +23,13 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.ExternalFullStatisticsCollectJob;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.arrow.adbc.core.AdbcConnection;
 import org.apache.arrow.adbc.core.AdbcDatabase;
-import org.apache.arrow.adbc.core.AdbcException;
-import org.apache.arrow.adbc.core.AdbcStatement;
-import org.apache.arrow.adbc.core.AdbcStatusCode;
-import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.complex.ListVector;
@@ -53,7 +45,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -96,21 +87,6 @@ public class ADBCMetadataTest {
 
     @Mocked
     VarCharVector mockTableNameVec;
-
-    @Mocked
-    AdbcStatement mockStatement;
-
-    @Mocked
-    AdbcStatement.QueryResult mockQueryResult;
-
-    @Mocked
-    ArrowReader mockStatsReader;
-
-    @Mocked
-    VectorSchemaRoot mockStatsRoot;
-
-    @Mocked
-    BigIntVector mockBigIntVector;
 
     private Map<String, String> properties;
     private ADBCMetadata metadata;
@@ -386,136 +362,6 @@ public class ADBCMetadataTest {
         metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
         // Should not throw, resolver should be FlightSQLSchemaResolver
         assertNotNull(metadata);
-    }
-
-    @Test
-    public void testGetTableStatistics_returnsRowCount() throws Exception {
-        // Create an ADBCTable to pass to getTableStatistics
-        List<Column> cols = Arrays.asList(
-                new Column("col1", IntegerType.INT),
-                new Column("col2", VarcharType.VARCHAR)
-        );
-        ADBCTable adbcTable = new ADBCTable(1, "test_tbl", cols, "mydb", "test_catalog", properties);
-
-        // Build columns map with ColumnRefOperator keys
-        Map<ColumnRefOperator, Column> columns = new LinkedHashMap<>();
-        ColumnRefOperator colRef1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
-        ColumnRefOperator colRef2 = new ColumnRefOperator(2, VarcharType.VARCHAR, "col2", true);
-        columns.put(colRef1, cols.get(0));
-        columns.put(colRef2, cols.get(1));
-
-        new Expectations() {{
-                mockDatabase.connect();
-                result = mockConnection;
-
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
-                result = mockStatsReader;
-
-                mockStatsReader.loadNextBatch();
-                result = true;
-
-                mockStatsReader.getVectorSchemaRoot();
-                result = mockStatsRoot;
-
-                mockStatsRoot.getVector(0);
-                result = mockBigIntVector;
-
-                mockBigIntVector.get(0);
-                result = 42L;
-            }};
-
-        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        Statistics stats = metadata.getTableStatistics(null, adbcTable, columns,
-                Collections.emptyList(), null, -1, null);
-
-        assertNotNull(stats);
-        assertEquals(42.0, stats.getOutputRowCount(), 0.001);
-        // Each column should have unknown stats
-        assertEquals(ColumnStatistic.unknown(), stats.getColumnStatistic(colRef1));
-        assertEquals(ColumnStatistic.unknown(), stats.getColumnStatistic(colRef2));
-    }
-
-    @Test
-    public void testGetTableStatistics_connectionFailure() throws Exception {
-        List<Column> cols = Arrays.asList(
-                new Column("col1", IntegerType.INT)
-        );
-        ADBCTable adbcTable = new ADBCTable(1, "test_tbl", cols, "mydb", "test_catalog", properties);
-
-        Map<ColumnRefOperator, Column> columns = new LinkedHashMap<>();
-        ColumnRefOperator colRef1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
-        columns.put(colRef1, cols.get(0));
-
-        new Expectations() {{
-                mockDatabase.connect();
-                result = new AdbcException("Connection refused", null,
-                        AdbcStatusCode.UNKNOWN, null, 0);
-            }};
-
-        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        // Should NOT throw -- returns fallback stats
-        Statistics stats = metadata.getTableStatistics(null, adbcTable, columns,
-                Collections.emptyList(), null, -1, null);
-
-        assertNotNull(stats);
-        // Fallback row count should be 1
-        assertEquals(1.0, stats.getOutputRowCount(), 0.001);
-        // Column stats should still be unknown
-        assertEquals(ColumnStatistic.unknown(), stats.getColumnStatistic(colRef1));
-    }
-
-    @Test
-    public void testGetTableStatistics_emptyColumns() throws Exception {
-        List<Column> cols = Arrays.asList(
-                new Column("col1", IntegerType.INT)
-        );
-        ADBCTable adbcTable = new ADBCTable(1, "test_tbl", cols, "mydb", "test_catalog", properties);
-
-        // Empty columns map
-        Map<ColumnRefOperator, Column> columns = new LinkedHashMap<>();
-
-        new Expectations() {{
-                mockDatabase.connect();
-                result = mockConnection;
-
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
-                result = mockStatsReader;
-
-                mockStatsReader.loadNextBatch();
-                result = true;
-
-                mockStatsReader.getVectorSchemaRoot();
-                result = mockStatsRoot;
-
-                mockStatsRoot.getVector(0);
-                result = mockBigIntVector;
-
-                mockBigIntVector.get(0);
-                result = 100L;
-            }};
-
-        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        Statistics stats = metadata.getTableStatistics(null, adbcTable, columns,
-                Collections.emptyList(), null, -1, null);
-
-        assertNotNull(stats);
-        assertEquals(100.0, stats.getOutputRowCount(), 0.001);
     }
 
     @Test
