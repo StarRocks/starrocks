@@ -14,6 +14,13 @@
 
 #pragma once
 
+#if defined(__has_include)
+#if __has_include(<arrow/util/bpacking.h>)
+#define STARROCKS_HAVE_ARROW_BITPACKING_HEADERS 1
+#endif
+#endif
+
+#ifdef STARROCKS_HAVE_ARROW_BITPACKING_HEADERS
 #include <arrow/util/bpacking.h>
 #ifdef __ARM_NEON
 #include <arrow/util/bpacking_neon.h>
@@ -21,11 +28,14 @@
 #ifdef __AVX2__
 #include <arrow/util/bpacking_avx2.h>
 #endif
+#endif
 
 #include "base/bit/bit_packing_default.h"
 #include "base/logging.h"
 
 namespace starrocks::util::bitpacking_arrow {
+
+#ifdef STARROCKS_HAVE_ARROW_BITPACKING_HEADERS
 
 template <typename OutType, int BIT_WIDTH>
 static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
@@ -108,5 +118,21 @@ static const uint8_t* UnpackValues(int bit_width, const uint8_t* __restrict__ in
     }
 #pragma pop_macro("UNPACK_ARROW_VALUES_CASE")
 }
+
+#else
+
+template <typename OutType, int BIT_WIDTH>
+static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
+    return starrocks::util::bitpacking_default::UnpackValues<OutType, BIT_WIDTH>(in, in_bytes, num_values, out).first;
+}
+
+template <typename OutType>
+static const uint8_t* UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
+    return starrocks::util::bitpacking_default::UnpackValues(bit_width, in, in_bytes, num_values, out).first;
+}
+
+#endif
 
 } // namespace starrocks::util::bitpacking_arrow
