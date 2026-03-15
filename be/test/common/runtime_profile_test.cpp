@@ -33,6 +33,27 @@ static TCounterStrategy create_strategy(TUnit::type type) {
     return RuntimeProfile::Counter::create_strategy(type);
 }
 
+constexpr int64_t kZero = 0;
+constexpr int64_t kOne = 1;
+constexpr int64_t kTwo = 2;
+constexpr int64_t kThree = 3;
+constexpr int64_t kFour = 4;
+constexpr int64_t kSix = 6;
+constexpr int64_t kEight = 8;
+constexpr int64_t kEleven = 11;
+constexpr int64_t kTwelve = 12;
+constexpr int64_t kThirteen = 13;
+constexpr int64_t kFourteen = 14;
+constexpr int64_t kFifteen = 15;
+constexpr int64_t kOneHundredMillion = 100000000;
+constexpr int64_t kOneBillion = 1000000000;
+constexpr int64_t kOnePointFiveBillion = 1500000000;
+constexpr int64_t kTwoBillion = 2000000000;
+constexpr int64_t kTwoPointFiveBillion = 2500000000;
+constexpr int64_t kThreeBillion = 3000000000;
+constexpr int64_t kFourBillion = 4000000000;
+constexpr int64_t kFiveBillion = 5000000000;
+
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
     std::vector<RuntimeProfile*> profiles;
@@ -40,12 +61,12 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     auto profile1 = std::make_shared<RuntimeProfile>("profile");
     {
         auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time1->set(2000000000L);
+        time1->set(kTwoBillion);
         auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time2->set(0L);
+        time2->set(kZero);
 
         auto* count1 = profile1->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
-        count1->set(1L);
+        count1->set(kOne);
 
         profiles.push_back(profile1.get());
     }
@@ -53,12 +74,12 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     auto profile2 = std::make_shared<RuntimeProfile>("profile");
     {
         auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time1->set(2000000000L);
+        time1->set(kTwoBillion);
         auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time2->set(2000000000L);
+        time2->set(kTwoBillion);
 
         auto* count1 = profile2->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
-        count1->set(1L);
+        count1->set(kOne);
 
         profiles.push_back(profile2.get());
     }
@@ -66,14 +87,14 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
     auto* merged_time1 = merged_profile->get_counter("time1");
-    ASSERT_EQ(2000000000L, merged_time1->value());
-    ASSERT_EQ(2000000000L, merged_time1->min_value().value());
-    ASSERT_EQ(2000000000L, merged_time1->max_value().value());
+    ASSERT_EQ(kTwoBillion, merged_time1->value());
+    ASSERT_EQ(kTwoBillion, merged_time1->min_value().value());
+    ASSERT_EQ(kTwoBillion, merged_time1->max_value().value());
 
     auto* merged_time2 = merged_profile->get_counter("time2");
-    ASSERT_EQ(1000000000L, merged_time2->value());
+    ASSERT_EQ(kOneBillion, merged_time2->value());
     ASSERT_EQ(0, merged_time2->min_value().value());
-    ASSERT_EQ(2000000000L, merged_time2->max_value().value());
+    ASSERT_EQ(kTwoBillion, merged_time2->max_value().value());
 
     auto* merged_count1 = merged_profile->get_counter("count1");
     ASSERT_EQ(2, merged_count1->value());
@@ -88,14 +109,14 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     auto profile1 = std::make_shared<RuntimeProfile>("profile");
     {
         auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time1->set(2000000000L);
-        time1->set_min(1500000000L);
-        time1->set_max(5000000000L);
+        time1->set(kTwoBillion);
+        time1->set_min(kOnePointFiveBillion);
+        time1->set_max(kFiveBillion);
 
         auto* count1 = profile1->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
-        count1->set(6L);
-        count1->set_min(1L);
-        count1->set_max(3L);
+        count1->set(kSix);
+        count1->set_min(kOne);
+        count1->set_max(kThree);
 
         profiles.push_back(profile1.get());
     }
@@ -103,23 +124,23 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
     auto profile2 = std::make_shared<RuntimeProfile>("profile");
     {
         auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, create_strategy(TUnit::TIME_NS));
-        time1->set(3000000000L);
-        time1->set_min(100000000L);
-        time1->set_max(4000000000L);
+        time1->set(kThreeBillion);
+        time1->set_min(kOneHundredMillion);
+        time1->set_max(kFourBillion);
 
         auto* count1 = profile2->add_counter("count1", TUnit::UNIT, create_strategy(TUnit::UNIT));
-        count1->set(15L);
-        count1->set_min(4L);
-        count1->set_max(6L);
+        count1->set(kFifteen);
+        count1->set_min(kFour);
+        count1->set_max(kSix);
 
         profiles.push_back(profile2.get());
     }
 
     auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     auto* merged_time1 = merged_profile->get_counter("time1");
-    ASSERT_EQ(2500000000L, merged_time1->value());
-    ASSERT_EQ(100000000L, merged_time1->min_value().value());
-    ASSERT_EQ(5000000000L, merged_time1->max_value().value());
+    ASSERT_EQ(kTwoPointFiveBillion, merged_time1->value());
+    ASSERT_EQ(kOneHundredMillion, merged_time1->min_value().value());
+    ASSERT_EQ(kFiveBillion, merged_time1->max_value().value());
 
     auto* merged_count1 = merged_profile->get_counter("count1");
     ASSERT_EQ(21, merged_count1->value());
@@ -151,16 +172,16 @@ TEST(TestRuntimeProfile, testProfileMergeStrategy) {
         auto profile1 = std::make_shared<RuntimeProfile>("profile");
         {
             auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, strategy1);
-            time1->set(1000000000L);
+            time1->set(kOneBillion);
 
             auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, strategy2);
-            time2->set(2000000000L);
+            time2->set(kTwoBillion);
 
             auto* count1 = profile1->add_counter("count1", TUnit::UNIT, strategy3);
-            count1->set(6L);
+            count1->set(kSix);
 
             auto* count2 = profile1->add_counter("count2", TUnit::UNIT, strategy4);
-            count2->set(8L);
+            count2->set(kEight);
 
             profiles.push_back(profile1.get());
         }
@@ -168,28 +189,28 @@ TEST(TestRuntimeProfile, testProfileMergeStrategy) {
         auto profile2 = std::make_shared<RuntimeProfile>("profile");
         {
             auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, strategy1);
-            time1->set(1000000000L);
+            time1->set(kOneBillion);
 
             auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, strategy2);
-            time2->set(3000000000L);
+            time2->set(kThreeBillion);
 
             auto* count1 = profile2->add_counter("count1", TUnit::UNIT, strategy3);
-            count1->set(6L);
+            count1->set(kSix);
 
             auto* count2 = profile2->add_counter("count2", TUnit::UNIT, strategy4);
-            count2->set(8L);
+            count2->set(kEight);
             profiles.push_back(profile2.get());
         }
 
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
         auto* merged_time1 = merged_profile->get_counter("time1");
-        ASSERT_EQ(2000000000L, merged_time1->value());
-        ASSERT_EQ(1000000000L, merged_time1->min_value().value());
-        ASSERT_EQ(1000000000L, merged_time1->max_value().value());
+        ASSERT_EQ(kTwoBillion, merged_time1->value());
+        ASSERT_EQ(kOneBillion, merged_time1->min_value().value());
+        ASSERT_EQ(kOneBillion, merged_time1->max_value().value());
 
         auto* merged_time2 = merged_profile->get_counter("time2");
-        ASSERT_EQ(2000000000L, merged_time2->value());
+        ASSERT_EQ(kTwoBillion, merged_time2->value());
         ASSERT_FALSE(merged_time2->min_value().has_value());
         ASSERT_FALSE(merged_time2->max_value().has_value());
 
@@ -289,23 +310,23 @@ TEST(TestRuntimeProfile, testCopyCounterWithParent) {
     auto src1 = std::make_shared<RuntimeProfile>("src profile1");
 
     auto* time1 = src1->add_counter("time1", TUnit::TIME_NS, strategy_time);
-    time1->set(1L);
+    time1->set(kOne);
     auto* time2 = src1->add_child_counter("time2", TUnit::TIME_NS, strategy_time, "time1");
-    time2->set(2L);
+    time2->set(kTwo);
     auto* time3 = src1->add_child_counter("time3", TUnit::TIME_NS, strategy_time, "time2");
-    time3->set(3L);
+    time3->set(kThree);
     auto* time4 = src1->add_counter("time4", TUnit::TIME_NS, strategy_time);
-    time4->set(4L);
+    time4->set(kFour);
 
     auto src2 = std::make_shared<RuntimeProfile>("src profile2");
     auto* count1 = src2->add_counter("count1", TUnit::UNIT, strategy_unit);
-    count1->set(11L);
+    count1->set(kEleven);
     auto* count2 = src2->add_child_counter("count2", TUnit::UNIT, strategy_unit, "count1");
-    count2->set(12L);
+    count2->set(kTwelve);
     auto* count3 = src2->add_child_counter("count3", TUnit::UNIT, strategy_unit, "count2");
-    count3->set(13L);
+    count3->set(kThirteen);
     auto* count4 = src2->add_counter("count4", TUnit::UNIT, strategy_unit);
-    count4->set(14L);
+    count4->set(kFourteen);
 
     auto dest = std::make_shared<RuntimeProfile>("destination");
     dest->add_counter("cascade1", TUnit::UNIT, strategy_unit);
@@ -316,42 +337,42 @@ TEST(TestRuntimeProfile, testCopyCounterWithParent) {
 
     auto kv = dest->get_counter_pair("time1");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(1L, kv.first->value());
+    ASSERT_EQ(kOne, kv.first->value());
     ASSERT_EQ("cascade1", kv.second);
 
     kv = dest->get_counter_pair("time2");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(2L, kv.first->value());
+    ASSERT_EQ(kTwo, kv.first->value());
     ASSERT_EQ("time1", kv.second);
 
     kv = dest->get_counter_pair("time3");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(3L, kv.first->value());
+    ASSERT_EQ(kThree, kv.first->value());
     ASSERT_EQ("time2", kv.second);
 
     kv = dest->get_counter_pair("time4");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(4L, kv.first->value());
+    ASSERT_EQ(kFour, kv.first->value());
     ASSERT_EQ("cascade1", kv.second);
 
     kv = dest->get_counter_pair("count1");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(11L, kv.first->value());
+    ASSERT_EQ(kEleven, kv.first->value());
     ASSERT_EQ("cascade2", kv.second);
 
     kv = dest->get_counter_pair("count2");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(12L, kv.first->value());
+    ASSERT_EQ(kTwelve, kv.first->value());
     ASSERT_EQ("count1", kv.second);
 
     kv = dest->get_counter_pair("count3");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(13L, kv.first->value());
+    ASSERT_EQ(kThirteen, kv.first->value());
     ASSERT_EQ("count2", kv.second);
 
     kv = dest->get_counter_pair("count4");
     ASSERT_TRUE(kv.first != nullptr);
-    ASSERT_EQ(14L, kv.first->value());
+    ASSERT_EQ(kFourteen, kv.first->value());
     ASSERT_EQ("cascade2", kv.second);
 }
 
