@@ -32,13 +32,13 @@
 namespace starrocks {
 
 // Macro to check ADBC C API return codes and convert to StarRocks Status.
-#define RETURN_ADBC_NOT_OK(status_code, adbc_error)                                                  \
-    do {                                                                                             \
-        if ((status_code) != ADBC_STATUS_OK) {                                                       \
-            std::string msg = (adbc_error).message ? (adbc_error).message : "Unknown ADBC error";    \
-            if ((adbc_error).release) (adbc_error).release(&(adbc_error));                            \
-            return Status::InternalError("ADBC error: " + msg);                                      \
-        }                                                                                            \
+#define RETURN_ADBC_NOT_OK(status_code, adbc_error)                                               \
+    do {                                                                                          \
+        if ((status_code) != ADBC_STATUS_OK) {                                                    \
+            std::string msg = (adbc_error).message ? (adbc_error).message : "Unknown ADBC error"; \
+            if ((adbc_error).release) (adbc_error).release(&(adbc_error));                        \
+            return Status::InternalError("ADBC error: " + msg);                                   \
+        }                                                                                         \
     } while (0)
 
 // ================================
@@ -121,9 +121,9 @@ Status ADBCScanner::_init_adbc() {
     }
     if (!_token.empty()) {
         std::string auth_header = "Bearer " + _token;
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.authorization_header",
-                                                 auth_header.c_str(), &error),
-                           error);
+        RETURN_ADBC_NOT_OK(
+                AdbcDatabaseSetOption(&_database, "adbc.flight.sql.authorization_header", auth_header.c_str(), &error),
+                error);
     }
 
     // TLS options -- must be set before AdbcDatabaseInit
@@ -148,9 +148,9 @@ Status ADBCScanner::_init_adbc() {
     }
 
     if (!_tls_verify) {
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_skip_verify", "true",
-                                                 &error),
-                           error);
+        RETURN_ADBC_NOT_OK(
+                AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_skip_verify", "true", &error),
+                error);
         LOG(WARNING) << "ADBC TLS certificate verification DISABLED (insecure mode)";
     }
 
@@ -182,8 +182,7 @@ Status ADBCScanner::_try_parallel_read() {
     struct AdbcPartitions partitions {};
     int64_t rows_affected = -1;
 
-    AdbcStatusCode sc =
-            AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
+    AdbcStatusCode sc = AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
     if (sc != ADBC_STATUS_OK) {
         // Driver doesn't support partitions -- fall back
         if (error.release) error.release(&error);
@@ -224,8 +223,7 @@ Status ADBCScanner::_fallback_single_stream_read() {
     struct ArrowSchema c_schema {};
     if (_c_stream.get_schema(&_c_stream, &c_schema) != 0) {
         const char* err = _c_stream.get_last_error(&_c_stream);
-        return Status::InternalError(
-                fmt::format("Failed to get schema from ADBC stream: {}", err ? err : "unknown"));
+        return Status::InternalError(fmt::format("Failed to get schema from ADBC stream: {}", err ? err : "unknown"));
     }
     auto schema_result = arrow::ImportSchema(&c_schema);
     if (!schema_result.ok()) {
@@ -241,10 +239,8 @@ Status ADBCScanner::_fallback_single_stream_read() {
 
 Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = false;
-    LOG(INFO) << "ADBC: get_next called, _use_parallel=" << _use_parallel
-              << " _tuple_desc=" << (void*)_tuple_desc
-              << " chunk=" << (void*)chunk
-              << " *chunk=" << (chunk ? (void*)chunk->get() : nullptr);
+    LOG(INFO) << "ADBC: get_next called, _use_parallel=" << _use_parallel << " _tuple_desc=" << (void*)_tuple_desc
+              << " chunk=" << (void*)chunk << " *chunk=" << (chunk ? (void*)chunk->get() : nullptr);
 
     std::shared_ptr<arrow::RecordBatch> batch;
 
@@ -273,8 +269,7 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             int rc = _c_stream.get_next(&_c_stream, &c_array);
             if (rc != 0) {
                 const char* err = _c_stream.get_last_error(&_c_stream);
-                return Status::InternalError(
-                        fmt::format("Arrow stream read error: {}", err ? err : "unknown"));
+                return Status::InternalError(fmt::format("Arrow stream read error: {}", err ? err : "unknown"));
             }
             if (c_array.release == nullptr) {
                 *eos = true;
@@ -282,8 +277,7 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             }
             auto batch_result = arrow::ImportRecordBatch(&c_array, _arrow_schema);
             if (!batch_result.ok()) {
-                return Status::InternalError("Failed to import record batch: " +
-                                             batch_result.status().ToString());
+                return Status::InternalError("Failed to import record batch: " + batch_result.status().ToString());
             }
             batch = std::move(batch_result).ValueUnsafe();
         }
@@ -310,8 +304,7 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
 Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk) {
     size_t num_rows = batch->num_rows();
-    LOG(INFO) << "ADBC: _convert_batch_to_chunk num_rows=" << num_rows
-              << " batch_cols=" << batch->num_columns()
+    LOG(INFO) << "ADBC: _convert_batch_to_chunk num_rows=" << num_rows << " batch_cols=" << batch->num_columns()
               << " _tuple_desc=" << (void*)_tuple_desc;
     if (num_rows == 0) {
         *chunk = std::make_shared<Chunk>();
@@ -344,15 +337,13 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         bool is_nullable = slot->is_nullable();
 
         LOG(INFO) << "ADBC: converting slot[" << i << "] name=" << slot->col_name()
-                  << " arrow_type=" << arrow_type->ToString()
-                  << " sr_type=" << type_to_string(sr_type)
+                  << " arrow_type=" << arrow_type->ToString() << " sr_type=" << type_to_string(sr_type)
                   << " nullable=" << is_nullable;
 
         ConvertFunc converter = get_arrow_converter(arrow_type_id, sr_type, is_nullable, true);
         if (converter == nullptr) {
-            return Status::InternalError(
-                    fmt::format("No Arrow converter for arrow type {} to StarRocks type {}",
-                                arrow_type->ToString(), type_to_string(sr_type)));
+            return Status::InternalError(fmt::format("No Arrow converter for arrow type {} to StarRocks type {}",
+                                                     arrow_type->ToString(), type_to_string(sr_type)));
         }
 
         // Create column with reserved capacity but size 0.
@@ -370,13 +361,12 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
 
             Column* data_col = nullable->data_column_raw_ptr();
             // Do NOT resize data_col -- the converter handles sizing
-            RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, data_col, 0, null_data, &chunk_filter,
-                                      nullptr, nullptr));
+            RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, data_col, 0, null_data, &chunk_filter, nullptr,
+                                      nullptr));
         } else {
             // Do NOT resize column -- the converter handles sizing
-            RETURN_IF_ERROR(
-                    converter(arrow_column.get(), 0, num_rows, column.get(), 0, nullptr, &chunk_filter, nullptr,
-                              nullptr));
+            RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, column.get(), 0, nullptr, &chunk_filter, nullptr,
+                                      nullptr));
         }
 
         columns[i] = std::move(column);
@@ -420,8 +410,7 @@ void ADBCScanner::close(RuntimeState* state) {
     if (_statement_initialized) {
         AdbcStatusCode sc = AdbcStatementRelease(&_statement, &error);
         if (sc != ADBC_STATUS_OK) {
-            LOG(WARNING) << "Failed to release ADBC statement: "
-                         << (error.message ? error.message : "Unknown error");
+            LOG(WARNING) << "Failed to release ADBC statement: " << (error.message ? error.message : "Unknown error");
             if (error.release) error.release(&error);
         }
         _statement_initialized = false;
@@ -431,8 +420,7 @@ void ADBCScanner::close(RuntimeState* state) {
         error = ADBC_ERROR_INIT;
         AdbcStatusCode sc = AdbcConnectionRelease(&_connection, &error);
         if (sc != ADBC_STATUS_OK) {
-            LOG(WARNING) << "Failed to release ADBC connection: "
-                         << (error.message ? error.message : "Unknown error");
+            LOG(WARNING) << "Failed to release ADBC connection: " << (error.message ? error.message : "Unknown error");
             if (error.release) error.release(&error);
         }
         _connection_initialized = false;
@@ -442,8 +430,7 @@ void ADBCScanner::close(RuntimeState* state) {
         error = ADBC_ERROR_INIT;
         AdbcStatusCode sc = AdbcDatabaseRelease(&_database, &error);
         if (sc != ADBC_STATUS_OK) {
-            LOG(WARNING) << "Failed to release ADBC database: "
-                         << (error.message ? error.message : "Unknown error");
+            LOG(WARNING) << "Failed to release ADBC database: " << (error.message ? error.message : "Unknown error");
             if (error.release) error.release(&error);
         }
         _database_initialized = false;

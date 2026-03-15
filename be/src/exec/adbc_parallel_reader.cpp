@@ -134,8 +134,8 @@ Status ADBCParallelReader::start() {
                 }
 
                 struct ArrowArrayStream c_stream {};
-                sc = AdbcConnectionReadPartition(&conn, _partitions[idx].first, _partitions[idx].second,
-                                                 &c_stream, &error);
+                sc = AdbcConnectionReadPartition(&conn, _partitions[idx].first, _partitions[idx].second, &c_stream,
+                                                 &error);
                 if (sc != ADBC_STATUS_OK) {
                     std::string msg = error.message ? error.message : "Unknown ADBC error";
                     if (error.release) error.release(&error);
@@ -162,8 +162,7 @@ Status ADBCParallelReader::start() {
                     std::shared_ptr<arrow::RecordBatch> batch;
                     auto read_status = reader->ReadNext(&batch);
                     if (!read_status.ok()) {
-                        _queue.set_error(
-                                Status::InternalError("ADBC parallel reader: " + read_status.ToString()));
+                        _queue.set_error(Status::InternalError("ADBC parallel reader: " + read_status.ToString()));
                         read_error = true;
                         break;
                     }

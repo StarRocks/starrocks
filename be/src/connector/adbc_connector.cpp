@@ -84,8 +84,7 @@ Status ADBCDataSource::open(RuntimeState* state) {
     std::string token = adbc_scan_node.__isset.adbc_token ? adbc_scan_node.adbc_token : "";
 
     // Extract TLS parameters
-    std::string ca_cert_file =
-            adbc_scan_node.__isset.adbc_tls_ca_cert_file ? adbc_scan_node.adbc_tls_ca_cert_file : "";
+    std::string ca_cert_file = adbc_scan_node.__isset.adbc_tls_ca_cert_file ? adbc_scan_node.adbc_tls_ca_cert_file : "";
     std::string client_cert_file =
             adbc_scan_node.__isset.adbc_tls_client_cert_file ? adbc_scan_node.adbc_tls_client_cert_file : "";
     std::string client_key_file =
@@ -100,16 +99,14 @@ Status ADBCDataSource::open(RuntimeState* state) {
     // Get tuple descriptor (also set base class member for _init_chunk_if_needed)
     auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(adbc_scan_node.tuple_id);
     _tuple_desc = tuple_desc;
-    LOG(INFO) << "ADBC connector: tuple_desc=" << (void*)tuple_desc
-              << " tuple_id=" << adbc_scan_node.tuple_id
-              << " slots=" << (tuple_desc ? tuple_desc->slots().size() : 0)
-              << " sql=" << sql;
+    LOG(INFO) << "ADBC connector: tuple_desc=" << (void*)tuple_desc << " tuple_id=" << adbc_scan_node.tuple_id
+              << " slots=" << (tuple_desc ? tuple_desc->slots().size() : 0) << " sql=" << sql;
 
     // Create scanner
-    _scanner = std::make_unique<ADBCScanner>(std::move(driver), std::move(uri), std::move(username),
-                                             std::move(password), std::move(token), std::move(sql), tuple_desc,
-                                             std::move(ca_cert_file), std::move(client_cert_file),
-                                             std::move(client_key_file), tls_verify);
+    _scanner =
+            std::make_unique<ADBCScanner>(std::move(driver), std::move(uri), std::move(username), std::move(password),
+                                          std::move(token), std::move(sql), tuple_desc, std::move(ca_cert_file),
+                                          std::move(client_cert_file), std::move(client_key_file), tls_verify);
 
     LOG(INFO) << "ADBC connector: calling scanner->open()";
     RETURN_IF_ERROR(_scanner->open(state));
