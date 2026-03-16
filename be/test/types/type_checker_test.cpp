@@ -405,7 +405,12 @@ TEST_F(TypeCheckerTest, NotSupportBigDecimalType) {
 // Define unit test for oracle.sql.TIMESTAMP, oracle.sql.TIMESTAMPLTZ, or oracle.sql.TIMESTAMPTZ
 TEST_F(TypeCheckerTest, SupporOracleTimestampType) {
     SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor datetime_type_slot(0, "datetime_type_slot", TypeDescriptor(TYPE_DATETIME));
     auto status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMP", &varchar_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+
+    status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMP", &datetime_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
@@ -413,7 +418,15 @@ TEST_F(TypeCheckerTest, SupporOracleTimestampType) {
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
+    status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMPLTZ", &datetime_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+
     status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMPTZ", &varchar_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+
+    status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMPTZ", &datetime_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }

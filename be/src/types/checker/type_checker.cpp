@@ -279,10 +279,10 @@ StatusOr<LogicalType> BigDecimalTypeChecker::check(const std::string& java_class
 StatusOr<LogicalType> OracleTimestampClassTypeChecker::check(const std::string& java_class,
                                                              const SlotDescriptor* slot_desc) const {
     auto type = slot_desc->type().type;
-    if (type != TYPE_VARCHAR) {
+    if (type != TYPE_VARCHAR && type != TYPE_DATETIME) {
         return Status::NotSupported(
                 fmt::format("Type mismatches on column[{}], JDBC result type is {}, please set the "
-                            "type to varchar",
+                            "type to varchar or datetime",
                             slot_desc->col_name(), java_class));
     }
     return TYPE_VARCHAR;

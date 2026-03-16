@@ -20,6 +20,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
@@ -110,9 +111,10 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     DCHECK(scan_context_cls != nullptr);
     LOCAL_REF_GUARD_ENV(env, scan_context_cls);
 
-    jmethodID constructor = env->GetMethodID(
-            scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIII)V");
+    static constexpr const char* scan_context_constructor_signature =
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+            "Ljava/lang/String;IIIII)V";
+    jmethodID constructor = env->GetMethodID(scan_context_cls, "<init>", scan_context_constructor_signature);
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -123,6 +125,16 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, passwd);
     jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
     LOCAL_REF_GUARD_ENV(env, sql);
+    bool needs_query_time_zone = false;
+    for (const SlotDescriptor* slot_desc : _slot_descs) {
+        if (slot_desc->type().type == TYPE_DATETIME) {
+            needs_query_time_zone = true;
+            break;
+        }
+    }
+    const std::string& query_time_zone_str = needs_query_time_zone ? state->timezone() : "";
+    jstring query_time_zone = env->NewStringUTF(query_time_zone_str.c_str());
+    LOCAL_REF_GUARD_ENV(env, query_time_zone);
     int statement_fetch_size = state->chunk_size();
     int connection_pool_size = config::jdbc_connection_pool_size;
     if (UNLIKELY(connection_pool_size <= 0)) {
@@ -144,8 +156,8 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
     connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
-                                   statement_fetch_size, connection_pool_size, minimum_idle_connections,
-                                   idle_timeout_ms, connection_timeout_ms);
+                                   query_time_zone, statement_fetch_size, connection_pool_size,
+                                   minimum_idle_connections, idle_timeout_ms, connection_timeout_ms);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
