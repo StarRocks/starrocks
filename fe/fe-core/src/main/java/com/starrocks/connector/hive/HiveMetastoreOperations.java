@@ -201,6 +201,7 @@ public class HiveMetastoreOperations {
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
                 .setCreateTime(System.currentTimeMillis())
+                .setComment(stmt.getComment())
                 .setHiveTableType(tableType);
         Table table = builder.build();
         try {
