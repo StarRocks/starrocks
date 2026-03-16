@@ -95,8 +95,8 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     name_set->clear();
     if (hive_column_names != nullptr && hive_column_names->size() > 0 && !use_orc_column_names) {
         // build hive column names index.
-        int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
-        for (int i = 0; i < size; i++) {
+        size_t size = std::min(hive_column_names->size(), static_cast<size_t>(root_type.getSubtypeCount()));
+        for (size_t i = 0; i < size; i++) {
             std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
             name_set->insert(col_name);
         }
@@ -635,7 +635,7 @@ Status OrcChunkReader::lazy_read_next(size_t numValues) {
     return Status::OK();
 }
 
-Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+Status OrcChunkReader::lazy_seek_to(uint64_t rowInStripe) {
     try {
         // It may throw orc::ParseError exception
         _row_reader->lazyLoadSeekTo(rowInStripe);
