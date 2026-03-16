@@ -200,6 +200,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
+    private boolean enableGlobalLateMaterialization = false;
 
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
@@ -231,6 +232,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
         this.isPreAggregation = isPreAggregation;
         this.reasonOfPreAggregation = reason;
+    }
+
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
     public List<Long> getScanTabletIds() {
@@ -1119,6 +1124,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setOutput_chunk_by_bucket(isOutputChunkByBucket);
             }
 
+            if (enableGlobalLateMaterialization) {
+                msg.lake_scan_node.setEnable_global_late_materialization(true);
+            }
+
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
             msg.lake_scan_node.setSchema_key(getSchemaKey());
         } else { // If you find yourself changing this code block, see also the above code block
@@ -1176,6 +1185,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
                 msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
+            }
+
+            if (enableGlobalLateMaterialization) {
+                msg.olap_scan_node.setEnable_global_late_materialization(true);
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);

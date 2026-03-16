@@ -431,6 +431,9 @@ struct TPlanFragmentExecParams {
   // Debug options: perform some action in a particular phase of a particular node
   74: optional list<TExecDebugOption> exec_debug_options
 
+  // used for global lazy materialization
+  75: optional map<Types.TPlanNodeId, i32> per_look_up_num_fetchers
+  76: optional map<Types.TPlanNodeId, Descriptors.TNodesInfo> per_fetch_target_nodes
 }
 
 // Global query parameters assigned by the coordinator.

@@ -292,6 +292,7 @@ public:
     static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
                                              const POlapTableColumnParam& column_param);
     static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
+    static TabletSchemaSPtr copy(const TabletSchema& tablet_schema, const std::vector<TabletColumn>& columns);
     static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in

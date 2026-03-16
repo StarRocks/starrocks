@@ -326,18 +326,21 @@ RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDesc
     RowPositionDescriptor* desc = nullptr;
     switch (t_desc.row_position_type) {
     case TRowPositionType::ICEBERG_V3_ROW_POSITION: {
-        std::vector<SlotId> fetch_ref_slot_ids;
-        fetch_ref_slot_ids.reserve(t_desc.fetch_ref_slots.size());
-        for (const auto& slot_id : t_desc.fetch_ref_slots) {
-            fetch_ref_slot_ids.emplace_back(slot_id);
-        }
-        std::vector<SlotId> lookup_ref_slot_ids;
-        lookup_ref_slot_ids.reserve(t_desc.lookup_ref_slots.size());
-        for (const auto& slot_id : t_desc.lookup_ref_slots) {
-            lookup_ref_slot_ids.emplace_back(slot_id);
-        }
-        desc = pool->add(
-                new IcebergV3RowPositionDescriptor(t_desc.row_source_slot, fetch_ref_slot_ids, lookup_ref_slot_ids));
+        desc = pool->add(new RowPositionDescriptor(RowPositionDescriptor::ICEBERG_V3, t_desc.scan_node_id,
+                                                   t_desc.row_source_slot, t_desc.fetch_ref_slots,
+                                                   t_desc.lookup_ref_slots));
+        break;
+    }
+    case TRowPositionType::OLAP_ROW_POSITION: {
+        desc = pool->add(new RowPositionDescriptor(RowPositionDescriptor::OLAP_SCAN, t_desc.scan_node_id,
+                                                   t_desc.row_source_slot, t_desc.fetch_ref_slots,
+                                                   t_desc.lookup_ref_slots));
+        break;
+    }
+    case TRowPositionType::LAKE_ROW_POSITION: {
+        desc = pool->add(new RowPositionDescriptor(RowPositionDescriptor::LAKE_SCAN, t_desc.scan_node_id,
+                                                   t_desc.row_source_slot, t_desc.fetch_ref_slots,
+                                                   t_desc.lookup_ref_slots));
         break;
     }
     default: {

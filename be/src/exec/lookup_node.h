@@ -18,7 +18,6 @@
 #include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "runtime/descriptors.h"
-#include "runtime/lookup_stream_mgr.h"
 
 namespace starrocks {
 class LookUpDispatcher;
@@ -41,8 +40,10 @@ public:
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
+    void set_num_fetchers(int32_t num_fetchers) { _num_peer_fetchers = num_fetchers; }
+
 private:
+    size_t _num_peer_fetchers = 0;
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
-    std::shared_ptr<LookUpDispatcher> _dispatcher;
 };
 } // namespace starrocks

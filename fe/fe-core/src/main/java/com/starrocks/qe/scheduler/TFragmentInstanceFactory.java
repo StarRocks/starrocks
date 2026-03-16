@@ -135,6 +135,7 @@ public class TFragmentInstanceFactory {
         }
         result.setIs_stream_pipeline(jobSpec.isEnableStreamPipeline());
         result.params.setPer_exch_num_senders(execFragment.getNumSendersPerExchange());
+        result.params.setPer_look_up_num_fetchers(execFragment.getNumFetchersPerLookUp());
         if (execFragment.getRuntimeFilterParams().isSetRuntime_filter_builder_number()) {
             result.params.setRuntime_filter_params(execFragment.getRuntimeFilterParams());
         }

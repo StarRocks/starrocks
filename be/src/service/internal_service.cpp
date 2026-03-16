@@ -1542,6 +1542,22 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
     st = _exec_env->lookup_dispatcher_mgr()->lookup(std::move(request_ctx));
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::lookup_close(google::protobuf::RpcController* cntl_base,
+                                               const PLookUpCloseRequest* request, PLookUpCloseResponse* response,
+                                               google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_query_id()) {
+        Status::InvalidArgument("missing query_id in lookup_close request").to_protobuf(response->mutable_status());
+        return;
+    }
+    TUniqueId query_id;
+    query_id.hi = request->query_id().hi();
+    query_id.lo = request->query_id().lo();
+    auto st = _exec_env->lookup_dispatcher_mgr()->lookup_close(query_id, request->lookup_node_id());
+    st.to_protobuf(response->mutable_status());
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 
 } // namespace starrocks

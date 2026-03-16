@@ -178,6 +178,7 @@ set(STORAGE_FILES
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     virtual_column_utils.cpp
+    extends_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
