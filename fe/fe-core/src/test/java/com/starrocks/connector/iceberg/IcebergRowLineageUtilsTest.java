@@ -15,7 +15,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -34,39 +33,46 @@ public class IcebergRowLineageUtilsTest {
 
     @Test
     public void shouldNotWriteRowLineageColumnsForRegularInsert() {
-        SessionVariable sessionVariable = new SessionVariable();
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         Mockito.when(icebergTable.getFormatVersion()).thenReturn(3);
 
         InsertStmt insertStmt = newInsertStmt();
 
         Assertions.assertFalse(
-                IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable, sessionVariable));
+                IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable));
     }
 
     @Test
     public void shouldWriteRowLineageColumnsForRewriteInsertOnV3Table() {
-        SessionVariable sessionVariable = new SessionVariable();
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         Mockito.when(icebergTable.getFormatVersion()).thenReturn(3);
 
-        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(newInsertStmt(), true);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(newInsertStmt(), true, true);
 
         Assertions.assertTrue(
-                IcebergRowLineageUtils.shouldWriteRowLineageColumns(rewriteStmt, icebergTable, sessionVariable));
+                IcebergRowLineageUtils.shouldWriteRowLineageColumns(rewriteStmt, icebergTable));
     }
 
     @Test
-    public void shouldNotWriteRowLineageColumnsWhenSessionVariableDisabled() {
-        SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.setEnableIcebergCompactionWithRowLineage(false);
+    public void shouldNotWriteRowLineageColumnsWhenRewriteStmtDoesNotWriteRowLineage() {
         IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
         Mockito.when(icebergTable.getFormatVersion()).thenReturn(3);
 
-        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(newInsertStmt(), true);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(newInsertStmt(), true, false);
 
         Assertions.assertFalse(
-                IcebergRowLineageUtils.shouldWriteRowLineageColumns(rewriteStmt, icebergTable, sessionVariable));
+                IcebergRowLineageUtils.shouldWriteRowLineageColumns(rewriteStmt, icebergTable));
+    }
+
+    @Test
+    public void shouldNotWriteRowLineageColumnsForV2Table() {
+        IcebergTable icebergTable = Mockito.mock(IcebergTable.class);
+        Mockito.when(icebergTable.getFormatVersion()).thenReturn(2);
+
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(newInsertStmt(), true, true);
+
+        Assertions.assertFalse(
+                IcebergRowLineageUtils.shouldWriteRowLineageColumns(rewriteStmt, icebergTable));
     }
 
     private InsertStmt newInsertStmt() {

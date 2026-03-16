@@ -3271,7 +3271,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
-    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE)
+    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergCompactionWithRowLineage = true;
 
     @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
@@ -5569,7 +5569,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
-    public boolean isEnableIcebergCompactionWithRowLineage() {
+    public boolean getEnableIcebergCompactionWithRowLineage() {
         return enableIcebergCompactionWithRowLineage;
     }
 

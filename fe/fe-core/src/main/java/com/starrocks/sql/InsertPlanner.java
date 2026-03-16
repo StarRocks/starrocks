@@ -314,8 +314,7 @@ public class InsertPlanner {
 
         if (targetTable.isIcebergTable()) {
             boolean preserveRowLineage = targetTable instanceof IcebergTable
-                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(
-                    insertStmt, (IcebergTable) targetTable, session.getSessionVariable());
+                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
             Set<String> columnsToFilter = preserveRowLineage
                     ? IcebergTable.ICEBERG_META_COLUMNS.stream()
                             .filter(col -> !col.equals(IcebergTable.ROW_ID)

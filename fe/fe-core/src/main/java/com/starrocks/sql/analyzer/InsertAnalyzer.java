@@ -253,8 +253,7 @@ public class InsertAnalyzer {
                         .collect(Collectors.toSet()));
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
-                boolean writeRowLineage = IcebergRowLineageUtils.shouldWriteRowLineageColumns(
-                        insertStmt, icebergTable, session.getSessionVariable());
+                boolean writeRowLineage = IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable);
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
                     if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&

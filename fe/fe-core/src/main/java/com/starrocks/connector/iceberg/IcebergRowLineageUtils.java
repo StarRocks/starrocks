@@ -15,7 +15,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 
@@ -24,10 +23,9 @@ public final class IcebergRowLineageUtils {
     private IcebergRowLineageUtils() {
     }
 
-    public static boolean shouldWriteRowLineageColumns(InsertStmt insertStmt, IcebergTable icebergTable,
-                                                       SessionVariable sessionVariable) {
-        return insertStmt instanceof IcebergRewriteStmt
-                && icebergTable.getFormatVersion() >= 3
-                && sessionVariable.isEnableIcebergCompactionWithRowLineage();
+    public static boolean shouldWriteRowLineageColumns(InsertStmt insertStmt, IcebergTable icebergTable) {
+        return insertStmt instanceof IcebergRewriteStmt rewriteStmt
+                && rewriteStmt.writeRowLineage()
+                && icebergTable.getFormatVersion() >= 3;
     }
 }

@@ -149,63 +149,9 @@ public class RewriteDataFilesTest {
     }
 
     @Test
-    void rewriteDataFilesV3ShouldIncludeRowLineageColumns(
+    void rewriteDataFilesV3ShouldSkipRowLineageWhenHiddenSessionVariableIsDisabled(
             @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
         // --- arrange: create a v3 BaseTable mock
-        TableOperations ops = Mockito.mock(TableOperations.class);
-        TableMetadata metadata = Mockito.mock(TableMetadata.class);
-        Mockito.when(metadata.formatVersion()).thenReturn(3);
-        Mockito.when(ops.current()).thenReturn(metadata);
-        BaseTable baseTable = Mockito.mock(BaseTable.class);
-        Mockito.when(baseTable.operations()).thenReturn(ops);
-
-        String catalog = "c1";
-        String db = "db";
-        String tbl = "table";
-
-        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
-        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
-        Mockito.when(stmt.getDbName()).thenReturn(db);
-        Mockito.when(stmt.getTableName()).thenReturn(tbl);
-
-        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        Mockito.when(clause.getWhere()).thenReturn(null);
-
-        // Default session variable: enable_iceberg_compaction_with_row_lineage = true
-        SessionVariable sessionVariable = new SessionVariable();
-        ConnectContext ctx = Mockito.mock(ConnectContext.class);
-        QueryState queryState = new QueryState();
-        Mockito.when(ctx.getState()).thenReturn(queryState);
-        Mockito.when(ctx.getSessionVariable()).thenReturn(sessionVariable);
-
-        // Capture the SQL passed to the job
-        final String[] capturedSql = new String[1];
-        try (MockedConstruction<IcebergRewriteDataJob> mocked = Mockito.mockConstruction(IcebergRewriteDataJob.class,
-                (mock, context) -> {
-                    capturedSql[0] = (String) context.arguments().get(0);
-                    Mockito.doNothing().when(mock).prepare();
-                    Mockito.when(mock.execute()).thenReturn(new IcebergRewriteDataJob.RewriteMetrics(1, 10, 2));
-                })) {
-
-            IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
-            IcebergTableProcedureContext procedureContext =
-                    new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
-            procedure.execute(procedureContext, Map.of());
-        }
-
-        // Verify the SQL includes row lineage columns for v3 table
-        Assertions.assertNotNull(capturedSql[0]);
-        Assertions.assertTrue(capturedSql[0].contains("_row_id"),
-                "SQL should include _row_id for v3 table: " + capturedSql[0]);
-        Assertions.assertTrue(capturedSql[0].contains("_last_updated_sequence_number"),
-                "SQL should include _last_updated_sequence_number for v3 table: " + capturedSql[0]);
-    }
-
-    @Test
-    void rewriteDataFilesV3WithRowLineageDisabledShouldNotIncludeColumns(
-            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
-        // --- arrange: v3 table but session variable disabled
         TableOperations ops = Mockito.mock(TableOperations.class);
         TableMetadata metadata = Mockito.mock(TableMetadata.class);
         Mockito.when(metadata.formatVersion()).thenReturn(3);
@@ -247,10 +193,157 @@ public class RewriteDataFilesTest {
             procedure.execute(procedureContext, Map.of());
         }
 
-        // When disabled, SQL should NOT include row lineage columns even for v3
         Assertions.assertNotNull(capturedSql[0]);
         Assertions.assertFalse(capturedSql[0].contains("_row_id"),
-                "SQL should NOT include _row_id when disabled: " + capturedSql[0]);
+                "disabled hidden switch should fall back to SELECT *: " + capturedSql[0]);
+    }
+
+    @Test
+    void rewriteDataFilesV3ShouldIncludeRowLineageColumnsByDefault(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        TableMetadata metadata = Mockito.mock(TableMetadata.class);
+        Mockito.when(metadata.formatVersion()).thenReturn(3);
+        Mockito.when(ops.current()).thenReturn(metadata);
+        BaseTable baseTable = Mockito.mock(BaseTable.class);
+        Mockito.when(baseTable.operations()).thenReturn(ops);
+
+        String catalog = "c1";
+        String db = "db";
+        String tbl = "table";
+
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
+        Mockito.when(stmt.getDbName()).thenReturn(db);
+        Mockito.when(stmt.getTableName()).thenReturn(tbl);
+
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        Mockito.when(clause.getWhere()).thenReturn(null);
+
+        SessionVariable sessionVariable = new SessionVariable();
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(ctx.getState()).thenReturn(queryState);
+        Mockito.when(ctx.getSessionVariable()).thenReturn(sessionVariable);
+
+        final String[] capturedSql = new String[1];
+        try (MockedConstruction<IcebergRewriteDataJob> mocked = Mockito.mockConstruction(IcebergRewriteDataJob.class,
+                (mock, context) -> {
+                    capturedSql[0] = (String) context.arguments().get(0);
+                    Mockito.doNothing().when(mock).prepare();
+                    Mockito.when(mock.execute()).thenReturn(new IcebergRewriteDataJob.RewriteMetrics(1, 10, 2));
+                })) {
+
+            IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
+            IcebergTableProcedureContext procedureContext =
+                    new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
+                            HDFS_ENVIRONMENT, stmt, clause);
+            procedure.execute(procedureContext, Map.of());
+        }
+
+        Assertions.assertNotNull(capturedSql[0]);
+        Assertions.assertTrue(capturedSql[0].contains("_row_id"),
+                "default v3 rewrite should request _row_id: " + capturedSql[0]);
+        Assertions.assertTrue(capturedSql[0].contains("_last_updated_sequence_number"),
+                "default v3 rewrite should include sequence number: " + capturedSql[0]);
+    }
+
+    @Test
+    void rewriteDataFilesV3ShouldIncludeRowLineageColumnsWhenHiddenSwitchIsEnabled(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        TableMetadata metadata = Mockito.mock(TableMetadata.class);
+        Mockito.when(metadata.formatVersion()).thenReturn(3);
+        Mockito.when(ops.current()).thenReturn(metadata);
+        BaseTable baseTable = Mockito.mock(BaseTable.class);
+        Mockito.when(baseTable.operations()).thenReturn(ops);
+
+        String catalog = "c1";
+        String db = "db";
+        String tbl = "table";
+
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
+        Mockito.when(stmt.getDbName()).thenReturn(db);
+        Mockito.when(stmt.getTableName()).thenReturn(tbl);
+
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        Mockito.when(clause.getWhere()).thenReturn(null);
+
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableIcebergCompactionWithRowLineage(true);
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(ctx.getState()).thenReturn(queryState);
+        Mockito.when(ctx.getSessionVariable()).thenReturn(sessionVariable);
+
+        final String[] capturedSql = new String[1];
+        try (MockedConstruction<IcebergRewriteDataJob> mocked = Mockito.mockConstruction(IcebergRewriteDataJob.class,
+                (mock, context) -> {
+                    capturedSql[0] = (String) context.arguments().get(0);
+                    Mockito.doNothing().when(mock).prepare();
+                    Mockito.when(mock.execute()).thenReturn(new IcebergRewriteDataJob.RewriteMetrics(1, 10, 2));
+                })) {
+
+            IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
+            IcebergTableProcedureContext procedureContext =
+                    new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
+                            HDFS_ENVIRONMENT, stmt, clause);
+            procedure.execute(procedureContext, Map.of());
+        }
+
+        Assertions.assertNotNull(capturedSql[0]);
+        Assertions.assertTrue(capturedSql[0].contains("_row_id"),
+                "enabled hidden switch should request _row_id: " + capturedSql[0]);
+    }
+
+    @Test
+    void rewriteDataFilesV3ShouldNotIncludeRowLineageColumnsWhenHiddenSwitchIsDisabled(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        TableMetadata metadata = Mockito.mock(TableMetadata.class);
+        Mockito.when(metadata.formatVersion()).thenReturn(3);
+        Mockito.when(ops.current()).thenReturn(metadata);
+        BaseTable baseTable = Mockito.mock(BaseTable.class);
+        Mockito.when(baseTable.operations()).thenReturn(ops);
+
+        String catalog = "c1";
+        String db = "db";
+        String tbl = "table";
+
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn(catalog);
+        Mockito.when(stmt.getDbName()).thenReturn(db);
+        Mockito.when(stmt.getTableName()).thenReturn(tbl);
+
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        Mockito.when(clause.getWhere()).thenReturn(null);
+
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableIcebergCompactionWithRowLineage(false);
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(ctx.getState()).thenReturn(queryState);
+        Mockito.when(ctx.getSessionVariable()).thenReturn(sessionVariable);
+
+        final String[] capturedSql = new String[1];
+        try (MockedConstruction<IcebergRewriteDataJob> mocked = Mockito.mockConstruction(IcebergRewriteDataJob.class,
+                (mock, context) -> {
+                    capturedSql[0] = (String) context.arguments().get(0);
+                    Mockito.doNothing().when(mock).prepare();
+                    Mockito.when(mock.execute()).thenReturn(new IcebergRewriteDataJob.RewriteMetrics(1, 10, 2));
+                })) {
+
+            IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
+            IcebergTableProcedureContext procedureContext =
+                    new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
+                            HDFS_ENVIRONMENT, stmt, clause);
+            procedure.execute(procedureContext, Map.of());
+        }
+
+        Assertions.assertNotNull(capturedSql[0]);
+        Assertions.assertFalse(capturedSql[0].contains("_row_id"),
+                "disabled hidden switch should not request _row_id: " + capturedSql[0]);
     }
 
     @Test
@@ -276,9 +369,8 @@ public class RewriteDataFilesTest {
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
         Mockito.when(clause.getWhere()).thenReturn(null);
 
-        // Default session variable: enable_iceberg_compaction_with_row_lineage = true,
-        // but v2 table should still not include row lineage columns
         SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableIcebergCompactionWithRowLineage(true);
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         QueryState queryState = new QueryState();
         Mockito.when(ctx.getState()).thenReturn(queryState);
