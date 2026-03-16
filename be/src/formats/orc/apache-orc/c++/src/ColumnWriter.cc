@@ -903,7 +903,7 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     }
 
     // do the transformation
-    for (long& i : idxBuffer) {
+    for (int64_t& i : idxBuffer) {
         i = static_cast<int64_t>(mapping[static_cast<size_t>(i)]);
     }
 }
