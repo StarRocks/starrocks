@@ -38,6 +38,7 @@ public class TableRelation extends Relation {
         _BINLOG_,
         _SYNC_MV_,
         _USE_PK_INDEX_,
+        _CACHE_STATS_,
     }
 
     private final TableName name;
@@ -197,6 +198,10 @@ public class TableRelation extends Relation {
 
     public boolean isUsePkIndex() {
         return tableHints.contains(TableHint._USE_PK_INDEX_);
+    }
+
+    public boolean isCacheStatsQuery() {
+        return tableHints.contains(TableHint._CACHE_STATS_);
     }
 
     @Override

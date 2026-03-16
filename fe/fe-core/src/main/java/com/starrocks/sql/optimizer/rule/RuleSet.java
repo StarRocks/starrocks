@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoCTEImplement
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumeInlineImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerReuseImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CacheStatsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.DeltaLakeScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
@@ -198,6 +199,7 @@ public class RuleSet {
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
+            new CacheStatsScanImplementationRule(),
             new JDBCScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
