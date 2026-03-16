@@ -62,10 +62,7 @@ public:
     }
 
 private:
-    // Tuple id resolved in Prepare() to set tuple_desc_;
     const int _tuple_id;
-    // Descriptor for tuples this union node constructs.
-    const TupleDescriptor* _tuple_desc;
     bool _has_outer_join_child = false;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
@@ -85,10 +82,6 @@ private:
 
     // pool for allocate key.
     std::unique_ptr<MemPool> _build_pool;
-
-    RuntimeProfile::Counter* _build_set_timer = nullptr; // time to build hash set
-    RuntimeProfile::Counter* _refine_intersect_row_timer = nullptr;
-    RuntimeProfile::Counter* _get_result_timer = nullptr;
 };
 
 } // namespace starrocks

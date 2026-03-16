@@ -49,7 +49,6 @@ private:
     const std::string _subquery_string;
     TAssertion::type _assertion;
     std::deque<ChunkPtr> _input_chunks;
-    bool _has_assert;
 };
 
 } // namespace starrocks
