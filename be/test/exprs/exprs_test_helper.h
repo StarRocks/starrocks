@@ -193,6 +193,16 @@ public:
 #endif
     }
 
+    static bool should_verify_with_jit(const Expr* expr, RuntimeState* runtime_state) {
+#ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
+        (void)expr;
+        (void)runtime_state;
+        return false;
+#else
+        return expr->is_compilable(runtime_state);
+#endif
+    }
+
     static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
 #ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
         (void)ptr;

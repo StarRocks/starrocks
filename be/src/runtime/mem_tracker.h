@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
@@ -443,8 +444,8 @@ public:
 
     // no any memory allocate
     size_t debug_string(char* dst, size_t max_length) {
-        return snprintf(dst, max_length, "tracker:%s consumption: %ld\n", _label.c_str(),
-                        _consumption->current_value());
+        return snprintf(dst, max_length, "tracker:%s consumption: %" PRId64 "\n", _label.c_str(),
+                        static_cast<int64_t>(_consumption->current_value()));
     }
 
     MemTrackerType type() const { return _type; }
