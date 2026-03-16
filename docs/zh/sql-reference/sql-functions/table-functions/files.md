@@ -47,7 +47,7 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 您可以指定路径或文件。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载名为 `20210411` 的数据文件。
 
-您还可以使用通配符 `?`、`*`、`[]`、`{}` 或 `^` 指定多个数据文件的保存路径。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 或 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载所有分区或仅 `202104` 分区的数据文件。
+您还可以使用通配符 `?`、`*`、`[]` 或 `^` 指定多个数据文件的保存路径。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 或 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载所有分区或仅 `202104` 分区的数据文件。
 
 :::note
 
