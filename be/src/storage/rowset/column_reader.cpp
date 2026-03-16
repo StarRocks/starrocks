@@ -238,6 +238,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
         _sub_readers = std::make_unique<SubReaderList>();
+        if (meta->children_columns_size() > 0) {
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
+        }
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
