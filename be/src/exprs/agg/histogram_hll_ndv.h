@@ -47,14 +47,18 @@ public:
             simdjson::padded_string padded_buckets_string = ctx->get_constant_column(1)->get(0).get_slice().to_string();
             simdjson::ondemand::parser simdjson_parser;
             simdjson::ondemand::document doc;
-            simdjson_parser.iterate(padded_buckets_string).get(doc);
+            if (auto error = simdjson_parser.iterate(padded_buckets_string).get(doc); error != simdjson::SUCCESS) {
+                ctx->set_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.", false);
+                return;
+            }
             simdjson::ondemand::array outer_array = doc.get_array();
             for (auto bucket_json : outer_array) {
                 simdjson::ondemand::array inner_array = bucket_json.get_array();
                 buckets.push_back(Bucket<LT>::from_json(inner_array, ctx->get_arg_type(0), &state.mem_pool));
             }
-        } catch (const simdjson::simdjson_error& e) {
-            throw std::runtime_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.");
+        } catch (const std::exception&) {
+            ctx->set_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.", false);
+            return;
         }
 
         state.buckets = buckets;
