@@ -131,6 +131,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
@@ -1161,7 +1162,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ConnectContext ctx = new ConnectContext();
         new Expectations() {
             {
-                icebergCatalog.refreshTable(anyString, anyString, null);
+                icebergCatalog.refreshTable(anyString, anyString, (ExecutorService) any, anyBoolean);
                 result = new StarRocksConnectorException("refresh failed");
             }
         };
