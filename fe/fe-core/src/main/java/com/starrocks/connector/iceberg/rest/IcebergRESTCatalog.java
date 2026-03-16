@@ -114,6 +114,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         restCatalogProperties.put(USER_AGENT, "StarRocks-Iceberg-Connector/" +
                 GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
+        // Map aws.s3.iam_role_arn to client.assume-role.arn so the REST SigV4 signer uses the
+        // same assumed role as S3/Glue clients, unless the caller has already set it explicitly.
+        String s3IamRoleArn = restCatalogProperties.get("aws.s3.iam_role_arn");
+        if (s3IamRoleArn != null && !restCatalogProperties.containsKey(AwsProperties.CLIENT_ASSUME_ROLE_ARN)) {
+            restCatalogProperties.put(AwsProperties.CLIENT_ASSUME_ROLE_ARN, s3IamRoleArn);
+        }
+
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
         viewEndpointsEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_VIEW_ENDPOINTS_ENABLED, true);
         // setup oauth2
