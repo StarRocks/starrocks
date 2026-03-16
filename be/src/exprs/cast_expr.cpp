@@ -39,9 +39,9 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/json_converter.h"
 #include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
@@ -1188,8 +1188,10 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 // Helper functions for Complex Types to JSON Conversion (Column-wise approach)
 // =========================================================================
 
-static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder);
-static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder);
+static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row,
+                                   vpack::Builder* builder);
+static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row,
+                                   vpack::Builder* builder);
 
 static Status column_key_to_string(const Column* column, const TypeDescriptor& type, size_t row, std::string* out) {
     if (column->is_null(row)) {
@@ -1285,7 +1287,8 @@ static Status column_key_to_string(const Column* column, const TypeDescriptor& t
     return Status::OK();
 }
 
-static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder) {
+static Status column_to_json_value(const Column* column, const TypeDescriptor& type, size_t row,
+                                   vpack::Builder* builder) {
     if (column->is_null(row)) {
         builder->add(vpack::Value(vpack::ValueType::Null));
         return Status::OK();
@@ -1422,14 +1425,11 @@ static Status column_to_json_value(const Column* column, const TypeDescriptor& t
 
         builder->openObject();
         for (size_t i = 0; i < fields.size(); ++i) {
-            std::string field_name = (i < type.field_names.size())
-                ? type.field_names[i]
-                : "col" + std::to_string(i + 1);
+            std::string field_name =
+                    (i < type.field_names.size()) ? type.field_names[i] : "col" + std::to_string(i + 1);
             builder->add(vpack::Value(field_name));
 
-            const auto& field_type = (i < type.children.size())
-                ? type.children[i]
-                : TypeDescriptor(TYPE_NULL);
+            const auto& field_type = (i < type.children.size()) ? type.children[i] : TypeDescriptor(TYPE_NULL);
             RETURN_IF_ERROR(column_to_json_value(fields[i].get(), field_type, row, builder));
         }
         builder->close();
@@ -1441,7 +1441,8 @@ static Status column_to_json_value(const Column* column, const TypeDescriptor& t
     return Status::OK();
 }
 
-static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row, vpack::Builder* builder) {
+static Status column_to_json_array(const Column* column, const TypeDescriptor& type, size_t row,
+                                   vpack::Builder* builder) {
     auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(column));
     const auto& offsets = array_col->offsets().get_data();
     const auto* elements = array_col->elements().get();
@@ -2539,9 +2540,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             std::vector<int> source_field_indices(to_type.children.size());
             for (int i = 0; i < (int)to_type.children.size(); ++i) {
                 source_field_indices[i] = i;
-                ASSIGN_OR_RETURN(field_casts[i],
-                                 create_cast_expr(pool, from_type.children[i], to_type.children[i],
-                                                  allow_throw_exception));
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
+                                                                  allow_throw_exception));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[i]);
                 field_casts[i]->add_child(cast_input.get());
