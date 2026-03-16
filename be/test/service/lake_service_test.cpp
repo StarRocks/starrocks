@@ -150,7 +150,8 @@ protected:
         ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
     }
 
-    void create_pk_tablet_with_delvec_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key) {
+    void create_pk_tablet_with_delvec_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key,
+                                            uint32_t delete_rows = 3) {
         auto metadata = lake::generate_simple_tablet_metadata(PRIMARY_KEYS);
         metadata->set_id(tablet_id);
         metadata->set_version(version);
@@ -182,8 +183,9 @@ protected:
         dv.set_empty();
         std::shared_ptr<DelVector> ndv;
         std::vector<uint32_t> del_ids;
-        del_ids.reserve(3);
-        for (uint32_t i = 0; i < 3; ++i) {
+        delete_rows = std::min<uint32_t>(delete_rows, rowset->num_rows());
+        del_ids.reserve(delete_rows);
+        for (uint32_t i = 0; i < delete_rows; ++i) {
             del_ids.push_back(i);
         }
         dv.add_dels_as_new_version(del_ids, metadata->version(), &ndv);
@@ -2896,6 +2898,70 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
 
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.tablet_stats_size());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_with_delvec_adjust_data_size) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t version = 2;
+    create_pk_tablet_with_delvec_range(tablet_id, version, 0, 100);
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(tablet_id);
+    info->set_version(version);
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_EQ(tablet_id, response.tablet_stats(0).tablet_id());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    const int64_t num_deletes = _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset);
+    const int64_t expected_num_rows = std::max<int64_t>(rowset.num_rows() - num_deletes, 0);
+    int64_t scaled_rowset_data_size = 0;
+    if (rowset.num_rows() > 0 && rowset.data_size() > 0 && expected_num_rows > 0) {
+        scaled_rowset_data_size =
+                static_cast<int64_t>(static_cast<__int128>(rowset.data_size()) * expected_num_rows / rowset.num_rows());
+    }
+    int64_t expected_data_size = scaled_rowset_data_size;
+    for (const auto& [_, file] : metadata->delvec_meta().version_to_file()) {
+        expected_data_size += file.size();
+    }
+    ASSERT_LT(expected_num_rows, rowset.num_rows());
+    ASSERT_LT(scaled_rowset_data_size, rowset.data_size());
+    ASSERT_EQ(expected_num_rows, response.tablet_stats(0).num_rows());
+    ASSERT_EQ(expected_data_size, response.tablet_stats(0).data_size());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_with_delvec_all_rows_deleted) {
+    const int64_t tablet_id = next_id();
+    constexpr int64_t version = 2;
+    create_pk_tablet_with_delvec_range(tablet_id, version, 0, 100, 10);
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(tablet_id);
+    info->set_version(version);
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_EQ(tablet_id, response.tablet_stats(0).tablet_id());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    const int64_t num_deletes = _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset);
+    ASSERT_EQ(rowset.num_rows(), num_deletes);
+
+    int64_t expected_data_size = 0;
+    for (const auto& [_, file] : metadata->delvec_meta().version_to_file()) {
+        expected_data_size += file.size();
+    }
+    ASSERT_EQ(0, response.tablet_stats(0).num_rows());
+    ASSERT_EQ(expected_data_size, response.tablet_stats(0).data_size());
 }
 
 // Verify that DUP_KEYS tablet stats are computed correctly without involving

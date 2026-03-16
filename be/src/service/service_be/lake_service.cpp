@@ -1184,12 +1184,21 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
                         // Clamp to avoid negative contribution when approximate num_dels overcounts.
-                        int64_t rowset_live_rows = rowset.num_rows() - num_deletes;
+                        const int64_t rowset_num_rows = rowset.num_rows();
+                        const int64_t rowset_data_size = rowset.data_size();
+                        int64_t rowset_live_rows = rowset_num_rows - num_deletes;
                         if (UNLIKELY(rowset_live_rows < 0)) {
                             rowset_live_rows = 0;
                         }
                         num_rows += rowset_live_rows;
-                        data_size += rowset.data_size();
+                        if (rowset_num_rows > 0 && rowset_data_size > 0 && rowset_live_rows > 0) {
+                            if (LIKELY(rowset_live_rows == rowset_num_rows)) {
+                                data_size += rowset_data_size;
+                            } else {
+                                data_size += static_cast<int64_t>(static_cast<__int128>(rowset_data_size) *
+                                                                  rowset_live_rows / rowset_num_rows);
+                            }
+                        }
                     }
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                         data_size += file.size();
