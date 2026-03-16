@@ -985,8 +985,6 @@ public class ExpressionStatisticsCalculatorTest {
     public void testArrayMapWithDependentLambda() {
         // GIVEN
         final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
-        // Lambda argument 'x' is a separate ColumnRefOperator with isLambdaArgument=true,
-        // matching production behavior where lambda args have different IDs from array columns.
         final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
 
         final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(IntegerType.INT));
@@ -1072,24 +1070,12 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testArrayMapWithCaseWhenAndLambdaArgNotInStats() {
-        // Reproduces production error: array_map((x) -> case when not(ID is null) then x end, ARRAY_TEST)
-        // where x (ID=5) is a lambda argument and ARRAY_TEST (ID=4) is the array column.
-        // The lambda body references both ID (a regular column) and x (the lambda argument).
-        // Without proper lambda arg stats propagation, this would throw:
-        // "only found column statistics: {4: ARRAY_TEST}, but missing statistic of col: 5: x."
-
         // GIVEN
         final var idCol = new ColumnRefOperator(3, IntegerType.INT, "ID", true);
         final var arrayTestCol = new ColumnRefOperator(4, ArrayType.ARRAY_INT, "ARRAY_TEST", true);
-        // Lambda argument 'x' — separate ColumnRefOperator with isLambdaArgument=true
         final var lambdaArgX = new ColumnRefOperator(5, IntegerType.INT, "x", true, true);
 
-        // case when not(ID is null) then x end
-        // NOT (ID is null) => isNotNull
         final var isNotNullPredicate = new IsNullPredicateOperator(true, idCol);
-
-        // CASE WHEN not(ID is null) THEN x END
-        // CaseWhenOperator: hasCase=true, hasElse=false, whenClauses=[(isNotNull, x)]
         final var caseWhen = new CaseWhenOperator(IntegerType.INT, null, null,
                 Lists.newArrayList(isNotNullPredicate, lambdaArgX));
 
@@ -1117,14 +1103,12 @@ public class ExpressionStatisticsCalculatorTest {
         final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
                 Lists.newArrayList(lambda, arrayTestCol));
 
-        // WHEN — this must not throw an exception
+        // WHEN
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(arrayMap, stats);
 
         // THEN
         Assertions.assertNotNull(exprStats);
-        // The result should not be unknown since we have stats for all involved columns
         Assertions.assertFalse(exprStats.isUnknown());
-        // Array-level stats should be preserved from the input array
         Assertions.assertEquals(0.1, exprStats.getNullsFraction(), 0.001);
         Assertions.assertEquals(16, exprStats.getAverageRowSize(), 0.001);
         Assertions.assertEquals(5, exprStats.getCollectionSize(), 0.001);

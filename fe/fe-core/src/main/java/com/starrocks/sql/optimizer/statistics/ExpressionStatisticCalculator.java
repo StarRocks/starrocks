@@ -73,8 +73,8 @@ public class ExpressionStatisticCalculator {
         // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
 
-        // Additional stats, e.g. ones that map stats to lambda variables.
-        private final Map<ColumnRefOperator, ColumnStatistic> additionalStats = new HashMap<>();
+        // Stats for lambda variables.
+        private final Map<ColumnRefOperator, ColumnStatistic> mappedStats = new HashMap<>();
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
             this.inputStatistics = statistics;
@@ -93,7 +93,7 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitVariableReference(ColumnRefOperator operator, Void context) {
             if (operator.getOpType() == OperatorType.LAMBDA_ARGUMENT) {
-                ColumnStatistic stat = additionalStats.get(operator);
+                ColumnStatistic stat = mappedStats.get(operator);
                 return stat != null ? stat : ColumnStatistic.unknown();
             }
             return inputStatistics.getColumnStatistic(operator);
@@ -976,10 +976,6 @@ public class ExpressionStatisticCalculator {
             return Optional.of(new Histogram(newBuckets, newMcv));
         }
 
-        private boolean isSupportedIntegerMcvType(Type t) {
-            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
-        }
-
         private Optional<ConstantOperator> toConstantOperator(ScalarOperator op) {
             if (op == null || !op.isConstant() || op.isConstantNull()) {
                 return Optional.empty();
@@ -1051,6 +1047,9 @@ public class ExpressionStatisticCalculator {
             }
         }
 
+        private boolean isSupportedIntegerMcvType(Type t) {
+            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
+        }
 
         private void mapVariableStatistics(CallOperator call) {
             if (FunctionSet.ARRAY_MAP.equalsIgnoreCase(call.getFnName())) {
@@ -1059,7 +1058,6 @@ public class ExpressionStatisticCalculator {
         }
 
         /**
-         * Populates the lambda argument statistics overlay so that {@link #visitVariableReference} can resolve lambda parameters.
          * E.g. for `array_map((x) -> ... x ..., ARRAY_TEST)`, maps lambda argument 'x' to the statistics of ARRAY_TEST.
          */
         private void addLambdaArgStats(CallOperator arrayMapCall) {
@@ -1081,7 +1079,7 @@ public class ExpressionStatisticCalculator {
                 ColumnRefOperator lambdaArg = refColumns.get(i);
                 ScalarOperator arrayInput = arrayInputs.get(i);
                 ColumnStatistic stat = arrayInput.accept(this, null);
-                additionalStats.put(lambdaArg, stat);
+                mappedStats.put(lambdaArg, stat);
             }
         }
 
