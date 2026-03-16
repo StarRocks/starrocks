@@ -56,22 +56,22 @@ public class LambdaFunctionOperatorTest {
     @Test
     void testArgumentDependency() {
         // GIVEN: lambda (x) -> x = 1, where x has the same id in refColumns and in the expression
-        var lambdaColRef = new ColumnRefOperator(1, Type.INT, "x", true, true);
+        var lambdaColRef = new ColumnRefOperator(1, IntegerType.INT, "x", true, true);
         PredicateOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "x", true),
+                new ColumnRefOperator(1, IntegerType.INT, "x", true),
                 ConstantOperator.createInt(1));
-        var lambda = new LambdaFunctionOperator(Lists.newArrayList(lambdaColRef), lambdaExpr, Type.BOOLEAN);
+        var lambda = new LambdaFunctionOperator(Lists.newArrayList(lambdaColRef), lambdaExpr, BooleanType.BOOLEAN);
 
         // WHEN / THEN
         assertEquals(1, lambda.getNumberOfDependentArguments());
         assertFalse(lambda.isIndependentOfArguments());
 
         // GIVEN: lambda (x, y) -> x = y, both arguments used
-        var lambdaColRef2 = new ColumnRefOperator(2, Type.INT, "y", true, true);
+        var lambdaColRef2 = new ColumnRefOperator(2, IntegerType.INT, "y", true, true);
         lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "x", true),
-                new ColumnRefOperator(2, Type.INT, "y", true));
-        lambda = new LambdaFunctionOperator(List.of(lambdaColRef, lambdaColRef2), lambdaExpr, Type.BOOLEAN);
+                new ColumnRefOperator(1, IntegerType.INT, "x", true),
+                new ColumnRefOperator(2, IntegerType.INT, "y", true));
+        lambda = new LambdaFunctionOperator(List.of(lambdaColRef, lambdaColRef2), lambdaExpr, BooleanType.BOOLEAN);
 
         // WHEN / THEN
         assertEquals(2, lambda.getNumberOfDependentArguments());
@@ -79,7 +79,7 @@ public class LambdaFunctionOperatorTest {
 
         // GIVEN: lambda (x) -> IS NULL(1), argument not used
         lambdaExpr = new IsNullPredicateOperator(ConstantOperator.createInt(1));
-        lambda = new LambdaFunctionOperator(List.of(lambdaColRef), lambdaExpr, Type.BOOLEAN);
+        lambda = new LambdaFunctionOperator(List.of(lambdaColRef), lambdaExpr, BooleanType.BOOLEAN);
         // WHEN / THEN
         assertEquals(0, lambda.getNumberOfDependentArguments());
         assertTrue(lambda.isIndependentOfArguments());

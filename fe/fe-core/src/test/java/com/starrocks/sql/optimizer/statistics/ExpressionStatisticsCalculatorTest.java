@@ -28,13 +28,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +43,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -985,13 +987,13 @@ public class ExpressionStatisticsCalculatorTest {
         final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
         // Lambda argument 'x' is a separate ColumnRefOperator with isLambdaArgument=true,
         // matching production behavior where lambda args have different IDs from array columns.
-        final var lambdaArg = new ColumnRefOperator(10, Type.INT, "x", true, true);
+        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
 
-        final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(Type.INT));
-        final var nullConst = ConstantOperator.createNull(Type.INT);
+        final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(IntegerType.INT));
+        final var nullConst = ConstantOperator.createNull(IntegerType.INT);
 
-        final var ifOp = new CallOperator(FunctionSet.IF, Type.INT, Lists.newArrayList(condition, lambdaArg, nullConst));
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), ifOp, Type.INT);
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT, Lists.newArrayList(condition, lambdaArg, nullConst));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), ifOp, IntegerType.INT);
 
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10_000) //
@@ -1025,13 +1027,13 @@ public class ExpressionStatisticsCalculatorTest {
     public void testArrayMapWithIndependentLambda() {
         // GIVEN
         final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
-        final var otherCol = new ColumnRefOperator(2, Type.INT, "other", true);
+        final var otherCol = new ColumnRefOperator(2, IntegerType.INT, "other", true);
         // Lambda argument 'x' is a separate ColumnRefOperator with isLambdaArgument=true.
-        final var lambdaArg = new ColumnRefOperator(10, Type.INT, "x", true, true);
+        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
 
-        var addOp = new CallOperator(FunctionSet.ADD, Type.INT,
-                Lists.newArrayList(otherCol, new ConstantOperator(1, Type.INT)));
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), addOp, Type.INT);
+        var addOp = new CallOperator(FunctionSet.ADD, IntegerType.INT,
+                Lists.newArrayList(otherCol, new ConstantOperator(1, IntegerType.INT)));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), addOp, IntegerType.INT);
 
         final var stats = Statistics.builder()
                 .setOutputRowCount(10_000) //
@@ -1077,10 +1079,10 @@ public class ExpressionStatisticsCalculatorTest {
         // "only found column statistics: {4: ARRAY_TEST}, but missing statistic of col: 5: x."
 
         // GIVEN
-        final var idCol = new ColumnRefOperator(3, Type.INT, "ID", true);
+        final var idCol = new ColumnRefOperator(3, IntegerType.INT, "ID", true);
         final var arrayTestCol = new ColumnRefOperator(4, ArrayType.ARRAY_INT, "ARRAY_TEST", true);
         // Lambda argument 'x' — separate ColumnRefOperator with isLambdaArgument=true
-        final var lambdaArgX = new ColumnRefOperator(5, Type.INT, "x", true, true);
+        final var lambdaArgX = new ColumnRefOperator(5, IntegerType.INT, "x", true, true);
 
         // case when not(ID is null) then x end
         // NOT (ID is null) => isNotNull
@@ -1088,10 +1090,10 @@ public class ExpressionStatisticsCalculatorTest {
 
         // CASE WHEN not(ID is null) THEN x END
         // CaseWhenOperator: hasCase=true, hasElse=false, whenClauses=[(isNotNull, x)]
-        final var caseWhen = new CaseWhenOperator(Type.INT, null, null,
+        final var caseWhen = new CaseWhenOperator(IntegerType.INT, null, null,
                 Lists.newArrayList(isNotNullPredicate, lambdaArgX));
 
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArgX), caseWhen, Type.INT);
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArgX), caseWhen, IntegerType.INT);
 
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10_000)

@@ -976,6 +976,10 @@ public class ExpressionStatisticCalculator {
             return Optional.of(new Histogram(newBuckets, newMcv));
         }
 
+        private boolean isSupportedIntegerMcvType(Type t) {
+            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
+        }
+
         private Optional<ConstantOperator> toConstantOperator(ScalarOperator op) {
             if (op == null || !op.isConstant() || op.isConstantNull()) {
                 return Optional.empty();
@@ -1139,12 +1143,6 @@ public class ExpressionStatisticCalculator {
                 return ColumnStatistic.unknown().getDistinctValuesCount();
             }
             return arrayStats.getDistinctValuesCount();
-        }
-    }
-}
-
-        private boolean isSupportedIntegerMcvType(Type t) {
-            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
         }
     }
 }
