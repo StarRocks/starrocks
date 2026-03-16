@@ -331,7 +331,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNull) {
                             }
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -382,7 +382,7 @@ TEST_F(VectorizedCaseExprTest, whenNullIntCaseAllNull) {
                             }
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -525,7 +525,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
                             }
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -578,7 +578,7 @@ TEST_F(VectorizedCaseExprTest, whenIntNullableCaseNullElse) {
                             }
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -663,7 +663,7 @@ TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
                             ASSERT_EQ(20, v->get_data()[j]);
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -704,7 +704,7 @@ TEST_F(VectorizedCaseExprTest, whenNullAndElseVariable) {
                             ASSERT_EQ(20, v->get_data()[j]);
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -753,7 +753,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNullElse) {
                             ASSERT_EQ(30, v->get_data()[j]);
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -799,7 +799,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseReturnInt) {
                             ASSERT_EQ(20, v->get_data()[j]);
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -851,7 +851,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseAllNull) {
                             ASSERT_TRUE(ptr->only_null());
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
@@ -901,7 +901,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
                             }
                         }
                     },
-                    expr->is_compilable(&runtime_state));
+                    ExprsTestHelper::should_verify_with_jit(expr.get(), &runtime_state));
         }
     }
 }
