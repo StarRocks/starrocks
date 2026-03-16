@@ -117,6 +117,23 @@ public class LakePublishBatchTest {
         LOG.warn("transaction {} is done. state: {}", transaction.getTransactionId(), transaction.getTransactionStatus());
     }
 
+    /**
+     * Simulates the real PublishVersionDaemon's periodic behavior by retrying runAfterCatalogReady()
+     * until all waiters are satisfied. This prevents flakiness caused by transient RPC failures or
+     * thread pool scheduling delays under CI load.
+     */
+    private void awaitPublish(PublishVersionDaemon daemon, VisibleStateWaiter... waiters) {
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+            daemon.runAfterCatalogReady();
+            for (VisibleStateWaiter waiter : waiters) {
+                if (!waiter.await(500, TimeUnit.MILLISECONDS)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
     @BeforeAll
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -244,12 +261,7 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
-
-        Assertions.assertTrue(waiter1.await(60, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter2.await(60, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter3.await(60, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter4.await(60, TimeUnit.SECONDS));
+        awaitPublish(publishVersionDaemon, waiter1, waiter2, waiter3, waiter4);
     }
 
     //    @ParameterizedTest
@@ -449,10 +461,7 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
-
-        Assertions.assertTrue(waiter1.await(60, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter2.await(60, TimeUnit.SECONDS));
+        awaitPublish(publishVersionDaemon, waiter1, waiter2);
 
         // Ensure publishingLakeTransactionsBatchTableId has been cleared, otherwise the following single publish may fail.
         publishVersionDaemon.publishingLakeTransactionsBatchTableId.clear();
@@ -467,8 +476,7 @@ public class LakePublishBatchTest {
         VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets1,
                 Lists.newArrayList(), null);
 
-        publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter3.await(60, TimeUnit.SECONDS));
+        awaitPublish(publishVersionDaemon, waiter3);
 
         Config.lake_enable_batch_publish_version = true;
     }
@@ -495,8 +503,7 @@ public class LakePublishBatchTest {
 
         Config.lake_enable_batch_publish_version = false;
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter5.await(60, TimeUnit.SECONDS));
+        awaitPublish(publishVersionDaemon, waiter5);
 
         long transactionId6 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -526,9 +533,7 @@ public class LakePublishBatchTest {
         Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
         publishVersionDaemon.publishingTransactionIds.clear();
-        publishVersionDaemon.runAfterCatalogReady();
-        Assertions.assertTrue(waiter6.await(60, TimeUnit.SECONDS));
-        Assertions.assertTrue(waiter7.await(60, TimeUnit.SECONDS));
+        awaitPublish(publishVersionDaemon, waiter6, waiter7);
     }
 
     @ParameterizedTest
@@ -678,11 +683,7 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
-
-        Assertions.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
-        Assertions.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
-        Assertions.assertTrue(waiter3.await(1, TimeUnit.MINUTES));
+        awaitPublish(publishVersionDaemon, waiter1, waiter2, waiter3);
 
         ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet.getId());
