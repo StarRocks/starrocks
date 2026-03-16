@@ -17,12 +17,12 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "common/object_pool.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
-#include "types/datum.h"
 
 namespace starrocks::parquet {
 

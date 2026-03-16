@@ -19,6 +19,11 @@
 
 #include <cstring>
 
+#include "column/const_column.h"
+#include "column/nullable_column.h"
+#include "formats/parquet/schema.h"
+#include "gutil/casts.h"
+#include "simd/simd.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks::parquet {
@@ -165,6 +170,73 @@ std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& 
         memcpy(data + 10, &size, sizeof(size));
     }
     return key;
+}
+
+bool ParquetUtils::get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                    size_t* out_row) {
+    if (column == nullptr || out_column == nullptr || out_row == nullptr) {
+        return false;
+    }
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        if (nullable->is_null(row)) {
+            return false;
+        }
+        column = nullable->data_column().get();
+    }
+    *out_column = column;
+    *out_row = row;
+    return true;
+}
+
+bool ParquetUtils::has_non_null_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return true;
+}
+
+bool ParquetUtils::has_non_null_binary_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const Column* data = nullable->data_column().get();
+        if (!data->is_binary()) {
+            return false;
+        }
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return column->is_binary();
 }
 
 } // namespace starrocks::parquet
