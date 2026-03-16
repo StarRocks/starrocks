@@ -29,6 +29,7 @@ import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import org.apache.iceberg.aws.AwsProperties;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -511,6 +512,32 @@ public class IcebergRESTCatalogTest {
         Assertions.assertEquals("test_secret_key", result.get("s3.secret-access-key"));
         Assertions.assertEquals("test_session_token", result.get("s3.session-token"));
         Assertions.assertEquals("us-east-1", result.get("client.region"));
+    }
+
+    @Test
+    public void testS3IamRoleArnPropagatedToAssumeRoleArn(@Mocked RESTSessionCatalog restCatalog) {
+        // aws.s3.iam_role_arn should be automatically mapped to client.assume-role.arn
+        // so the REST SigV4 signer uses the same role as S3 clients
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789:role/MyRole");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog("test_catalog", new Configuration(), properties);
+
+        Map<String, String> restProps = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("arn:aws:iam::123456789:role/MyRole", restProps.get(AwsProperties.CLIENT_ASSUME_ROLE_ARN));
+    }
+
+    @Test
+    public void testExplicitAssumeRoleArnNotOverwrittenByS3IamRoleArn(@Mocked RESTSessionCatalog restCatalog) {
+        // When client.assume-role.arn is already set explicitly, it must not be overwritten
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.iam_role_arn", "arn:aws:iam::123456789:role/S3Role");
+        properties.put(AwsProperties.CLIENT_ASSUME_ROLE_ARN, "arn:aws:iam::123456789:role/ExplicitRole");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog("test_catalog", new Configuration(), properties);
+
+        Map<String, String> restProps = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals("arn:aws:iam::123456789:role/ExplicitRole", restProps.get(AwsProperties.CLIENT_ASSUME_ROLE_ARN));
     }
 
     @Test

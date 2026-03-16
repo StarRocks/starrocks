@@ -100,7 +100,9 @@ Next, grant the above IAM User access permissions in Lake Formation.
 
 ## Create Iceberg REST Catalog
 
-Create an Iceberg REST catalog in StarRocks:
+Create an Iceberg REST catalog in StarRocks.
+
+**Using IAM user credentials:**
 
 ```SQL
 CREATE EXTERNAL CATALOG starrocks_lakehouse_s3tables PROPERTIES(
@@ -115,6 +117,28 @@ CREATE EXTERNAL CATALOG starrocks_lakehouse_s3tables PROPERTIES(
   "aws.s3.region" = "<region>"
 );
 ```
+
+**Using IAM role assumption (EC2 instance profile or cross-account access):**
+
+When running StarRocks on EC2, you can authenticate via IAM role assumption instead of static credentials. Setting `aws.s3.iam_role_arn` is sufficient — StarRocks automatically applies the same role to both S3 data access and REST catalog SigV4 request signing:
+
+```SQL
+CREATE EXTERNAL CATALOG starrocks_lakehouse_s3tables PROPERTIES(
+  "type"="iceberg",
+  "iceberg.catalog.type" = "rest",
+  "iceberg.catalog.uri"  = "https://glue.<region>.amazonaws.com/iceberg",
+  "iceberg.catalog.rest.sigv4-enabled" = "true",
+  "iceberg.catalog.rest.signing-name" = "glue",
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "iceberg.catalog.warehouse" = "<accountid>:s3tablescatalog/<table-bucket-name>",
+  "aws.s3.region" = "<region>"
+);
+```
+
+> **NOTE**
+>
+> If you need the REST catalog SigV4 signer to use a different role from S3, you can override it explicitly with `"client.assume-role.arn" = "<rest_signing_role_arn>"` in the catalog properties.
 
 You can then create databases and tables and run queries in it.
 
