@@ -1185,7 +1185,7 @@ public class StmtExecutor {
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}, " + SqlCredentialRedactor.redact(sql), e);
+            LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
             context.getState().setError(e.getMessage());
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
