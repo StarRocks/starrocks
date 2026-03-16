@@ -2477,8 +2477,8 @@ public class GlobalStateMgr {
         boolean isForce = stmt.isForce();
         refreshExternalTable(context, tableName, partitionNames, isForce);
 
-        // Sync to other FEs based on config
-        if (Config.enable_sync_refresh_follower_fe) {
+        // Sync to other FEs based on config or when it's a force refresh
+        if (isForce || Config.enable_sync_refresh_follower_fe) {
             refreshOthersFeTable(tableName, partitionNames, isForce);
         }
     }
