@@ -1080,7 +1080,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
             ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
             Preconditions.checkNotNull(groupSchema);
-            groupSchema.checkDistribution(olapTable.getIdToColumn(), distributionInfo);
+            groupSchema.checkDistribution(olapTable, distributionInfo);
             for (PartitionDesc partitionDesc : partitionDescs) {
                 groupSchema.checkReplicationNum(partitionDesc.getReplicationNum());
             }
