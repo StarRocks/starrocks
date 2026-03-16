@@ -19,6 +19,7 @@
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
+#include "runtime/runtime_state.h"
 #include "util/compression/compression_utils.h"
 
 namespace starrocks {

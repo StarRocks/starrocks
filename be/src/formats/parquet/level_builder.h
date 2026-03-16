@@ -42,7 +42,6 @@
 #include "common/status.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/priority_thread_pool.hpp"

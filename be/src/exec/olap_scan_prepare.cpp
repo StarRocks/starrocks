@@ -31,6 +31,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_placeholder_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"

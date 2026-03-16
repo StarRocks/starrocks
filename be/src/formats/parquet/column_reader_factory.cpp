@@ -219,8 +219,7 @@ static Status build_array_readers_for_variant_node(const ColumnReaderOptions& op
 }
 
 // SCALAR typed_value is simpler than ARRAY, but still worth centralizing:
-// build the typed reader when possible, and if typed reader creation fails,
-// degrade to fallback binary only when `value_reader` already exists.
+// build the typed reader and fail immediately if reader creation fails.
 static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& opts, const ParquetField* typed_field,
                                                    const std::string& full_path, ShreddedFieldNode* node) {
     if (typed_field == nullptr || node == nullptr) {
@@ -228,20 +227,13 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
     }
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
-    node->typed_kind = ShreddedTypedKind::SCALAR;
+    node->kind = ShreddedFieldNode::Kind::SCALAR;
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
     // a raw pointer to TypeDescriptor, so a stack-local cannot be referenced.
     node->typed_value_read_type = std::make_unique<TypeDescriptor>(file_type);
     auto typed_reader_or = ColumnReaderFactory::create(opts, typed_field, *node->typed_value_read_type);
     if (!typed_reader_or.ok()) {
-        if (node->value_reader != nullptr) {
-            // Typed projection is best-effort for shredded scalar paths.
-            // If typed reader creation fails, keep fallback binary reader and degrade to fallback-only.
-            node->typed_value_reader.reset();
-            node->typed_value_read_type.reset();
-            return Status::OK();
-        }
         return Status::InternalError(strings::Substitute("build variant typed reader failed, path=$0, type=$1, err=$2",
                                                          full_path, file_type.debug_string(),
                                                          typed_reader_or.status().to_string()));
@@ -316,7 +308,7 @@ Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const Pa
         } else if (typed_field->type == ColumnType::STRUCT) {
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, &node.children));
         } else if (typed_field->type == ColumnType::ARRAY) {
-            node.typed_kind = ShreddedTypedKind::ARRAY;
+            node.kind = ShreddedFieldNode::Kind::ARRAY;
             RETURN_IF_ERROR(
                     build_array_readers_for_variant_node(opts, column_chunks, typed_field, node.full_path, &node));
         }
@@ -509,18 +501,11 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
             auto root_reader_or = ColumnReaderFactory::create(opts, typed_value_field, *root_typed_value_type);
             if (!root_reader_or.ok()) {
-                if (value_field != nullptr) {
-                    // Root typed projection is best-effort when fallback binary exists.
-                    // Keep fallback value path and skip root typed reader on failures.
-                    root_typed_value_type.reset();
-                } else {
-                    return Status::InternalError(
-                            strings::Substitute("build root variant typed reader failed, type=$0, err=$1",
-                                                file_type.debug_string(), root_reader_or.status().to_string()));
-                }
-            } else {
-                root_typed_value_reader = std::move(root_reader_or).value();
+                return Status::InternalError(
+                        strings::Substitute("build root variant typed reader failed, type=$0, err=$1",
+                                            file_type.debug_string(), root_reader_or.status().to_string()));
             }
+            root_typed_value_reader = std::move(root_reader_or).value();
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
@@ -528,28 +513,28 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 
-StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,
                                                       SlotId slot_id, int64_t num_rows) {
     FAIL_POINT_TRIGGER_EXECUTE(parquet_reader_returns_global_dict_not_match_status, {
         return Status::GlobalDictNotMatch(
                 fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
     });
 
-    if (ori_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
+    if (raw_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(
-                                 std::move((down_cast<ListColumnReader*>(ori_reader.get()))->get_element_reader()),
+                                 std::move((down_cast<ListColumnReader*>(raw_reader.get()))->get_element_reader()),
                                  dict, slot_id, num_rows));
-        return std::make_unique<ListColumnReader>(ori_reader->get_column_parquet_field(), std::move(child_reader));
+        return std::make_unique<ListColumnReader>(raw_reader->get_column_parquet_field(), std::move(child_reader));
     } else {
-        RawColumnReader* raw_reader = dynamic_cast<RawColumnReader*>(ori_reader.get());
-        if (raw_reader == nullptr) {
+        RawColumnReader* scalar_reader = dynamic_cast<RawColumnReader*>(raw_reader.get());
+        if (scalar_reader == nullptr) {
             return Status::InternalError("Error on reader transform for low cardinality reader");
         }
-        if (raw_reader->column_all_pages_dict_encoded()) {
-            return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
+        if (scalar_reader->column_all_pages_dict_encoded()) {
+            return std::make_unique<LowCardColumnReader>(*scalar_reader, dict, slot_id);
         } else if (num_rows <= dict->size()) {
-            return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
+            return std::make_unique<LowRowsColumnReader>(*scalar_reader, dict, slot_id);
         } else {
             return Status::GlobalDictNotMatch(
                     fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));

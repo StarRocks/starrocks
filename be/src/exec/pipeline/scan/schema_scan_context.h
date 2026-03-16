@@ -18,9 +18,10 @@
 
 #include "common/object_pool.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class SchemaScannerParam;

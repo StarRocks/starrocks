@@ -25,6 +25,8 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"

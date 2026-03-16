@@ -113,6 +113,10 @@ public abstract class RangerAccessController extends ExternalAccessController im
     protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, Set<String> groups,
                                  PrivilegeType privilegeType)
             throws AccessDeniedException {
+        // root user bypasses Ranger authorization entirely
+        if (UserIdentity.ROOT.equals(user)) {
+            return;
+        }
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
             accessType = RangerPolicyEngine.ANY_ACCESS;

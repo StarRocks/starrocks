@@ -100,10 +100,9 @@ set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
-set(GENCODE_DIR "${GENSRC_DIR}/gen_cpp")
-if(NOT EXISTS "${GENCODE_DIR}")
-    message(FATAL_ERROR "Generated C++ sources directory not found: ${GENCODE_DIR}")
-endif()
+set(BE_PROTO_THRIFT_GENSRC_DIR "${CMAKE_BINARY_DIR}/gensrc")
+set(BE_PROTO_THRIFT_GEN_CPP_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/gen_cpp")
+set(BE_PROTO_THRIFT_CODEGEN_DIR "${BE_PROTO_THRIFT_GENSRC_DIR}/codegen")
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/../output/be")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
@@ -151,6 +150,15 @@ set(Protobuf_DIR "${PROTOBUF_HOME}/lib/cmake/protobuf" CACHE PATH "Protobuf conf
 set(PROTOBUF_LIBRARY "${PROTOBUF_HOME}/lib/libprotobuf.a" CACHE FILEPATH "libprotobuf.a" FORCE)
 set(PROTOBUF_INCLUDE_DIR "${PROTOBUF_HOME}/include" CACHE PATH "protobuf include dir" FORCE)
 set(PROTOBUF_PROTOC_EXECUTABLE "${PROTOBUF_HOME}/bin/protoc" CACHE FILEPATH "protoc" FORCE)
+set(STARROCKS_PROTOC_EXECUTABLE "${PROTOBUF_PROTOC_EXECUTABLE}")
+if(NOT EXISTS "${STARROCKS_PROTOC_EXECUTABLE}")
+    find_program(STARROCKS_PROTOC_EXECUTABLE NAMES protoc REQUIRED)
+endif()
+
+set(STARROCKS_THRIFT_EXECUTABLE "${THIRDPARTY_DIR}/installed/bin/thrift")
+if(NOT EXISTS "${STARROCKS_THRIFT_EXECUTABLE}")
+    find_program(STARROCKS_THRIFT_EXECUTABLE NAMES thrift REQUIRED)
+endif()
 
 # Create protobuf target - STATIC ONLY to avoid dynamic linking issues
 add_library(protobuf STATIC IMPORTED GLOBAL)
@@ -178,7 +186,8 @@ message(STATUS "Protobuf configuration:")
 message(STATUS "  Home: ${PROTOBUF_HOME}")
 message(STATUS "  Library: ${PROTOBUF_LIBRARY}")
 message(STATUS "  Include: ${PROTOBUF_INCLUDE_DIR}")
-message(STATUS "  Protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
+message(STATUS "  Protoc: ${STARROCKS_PROTOC_EXECUTABLE}")
+message(STATUS "  Thrift: ${STARROCKS_THRIFT_EXECUTABLE}")
 
 # ==============================================================================
 # COMPILER VALIDATION
@@ -196,6 +205,30 @@ endif()
 # ==============================================================================
 # BUILD VERSION CONFIGURATION
 # ==============================================================================
+include(${BASE_DIR}/cmake_modules/StarRocksGenCodegen.cmake)
+
+set(GENSRC_PROTO_DIR "${BASE_DIR}/../gensrc/proto")
+set(GENSRC_THRIFT_DIR "${BASE_DIR}/../gensrc/thrift")
+set(GENCODE_MANIFEST_DIR "${BE_PROTO_THRIFT_CODEGEN_DIR}")
+
+starrocks_define_proto_codegen_target(
+    be_proto_codegen
+    SOURCE_ROOT "${GENSRC_PROTO_DIR}"
+    OUTPUT_DIR "${BE_PROTO_THRIFT_GEN_CPP_DIR}"
+    MANIFEST_DIR "${GENCODE_MANIFEST_DIR}/proto"
+    SCRIPT "${BASE_DIR}/cmake_modules/RunProtoCodegen.cmake"
+    TOOL "${STARROCKS_PROTOC_EXECUTABLE}"
+    CONFIGURE_GENERATE)
+
+starrocks_define_thrift_codegen_target(
+    be_thrift_codegen
+    SOURCE_ROOT "${GENSRC_THRIFT_DIR}"
+    OUTPUT_DIR "${BE_PROTO_THRIFT_GEN_CPP_DIR}"
+    MANIFEST_DIR "${GENCODE_MANIFEST_DIR}/thrift"
+    SCRIPT "${BASE_DIR}/cmake_modules/RunThriftCodegen.cmake"
+    TOOL "${STARROCKS_THRIFT_EXECUTABLE}"
+    CONFIGURE_GENERATE)
+
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 add_library(build_version OBJECT ${BUILD_VERSION_CC})
@@ -754,10 +787,9 @@ message(STATUS "Apple frameworks configured for brpc support")
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/include)
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/override)
 include_directories(${SRC_DIR})
+include_directories(${BE_PROTO_THRIFT_GENSRC_DIR})
 include_directories(${GENSRC_DIR})
 include_directories(${BASE_DIR}/build)
-include_directories(${BASE_DIR}/../gensrc/build)
-include_directories(${BASE_DIR}/../gensrc/build/gen_cpp)
 include_directories(${THIRDPARTY_DIR}/installed/include)
 include_directories(${HOMEBREW_PREFIX}/opt/re2/include)
 include_directories(${HOMEBREW_PREFIX}/opt/abseil/include)
@@ -840,15 +872,15 @@ file(GLOB_RECURSE GEO_SOURCES
 list(REMOVE_ITEM STARROCKS_SOURCES ${GEO_SOURCES})
 
 # Add generated protobuf files
-# Only use the resolved gen_cpp directory to avoid duplicate sources mirrored in gensrc/build
+# Only use the build-tree gen_cpp directory to avoid stale sources mirrored in gensrc/build.
 file(GLOB PROTOBUF_SOURCES
-    ${GENCODE_DIR}/*.pb.cc
+    ${BE_PROTO_THRIFT_GEN_CPP_DIR}/*.pb.cc
 )
 list(REMOVE_DUPLICATES PROTOBUF_SOURCES)
 
 # Add generated Thrift files (exclude server skeleton helpers)
 file(GLOB THRIFT_SOURCES
-    ${GENCODE_DIR}/*.cpp
+    ${BE_PROTO_THRIFT_GEN_CPP_DIR}/*.cpp
 )
 list(FILTER THRIFT_SOURCES EXCLUDE REGEX ".*_server\\.skeleton\\.cpp$")
 list(REMOVE_DUPLICATES THRIFT_SOURCES)
@@ -1101,12 +1133,14 @@ list(REMOVE_ITEM STARROCKS_SOURCES ${EXPRS_SOURCES})
 # Separate kv_store.cpp to apply different compile flags
 list(REMOVE_ITEM STARROCKS_SOURCES "${SRC_DIR}/storage/kv_store.cpp")
 add_library(starrocks_core STATIC ${STARROCKS_SOURCES})
+add_dependencies(starrocks_core be_proto_codegen be_thrift_codegen)
 set_target_properties(starrocks_core PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
 # Create separate exprs library to enable force-loading of constructor functions
 add_library(starrocks_exprs STATIC ${EXPRS_SOURCES})
+add_dependencies(starrocks_exprs be_proto_codegen be_thrift_codegen)
 set_target_properties(starrocks_exprs PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )
@@ -1126,6 +1160,7 @@ target_link_libraries(starrocks_core PRIVATE ${STARROCKS_LINK_LIBS} kv_store_obj
 # ==============================================================================
 # Create the main StarRocks BE executable
 add_executable(starrocks_be ${SRC_DIR}/service/starrocks_main.cpp)
+add_dependencies(starrocks_be be_proto_codegen be_thrift_codegen)
 
 # Ensure the force-loaded archive is built before linking the final binary.
 add_dependencies(starrocks_be starrocks_exprs)

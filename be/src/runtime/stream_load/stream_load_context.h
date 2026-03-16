@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "base/concurrency/concurrent_limiter.h"
+#include "base/metrics.h"
 #include "base/string/string_util.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -50,9 +51,9 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "pulsar/Client.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_executor.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -155,17 +156,7 @@ public:
         }
     }
 
-    ~StreamLoadContext() noexcept {
-        if (need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(this);
-            need_rollback = false;
-        }
-
-        _exec_env->load_stream_mgr()->remove(id);
-        if (_running_loads != nullptr) {
-            _running_loads->increment(-1);
-        }
-    }
+    ~StreamLoadContext() noexcept;
 
     std::string to_json() const;
     std::string to_merge_commit_json() const;

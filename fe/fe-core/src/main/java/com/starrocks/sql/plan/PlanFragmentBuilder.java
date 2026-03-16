@@ -1612,6 +1612,7 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            icebergScanNode.setColumnAccessPaths(node.getColumnAccessPaths());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
             try {

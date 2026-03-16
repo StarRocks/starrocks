@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sstream>
+
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"

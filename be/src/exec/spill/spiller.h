@@ -37,7 +37,7 @@
 #include "exec/spill/spiller_factory.h"
 #include "fs/fs.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/compression/block_compression.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)

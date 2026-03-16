@@ -38,11 +38,13 @@
 
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <list>
 #include <mutex>
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -50,8 +52,8 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace arrow {
 class RecordBatch;
@@ -143,14 +145,7 @@ public:
         _observable.add_observer(state, observer);
     }
 
-    auto defer_notify() {
-        return DeferOp([query_ctx = _query_ctx, this]() {
-            if (auto ctx = query_ctx.lock()) {
-                this->_observable.notify_source_observers();
-                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
-            }
-        });
-    }
+    DeferOp<std::function<void()>> defer_notify();
 
     void attach_query_ctx(const std::shared_ptr<pipeline::QueryContext>& query_ctx) {
         if (_query_ctx.use_count() == 0) {
