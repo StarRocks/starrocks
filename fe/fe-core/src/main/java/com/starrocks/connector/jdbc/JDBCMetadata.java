@@ -132,7 +132,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (driverClass.contains("clickhouse")) {
             return new ClickhouseSchemaResolver(properties);
         } else if (driverClass.contains("oracle")) {
-            return new OracleSchemaResolver();
+            return new OracleSchemaResolver(properties);
         } else if (driverClass.contains("sqlserver")) {
             return new SqlServerSchemaResolver();
         } else {
