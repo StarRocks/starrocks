@@ -170,6 +170,10 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
+        // We're in the execution queue's pthread thread pool — safe to block.
+        // Merge tasks have already been drained by _block_merge_token->shutdown()
+        // in AsyncDeltaWriterImpl::close() before execution_queue_stop().
+        // close() runs here in pthread context, avoiding DCHECK_EQ(0, bthread_self()).
         delta_writer->close();
         return 0;
     }
@@ -352,13 +356,12 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
-        // This must happen BEFORE execution_queue_stop() because stop() triggers the
-        // is_queue_stopped() handler (on a bthread) which calls delta_writer->close()
-        // and destroys SpillMemTableSink. We need all merge tasks to complete before that.
-        // The token remains allocated (not null) so if execute() is still running and
-        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
-        // of SIGSEGV.
+        // Shutdown merge token first to drain any running/pending merge tasks.
+        // This must happen BEFORE execution_queue_stop() so that merge tasks
+        // (which access writer state like _mem_table_sink, _flush_token) complete
+        // before the stop handler calls delta_writer->close().
+        // Queued FinishTasks that try to submit new merge tasks will get
+        // ServiceUnavailable — that's fine since we're aborting anyway.
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
         }
@@ -368,11 +371,13 @@ inline void AsyncDeltaWriterImpl::close() {
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
-        // Wait for all running tasks completed.
+        // Wait for all running tasks to complete. The stop handler runs in the
+        // execution queue's pthread thread pool and calls delta_writer->close(),
+        // which avoids DCHECK_EQ(0, bthread_self()) failure.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
 
-        // Safe to destroy token now since both execution queue and merge tasks are done.
+        // Safe to destroy token now since shutdown() already drained it.
         _block_merge_token.reset();
     }
 }

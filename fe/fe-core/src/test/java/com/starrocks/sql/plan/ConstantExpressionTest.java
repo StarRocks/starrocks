@@ -583,4 +583,65 @@ public class ConstantExpressionTest extends PlanTestBase {
         }
 
     }
+
+    @Test
+    public void testDivisionByZeroWithSqlMode() throws Exception {
+        long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
+
+        try {
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() | SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO);
+
+            // Case 1: When ERROR_FOR_DIVISION_BY_ZERO is ON, division by zero (non-null dividend) should throw
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT 1.0/0.0"));
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT 1%0"));
+
+            // Case 2: When dividend is NULL, NULL/0 should return NULL (not throw), consistent with FE semantics
+            String planNullDivZero = getFragmentPlan("SELECT NULL/0");
+            assertContains(planNullDivZero, "NULL");
+
+            // When ERROR_FOR_DIVISION_BY_ZERO is OFF, division by zero should return NULL
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() & ~SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO);
+            String plan = getFragmentPlan("SELECT 1/0");
+            assertContains(plan, "NULL");
+            plan = getFragmentPlan("SELECT 1%0");
+            assertContains(plan, "NULL");
+
+            // When dividend is NULL, always return NULL
+            plan = getFragmentPlan("SELECT NULL/1");
+            assertContains(plan, "NULL");
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(savedSqlMode);
+        }
+    }
+
+    @Test
+    public void testStrToDateWithAllowThrowException() throws Exception {
+        long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() | SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+
+            // Case 1: When ALLOW_THROW_EXCEPTION is ON, invalid parse should throw
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT str_to_date('invalid', '%Y-%m-%d')"));
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT str2date('invalid', '%Y-%m-%d')"));
+
+            // Case 2: When first argument is NULL, should return NULL (not throw), consistent with FE semantics
+            String planNullInput = getFragmentPlan("SELECT str_to_date(NULL, '%Y-%m-%d')");
+            assertContains(planNullInput, "NULL");
+            planNullInput = getFragmentPlan("SELECT str2date(NULL, '%Y-%m-%d')");
+            assertContains(planNullInput, "NULL");
+
+            // When ALLOW_THROW_EXCEPTION is OFF, invalid parse should return NULL
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() & ~SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+            String plan = getFragmentPlan("SELECT str_to_date('invalid', '%Y-%m-%d')");
+            assertContains(plan, "NULL");
+            plan = getFragmentPlan("SELECT str2date('invalid', '%Y-%m-%d')");
+            assertContains(plan, "NULL");
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(savedSqlMode);
+        }
+    }
 }

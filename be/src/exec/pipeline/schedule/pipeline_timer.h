@@ -29,6 +29,19 @@ namespace starrocks::pipeline {
 using TaskId = int64_t;
 class PipelineTimer;
 
+class LightTimerTask {
+public:
+    virtual ~LightTimerTask() = default;
+
+    virtual void Run() = 0;
+
+    void set_tid(TaskId tid) { _tid = tid; }
+    TaskId tid() const { return _tid; }
+
+private:
+    TaskId _tid{};
+};
+
 class PipelineTimerTask {
 public:
     virtual ~PipelineTimerTask() = default;
@@ -72,6 +85,10 @@ public:
     //  -1   -  The task does not exist.
     //   1   -  The task is just running.
     int unschedule(PipelineTimerTask* task);
+
+    Status schedule(LightTimerTask* task, const timespec& abstime);
+
+    int unschedule(LightTimerTask* task);
 
 private:
     std::shared_ptr<bthread::TimerThread> _thr;

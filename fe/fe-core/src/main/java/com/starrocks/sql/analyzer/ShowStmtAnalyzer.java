@@ -40,6 +40,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
@@ -415,6 +416,9 @@ public class ShowStmtAnalyzer {
                                 if (olapTable.getIndexNameById(mvMeta.getIndexId()).equalsIgnoreCase(node.getTableName())) {
                                     List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexId());
                                     for (Column column : columns) {
+                                        if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                            continue;
+                                        }
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
                                         if (column.getAggregationType() != null &&
@@ -489,7 +493,9 @@ public class ShowStmtAnalyzer {
                             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);
-
+                                if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                    continue;
+                                }
                                 // Extra string (aggregation and bloom filter)
                                 List<String> extras = Lists.newArrayList();
                                 if (column.getAggregationType() != null &&

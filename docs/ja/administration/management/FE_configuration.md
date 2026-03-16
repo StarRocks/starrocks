@@ -2854,6 +2854,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: データベース、テーブル、またはパーティションが削除された後にメタデータが保持される最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドで回復することはできません。
 - Introduced in: -
 
+##### `catalog_recycle_bin_erase_min_latency_ms`
+
+- Default: 600000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: データベース、テーブル、またはパーティションが削除された際にメタデータが消去されるまでの最小遅延時間（ミリ秒単位）。これにより、削除ログよりも先に消去ログが書き込まれることを回避します。
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_max_operations_per_cycle`
+
+- Default: 500
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: リサイクルビンからデータベース、テーブル、またはパーティションを実際に削除する操作における、1 サイクルあたりの最大消去回数。消去操作はロックを保持するため、1 バッチのサイズが大きくなりすぎないようにしてください。
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_fail_retry_interval_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: リサイクルビン内の削除操作が失敗した場合の再試行間隔（ミリ秒単位）。
+- Introduced in: -
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600

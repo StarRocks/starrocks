@@ -1341,6 +1341,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 各パーティションで同時に実行できるトランザクションの最大数。
 - 導入バージョン: -
 
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15
+
 ##### enable_stream_load_verbose_log
 
 - デフォルト: false
@@ -1761,7 +1770,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が期待するクエリキャッシュサイズを提供するのに不十分な場合、BE のメモリ容量を増やすことができます。
 - 導入バージョン: -
 
-##### enable_json_flat
 
 - デフォルト: false
 - タイプ: Boolean
@@ -1831,6 +1839,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: Bytes
 - 可変: はい
 - 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
+##### lake_enable_accurate_pk_row_count
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
+- 導入バージョン: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- デフォルト: 300000
+- タイプ: Int64
+- 単位: Milliseconds
+- 可変: はい
+- 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
+- 導入バージョン: -
+
 - 導入バージョン: -
 
 ### 共有データ

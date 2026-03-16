@@ -168,7 +168,7 @@ Example for the CSV format:
 "format"="csv",
 "csv.column_separator"="\\t",
 "csv.enclose"='"',
-"csv.skip_header"="1",
+"csv.skip_header"="1",  -- for loading only
 "csv.escape"="\\"
 ```
 
@@ -193,7 +193,7 @@ If a field value contains an `enclose`-specified character, you can use the same
 
 ###### `csv.skip_header`
 
-Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`.
+Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`. This property is only supported for data loading.
 
 In some CSV-formatted data files, a number of header rows are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip these header rows. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
 

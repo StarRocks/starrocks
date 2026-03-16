@@ -115,4 +115,117 @@ TEST_F(JavaUDFTest, test_time_convert) {
     _env->DeleteLocalRef(time_array);
     _env->DeleteLocalRef(time_class);
 }
+
+// ============================================================================
+// Tests for strip_jni_generic_types():
+//   Strips generic type parameters from JNI method signatures.
+// ============================================================================
+
+TEST(StripJniGenericTypesTest, NoGenerics) {
+    std::string sign = "(Ljava/lang/String;I)V";
+    ClassAnalyzer::strip_jni_generic_types(&sign);
+    EXPECT_EQ(sign, "(Ljava/lang/String;I)V");
+}
+
+TEST(StripJniGenericTypesTest, SimpleGeneric) {
+    std::string sign = "(Ljava/util/List<Ljava/lang/String;>;)V";
+    ClassAnalyzer::strip_jni_generic_types(&sign);
+    EXPECT_EQ(sign, "(Ljava/util/List;)V");
+}
+
+TEST(StripJniGenericTypesTest, MultipleGenericParams) {
+    std::string sign = "(Ljava/lang/String;Ljava/util/List<Ljava/lang/String;>;Ljava/util/List<Ljava/lang/Integer;>;)V";
+    ClassAnalyzer::strip_jni_generic_types(&sign);
+    EXPECT_EQ(sign, "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V");
+}
+
+TEST(StripJniGenericTypesTest, NestedGenerics) {
+    std::string sign = "(Ljava/util/Map<Ljava/lang/String;Ljava/util/List<Ljava/lang/Integer;>;>;)V";
+    ClassAnalyzer::strip_jni_generic_types(&sign);
+    EXPECT_EQ(sign, "(Ljava/util/Map;)V");
+}
+
+TEST(StripJniGenericTypesTest, EmptyString) {
+    std::string sign;
+    ClassAnalyzer::strip_jni_generic_types(&sign);
+    EXPECT_EQ(sign, "");
+}
+
+// ============================================================================
+// Tests for ClassAnalyzer::get_udaf_method_desc bug fixes:
+//   1. '[' branch missing continue — caused spurious method_desc entries
+//   2. List<> generic in signature — caused type matching failure
+//   3. Combined: UDTF with List params + String[] return — the crash scenario
+// ============================================================================
+
+// Test: '[' branch continue fix — array param must not produce spurious entries.
+// Before fix, processing "[Ljava/lang/String;" left i on ';', which fell through
+// to the else branch and added an extra {TYPE_UNKNOWN, false} entry.
+TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    // Signature: process(String[] arr, int n) -> void
+    ASSERT_OK(analyzer.get_udaf_method_desc("([Ljava/lang/String;I)V", &desc));
+    // Must be exactly 3: [return=V, param1=[String, param2=I]
+    // Before fix: 4 entries (spurious {TYPE_UNKNOWN,false} from ';')
+    ASSERT_EQ(desc.size(), 3);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_UNKNOWN); // [String array
+    EXPECT_EQ(desc[2].type, TYPE_INT);     // int
+}
+
+// Test: List type matching — after get_signature strips generics,
+// "Ljava/util/List;" must be recognized as TYPE_ARRAY.
+// Before fix, generic signature "Ljava/util/List<java/lang/String>;" caused
+// type == "java/util/List<java/lang/String>" which didn't match "java/util/List".
+TEST(GetUdafMethodDescTest, ListTypeMatchAfterGenericStrip) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    // Clean signature (generics already stripped by get_signature)
+    ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V", &desc));
+    ASSERT_EQ(desc.size(), 4);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // String
+    EXPECT_EQ(desc[2].type, TYPE_ARRAY);   // List → TYPE_ARRAY
+    EXPECT_EQ(desc[3].type, TYPE_ARRAY);   // List → TYPE_ARRAY
+}
+
+// Test: realistic UDTF crash scenario — process(String, List, List) -> String[]
+// This is the exact signature pattern that caused the CN crash.
+// Verifies method_desc.size() == num_cols + 1 so process() won't OOB access.
+TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    std::string sign = "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)[Ljava/lang/String;";
+    ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
+    // 1 return + 3 params = 4
+    ASSERT_EQ(desc.size(), 4);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return [String
+    EXPECT_EQ(desc[1].type, TYPE_VARCHAR); // param String
+    EXPECT_EQ(desc[2].type, TYPE_ARRAY);   // param List
+    EXPECT_EQ(desc[3].type, TYPE_ARRAY);   // param List
+}
+
+// Test: Primitive array parsing — [I, [J, etc. don't end with ';'.
+TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    // Signature: process(int, int[]) -> void
+    ASSERT_OK(analyzer.get_udaf_method_desc("(I[I)V", &desc));
+    ASSERT_EQ(desc.size(), 3);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_INT);     // param int
+    EXPECT_EQ(desc[2].type, TYPE_UNKNOWN); // param int[] (array)
+}
+
+// Test: Multi-dimensional primitive array — [[J (long[][])
+TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
+    ClassAnalyzer analyzer;
+    std::vector<MethodTypeDescriptor> desc;
+    ASSERT_OK(analyzer.get_udaf_method_desc("([[J)V", &desc));
+    ASSERT_EQ(desc.size(), 2);
+    EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
+    EXPECT_EQ(desc[1].type, TYPE_UNKNOWN); // param long[][] (array)
+}
+
 } // namespace starrocks

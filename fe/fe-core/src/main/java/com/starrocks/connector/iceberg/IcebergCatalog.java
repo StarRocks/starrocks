@@ -400,11 +400,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
+            // Call public method so subclasses can override and optimize this method.
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
             return new ArrayList<>(partitionMap.keySet());
         }
     }

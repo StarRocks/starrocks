@@ -215,6 +215,10 @@ bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
 }
 
+bool ExprContext::error_for_division_by_zero() const {
+    return _runtime_state != nullptr && _runtime_state->error_for_division_by_zero();
+}
+
 Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
         return Status::OK();
@@ -234,5 +238,4 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
 
     return Status::OK();
 }
-
 } // namespace starrocks

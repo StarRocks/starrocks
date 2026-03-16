@@ -103,10 +103,12 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
+    _join_builder->ref();
     auto set_call_back_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
-                [this]() {
+                [this, state]() {
+                    auto defer = DeferOp([&]() { _join_builder->unref(state); });
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     FAIL_POINT_TRIGGER_EXECUTE(spill_flush_set_invalid_status, {

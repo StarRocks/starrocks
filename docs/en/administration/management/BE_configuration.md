@@ -1463,6 +1463,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The time interval at which Tablet Stat Cache updates.
 - Introduced in: -
 
+##### lake_enable_accurate_pk_row_count
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use accurate row counts for lake primary-key tablets. When enabled, StarRocks reads each rowset's delete vector from object storage and subtracts deleted rows, producing more accurate stats but potentially increasing `get_tablet_stats` RPC overhead. When disabled, StarRocks uses the approximate `num_dels` value in rowset metadata to avoid remote I/O, which may slightly overcount rows that were deleted but not yet compacted.
+- Introduced in: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- Default: 300000
+- Type: Int64
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
+- Introduced in: -
+
 ##### enable_bitmap_union_disk_format_with_set
 
 - Default: false
@@ -1976,6 +1994,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The maximum number of transactions that can run concurrently in each partition.
 - Introduced in: -
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether to allow object-storage LIST fallback when lake metadata cache misses during random bucketing size checks. `true` means fallback to LIST metadata files to compute base size (historical behavior, more accurate size estimation). `false` means skip LIST and use `base_size = 0`, which reduces LIST object requests but may delay immutable marking due to less accurate size estimation.
+- Introduced in: 4.1.0, 4.0.7, 3.5.15
 
 ##### enable_stream_load_verbose_log
 
