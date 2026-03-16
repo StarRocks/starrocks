@@ -28,6 +28,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "storage/del_vector.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -380,6 +381,77 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         EXPECT_GT(meta->rowsets(0).num_rows(), 0);
         EXPECT_GT(meta->rowsets(0).data_size(), 0);
     }
+}
+
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(true);
+    rowset->set_num_rows(8);
+    rowset->set_data_size(800);
+
+    rowset->add_segments("segment_0.dat");
+    rowset->add_segment_size(400);
+    auto* segment_meta0 = rowset->add_segment_metas();
+    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    segment_meta0->set_num_rows(4);
+
+    rowset->add_segments("segment_1.dat");
+    rowset->add_segment_size(400);
+    auto* segment_meta1 = rowset->add_segment_metas();
+    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    segment_meta1->set_num_rows(4);
+
+    DelVector delvec;
+    const uint32_t deleted_rows[] = {0, 1, 2};
+    delvec.init(base_version, deleted_rows, 3);
+    add_delvec(&metadata, tablet_id, base_version, rowset->id(), "test.delvec", delvec.save());
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& splitting_tablet = *resharding_tablet.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    const int64_t new_tablet_id_1 = next_id();
+    const int64_t new_tablet_id_2 = next_id();
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_1);
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    int64_t total_child_num_rows = 0;
+    int64_t total_child_data_size = 0;
+    for (auto new_tablet_id : {new_tablet_id_1, new_tablet_id_2}) {
+        auto it = tablet_metadatas.find(new_tablet_id);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        ASSERT_EQ(1, it->second->rowsets_size());
+        total_child_num_rows += it->second->rowsets(0).num_rows();
+        total_child_data_size += it->second->rowsets(0).data_size();
+    }
+
+    EXPECT_EQ(8, total_child_num_rows);
+    EXPECT_EQ(800, total_child_data_size);
 }
 
 TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
