@@ -37,6 +37,25 @@ detect_parallelism() {
     echo "${cpu_count}"
 }
 
+resolve_brew_prefix() {
+    local formula="$1"
+    local fallback="$2"
+    local prefix=""
+
+    prefix="$(brew --prefix "${formula}" 2>/dev/null || true)"
+    if [[ -n "${prefix}" && -d "${prefix}" ]]; then
+        echo "${prefix}"
+        return 0
+    fi
+
+    if [[ -n "${fallback}" && -d "${fallback}" ]]; then
+        echo "${fallback}"
+        return 0
+    fi
+
+    echo "${prefix:-$fallback}"
+}
+
 # ============================================================================
 # BASIC PATHS
 # ============================================================================
@@ -74,7 +93,17 @@ fi
 # ============================================================================
 # HOMEBREW CONFIGURATION
 # ============================================================================
-export HOMEBREW_PREFIX="/opt/homebrew"
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+    HOMEBREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
+    if [[ -z "${HOMEBREW_PREFIX}" ]]; then
+        if [[ -d /opt/homebrew ]]; then
+            HOMEBREW_PREFIX="/opt/homebrew"
+        else
+            HOMEBREW_PREFIX="/usr/local"
+        fi
+    fi
+fi
+export HOMEBREW_PREFIX
 export HOMEBREW_NO_AUTO_UPDATE=1  # Speed up builds
 
 # Add Homebrew to PATH if not already there
@@ -86,7 +115,7 @@ fi
 # COMPILER CONFIGURATION
 # ============================================================================
 # Use Homebrew LLVM for consistent C++17 support
-export LLVM_HOME="$HOMEBREW_PREFIX/opt/llvm"
+export LLVM_HOME="${LLVM_HOME:-${STARROCKS_LLVM_HOME:-$(resolve_brew_prefix llvm "${HOMEBREW_PREFIX}/opt/llvm")}}"
 
 if [[ ! -d "$LLVM_HOME" ]]; then
     log_error "LLVM not found at $LLVM_HOME. Please run: brew install llvm"
@@ -157,7 +186,7 @@ log_info "Parallel jobs: $PARALLEL"
 # ============================================================================
 
 # OpenSSL (keg-only in Homebrew)
-export OPENSSL_ROOT_DIR="$HOMEBREW_PREFIX/opt/openssl@3"
+export OPENSSL_ROOT_DIR="${OPENSSL_ROOT_DIR:-$(resolve_brew_prefix openssl@3 "${HOMEBREW_PREFIX}/opt/openssl@3")}"
 if [[ -d "$OPENSSL_ROOT_DIR" ]]; then
     export PKG_CONFIG_PATH="$OPENSSL_ROOT_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$OPENSSL_ROOT_DIR/include $CPPFLAGS"
@@ -167,7 +196,7 @@ else
 fi
 
 # cURL (keg-only in Homebrew)
-export CURL_ROOT="$HOMEBREW_PREFIX/opt/curl"
+export CURL_ROOT="${CURL_ROOT:-$(resolve_brew_prefix curl "${HOMEBREW_PREFIX}/opt/curl")}"
 if [[ -d "$CURL_ROOT" ]]; then
     export PKG_CONFIG_PATH="$CURL_ROOT/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$CURL_ROOT/include $CPPFLAGS"
@@ -175,7 +204,7 @@ if [[ -d "$CURL_ROOT" ]]; then
 fi
 
 # ICU4C (keg-only in Homebrew)
-export ICU_ROOT="$HOMEBREW_PREFIX/opt/icu4c"
+export ICU_ROOT="${ICU_ROOT:-$(resolve_brew_prefix icu4c "${HOMEBREW_PREFIX}/opt/icu4c")}"
 if [[ -d "$ICU_ROOT" ]]; then
     export PKG_CONFIG_PATH="$ICU_ROOT/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
     export CPPFLAGS="-I$ICU_ROOT/include $CPPFLAGS"

@@ -36,6 +36,25 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+resolve_brew_prefix() {
+    local formula="$1"
+    local fallback="$2"
+    local prefix=""
+
+    prefix="$(brew --prefix "${formula}" 2>/dev/null || true)"
+    if [[ -n "${prefix}" && -d "${prefix}" ]]; then
+        echo "${prefix}"
+        return 0
+    fi
+
+    if [[ -n "${fallback}" && -d "${fallback}" ]]; then
+        echo "${fallback}"
+        return 0
+    fi
+
+    echo "${prefix:-$fallback}"
+}
+
 usage() {
     echo "Usage: $(basename "$0") [OPTIONS]"
     echo ""
@@ -114,12 +133,20 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 # Setup environment variables
-export HOMEBREW_PREFIX="/opt/homebrew"
-export CC="$HOMEBREW_PREFIX/opt/llvm/bin/clang"
-export CXX="$HOMEBREW_PREFIX/opt/llvm/bin/clang++"
-export AR="$HOMEBREW_PREFIX/opt/llvm/bin/llvm-ar"
-export RANLIB="$HOMEBREW_PREFIX/opt/llvm/bin/llvm-ranlib"
-export OPENSSL_ROOT_DIR="$HOMEBREW_PREFIX/opt/openssl@3"
+export HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-$(brew --prefix 2>/dev/null || true)}"
+if [[ -z "${HOMEBREW_PREFIX}" ]]; then
+    if [[ -d /opt/homebrew ]]; then
+        export HOMEBREW_PREFIX="/opt/homebrew"
+    else
+        export HOMEBREW_PREFIX="/usr/local"
+    fi
+fi
+export STARROCKS_LLVM_HOME="${STARROCKS_LLVM_HOME:-$(resolve_brew_prefix llvm "${HOMEBREW_PREFIX}/opt/llvm")}"
+export CC="$STARROCKS_LLVM_HOME/bin/clang"
+export CXX="$STARROCKS_LLVM_HOME/bin/clang++"
+export AR="$STARROCKS_LLVM_HOME/bin/llvm-ar"
+export RANLIB="$STARROCKS_LLVM_HOME/bin/llvm-ranlib"
+export OPENSSL_ROOT_DIR="${OPENSSL_ROOT_DIR:-$(resolve_brew_prefix openssl@3 "${HOMEBREW_PREFIX}/opt/openssl@3")}"
 export PKG_CONFIG_PATH="$OPENSSL_ROOT_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 export CFLAGS="-march=armv8-a -O3"
 export CXXFLAGS="-march=armv8-a -O3 -stdlib=libc++"
@@ -1352,8 +1379,8 @@ build_vectorscan() {
     fi
 
     # Set boost path for homebrew with detected version
-    export BOOST_ROOT="/opt/homebrew"
-    export Boost_DIR="/opt/homebrew/lib/cmake/Boost-$boost_version"
+    export BOOST_ROOT="${HOMEBREW_PREFIX}"
+    export Boost_DIR="${HOMEBREW_PREFIX}/lib/cmake/Boost-$boost_version"
 
     log_info "Using Boost version $boost_version"
 
@@ -1374,8 +1401,8 @@ build_vectorscan() {
         -DCORRECT_PCRE_VERSION=OFF \
         -DCMAKE_C_FLAGS="${CFLAGS} -Wno-error" \
         -DCMAKE_CXX_FLAGS="${CXXFLAGS} -D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error" \
-        -DBOOST_ROOT="/opt/homebrew" \
-        -DBoost_DIR="/opt/homebrew/lib/cmake/Boost-$boost_version" \
+        -DBOOST_ROOT="${HOMEBREW_PREFIX}" \
+        -DBoost_DIR="${HOMEBREW_PREFIX}/lib/cmake/Boost-$boost_version" \
         -DBoost_NO_SYSTEM_PATHS=ON \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
