@@ -55,26 +55,27 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @return the list partition diff between the base table and the mv
      */
     public static PartitionDiff getListPartitionDiff(Map<String, PCell> baseItems,
-                                                     Map<String, PCell> mvItems,
-                                                     Set<String> uniqueResultNames) {
+                                                     Map<String, PCell> mvItems) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         // for addition, we need to ensure the partition name is unique in case-insensitive
-        Map<String, PCell> adds = diffList(baseItems, mvItems, uniqueResultNames);
+        Map<String, PCell> adds = diffList(baseItems, mvItems, true);
         // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
-        Map<String, PCell> deletes = diffList(mvItems, baseItems, null);
+        Map<String, PCell> deletes = diffList(mvItems, baseItems, false);
         return new PartitionDiff(adds, deletes);
     }
 
     /**
-     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
-     * When `uniqueResultNames` is set, use it to ensure the output partition name is unique in case-insensitive.
-     * NOTE: Ensure output map keys are distinct in case-insensitive which is because the key is used for partition name,
-     * and StarRocks partition name is case-insensitive.
+     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into
+     * result.
+     * When `isEnsureUniqueResultNames` is true, ensure the output partition names are unique in case-insensitive
+     * by checking against both existing destination partitions and partitions generated in this diff.
+     * NOTE: StarRocks partition names are case-insensitive, so output map keys must also be distinct in
+     * case-insensitive when this option is enabled.
      */
     public static Map<String, PCell> diffList(Map<String, PCell> srcListMap,
                                               Map<String, PCell> dstListMap,
-                                              Set<String> uniqueResultNames) {
+                                              boolean isEnsureUniqueResultNames) {
         if (CollectionUtils.sizeIsEmpty(srcListMap)) {
             return Maps.newHashMap();
         }
@@ -89,6 +90,11 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         }
 
         Map<String, PCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        Map<String, PCell> occupiedPartitions = null;
+        if (isEnsureUniqueResultNames) {
+            occupiedPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            occupiedPartitions.putAll(dstListMap);
+        }
         for (Map.Entry<String, PCell> srcEntry : srcListMap.entrySet()) {
             String pName = srcEntry.getKey();
             PListCell srcItem = (PListCell) srcEntry.getValue();
@@ -106,17 +112,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                 PListCell newValue = new PListCell(
                         srcDistinctAtoms.stream().map(PListAtom::getPartitionItem).collect(Collectors.toList()));
 
-                // ensure the partition name is unique
-                if (uniqueResultNames != null) {
-                    if (uniqueResultNames.contains(pName)) {
+                // Optionally ensure the output partition name is unique against both existing destination partitions
+                // and newly generated result partitions.
+                if (occupiedPartitions != null) {
+                    if (occupiedPartitions.containsKey(pName)) {
                         try {
-                            // it's fine to use result to keep it unique here, since we always
-                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, result);
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, occupiedPartitions);
                         } catch (Exception e) {
                             throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
                         }
                     }
-                    uniqueResultNames.add(pName);
+                    occupiedPartitions.put(pName, newValue);
                 }
 
                 result.put(pName, newValue);
@@ -267,12 +273,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         // collect all base table partition cells
         Map<String, PCell> allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
 
-        // ensure the result partition name is unique in case-insensitive
-        Set<String> uniqueResultNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        uniqueResultNames.addAll(mvPartitionNameToListMap.keySet());
-
-        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems,
-                mvPartitionNameToListMap, uniqueResultNames);
+        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();

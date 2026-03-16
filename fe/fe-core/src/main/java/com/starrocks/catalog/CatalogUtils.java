@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,6 +80,34 @@ public class CatalogUtils {
         }
     }
 
+    /**
+     * Format partition values from an existing partition for log comparison.
+     */
+    private static String formatExistedPartitionValues(OlapTable olapTable, Partition partition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        long partitionId = partition.getId();
+        if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = MapUtils.emptyIfNull(listInfo.getIdToValues()).get(partitionId);
+            List<List<String>> multiValues = MapUtils.emptyIfNull(listInfo.getIdToMultiValues()).get(partitionId);
+            if (values != null && !values.isEmpty()) {
+                return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+            if (multiValues != null && !multiValues.isEmpty()) {
+                return "VALUES IN (" + multiValues.stream()
+                        .map(row -> "(" + row.stream().map(v -> "'" + v + "'")
+                                .collect(Collectors.joining(",")) + ")")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+            Range<PartitionKey> range = rangeInfo.getRange(partitionId);
+            return range != null ? range.toString() : "null";
+        }
+        return "unknown";
+    }
+
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
                                                                       List<PartitionDesc> partitionDescs)
             throws DdlException {
@@ -90,8 +120,10 @@ public class CatalogUtils {
                 } else {
                     // add more information for user
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
-                            existedPartition, partitionDesc);
+                    String existedValues = formatExistedPartitionValues(olapTable, existedPartition);
+                    String currentValues = partitionDesc.toString();
+                    LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
+                            existedValues, currentValues);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }
