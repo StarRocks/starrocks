@@ -42,14 +42,11 @@ public:
     template <typename Key, typename Func, typename... Args>
     requires std::constructible_from<K, Key&&> SharedFuture<R> DoFuture(Key&& key, Func&& func, Args&&... args) {
         // Keep a stable lookup key for both map lookup and cleanup. The original `key`
-        // can be mutated by caller code while `func` runs, and rvalue `key` can also
-        // become moved-from after emplace.
+        // can be mutated by caller code while `func` runs, and it may also become
+        // moved-from after emplace in rvalue calls.
         std::optional<K> owned_lookup_key;
-        const K* lookup_key = &key;
-        if constexpr (std::is_lvalue_reference_v<Key&&>) {
-            owned_lookup_key.emplace(key);
-            lookup_key = &owned_lookup_key.value();
-        }
+        owned_lookup_key.emplace(key);
+        const K* lookup_key = &owned_lookup_key.value();
 
         std::unique_lock lock(_doing_mtx);
 
