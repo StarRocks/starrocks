@@ -22,7 +22,9 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.VarcharType;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
@@ -41,6 +43,8 @@ import java.util.List;
 import java.util.Map;
 
 public class OracleSchemaResolverTest {
+    private static final String ORACLE_TEMPORAL_TO_DATETIME_KEY = "oracle.temporal.to-datetime";
+
     @Mocked
     HikariDataSource dataSource;
 
@@ -212,6 +216,114 @@ public class OracleSchemaResolverTest {
             System.out.println(e.getMessage());
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetTableWithOracleTimestampSwitches() throws SQLException {
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getCatalog();
+                result = "t1";
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("t1", "test", "tbl1", "%");
+                result = columnResult;
+                minTimes = 0;
+            }
+        };
+
+        Map<String, String> propertiesWithSwitches = new HashMap<>(properties);
+        propertiesWithSwitches.put(ORACLE_TEMPORAL_TO_DATETIME_KEY, "true");
+        propertiesWithSwitches.put(OracleSchemaResolver.ORACLE_TIMESTAMPTZ_TO_DATETIME, "true");
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(propertiesWithSwitches, "catalog", dataSource);
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table.getColumn("h").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("i").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("j").getType().isDatetime());
+            Assertions.assertTrue(table.getColumn("k").getType().isDatetime());
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testTemporalSwitchControlsDateTimestampAndTimestampLtz() {
+        Map<String, String> propertiesWithSwitches = new HashMap<>(properties);
+        propertiesWithSwitches.put(ORACLE_TEMPORAL_TO_DATETIME_KEY, "true");
+        OracleSchemaResolver resolver = new OracleSchemaResolver(propertiesWithSwitches);
+
+        Assertions.assertTrue(resolver.convertColumnType(Types.DATE, "DATE", 8, 0).isDatetime());
+        Assertions.assertTrue(resolver.convertColumnType(Types.TIMESTAMP, "TIMESTAMP", 11, 0).isDatetime());
+        Assertions.assertTrue(resolver.convertColumnType(-102, "TIMESTAMP WITH LOCAL TIME ZONE", 11, 0).isDatetime());
+        Assertions.assertTrue(resolver.convertColumnType(-101, "TIMESTAMP WITH TIME ZONE", 11, 0).isStringType());
+    }
+
+    @Test
+    public void testNumberNegativeScaleExpandsPrecision() {
+        OracleSchemaResolver resolver = new OracleSchemaResolver();
+        ScalarType type = (ScalarType) resolver.convertColumnType(Types.NUMERIC, "NUMBER", 5, -2);
+        Assertions.assertEquals(7, type.decimalPrecision());
+        Assertions.assertEquals(0, type.decimalScale());
+    }
+
+    @Test
+    public void testInvalidNumberDefaultScaleFallsBackToSix() {
+        Map<String, String> propertiesWithInvalidScale = new HashMap<>(properties);
+        propertiesWithInvalidScale.put(OracleSchemaResolver.ORACLE_NUMBER_DEFAULT_SCALE, "invalid");
+        OracleSchemaResolver resolver = new OracleSchemaResolver(propertiesWithInvalidScale);
+
+        ScalarType type = (ScalarType) resolver.convertColumnType(Types.NUMERIC, "NUMBER", 0, -127);
+        Assertions.assertEquals(38, type.decimalPrecision());
+        Assertions.assertEquals(6, type.decimalScale());
+    }
+
+    @Test
+    public void testScaleLargerThanPrecisionAdjustsPrecisionAndScale() {
+        OracleSchemaResolver resolver = new OracleSchemaResolver();
+        ScalarType type = (ScalarType) resolver.convertColumnType(Types.NUMERIC, "NUMBER", 1, 5);
+        Assertions.assertEquals(5, type.decimalPrecision());
+        Assertions.assertEquals(5, type.decimalScale());
+    }
+
+    @Test
+    public void testExceedingMaxPrecisionThrowsConnectorException() {
+        OracleSchemaResolver resolver = new OracleSchemaResolver();
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> resolver.convertColumnType(Types.NUMERIC, "NUMBER", 39, 0));
+        Assertions.assertTrue(ex.getMessage().contains(OracleSchemaResolver.ORACLE_NUMBER_DEFAULT_SCALE));
+        Assertions.assertTrue(ex.getMessage().contains(OracleSchemaResolver.ORACLE_NUMBER_ROUNDING_MODE));
+    }
+
+    @Test
+    public void testTimestamptzSwitchOnlyControlsTimestamptzTypes() {
+        Map<String, String> propertiesWithSwitches = new HashMap<>(properties);
+        propertiesWithSwitches.put(OracleSchemaResolver.ORACLE_TIMESTAMPTZ_TO_DATETIME, "true");
+        OracleSchemaResolver resolver = new OracleSchemaResolver(propertiesWithSwitches);
+
+        Assertions.assertTrue(resolver.convertColumnType(Types.DATE, "DATE", 8, 0).isDate());
+        Assertions.assertTrue(resolver.convertColumnType(Types.TIMESTAMP, "TIMESTAMP", 11, 0).isStringType());
+        Assertions.assertTrue(resolver.convertColumnType(-102, "TIMESTAMP WITH LOCAL TIME ZONE", 11, 0).isStringType());
+        Assertions.assertTrue(resolver.convertColumnType(-101, "TIMESTAMP WITH TIME ZONE", 11, 0).isDatetime());
+        Assertions.assertTrue(resolver.convertColumnType(Types.TIMESTAMP_WITH_TIMEZONE,
+                "TIMESTAMP WITH TIME ZONE", 11, 0).isDatetime());
+    }
+
+    @Test
+    public void testStandardTimestampWithTimezoneTypeCode() {
+        OracleSchemaResolver defaultResolver = new OracleSchemaResolver();
+        Assertions.assertTrue(defaultResolver.convertColumnType(Types.TIMESTAMP_WITH_TIMEZONE,
+                "TIMESTAMP WITH TIME ZONE", 11, 0).isStringType());
+
+        Map<String, String> propertiesWithSwitches = new HashMap<>(properties);
+        propertiesWithSwitches.put(OracleSchemaResolver.ORACLE_TIMESTAMPTZ_TO_DATETIME, "true");
+        OracleSchemaResolver resolver = new OracleSchemaResolver(propertiesWithSwitches);
+        Assertions.assertTrue(resolver.convertColumnType(Types.TIMESTAMP_WITH_TIMEZONE,
+                "TIMESTAMP WITH TIME ZONE", 11, 0).isDatetime());
     }
 
     @Test
