@@ -44,39 +44,95 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class StmtExecutorTest {
 
     @Test
-    public void testIsForwardToLeader(@Mocked GlobalStateMgr state) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = state;
+    public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        Thread testThread = Thread.currentThread();
+        AtomicInteger leaderCallCount = new AtomicInteger(0);
 
-                state.isInTransferringToLeader();
-                times = 1;
-                result = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
 
-                state.isLeader();
-                times = 2;
-                result = false;
-                result = true;
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                if (Thread.currentThread() != testThread) {
+                    return false;
+                }
+                return leaderCallCount.getAndIncrement() > 0;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return Thread.currentThread() == testThread;
             }
         };
 
-        Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
-                new ShowFrontendsStmt()).isForwardToLeader());
+        new Expectations(ctx) {
+            {
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+            }
+        };
+
+        Assertions.assertFalse(new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
     }
 
     @Test
-    public void testForwardExplicitTxnSelectOnFollower(@Mocked GlobalStateMgr state,
-                                                       @Mocked ConnectContext ctx) {
+    public void testForwardExplicitTxnSelectOnFollower(@Mocked ConnectContext ctx) {
         StatementBase stmt;
         MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public GlobalStateMgr getServingState() {
+                return state;
+            }
+
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return false;
+            }
+        };
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = state;
@@ -93,6 +149,8 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = false;
 
+=======
+>>>>>>> ba2c86af98 ([UT] Fix forwardToLeader unstable UT (#70316))
                 ctx.getSerializer();
                 minTimes = 0;
                 result = serializer;
