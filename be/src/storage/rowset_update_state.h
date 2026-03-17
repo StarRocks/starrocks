@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
@@ -77,7 +78,7 @@ struct AutoIncrementPartialUpdateState {
 
     void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;
-        this->schema = schema;
+        this->schema = std::move(schema);
         this->id = id;
         this->segment_id = segment_id;
     }

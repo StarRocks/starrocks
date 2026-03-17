@@ -70,7 +70,7 @@ struct ApproxTopKState {
         this->table.clear();
     }
 
-    void merge(MemPool* mem_pool, const std::vector<Counter> other_counters) {
+    void merge(MemPool* mem_pool, const std::vector<Counter>& other_counters) {
         for (auto& other_counter : other_counters) {
             process<false>(mem_pool, other_counter.value, other_counter.count, true);
         }

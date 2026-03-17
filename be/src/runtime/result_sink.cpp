@@ -150,7 +150,7 @@ Status ResultSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return _writer->append_chunk(chunk);
 }
 
-Status ResultSink::close(RuntimeState* state, Status exec_status) {
+Status ResultSink::close(RuntimeState* state, const Status& exec_status) {
     if (_closed) {
         return Status::OK();
     }

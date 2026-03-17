@@ -60,7 +60,7 @@ Status TableFunctionTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status TableFunctionTableSink::close(RuntimeState* state, Status exec_status) {
+Status TableFunctionTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
