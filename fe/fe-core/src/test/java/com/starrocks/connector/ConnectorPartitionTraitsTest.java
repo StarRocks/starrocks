@@ -15,9 +15,9 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Range;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -39,6 +39,7 @@ import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
+import com.starrocks.sql.common.PCell;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import mockit.Mock;
@@ -53,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import com.starrocks.sql.common.PCell;
 
 public class ConnectorPartitionTraitsTest {
 

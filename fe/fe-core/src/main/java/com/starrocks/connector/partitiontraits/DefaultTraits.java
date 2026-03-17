@@ -167,13 +167,39 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                     // If this partition is dropped, ignore it.
                     continue;
                 }
+                long latestPartitionInfo = latestPartitionInfo.get(basePartitionName);
+
                 MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
-                long basePartitionVersion = getComparablePartitionVersion(
-                        basePartitionInfo, latestPartitionInfo.get(basePartitionName));
-                // basePartitionVersion less than 0 is illegal
-                if ((basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion())
-                        && basePartitionVersion >= 0) {
+                if (basePartitionInfo == null) {
+                    // if mv does not have this partition, add it to the result
                     result.add(basePartitionName);
+                    continue;
+                }
+
+                if (table.getType() == Table.TableType.ICEBERG) {
+                    long basePartitionVersion = basePartitionInfo.getVersion();
+                    long basePartitionModifiedTime = basePartitionInfo.getLastRefreshTime();
+                    long latestPartitionVersion = latestPartitionInfo.getVersion();
+                    long latestPartitionModifiedTime = latestPartitionInfo.getModifiedTime();
+                    if (basePartitionVersion == basePartitionModifiedTime) {
+                        // 1. for historical iceberg mv, the version is the modified time
+                        if (latestPartitionModifiedTime >= 0 && latestPartitionModifiedTime != basePartitionModifiedTime) {
+                            result.add(basePartitionName);
+                        }
+                    } else {
+                        // 2. for new iceberg mv, the version is the snapshot sequence number
+                        if (latestPartitionVersion >= 0 && (latestPartitionVersion != basePartitionVersion 
+                                || latestPartitionModifiedTime > basePartitionModifiedTime)) {
+                            result.add(basePartitionName);
+                        }
+                    }
+                } else {
+                    // TODO: correct the logic here by comparing version and modified time
+                    long latestPartitionVersion = latestPartitionInfo.getModifiedTime();
+                    // basePartitionVersion less than 0 is illegal
+                    if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionInfo.getVersion()) {
+                        result.add(basePartitionName);
+                    }
                 }
             }
         }
