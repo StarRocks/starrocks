@@ -5830,3 +5830,5 @@ XXH_PUBLIC_API void XXH3_generateSecret_fromSeed(void* secretBuffer, XXH64_hash_
 #if defined(__cplusplus)
 }
 #endif
+
+// NOLINTEND
