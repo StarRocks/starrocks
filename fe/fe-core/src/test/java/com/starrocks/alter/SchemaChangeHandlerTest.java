@@ -906,6 +906,29 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
     }
 
+    @Test
+    public void testModifyColumnRejectsSortKeyOrderChange() throws Exception {
+        createTable("CREATE TABLE test.sc_dup_sort_key_modify (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "v0 INT\n"
+                + ") DUPLICATE KEY(k0)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_dup_sort_key_modify");
+
+        String alterSql = "ALTER TABLE test.sc_dup_sort_key_modify MODIFY COLUMN k1 INT AFTER k0";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                handler.process(alterStmt.getAlterClauseList(), db, tbl));
+        Assertions.assertTrue(exception.getMessage().contains("please use ALTER TABLE ORDER BY instead"),
+                exception.getMessage());
+    }
+
     private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
         Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
 

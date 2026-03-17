@@ -843,6 +843,38 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaForFinding.set(modColIndex, modColumn);
         }
 
+        // assert if modify column with sort key if and only if (satisfy all):
+        // 1. User has specified ORDER BY clause by CREATE TABLE / ALTER TABLE ORDER BY
+        // 2. Try to modify a column has the same name with the sort key column
+        // 3. Try to modify the column pos between the sort key columns
+        if (hasColPos) {
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaIdForFindingColumn);
+            if (indexMeta.getSortKeyIdxes() != null && indexMeta.getSortKeyIdxes().size() > 1) {
+                boolean sortKeyModified = false;
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
+                        sortKeyModified = true;
+                        break;
+                    }
+                }
+
+                if (sortKeyModified) {
+                    List<String> oldSortKey = indexMeta.getSortKeyIdxes().stream()
+                            .map(i -> indexMeta.getSchema().get(i).getName())
+                            .collect(Collectors.toList());
+                    List<String> newSortKey = indexMeta.getSortKeyIdxes().stream()
+                            .map(i -> schemaForFinding.get(i).getName())
+                            .collect(Collectors.toList());
+                    if (!oldSortKey.equals(newSortKey)) {
+                        throw new DdlException("Can not modify column[" + modColumn.getName() +
+                            "] to change sort key order by ALTER TABLE MODIFY COLUMN, " +
+                                "please use ALTER TABLE ORDER BY instead");
+
+                    }
+                }
+            }
+        }
+
         List<Column> otherIndexModifiedColumn = new ArrayList<>();
         // check if column being mod
         if (!modColumn.equals(oriColumn)) {
