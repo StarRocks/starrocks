@@ -938,7 +938,7 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_simple_tablet_metadata(_src_tablet_id);
