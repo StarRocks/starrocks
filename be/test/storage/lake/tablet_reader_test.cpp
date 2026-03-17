@@ -31,7 +31,9 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
@@ -1131,6 +1133,7 @@ TEST_F(LakeDuplicateTablet10kColumnReaderTest, DISABLED_test_bench_5kcolumn_init
                  << "ns. Perf diff times: " << std::setprecision(3) << (double)total_time_ns_false / total_time_ns_true
                  << "x";
 }
+
 // Test case for issue: PhysicalSplitMorselQueue crashes when tablet has no rowsets
 // This test verifies that TabletReader::open correctly handles empty rowsets
 // when need_split is true, preventing SIGSEGV in PhysicalSplitMorselQueue::_cur_rowset
@@ -1158,6 +1161,43 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_empty_tablet_with_split) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+}
+
+// Test case for issue: PhysicalSplitMorselQueue crashes when tablet has no rowsets
+// This test directly verifies the boundary checks in PhysicalSplitMorselQueue methods:
+// _cur_rowset, _cur_segment, _is_last_split_of_current_morsel, _next_segment, _init_segment
+TEST_F(LakeDuplicateTabletReaderTest, test_physical_split_morsel_queue_with_empty_rowset) {
+    // Create scan range for the morsel
+    TScanRange scan_range;
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.tablet_id = _tablet_metadata->id();
+    internal_scan_range.version = "1";
+    internal_scan_range.partition_id = 1;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Create morsels
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(1, scan_range));
+
+    // Create PhysicalSplitMorselQueue
+    pipeline::PhysicalSplitMorselQueue queue(std::move(morsels), 1, 1024);
+
+    // Create a lake tablet for testing
+    auto tablet = std::make_shared<Tablet>(_tablet_mgr.get(), _tablet_metadata->id());
+    std::vector<BaseTabletSharedPtr> tablets;
+    tablets.push_back(tablet);
+    queue.set_tablets(tablets);
+
+    // Set up tablet_rowsets with empty rowsets (key scenario for issue #70280)
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.emplace_back(); // Empty rowsets for the tablet
+    queue.set_tablet_rowsets(tablet_rowsets);
+
+    // Call try_get, this should not crash with empty rowsets
+    auto result = queue.try_get();
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), nullptr);
+    ASSERT_TRUE(queue.empty());
 }
 
 } // namespace starrocks::lake
