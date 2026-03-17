@@ -59,6 +59,16 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 | driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 | schema_resolver   | (Optional) Explicitly specifies the schema resolver to use. Valid values: `postgresql`, `mysql`, `oracle`, `sqlserver`, `clickhouse`. Use this parameter when working with non-standard JDBC drivers that cannot be auto-detected by driver class name. If not specified, StarRocks will auto-detect the appropriate resolver based on the `driver_class` parameter. |
 
+#### Optional Oracle properties
+
+When `driver_class` is Oracle, you can configure the following optional properties:
+
+| **Parameter**                   | **Default** | **Description** |
+| ------------------------------ | ----------- | --------------- |
+| oracle.number.default-scale    | 6           | Used when Oracle `NUMBER` metadata does not provide explicit precision and scale. Valid range: `0` to `38`. |
+| oracle.temporal.to-datetime    | false       | Controls Oracle `DATE`, `TIMESTAMP`, and `TIMESTAMP WITH LOCAL TIME ZONE` mapping. If `true`, they are mapped to StarRocks `DATETIME`; otherwise, `DATE` remains `DATE`, and `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` are mapped to `VARCHAR(64)`. |
+| oracle.timestamptz.to-datetime | false       | Controls Oracle `TIMESTAMP WITH TIME ZONE` mapping. If `true`, it is mapped to StarRocks `DATETIME`; otherwise, it is mapped to `VARCHAR(64)`. |
+
 > **NOTE**
 >
 > The FEs download the JDBC driver JAR package at the time of JDBC catalog creation, and the BEs or CNs download the JDBC driver JAR package at the time of the first query. The amount of time taken for the download varies depending on network conditions.
@@ -100,6 +110,20 @@ PROPERTIES
     "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
+);
+-- Oracle (with Oracle-specific optional properties)
+CREATE EXTERNAL CATALOG jdbc2_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521/ORCLPDB1",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver",
+    "oracle.number.default-scale"="6",
+    "oracle.temporal.to-datetime"="true",
+    "oracle.timestamptz.to-datetime"="true"
 );
 -- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
