@@ -945,7 +945,7 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_simple_tablet_metadata(_src_tablet_id);
@@ -1150,8 +1150,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("test_segment_001.dat");
-    rowset->add_segments("test_segment_002.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Pre-populate the metacache with source tablet metadata at the starlet URI path
@@ -1199,8 +1199,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("test_segment_001.dat");
-    rowset->add_segments("test_segment_002.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Pre-populate the metacache with source tablet metadata at the starlet URI path
@@ -1266,7 +1266,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     rowset->set_overlapped(false);
     rowset->set_num_rows(10);
     rowset->set_data_size(1024);
-    rowset->add_segments("test_segment_001.dat");
+    rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
     src_meta_v2->set_next_rowset_id(2);
 
     // Pre-populate the metacache with source tablet metadata at the starlet URI path
