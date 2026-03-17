@@ -91,8 +91,8 @@ struct IOStatEntry {
     }
 
     static std::string header_string() {
-        return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", "Tablet", "TAG", "read_bytes",
-                           "ops", "write_bytes", "ops", "total_bytes", "ops");
+        return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", "Tablet", "TAG", "read_bytes", "ops",
+                           "write_bytes", "ops", "total_bytes", "ops");
     }
     uint32_t get_tag() const { return id >> 48UL; }
 
@@ -101,7 +101,8 @@ struct IOStatEntry {
         uint64_t tablet_id = id & 0x0000FFFFFFFFFFFFUL;
         return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", tablet_id,
                            IOProfiler::tag_to_string(tag), read_bytes.load(), read_ops.load(), write_bytes.load(),
-                           write_ops.load(), read_bytes.load() + write_bytes.load(), read_ops.load() + write_ops.load());
+                           write_ops.load(), read_bytes.load() + write_bytes.load(),
+                           read_ops.load() + write_ops.load());
     }
 };
 
