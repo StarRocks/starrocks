@@ -188,8 +188,7 @@ public class SyncPartitionUtilsTest {
 
     private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
                                             Map<String, PCell> mvListMap) {
-        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
-                mvListMap.keySet().stream().collect(Collectors.toSet()));
+        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap, true);
         return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
     }
 
@@ -294,6 +293,22 @@ public class SyncPartitionUtilsTest {
 
         diff = diffList(baseListMap, mvListMap);
         Assertions.assertEquals(0, diff.size());
+    }
+
+    @Test
+    public void testDiffListWithExistingPartitionNameConflict() {
+        // Same partition name with different values (e.g. domain values that sanitize to same partition name)
+        Map<String, PCell> baseListMap = Maps.newHashMap();
+        addIntoListPartitionMap(baseListMap, "psampledomain2ecom", "sample-domain.com");
+
+        Map<String, PCell> mvListMap = Maps.newHashMap();
+        addIntoListPartitionMap(mvListMap, "psampledomain2ecom", "sample-domain2.com");
+
+        Map<String, PListCell> diff = diffList(baseListMap, mvListMap);
+        Assertions.assertEquals(1, diff.size());
+        Assertions.assertFalse(diff.containsKey("psampledomain2ecom"));
+        Assertions.assertEquals("sample-domain.com",
+                diff.values().iterator().next().getPartitionItems().iterator().next().get(0));
     }
 
     @Test
