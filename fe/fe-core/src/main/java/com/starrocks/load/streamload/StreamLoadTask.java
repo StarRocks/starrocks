@@ -1135,10 +1135,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1180,11 +1177,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
@@ -1298,12 +1291,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(true);
         }
@@ -1352,10 +1341,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {

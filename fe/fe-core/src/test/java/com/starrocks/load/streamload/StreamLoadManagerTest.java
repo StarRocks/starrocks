@@ -247,7 +247,7 @@ public class StreamLoadManagerTest {
         StreamLoadTask task = idToStreamLoadTask.get("label2");
 
         TransactionState state = new TransactionState();
-        task.afterCommitted(state, true);
+        task.afterCommitted(state);
         Assertions.assertNotEquals(-1, task.commitTimeMs());
         Assertions.assertTrue(task.isUnreversibleState());
         Assertions.assertFalse(task.isFinalState());

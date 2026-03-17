@@ -1158,10 +1158,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         writeLock();
         try {
             unprotectUpdateLoadingStatus(txnState);
@@ -1192,14 +1189,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
      * The job will be cancelled by replayOnAborted when journal replay
      *
      * @param txnState
-     * @param txnOperated
      * @param txnStatusChangeReason
      */
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
         writeLock();
         try {
             if (isTxnDone()) {
@@ -1239,13 +1232,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
      * The job will be finished by replayOnVisible when txn journal replay
      *
      * @param txnState
-     * @param txnOperated
      */
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterVisible(TransactionState txnState) {
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onLoadJobTransactionFinish(txnState);
         unprotectUpdateLoadingStatus(txnState);
         updateState(JobState.FINISHED);

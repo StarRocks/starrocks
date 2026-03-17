@@ -390,7 +390,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             try {
                 // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
                 // This approach prevents blocking subsequent transactions due to the current one.
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                transactionState = globalTransactionMgr.finishTransaction(transactionState.getDbId(),
                         transactionState.getTransactionId(), publishErrorReplicaIds,
                         Config.finish_transaction_default_lock_timeout_ms);
             } catch (StarRocksException exception) {
@@ -424,7 +424,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             try {
                 if (transactionState.checkCanFinish()) {
-                    globalTransactionMgr.finishTransactionNew(transactionState, publishErrorReplicas);
+                    transactionState = globalTransactionMgr.finishTransactionNew(transactionState, publishErrorReplicas);
                 }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
@@ -850,9 +850,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     // as soon as the publish task succeeds. Set readyToFinishTime here so that
                     // publishCanFinishLatencyMs and publishAckLatencyMs are recorded correctly.
                     states.forEach(TransactionState::setReadyToFinishTimeIfUnset);
-                    globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
+                    TransactionStateBatch latestStateBatch =
+                            globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
-                    submitDeleteTxnLogJob(txnStateBatch);
+                    submitDeleteTxnLogJob(latestStateBatch);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }

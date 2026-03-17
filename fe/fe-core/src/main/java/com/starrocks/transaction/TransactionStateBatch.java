@@ -51,6 +51,13 @@ public class TransactionStateBatch implements Writable {
         this.transactionStates = transactionStates;
     }
 
+    public TransactionStateBatch(TransactionStateBatch stateBatch) {
+        this.transactionStates = stateBatch.transactionStates.stream()
+                .map(TransactionState::new)
+                .collect(Collectors.toList());
+        this.partitionToTablets = stateBatch.partitionToTablets;
+    }
+
     // No concurrency issues.
     // Because in the case of concurrent calls,
     // the partitionId will not be the same,
@@ -81,7 +88,6 @@ public class TransactionStateBatch implements Writable {
             transactionState.clearErrorMsg();
             transactionState.setNewFinish();
             transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
-            transactionState.notifyVisible();
         }
     }
 
@@ -99,9 +105,9 @@ public class TransactionStateBatch implements Writable {
                 TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getCallbackFactory().getCallback(callbackId);
                 if (callback != null) {
-                    if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                    if (txnOperated && Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
                         try {
-                            callback.afterVisible(transactionState, txnOperated);
+                            callback.afterVisible(transactionState);
                         } catch (Throwable t) {
                             LOG.warn("afterVisible callback failed for txn {}, callbackId {}",
                                     transactionState.getTransactionId(), callbackId, t);

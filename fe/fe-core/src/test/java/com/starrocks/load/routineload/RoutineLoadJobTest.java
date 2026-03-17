@@ -124,7 +124,7 @@ public class RoutineLoadJobTest {
         String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
@@ -184,7 +184,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadAbortedTasksTotal.getValue();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
@@ -193,7 +193,7 @@ public class RoutineLoadJobTest {
         Assertions.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
 
         routineLoadTaskInfoList.clear();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
         Assertions.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assertions.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
     }
@@ -252,7 +252,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadCommittedTasksTotal.getValue();
-        routineLoadJob.afterCommitted(transactionState, true);
+        routineLoadJob.afterCommitted(transactionState);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
@@ -893,7 +893,7 @@ public class RoutineLoadJobTest {
             RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
             Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
@@ -908,7 +908,7 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "true");
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =

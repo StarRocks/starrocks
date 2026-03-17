@@ -36,6 +36,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.load.DeleteJob.DeleteState;
+import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
@@ -140,7 +141,18 @@ public class DeleteHandlerTest {
             }
 
             @Mock
-            public void logInsertTransactionState(TransactionState transactionState) {
+            public void logInsertTransactionState(TransactionState transactionState,
+                    com.starrocks.persist.WALApplier walApplier) {
+                if (walApplier != null) {
+                    walApplier.apply(transactionState);
+                }
+            }
+
+            @Mock
+            public void logFinishMultiDelete(MultiDeleteInfo info, com.starrocks.persist.WALApplier walApplier) {
+                if (walApplier != null) {
+                    walApplier.apply(info);
+                }
             }
         };
 

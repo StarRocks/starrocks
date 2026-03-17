@@ -346,10 +346,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
         writeLock();
         try {
             // check if job has been completed
@@ -390,8 +387,8 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "BrokerLoad: jobId[" + id + "] label[" + label + "]");
     }
 

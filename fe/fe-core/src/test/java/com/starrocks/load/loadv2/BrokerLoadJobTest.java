@@ -384,7 +384,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob1.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
-        brokerLoadJob1.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob1.afterAborted(txnState, txnStatusChangeReason);
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob1, "idToTasks");
         Assertions.assertEquals(0, idToTasks.size());
 
@@ -401,7 +401,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.createTimestamp = createTimestamp;
         brokerLoadJob2.timeoutSecond = 0;
         brokerLoadJob2.failInfos = Lists.newArrayList(new TabletFailInfo(1L, 2L));
-        brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob2.afterAborted(txnState, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assertions.assertEquals(1, idToTasks.size());
         Assertions.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
@@ -414,7 +414,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob3.unprotectedExecuteJob();
         txnOperated = false;
         txnStatusChangeReason = "broker load job timeout";
-        brokerLoadJob3.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob3.afterAborted(txnState, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob3, "idToTasks");
         Assertions.assertEquals(1, idToTasks.size());
 
@@ -425,7 +425,7 @@ public class BrokerLoadJobTest {
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
         Deencapsulation.setField(brokerLoadJob4, "state", JobState.FINISHED);
-        brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob4.afterAborted(txnState, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assertions.assertEquals(1, idToTasks.size());
 
@@ -441,7 +441,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob5.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = LoadErrorUtils.BACKEND_BRPC_TIMEOUT.keywords;
-        brokerLoadJob5.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob5.afterAborted(txnState, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob5, "idToTasks");
         Assertions.assertEquals(1, idToTasks.size());
 
@@ -451,7 +451,7 @@ public class BrokerLoadJobTest {
         brokerLoadJob6.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "parse error, task failed";
-        brokerLoadJob6.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        brokerLoadJob6.afterAborted(txnState, txnStatusChangeReason);
         Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob6.getState());
         idToTasks = Deencapsulation.getField(brokerLoadJob6, "idToTasks");
         Assertions.assertEquals(0, idToTasks.size());

@@ -94,7 +94,7 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         if (CollectionUtils.sizeIsEmpty(this.baseTableInfoTvrDeltaMap)) {
             LOG.info("Materialized view {} has no base table info tvr version range to update, skip", mv.getName());
             return;

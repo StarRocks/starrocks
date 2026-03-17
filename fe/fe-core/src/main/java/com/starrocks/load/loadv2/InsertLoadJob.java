@@ -286,13 +286,10 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         loadCommittedTimestamp = System.currentTimeMillis();
         if (txnCallback != null) {
-            txnCallback.afterCommitted(txnState, txnOperated);
+            txnCallback.afterCommitted(txnState);
         }
     }
 
@@ -301,7 +298,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
     }
 
     @Override
@@ -309,7 +306,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    public void afterVisible(TransactionState txnState) {
     }
 
     @Override
