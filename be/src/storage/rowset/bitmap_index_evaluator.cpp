@@ -99,6 +99,11 @@ struct BitmapIndexInitializer {
 struct BitmapIndexSeeker {
     enum class ResultType : uint8_t { ALWAYS_FALSE, ALWAYS_TRUE, NOT_USED, OK };
 
+    explicit BitmapIndexSeeker(BitmapIndexEvaluator* parent)
+            : parent(parent),
+              bitmap_max_filter_ratio(parent->_bitmap_max_filter_ratio > 0 ? parent->_bitmap_max_filter_ratio
+                                                                           : config::bitmap_max_filter_ratio) {}
+
     StatusOr<ResultType> operator()(const PredicateAndNode& node) {
         if (!parent->_ctx.is_node_support_bitmap[&node]) {
             return ResultType::NOT_USED;
@@ -181,7 +186,7 @@ struct BitmapIndexSeeker {
         // Estimate the selectivity of the bitmap index.
         // ---------------------------------------------------------
         if (num_always_true_child + num_not_used_children >= num_children ||
-            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
+            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * bitmap_max_filter_ratio)) {
             return ResultType::NOT_USED;
         }
 
@@ -274,7 +279,7 @@ struct BitmapIndexSeeker {
         // Estimate the selectivity of the bitmap index.
         // ---------------------------------------------------------
         if (num_always_false_child >= num_children ||
-            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * config::bitmap_max_filter_ratio)) {
+            (need_estimate_selectivity && mul_selected * 1000 > mul_cardinality * bitmap_max_filter_ratio)) {
             return ResultType::NOT_USED;
         }
 
@@ -320,6 +325,7 @@ struct BitmapIndexSeeker {
     }
 
     BitmapIndexEvaluator* parent;
+    const int bitmap_max_filter_ratio;
 };
 
 struct BitmapIndexRetriver {

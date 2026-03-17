@@ -272,6 +272,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
+    // if set > 0, override BE config::bitmap_max_filter_ratio
+    public static final String BITMAP_MAX_FILTER_RATIO = "bitmap_max_filter_ratio";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
 
@@ -1690,6 +1692,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxScanKeyNum = -1;
     @VariableMgr.VarAttr(name = MAX_PUSHDOWN_CONDITIONS_PER_COLUMN)
     private int maxPushdownConditionsPerColumn = -1;
+    // 0 means unset, BE will use its config value
+    @VariableMgr.VarAttr(name = BITMAP_MAX_FILTER_RATIO)
+    private int bitmapMaxFilterRatio = 0;
     @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
     private boolean enableLambdaPushdown = true;
 
@@ -6076,6 +6081,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         if (maxPushdownConditionsPerColumn > -1) {
             tResult.setMax_pushdown_conditions_per_column(maxPushdownConditionsPerColumn);
+        }
+        if (bitmapMaxFilterRatio > 0) {
+            tResult.setBitmap_max_filter_ratio(bitmapMaxFilterRatio);
         }
 
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
