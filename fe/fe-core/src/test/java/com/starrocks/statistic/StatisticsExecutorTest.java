@@ -329,7 +329,10 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         connectContext.setCurrentWarehouse("xxx");
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        // Warehouse validation only happens in SHARED_DATA mode
+        if (RunMode.isSharedDataMode()) {
+            Assertions.assertTrue(analyzeStatus.getReason() != null && analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        }
         connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
     }
