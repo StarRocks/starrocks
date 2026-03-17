@@ -119,6 +119,25 @@ public class SqlCredentialRedactor {
             Pattern.DOTALL | Pattern.MULTILINE
     );
 
+    private static final Pattern IDENTIFIED_BY_PATTERN = Pattern.compile(
+            "(IDENTIFIED\\s+BY\\s+(?:PASSWORD\\s+)?)" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
+    private static final Pattern IDENTIFIED_WITH_PATTERN = Pattern.compile(
+            "(IDENTIFIED\\s+WITH\\s+[^\\s]+\\s+(?:BY|AS)\\s+)" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
+    private static final Pattern SET_PASSWORD_PATTERN = Pattern.compile(
+            "(SET\\s+PASSWORD(?:\\s+FOR\\s+.+?)?\\s*=\\s*PASSWORD\\s*\\()" +
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")" +
+                    "(\\s*\\))",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+    );
+
     private static final String REDACTED_VALUE = "***";
 
     /**
@@ -132,6 +151,14 @@ public class SqlCredentialRedactor {
             return sql;
         }
 
+        sql = redactKeyValueCredentials(sql);
+        sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3, 0);
+        sql = redactSqlCredentialClause(sql, IDENTIFIED_WITH_PATTERN, 1, 2, 3, 0);
+        sql = redactSqlCredentialClause(sql, SET_PASSWORD_PATTERN, 1, 2, 3, 4);
+        return sql;
+    }
+
+    private static String redactKeyValueCredentials(String sql) {
         Matcher matcher = KEY_VALUE_PATTERN.matcher(sql);
         StringBuilder result = new StringBuilder(sql.length() + 100);
 
@@ -165,6 +192,33 @@ public class SqlCredentialRedactor {
         }
 
         // Append remaining text
+        result.append(sql, lastEnd, sql.length());
+        return result.toString();
+    }
+
+    private static String redactSqlCredentialClause(String sql, Pattern pattern, int prefixGroup,
+                                                    int singleQuotedGroup, int doubleQuotedGroup, int suffixGroup) {
+        Matcher matcher = pattern.matcher(sql);
+        StringBuilder result = new StringBuilder(sql.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            result.append(sql, lastEnd, matcher.start());
+
+            result.append(matcher.group(prefixGroup));
+            if (matcher.group(singleQuotedGroup) != null) {
+                result.append('\'').append(REDACTED_VALUE).append('\'');
+            } else if (matcher.group(doubleQuotedGroup) != null) {
+                result.append('"').append(REDACTED_VALUE).append('"');
+            } else {
+                result.append(REDACTED_VALUE);
+            }
+
+            if (suffixGroup > 0) {
+                result.append(matcher.group(suffixGroup));
+            }
+            lastEnd = matcher.end();
+        }
+
         result.append(sql, lastEnd, sql.length());
         return result.toString();
     }

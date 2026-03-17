@@ -321,15 +321,15 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
-            return SqlCredentialRedactor.redact(origStmt);
-        } else if (Config.enable_sql_desensitize_in_log) {
+        } else if (needEncrypt || Config.enable_sql_desensitize_in_log) {
             // Some information like username, password in the stmt should not be printed.
             return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                             .setColumnSimplifyTableName(false)
                             .setHideCredential(needEncrypt)
                             .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
+                    .orElseGet(() -> needEncrypt
+                            ? SqlCredentialRedactor.redact(LogUtil.removeLineSeparator(origStmt))
+                            : "this is a desensitized sql");
         } else {
             // Always redact credentials as defense in depth - raw SQL may contain
             // credentials that AuditEncryptionChecker does not yet recognize
