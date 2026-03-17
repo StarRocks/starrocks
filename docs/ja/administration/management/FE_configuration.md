@@ -4015,6 +4015,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: コロケーションテーブルのバックアップと復元を有効にするかどうか。`true` はコロケーションテーブルのバックアップと復元を有効にすることを示し、`false` は無効にすることを示します。
 - Introduced in: v3.2.10, v3.3.3
 
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: 外部カタログ（Hive、Iceberg、JDBC など）内のテーブルを解決する際に、`information_schema.tables` が外部メタデータサービスにアクセスすることを許可するかどうかを制御します。`false`（デフォルト）に設定すると、外部テーブルの `TABLE_COMMENT` などの列は空になる場合がありますが、クエリは高速でリモート呼び出しを回避します。`true` に設定すると、FE は対応する外部メタデータサービスに問い合わせ、`TABLE_COMMENT` などのフィールドを埋めることができますが、テーブルごとに追加のレイテンシとリモート呼び出しが発生します。
+- Introduced in: -
+
 ##### `enable_materialized_view_concurrent_prepare`
 
 - Default: true

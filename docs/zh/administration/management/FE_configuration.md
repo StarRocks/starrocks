@@ -4001,6 +4001,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为 Colocate 表启用备份和恢复。`true` 表示为 Colocate 表启用备份和恢复，`false` 表示禁用。
 - 引入版本: v3.2.10, v3.3.3
 
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制在构建 `information_schema.tables` 时，是否为外部 Catalog（如 Hive、Iceberg、JDBC）中的表加载完整元数据。当该项为 `false`（默认）时不会访问远端 metastore，因此外部表在 `information_schema.tables` 中的 `TABLE_COMMENT` 等字段可能为空，但查询开销较小且不会对外部服务产生额外请求。当该项为 `true` 时，FE 会访问对应的外部元数据服务，填充 `TABLE_COMMENT` 等字段，但代价是每张外部表都会产生额外的远端调用和一定延迟。
+- 引入版本: -
+
 ##### `enable_materialized_view_concurrent_prepare`
 
 - 默认值: true
