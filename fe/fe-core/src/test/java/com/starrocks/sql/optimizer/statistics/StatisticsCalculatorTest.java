@@ -354,8 +354,11 @@ public class StatisticsCalculatorTest {
         Partition partition3 = partitions.get(2);
         // mock one empty partition
         partition1.getDefaultPhysicalPartition().setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition1.getDefaultPhysicalPartition().setDataVersion(Partition.PARTITION_INIT_VERSION);
         partition2.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition2.getDefaultPhysicalPartition().setDataVersion(2);
         partition3.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition3.getDefaultPhysicalPartition().setDataVersion(2);
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
