@@ -308,8 +308,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public void updateVersionForRestore(long visibleVersion) {
         this.setVisibleVersion(visibleVersion, System.currentTimeMillis());
         this.nextVersion = this.visibleVersion + 1;
-        LOG.info("update partition {} version for restore: visible: {}, next: {}",
-                id, visibleVersion, nextVersion);
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        LOG.info("update partition {} version for restore: visible: {}, next: {}, dataVersion: {}, nextDataVersion: {}",
+                id, visibleVersion, nextVersion, dataVersion, nextDataVersion);
     }
 
     public void updateVisibleVersion(long visibleVersion) {
