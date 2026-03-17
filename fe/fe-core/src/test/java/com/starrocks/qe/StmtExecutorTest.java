@@ -92,29 +92,46 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testForwardExplicitTxnSelectOnFollower(@Mocked GlobalStateMgr state,
-                                                       @Mocked ConnectContext ctx) {
+    public void testForwardExplicitTxnSelectOnFollower(@Mocked ConnectContext ctx) {
         StatementBase stmt;
         MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public GlobalStateMgr getServingState() {
+                return state;
+            }
+
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return false;
+            }
+        };
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = state;
-
-                state.getSqlParser();
-                minTimes = 0;
-                result = new SqlParser(AstBuilder.getInstance());
-
-                state.isLeader();
-                minTimes = 0;
-                result = false;
-
-                state.isInTransferringToLeader();
-                minTimes = 0;
-                result = false;
-
                 ctx.getSerializer();
                 minTimes = 0;
                 result = serializer;
