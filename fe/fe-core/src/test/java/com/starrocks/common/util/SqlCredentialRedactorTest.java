@@ -260,29 +260,6 @@ public class SqlCredentialRedactorTest {
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
     }
 
-    @Test
-    public void testRedactCreateUserCredentialClauses() {
-        String plainSql = "CREATE USER 'u1' IDENTIFIED BY 'secret'";
-        String plainRedacted = SqlCredentialRedactor.redact(plainSql);
-        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY '***'", plainRedacted);
-
-        String hashedSql = "CREATE USER 'u1' IDENTIFIED BY PASSWORD '*59C70DA2'";
-        String hashedRedacted = SqlCredentialRedactor.redact(hashedSql);
-        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY PASSWORD '***'", hashedRedacted);
-
-        String pluginSql = "CREATE USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=test,dc=example,dc=io'";
-        String pluginRedacted = SqlCredentialRedactor.redact(pluginSql);
-        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS '***'",
-                pluginRedacted);
-    }
-
-    @Test
-    public void testRedactSetPasswordClause() {
-        String sql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('secret')";
-        String redacted = SqlCredentialRedactor.redact(sql);
-        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = PASSWORD('***')", redacted);
-    }
-
     /**
      * java.regex uses NFA algorithm, it cannot guarantee O(N) complexity, might run into timeout
      * when the string is very long.

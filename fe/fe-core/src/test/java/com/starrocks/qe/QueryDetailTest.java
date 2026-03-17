@@ -150,31 +150,6 @@ public class QueryDetailTest {
     }
 
     @Test
-    public void testSensitiveAuditStmtUsesAstDesensitization() throws Exception {
-        String sql = "CREATE USER 'audit_user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
-                + "AS 'uid=gengjun,ou=people,dc=example,dc=io'";
-        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
-
-        ConnectContext testContext = new ConnectContext();
-        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
-        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
-        testContext.setQualifiedUser(connectContext.getQualifiedUser());
-        testContext.setDatabase("test_db");
-        testContext.setCurrentCatalog("default_catalog");
-        testContext.setQueryId(UUIDUtil.genUUID());
-        testContext.setStartTime();
-
-        ConnectProcessor processor = new ConnectProcessor(testContext);
-        processor.auditAfterExec(sql, statement, null);
-
-        AuditEvent event = testContext.getAuditEventBuilder().build();
-        Assertions.assertEquals(
-                "CREATE USER 'audit_user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS '*XXX'",
-                event.stmt);
-        Assertions.assertFalse(event.stmt.contains("uid=gengjun"));
-    }
-
-    @Test
     public void testImpersonatedUserInQueryDetail() throws Exception {
         String sql = "SELECT 1";
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());

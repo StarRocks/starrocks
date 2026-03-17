@@ -152,8 +152,8 @@ public class SqlCredentialRedactor {
         }
 
         sql = redactKeyValueCredentials(sql);
-        sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3, 0);
-        sql = redactSqlCredentialClause(sql, IDENTIFIED_WITH_PATTERN, 1, 2, 3, 0);
+        sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3);
+        sql = redactSqlCredentialClause(sql, IDENTIFIED_WITH_PATTERN, 1, 2, 3);
         sql = redactSqlCredentialClause(sql, SET_PASSWORD_PATTERN, 1, 2, 3, 4);
         return sql;
     }
@@ -196,6 +196,11 @@ public class SqlCredentialRedactor {
         return result.toString();
     }
 
+    private static String redactSqlCredentialClause(String sql, Pattern pattern,
+                                                    int prefixGroup, int singleQuotedGroup, int doubleQuotedGroup) {
+        return redactSqlCredentialClause(sql, pattern, prefixGroup, singleQuotedGroup, doubleQuotedGroup, 0);
+    }
+
     private static String redactSqlCredentialClause(String sql, Pattern pattern, int prefixGroup,
                                                     int singleQuotedGroup, int doubleQuotedGroup, int suffixGroup) {
         Matcher matcher = pattern.matcher(sql);
@@ -212,7 +217,6 @@ public class SqlCredentialRedactor {
             } else {
                 result.append(REDACTED_VALUE);
             }
-
             if (suffixGroup > 0) {
                 result.append(matcher.group(suffixGroup));
             }

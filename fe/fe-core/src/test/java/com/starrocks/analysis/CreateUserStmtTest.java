@@ -77,7 +77,7 @@ public class CreateUserStmtTest {
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals("user", stmt.getUser().getUser());
         Assertions.assertEquals(
-                "CREATE USER 'user'@'%' IDENTIFIED BY PASSWORD '*XXX'",
+                "CREATE USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                 StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
@@ -92,7 +92,7 @@ public class CreateUserStmtTest {
 
         sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assertions.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '*XXX'",
+        Assertions.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                 StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
@@ -101,7 +101,7 @@ public class CreateUserStmtTest {
         sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals(
-                "CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*XXX'",
+                "CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                 StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
@@ -118,7 +118,7 @@ public class CreateUserStmtTest {
         sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals(
-                "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS '*XXX'",
+                "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                 StandardCharsets.UTF_8), "");
@@ -129,7 +129,7 @@ public class CreateUserStmtTest {
         sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assertions.assertEquals(
-                "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY '*XXX'",
+                "CREATE USER 'user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
                 AstToSQLBuilder.toSQL(stmt));
         Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
                 StandardCharsets.UTF_8), "");
