@@ -55,7 +55,7 @@ private:
     std::mutex _mutex;
     const TUniqueId _query_id;
     std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
-    int _ref_count;
+    int _ref_count{1};
 };
 
 class PassThroughContext {

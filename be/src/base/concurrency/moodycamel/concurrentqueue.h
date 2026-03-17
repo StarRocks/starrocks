@@ -422,12 +422,12 @@ namespace details
 {
 	struct ConcurrentQueueProducerTypelessBase
 	{
-		ConcurrentQueueProducerTypelessBase* next;
+		ConcurrentQueueProducerTypelessBase* next{nullptr};
 		std::atomic<bool> inactive;
-		ProducerToken* token;
+		ProducerToken* token{nullptr};
 		
 		ConcurrentQueueProducerTypelessBase()
-			: next(nullptr), inactive(false), token(nullptr)
+			:  inactive(false) 
 		{
 		}
 	};
@@ -1538,7 +1538,7 @@ private:
 	struct Block
 	{
 		Block()
-			: next(nullptr), elementsCompletelyDequeued(0), freeListRefs(0), freeListNext(nullptr), shouldBeOnFreeList(false), dynamicallyAllocated(true)
+			: next(nullptr), elementsCompletelyDequeued(0), freeListRefs(0), freeListNext(nullptr), shouldBeOnFreeList(false) 
 		{
 #ifdef MCDBGQ_TRACKMEM
 			owner = nullptr;
@@ -1656,7 +1656,7 @@ private:
 		std::atomic<uint32_t> freeListRefs;
 		std::atomic<Block*> freeListNext;
 		std::atomic<bool> shouldBeOnFreeList;
-		bool dynamicallyAllocated;		// Perhaps a better name for this would be 'isNotPartOfInitialBlockPool'
+		bool dynamicallyAllocated{true};		// Perhaps a better name for this would be 'isNotPartOfInitialBlockPool'
 		
 #ifdef MCDBGQ_TRACKMEM
 		void* owner;
@@ -1754,8 +1754,8 @@ private:
 			pr_blockIndexSlotsUsed(0),
 			pr_blockIndexSize(EXPLICIT_INITIAL_INDEX_SIZE >> 1),
 			pr_blockIndexFront(0),
-			pr_blockIndexEntries(nullptr),
-			pr_blockIndexRaw(nullptr)
+			pr_blockIndexEntries(nullptr)
+			
 		{
 			size_t poolBasedIndexSize = details::ceil_to_pow_2(parent_->initialBlockPoolSize) >> 1;
 			if (poolBasedIndexSize > pr_blockIndexSize) {
@@ -2385,7 +2385,7 @@ private:
 		size_t pr_blockIndexSize;
 		size_t pr_blockIndexFront;		// Next slot (not current)
 		BlockIndexEntry* pr_blockIndexEntries;
-		void* pr_blockIndexRaw;
+		void* pr_blockIndexRaw{nullptr};
 		
 #ifdef MOODYCAMEL_QUEUE_INTERNAL_DEBUG
 	public:

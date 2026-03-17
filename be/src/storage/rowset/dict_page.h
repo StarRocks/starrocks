@@ -103,13 +103,13 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     PageBuilderOptions _options;
-    bool _finished;
+    bool _finished{false};
 
     std::unique_ptr<PageBuilder> _data_page_builder;
 
     std::unique_ptr<BitshufflePageBuilder<Type>> _dict_builder;
 
-    EncodingTypePB _encoding_type;
+    EncodingTypePB _encoding_type{DICT_ENCODING};
     // query for dict item -> dict id
     phmap::flat_hash_map<ValueType, ValueCodeType> _dictionary;
     ValueType _first_value;
@@ -154,8 +154,8 @@ private:
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BitShufflePageDecoder<Type>* _dict_decoder = nullptr;
-    bool _parsed;
-    EncodingTypePB _encoding_type;
+    bool _parsed{false};
+    EncodingTypePB _encoding_type{UNKNOWN_ENCODING};
     MutableColumnPtr _vec_code_buf;
 };
 

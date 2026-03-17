@@ -63,13 +63,11 @@ static const std::string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryConte
 const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
-        : _parent(nullptr),
-          _pool(new ObjectPool()),
+        : _pool(new ObjectPool()),
           _name(std::move(name)),
-          _metadata(-1),
+
           _is_averaged_profile(is_averaged_profile),
-          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0),
-          _local_time_percent(0) {
+          _counter_total_time(TUnit::TIME_NS, Counter::create_strategy(TUnit::TIME_NS), 0) {
     _counter_map["TotalTime"] = std::make_pair(&_counter_total_time, ROOT_COUNTER);
 }
 

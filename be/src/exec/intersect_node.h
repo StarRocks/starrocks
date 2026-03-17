@@ -65,7 +65,7 @@ private:
     // Tuple id resolved in Prepare() to set tuple_desc_;
     const int _tuple_id;
     // Descriptor for tuples this union node constructs.
-    [[maybe_unused]] const TupleDescriptor* _tuple_desc;
+    [[maybe_unused]] const TupleDescriptor* _tuple_desc{nullptr};
     bool _has_outer_join_child = false;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;

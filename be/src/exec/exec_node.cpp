@@ -70,15 +70,8 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _tuple_ids(tnode.row_tuples),
           _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
-          _debug_phase(TExecNodePhase::INVALID),
-          _debug_action(TDebugAction::WAIT),
-          _limit(tnode.limit),
-          _num_rows_returned(0),
-          _rows_returned_counter(nullptr),
-          _rows_returned_rate(nullptr),
-          _memory_used_counter(nullptr),
-          _runtime_state(nullptr),
-          _is_closed(false) {
+
+          _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 

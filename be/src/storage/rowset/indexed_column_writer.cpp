@@ -59,13 +59,7 @@ IndexedColumnWriterOptions::IndexedColumnWriterOptions() : index_page_size(confi
 
 IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                          WritableFile* wfile)
-        : _options(options),
-          _typeinfo(std::move(typeinfo)),
-          _wfile(wfile),
-          _num_values(0),
-          _num_data_pages(0),
-          _validx_key_coder(nullptr),
-          _compress_codec(nullptr) {
+        : _options(options), _typeinfo(std::move(typeinfo)), _wfile(wfile) {
     _first_value.resize(_typeinfo->size());
 }
 

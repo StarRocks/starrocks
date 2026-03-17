@@ -27,9 +27,7 @@ BinlogBuilder::BinlogBuilder(int64_t tablet_id, int64_t version, int64_t change_
           _version(version),
           _change_event_timestamp(change_event_timestamp),
           _params(params),
-          _next_file_id(params->start_file_id),
-          _init_writer(false),
-          _next_seq_id(0) {}
+          _next_file_id(params->start_file_id) {}
 
 Status BinlogBuilder::add_empty() {
     RETURN_IF_ERROR(_switch_writer_if_full());

@@ -30,17 +30,12 @@ struct ModelConfig {
     std::string endpoint;
     std::string model;
     std::string api_key;
-    double temperature;
-    int max_tokens;
-    double top_p;
-    int timeout_ms;
+    double temperature{kDefaultTemperature};
+    int max_tokens{kDefaultMaxTokens};
+    double top_p{kDefaultTopP};
+    int timeout_ms{kDefaultTimeout};
 
-    ModelConfig()
-            : endpoint(kDefaultEndpoint),
-              temperature(kDefaultTemperature),
-              max_tokens(kDefaultMaxTokens),
-              top_p(kDefaultTopP),
-              timeout_ms(kDefaultTimeout) {}
+    ModelConfig() : endpoint(kDefaultEndpoint) {}
 };
 
 class AiFunctions {

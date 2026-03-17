@@ -281,8 +281,7 @@ void ThriftServer::ThriftServerEventProcessor::deleteContext(
 
 ThriftServer::ThriftServer(const std::string& name, std::shared_ptr<apache::thrift::TProcessor> processor, int port,
                            MetricRegistry* metrics, int num_worker_threads, ServerType server_type)
-        : _started(false),
-          _port(port),
+        : _port(port),
           _num_worker_threads(num_worker_threads),
           _server_type(server_type),
           _name(name),

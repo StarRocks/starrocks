@@ -32,7 +32,7 @@
 namespace starrocks {
 
 IntersectNode::IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : PipelineNode(pool, tnode, descs), _tuple_id(tnode.intersect_node.tuple_id), _tuple_desc(nullptr) {}
+        : PipelineNode(pool, tnode, descs), _tuple_id(tnode.intersect_node.tuple_id) {}
 
 Status IntersectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

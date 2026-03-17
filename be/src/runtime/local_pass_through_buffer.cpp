@@ -97,8 +97,7 @@ private:
     std::atomic_int64_t _total_bytes = 0;
 };
 
-PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
-        : _mutex(), _query_id(query_id), _ref_count(1) {}
+PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id) : _mutex(), _query_id(query_id) {}
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
     if (UNLIKELY(_ref_count != 0)) {

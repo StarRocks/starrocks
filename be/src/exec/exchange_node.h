@@ -84,7 +84,7 @@ private:
 
     const TExchangeNode& _texchange_node;
 
-    int _num_senders; // needed for _stream_recvr construction
+    int _num_senders{0}; // needed for _stream_recvr construction
 
     // created in prepare() and owned by the RuntimeState
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
@@ -109,7 +109,7 @@ private:
     int64_t _offset;
 
     // Number of rows skipped so far.
-    int64_t _num_rows_skipped;
+    int64_t _num_rows_skipped{0};
 
     // Sub plan query statistics receiver. It is shared with DataStreamRecvr and will be
     // called in two different threads. When ExchangeNode is destructed, this may be accessed

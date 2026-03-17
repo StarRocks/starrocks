@@ -61,12 +61,7 @@ CompactionTaskCallback::~CompactionTaskCallback() = default;
 
 CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
                                                CompactResponse* response, ::google::protobuf::Closure* done)
-        : _scheduler(scheduler),
-          _mtx(),
-          _request(request),
-          _response(response),
-          _done(done),
-          _last_check_time(INT64_MAX) {
+        : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
     _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();

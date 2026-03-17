@@ -173,7 +173,7 @@ private:
     int _buffer_limit;
     std::atomic<int64_t> _packet_num;
     int _arrow_rows_limit;
-    int _arrow_rows;
+    int _arrow_rows{0};
 
     // blocking queue for batch
     ResultQueue _batch_queue;

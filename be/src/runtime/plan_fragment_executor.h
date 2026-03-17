@@ -160,15 +160,15 @@ private:
     report_status_callback _report_status_cb;
 
     // true if _plan->_get_next_internal_vectorized() indicated that it's done
-    bool _done;
+    bool _done{false};
 
     // true if prepare() returned OK
-    bool _prepared;
+    bool _prepared{false};
 
     // true if close() has been called
-    bool _closed;
+    bool _closed{false};
 
-    bool enable_profile;
+    bool enable_profile{true};
 
     // If load_profile_collect_second is set and time cost of load is less than the value,
     // then profile will not be reported to FE even though enable_profile=true
@@ -178,7 +178,7 @@ private:
 
     // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
-    bool _is_report_on_cancel;
+    bool _is_report_on_cancel{true};
 
     // Overall execution status. Either ok() or set to the first error status that
     // was encountered.
@@ -209,10 +209,10 @@ private:
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
     std::shared_ptr<QueryStatistics> _query_statistics;
-    bool _collect_query_statistics_with_every_batch;
+    bool _collect_query_statistics_with_every_batch{false};
 
     // If this is a runtime filter merge node for some query.
-    bool _is_runtime_filter_merge_node;
+    bool _is_runtime_filter_merge_node{false};
 
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;

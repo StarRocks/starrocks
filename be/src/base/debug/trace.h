@@ -233,7 +233,7 @@ private:
 // on the same thread)
 class ScopedAdoptTrace {
 public:
-    explicit ScopedAdoptTrace(Trace* t) : old_trace_(Trace::threadlocal_trace_) {
+    explicit ScopedAdoptTrace(Trace* t) {
         Trace::threadlocal_trace_ = t;
         if (t) {
             t->AddRef();
@@ -253,7 +253,7 @@ public:
 
 private:
     DFAKE_MUTEX(ctor_dtor_);
-    Trace* old_trace_;
+    Trace* old_trace_{Trace::threadlocal_trace_};
 };
 
 // Implementation for TRACE_COUNTER_SCOPE_LATENCY_US(...) macro above.

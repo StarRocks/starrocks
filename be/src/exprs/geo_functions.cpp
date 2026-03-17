@@ -300,13 +300,13 @@ StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Colu
 }
 
 struct StContainsState {
-    StContainsState() : shapes{nullptr, nullptr} {}
+    StContainsState() {}
     ~StContainsState() {
         delete shapes[0];
         delete shapes[1];
     }
     bool is_null{false};
-    GeoShape* shapes[2];
+    GeoShape* shapes[2]{nullptr, nullptr};
 };
 
 Status GeoFunctions::st_contains_close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {

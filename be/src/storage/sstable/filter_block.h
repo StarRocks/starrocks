@@ -51,10 +51,10 @@ public:
 
 private:
     const FilterPolicy* policy_;
-    const char* data_;   // Pointer to filter data (at block-start)
-    const char* offset_; // Pointer to beginning of offset array (at block-end)
-    size_t num_;         // Number of entries in offset array
-    size_t base_lg_;     // Encoding parameter (see kFilterBaseLg in .cc file)
+    const char* data_{nullptr};   // Pointer to filter data (at block-start)
+    const char* offset_{nullptr}; // Pointer to beginning of offset array (at block-end)
+    size_t num_{0};               // Number of entries in offset array
+    size_t base_lg_{0};           // Encoding parameter (see kFilterBaseLg in .cc file)
 };
 
 } // namespace starrocks::sstable

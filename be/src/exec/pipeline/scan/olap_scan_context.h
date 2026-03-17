@@ -56,7 +56,7 @@ private:
     // TODO: use c++20 barrier after upgrading gcc
     class Barrier {
     public:
-        explicit Barrier() : _count(0), _current(0) {}
+        explicit Barrier() {}
 
         void arrive() {
             std::unique_lock<std::mutex> lock(_mutex);
@@ -73,8 +73,8 @@ private:
         }
 
     private:
-        std::size_t _count;
-        std::size_t _current;
+        std::size_t _count{0};
+        std::size_t _current{0};
         std::mutex _mutex;
         std::condition_variable _cv;
     };

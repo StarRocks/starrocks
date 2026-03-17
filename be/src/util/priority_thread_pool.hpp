@@ -73,7 +73,7 @@ public:
     //     capacity available.
     //  -- work_function: the function to run every time an item is consumed from the queue
     PriorityThreadPool(std::string name, uint32_t num_threads, uint32_t queue_size)
-            : _name(std::move(name)), _work_queue(queue_size), _shutdown(false) {
+            : _name(std::move(name)), _work_queue(queue_size) {
         for (int i = 0; i < num_threads; ++i) {
             new_thread(++_current_thread_id);
         }
@@ -243,7 +243,7 @@ private:
     std::mutex _lock;
 
     // Set to true when threads should stop doing work and terminate.
-    bool _shutdown;
+    bool _shutdown{false};
 
     // Signalled when the queue becomes empty
     std::condition_variable _empty_cv;
