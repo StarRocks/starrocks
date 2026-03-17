@@ -85,7 +85,7 @@ private:
             : Expr(rhs),
               _cast_to_type_desc(rhs._cast_to_type_desc),
               _throw_exception_if_err(rhs._throw_exception_if_err),
-              _constant_res(rhs._constant_res != nullptr ? std::move(*(rhs._constant_res)).mutate() : nullptr) {}
+              _constant_res(rhs._constant_res != nullptr ? Column::mutate(ColumnPtr(rhs._constant_res)) : nullptr) {}
 
     Slice _unquote(Slice slice) const;
     Slice _trim(Slice slice) const;

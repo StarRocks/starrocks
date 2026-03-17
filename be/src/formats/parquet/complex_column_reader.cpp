@@ -1309,7 +1309,7 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
             append_null();
             return Status::OK();
         }
-        append_value(std::move(**value));
+        append_value(**value);
         return Status::OK();
     }
 

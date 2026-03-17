@@ -106,7 +106,7 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
                 _project_default_datum_by_path_if_needed(&v, value_type_info.get(), value_path);
                 projected.emplace(it.first, std::move(v));
             }
-            datum->set<DatumMap>(std::move(projected));
+            datum->set<DatumMap>(projected);
             return;
         }
 

@@ -807,7 +807,7 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
 
         // not the same segment file
         if (!same_segment) {
-            ranges.add(std::move(cur_range));
+            ranges.add(cur_range);
             locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
 
             // reset
@@ -827,13 +827,13 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
 
         // new rowid -> new range
         else if (rowid != cur_range.end() - 1) {
-            ranges.add(std::move(cur_range));
+            ranges.add(cur_range);
             cur_range = Range<rowid_t>(rowid, rowid + 1);
         }
     }
 
     // flush the last range
-    ranges.add(std::move(cur_range));
+    ranges.add(cur_range);
     locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
     replicated->push_back(replicated->back() + current_group_size);
 
