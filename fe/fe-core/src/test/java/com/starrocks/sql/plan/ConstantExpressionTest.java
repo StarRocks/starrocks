@@ -644,4 +644,9 @@ public class ConstantExpressionTest extends PlanTestBase {
             connectContext.getSessionVariable().setSqlMode(savedSqlMode);
         }
     }
+
+    @Test
+    void testConstantDoubleAdd() throws Exception {
+        assertCContains(getFragmentPlan("SELECT -1.5e308-3e307"), "NULL");
+    }
 }
