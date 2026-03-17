@@ -1755,6 +1755,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The number of threads used for Schema Change.
 - Introduced in: -
 
+##### automatic_partition_thread_pool_thread_num
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads in the automatic partition thread pool used for automatic partition creation during loading. The queue size of the pool is automatically set to 10 times the thread count.
+- Introduced in: -
+
 ##### avro_ignore_union_type_tag
 
 - Default: true
