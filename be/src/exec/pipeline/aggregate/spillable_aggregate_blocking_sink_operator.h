@@ -13,6 +13,8 @@
 // limitations under the License.
 
 #pragma once
+#include <utility>
+
 #include "aggregate_blocking_sink_operator.h"
 #include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
@@ -28,7 +30,7 @@ class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOpera
 public:
     template <class... Args>
     SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
-            : AggregateBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateBlockingSinkOperator(std::move(aggregator), std::forward<Args>(args)...,
                                             "spillable_aggregate_blocking_sink") {}
 
     ~SpillableAggregateBlockingSinkOperator() override = default;

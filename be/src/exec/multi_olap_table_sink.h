@@ -173,7 +173,7 @@ public:
      * @param close_status The status of the close operation.
      * @return The status of the close operation.
      */
-    Status close(RuntimeState* state, Status close_status) override;
+    Status close(RuntimeState* state, const Status& close_status) override;
 
     /**
      * @brief Returns the runtime profile for the MultiOlapTableSink.

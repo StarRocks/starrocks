@@ -39,7 +39,7 @@ Status MultiCastDataStreamSink::open(RuntimeState* state) {
     return Status::NotSupported("Don't support non-pipelined query engine");
 }
 
-Status MultiCastDataStreamSink::close(RuntimeState* state, Status exec_status) {
+Status MultiCastDataStreamSink::close(RuntimeState* state, const Status& exec_status) {
     return Status::NotSupported("Don't support non-pipelined query engine");
 }
 

@@ -116,7 +116,7 @@ Status MemoryScratchSink::open(RuntimeState* state) {
     return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
-Status MemoryScratchSink::close(RuntimeState* state, Status exec_status) {
+Status MemoryScratchSink::close(RuntimeState* state, const Status& exec_status) {
     if (_closed) {
         return Status::OK();
     }

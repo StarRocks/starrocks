@@ -117,8 +117,8 @@ public:
         return slot_desc;
     }
 
-    static TDescriptorTable create_table_desc(std::vector<TTupleDescriptor> tuple_descs,
-                                              std::vector<TSlotDescriptor> slot_descs) {
+    static TDescriptorTable create_table_desc(const std::vector<TTupleDescriptor>& tuple_descs,
+                                              const std::vector<TSlotDescriptor>& slot_descs) {
         TDescriptorTable t_desc_table;
         for (auto& slot_desc : slot_descs) {
             t_desc_table.slotDescriptors.push_back(slot_desc);
@@ -287,7 +287,7 @@ public:
         return ExprExecutor::open(*conjunct_ctxs, runtime_state);
     }
 
-    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc ttype, bool is_nullable) {
+    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, const TTypeDesc& ttype, bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
         slot_ref.type = ttype;
@@ -368,13 +368,13 @@ public:
         return node;
     }
 
-    static TExpr create_slot_expr(TExprNode slot_ref) {
+    static TExpr create_slot_expr(const TExprNode& slot_ref) {
         TExpr expr;
         expr.nodes.push_back(slot_ref);
         return expr;
     }
 
-    static TFunction create_builtin_function(const std::string func_name, const std::vector<TTypeDesc>& arg_types,
+    static TFunction create_builtin_function(const std::string& func_name, const std::vector<TTypeDesc>& arg_types,
                                              const TTypeDesc& intermediate_type, const TTypeDesc& ret_type) {
         TFunction fn;
         {
@@ -390,7 +390,7 @@ public:
         return fn;
     }
 
-    static TExpr create_aggregate_expr(TFunction fn, const std::vector<TExprNode>& children) {
+    static TExpr create_aggregate_expr(const TFunction& fn, const std::vector<TExprNode>& children) {
         TExpr expr;
 
         TExprNode node;

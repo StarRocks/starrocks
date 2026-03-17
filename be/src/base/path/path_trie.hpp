@@ -67,7 +67,7 @@ public:
         }
 
         // Return true if insert sucess.
-        bool insert(const std::vector<std::string> path, int index, const T& value) {
+        bool insert(const std::vector<std::string>& path, int index, const T& value) {
             if (index >= path.size()) {
                 return false;
             }
@@ -114,7 +114,7 @@ public:
             return node->insert(path, index + 1, value);
         }
 
-        bool retrieve(const std::vector<std::string> path, int index, T* value,
+        bool retrieve(const std::vector<std::string>& path, int index, T* value,
                       std::map<std::string, std::string>* params) {
             // check max index
             if (index >= path.size()) {

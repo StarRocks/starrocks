@@ -55,7 +55,7 @@ public:
     Datum() = default;
 
     template <typename T>
-    Datum(T value) {
+    Datum(const T& value) {
         static_assert(!std::is_same_v<std::string, T>, "should use the Slice as parameter instead of std::string");
         set(value);
     }
@@ -136,7 +136,7 @@ public:
     }
 
     template <typename T>
-    void set(T value) {
+    void set(const T& value) {
         if constexpr (std::is_same_v<DateValue, T>) {
             _value = value.julian();
         } else if constexpr (std::is_same_v<TimestampValue, T>) {

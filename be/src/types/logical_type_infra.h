@@ -178,7 +178,7 @@ auto type_dispatch_basic(LogicalType ltype, Functor fun, Args... args) {
 }
 
 template <class Functor, class... Args>
-auto type_dispatch_basic_and_complex_types(LogicalType ltype, Functor fun, Args... args) {
+auto type_dispatch_basic_and_complex_types(LogicalType ltype, Functor fun, const Args&... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
@@ -208,7 +208,7 @@ auto type_dispatch_all(LogicalType ltype, Functor fun, Args... args) {
 
 // Types could build into columns
 template <class Functor, class... Args>
-auto type_dispatch_column(LogicalType ltype, Functor fun, Args... args) {
+auto type_dispatch_column(LogicalType ltype, Functor fun, const Args&... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
@@ -232,7 +232,7 @@ auto type_dispatch_sortable(LogicalType ltype, Functor fun, Args... args) {
 }
 
 template <class Ret, class Functor, class... Args>
-Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args... args) {
+Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, const Args&... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -290,7 +290,7 @@ auto scalar_type_dispatch(LogicalType ltype, Functor fun, Args... args) {
 }
 
 template <class Functor, class Ret, class... Args>
-auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, const Args&... args) {
     switch (ltype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -299,7 +299,7 @@ auto type_dispatch_filter(LogicalType ltype, Ret default_value, Functor fun, Arg
 }
 
 template <class Functor, class Ret, class... Args>
-auto type_dispatch_bitset_filter(LogicalType ltype, Ret default_value, Functor fun, Args... args) {
+auto type_dispatch_bitset_filter(LogicalType ltype, Ret default_value, Functor fun, const Args&... args) {
     switch (ltype) {
         APPLY_FOR_BITSET_FILTER_SUPPORTED_TYPE(_TYPE_DISPATCH_CASE)
     default:

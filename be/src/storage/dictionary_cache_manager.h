@@ -605,7 +605,7 @@ public:
                                                            const DictionaryCacheTxnId& txn_id);
 
     inline static Status probe_given_dictionary_cache(const Schema& key_schema, const Schema& value_schema,
-                                                      DictionaryCachePtr dictionary, const ChunkPtr& key_chunk,
+                                                      const DictionaryCachePtr& dictionary, const ChunkPtr& key_chunk,
                                                       ChunkPtr& value_chunk, Column* null_column) {
         DCHECK(value_chunk->num_rows() == 0);
         size_t size = key_chunk->num_rows();

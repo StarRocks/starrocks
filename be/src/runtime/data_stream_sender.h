@@ -97,7 +97,7 @@ public:
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.

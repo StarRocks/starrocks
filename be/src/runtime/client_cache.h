@@ -168,7 +168,7 @@ public:
         }
     }
 
-    ClientConnection(ClientCache<T>* client_cache, TNetworkAddress address, int timeout_ms, Status* status)
+    ClientConnection(ClientCache<T>* client_cache, const TNetworkAddress& address, int timeout_ms, Status* status)
             : _client_cache(client_cache), _client(nullptr) {
         *status = _client_cache->get_client(address, &_client, timeout_ms);
 

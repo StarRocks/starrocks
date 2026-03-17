@@ -40,7 +40,7 @@ public:
 
     Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
 
     RuntimeProfile* profile() override { return _profile; }
 

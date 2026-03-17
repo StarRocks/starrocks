@@ -54,7 +54,7 @@ Status IcebergTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status IcebergTableSink::close(RuntimeState* state, Status exec_status) {
+Status IcebergTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
