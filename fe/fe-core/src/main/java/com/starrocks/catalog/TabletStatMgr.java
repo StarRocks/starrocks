@@ -57,6 +57,7 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
@@ -136,6 +137,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
                 long totalRowCount = 0L;
                 long maxTabletSize = 0L;
+                long minAdjacentTabletPairSize = Long.MAX_VALUE;
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
@@ -144,13 +146,26 @@ public class TabletStatMgr extends FrontendDaemon {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             long version = physicalPartition.getVisibleVersion();
+                            long visibleVersionTime = physicalPartition.getVisibleVersionTime();
                             for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                     IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
+                                long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : index.getTablets()) {
                                     indexRowCount += tablet.getRowCount(version);
-                                    maxTabletSize = Math.max(maxTabletSize, tablet.getDataSize(true));
+                                    long dataSize = tablet.getDataSize(true);
+                                    maxTabletSize = Math.max(maxTabletSize, dataSize);
+                                    if (!(tablet instanceof LakeTablet)
+                                            || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
+                                        prevFreshTabletSize = -1L;
+                                        continue;
+                                    }
+                                    if (prevFreshTabletSize >= 0) {
+                                        minAdjacentTabletPairSize = Math.min(minAdjacentTabletPairSize,
+                                                prevFreshTabletSize + dataSize);
+                                    }
+                                    prevFreshTabletSize = dataSize;
                                 } // end for tablets
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
@@ -188,7 +203,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
                 // Trigger tablet reshard
                 if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerTabletReshard(db, olapTable, maxTabletSize);
+                    triggerTabletReshard(db, olapTable, maxTabletSize, minAdjacentTabletPairSize);
                 }
             }
         }
@@ -197,18 +212,30 @@ public class TabletStatMgr extends FrontendDaemon {
         lastWorkTimestamp = LocalDateTime.now();
     }
 
-    private static void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
-        if (table.isCloudNativeTableOrMaterializedView() && table.isRangeDistribution()
-                && TabletReshardUtils.needSplit(maxTabletSize)) {
-            try {
+    private static void triggerTabletReshard(Database db, OlapTable table,
+                                             long maxTabletSize, long minAdjacentTabletPairSize) {
+        if (!table.isCloudNativeTableOrMaterializedView() || !table.isRangeDistribution()) {
+            return;
+        }
+
+        try {
+            if (TabletReshardUtils.needSplit(maxTabletSize)) {
                 GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
                         db, table, new SplitTabletClause());
                 LOG.info("Auto triggered split tablet job for table {}.{}, maxTabletSize {}",
                         db.getFullName(), table.getName(), maxTabletSize);
-            } catch (Exception e) {
-                LOG.warn("Failed to create split tablet job for table {}.{}. ",
-                        db.getFullName(), table.getName(), e);
+                return;
             }
+
+            if (TabletReshardUtils.needMerge(minAdjacentTabletPairSize)) {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(
+                        db, table, new MergeTabletClause());
+                LOG.info("Auto triggered merge tablet job for table {}.{}, minAdjacentTabletPairSize {}",
+                        db.getFullName(), table.getName(), minAdjacentTabletPairSize);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to create tablet reshard job for table {}.{}.",
+                    db.getFullName(), table.getName(), e);
         }
     }
 

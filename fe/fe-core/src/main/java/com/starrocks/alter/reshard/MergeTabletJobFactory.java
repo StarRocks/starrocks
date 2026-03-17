@@ -152,7 +152,8 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
                     for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                        List<List<Long>> mergeTabletGroupsForIndex = createMergeTabletGroups(oldIndex, targetSize);
+                        List<List<Long>> mergeTabletGroupsForIndex =
+                                createMergeTabletGroups(physicalPartition, oldIndex, targetSize);
                         if (mergeTabletGroupsForIndex.isEmpty()) {
                             continue;
                         }
@@ -254,16 +255,17 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         return mergeTabletGroups;
     }
 
-    private List<List<Long>> createMergeTabletGroups(MaterializedIndex oldIndex, long targetSize) {
+    private List<List<Long>> createMergeTabletGroups(
+            PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize) {
         // MaterializedIndex tablets are already ordered by range.
         List<Tablet> orderedTablets = oldIndex.getTablets();
         List<List<Long>> mergeTabletGroups = new ArrayList<>();
 
         List<Long> currentTabletGroup = new ArrayList<>();
         long currentSize = 0;
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (Tablet tablet : orderedTablets) {
-            long dataSize = tablet.getDataSize(true);
-            if (dataSize >= targetSize) {
+            if (!(tablet instanceof LakeTablet)) {
                 if (currentTabletGroup.size() >= 2) {
                     mergeTabletGroups.add(currentTabletGroup);
                 }
@@ -272,13 +274,27 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
                 continue;
             }
 
-            currentTabletGroup.add(tablet.getId());
-            currentSize += dataSize;
-            if (currentSize >= targetSize && currentTabletGroup.size() >= 2) {
-                mergeTabletGroups.add(currentTabletGroup);
+            long dataSize = tablet.getDataSize(true);
+            if (dataSize >= targetSize
+                    || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
+                if (currentTabletGroup.size() >= 2) {
+                    mergeTabletGroups.add(currentTabletGroup);
+                }
+                currentTabletGroup = new ArrayList<>();
+                currentSize = 0;
+                continue;
+            }
+
+            if (currentSize + dataSize > targetSize) {
+                if (currentTabletGroup.size() >= 2) {
+                    mergeTabletGroups.add(currentTabletGroup);
+                }
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;
             }
+
+            currentTabletGroup.add(tablet.getId());
+            currentSize += dataSize;
         }
 
         if (currentTabletGroup.size() >= 2) {

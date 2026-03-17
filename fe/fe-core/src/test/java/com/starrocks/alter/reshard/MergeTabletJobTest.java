@@ -604,9 +604,17 @@ public class MergeTabletJobTest {
         MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
 
         List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
         for (int i = 0; i < orderedTablets.size(); i++) {
             LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
-            tablet.setDataSize(i < 2 ? 60L : 200L);
+            if (i == 0) {
+                tablet.setDataSize(40L);
+            } else if (i == 1) {
+                tablet.setDataSize(60L);
+            } else {
+                tablet.setDataSize(200L);
+            }
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
         }
 
         MergeTabletClause clause = new MergeTabletClause();
@@ -631,6 +639,73 @@ public class MergeTabletJobTest {
         Assertions.assertNotNull(mergingTablet);
         Assertions.assertEquals(List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId()),
                 mergingTablet.getOldTabletIds());
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryAutoMergeStopsAtTargetSize() throws Exception {
+        ensureTabletCount(4);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        for (Tablet orderedTablet : orderedTablets) {
+            LakeTablet tablet = (LakeTablet) orderedTablet;
+            tablet.setDataSize(40L);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingPhysicalPartition reshardingPartition =
+                mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+        Assertions.assertNotNull(reshardingPartition);
+        ReshardingMaterializedIndex reshardingIndex =
+                reshardingPartition.getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        List<List<Long>> mergedTabletGroups = new ArrayList<>();
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergedTabletGroups.add(reshardingTablet.getMergingTablet().getOldTabletIds());
+            }
+        }
+
+        Assertions.assertEquals(List.of(
+                List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId()),
+                List.of(orderedTablets.get(2).getId(), orderedTablets.get(3).getId())),
+                mergedTabletGroups);
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryAutoMergeSkipsStaleTablet() throws Exception {
+        ensureTabletCount(3);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        for (int i = 0; i < orderedTablets.size(); i++) {
+            LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
+            if (i == 0) {
+                tablet.setDataSize(40L);
+                tablet.setDataSizeUpdateTime(visibleVersionTime);
+            } else if (i == 1) {
+                tablet.setDataSize(40L);
+                tablet.setDataSizeUpdateTime(visibleVersionTime - 1);
+            } else {
+                tablet.setDataSize(200L);
+                tablet.setDataSizeUpdateTime(visibleVersionTime);
+            }
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
     }
 
     @Test
