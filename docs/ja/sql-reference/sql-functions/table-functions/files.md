@@ -47,7 +47,7 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 パスまたはファイルを指定できます。たとえば、HDFS サーバー上のパス `/user/data/tablename` からデータファイル `20210411` をロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` と指定します。
 
-ワイルドカード `?`, `*`, `[]`, `{}`, または `^` を使用して複数のデータファイルの保存パスを指定することもできます。たとえば、HDFS サーバー上のパス `/user/data/tablename` 内のすべてのパーティションまたは `202104` パーティションのみからデータファイルをロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` または `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` と指定します。
+ワイルドカード `?`, `*`, `[]`, または `^` を使用して複数のデータファイルの保存パスを指定することもできます。たとえば、HDFS サーバー上のパス `/user/data/tablename` 内のすべてのパーティションまたは `202104` パーティションのみからデータファイルをロードするには、このパラメータを `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` または `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` と指定します。
 
 :::note
 
