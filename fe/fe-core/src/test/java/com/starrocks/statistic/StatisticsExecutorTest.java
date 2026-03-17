@@ -331,7 +331,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
         // Warehouse validation only happens in SHARED_DATA mode
         if (RunMode.isSharedDataMode()) {
-            Assertions.assertTrue(analyzeStatus.getReason() != null && analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+            Assertions.assertTrue(analyzeStatus.getReason() != null &&
+                    analyzeStatus.getReason().contains("Warehouse xxx not exist"));
         }
         connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
