@@ -36,6 +36,7 @@ import java.util.Map;
 public abstract class JDBCSchemaResolver {
 
     boolean supportPartitionInformation = false;
+    protected String[] defaultTableTypes = new String[] {"TABLE", "VIEW"};
 
     /**
      * Get the query timeout in seconds for JDBC statement execution.
@@ -102,8 +103,11 @@ public abstract class JDBCSchemaResolver {
     }
 
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(dbName, null, null,
-                new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(dbName, null, null, defaultTableTypes);
+    }
+
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(dbName, null, tblName, defaultTableTypes);
     }
 
     public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
@@ -118,6 +122,30 @@ public abstract class JDBCSchemaResolver {
     public Table getTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
                           String catalogName, Map<String, String> properties) throws DdlException {
         return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, properties);
+    }
+
+    /**
+     * Get table comment from JDBC metadata, typically from the "REMARKS" column of DatabaseMetaData#getTables().
+     *
+     * <p>Notes:
+     * - Some JDBC drivers don't support REMARKS or may throw SQLException when accessing it.
+     * - Some drivers return empty REMARKS unless certain connection properties are enabled.
+     */
+    public String getTableComment(Connection connection, String dbName, String tblName) {
+        try (ResultSet resultSet = getTables(connection, dbName, tblName)) {
+            if (!resultSet.next()) {
+                return "";
+            }
+            try {
+                String remarks = resultSet.getString("REMARKS");
+                return remarks != null ? remarks : "";
+            } catch (SQLException ignored) {
+                // ignore
+            }
+        } catch (SQLException ignored) {
+            // ignore
+        }
+        return "";
     }
 
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
