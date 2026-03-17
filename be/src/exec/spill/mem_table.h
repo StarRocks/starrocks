@@ -28,7 +28,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;

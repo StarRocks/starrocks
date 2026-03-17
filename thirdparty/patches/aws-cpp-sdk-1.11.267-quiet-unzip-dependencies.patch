@@ -1,22 +1,33 @@
 diff --git a/prefetch_crt_dependency.sh b/prefetch_crt_dependency.sh
-index e7b2f94631e..54a179f2732 100755
+index e7b2f94631e..5e7c1e820af 100755
 --- a/prefetch_crt_dependency.sh
 +++ b/prefetch_crt_dependency.sh
-@@ -26,7 +26,7 @@ rm -rf crt
+@@ -23,10 +23,18 @@ S2N_URI=${CRT_URI_PREFIX}/s2n/zip/0998358a6ef7c4f22295deba088796fe354c5f4c  # v1
+ echo "Removing CRT"
+ rm -rf crt
+ 
++extract_zip() {
++    if [ "$(uname -s)" = "Darwin" ]; then
++        ditto -x -k "$1" "$2"
++    else
++        unzip -q "$1" -d "$2"
++    fi
++}
++
  echo "Downloading and expanding CRT CPP"
  mkdir -p crt/tmp
  curl ${CRT_URI} --output crt/tmp/crt.zip
 -unzip crt/tmp/crt -d crt
-+unzip -q crt/tmp/crt -d crt
++extract_zip crt/tmp/crt.zip crt
  CRT_DIR_TMP=`ls -d crt/aws-crt-cpp*`
  mv ${CRT_DIR_TMP} crt/aws-crt-cpp
  
-@@ -47,7 +47,7 @@ curl ${S2N_URI} --output crt/tmp/13.zip
+@@ -47,7 +55,7 @@ curl ${S2N_URI} --output crt/tmp/13.zip
  
  
  for a in `seq 1 13`; do
 -    unzip crt/tmp/${a} -d crt/tmp
-+    unzip -q crt/tmp/${a} -d crt/tmp
++    extract_zip crt/tmp/${a}.zip crt/tmp
  done
  
  rm -rf crt/aws-crt-cpp/crt

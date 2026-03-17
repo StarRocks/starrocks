@@ -97,7 +97,7 @@ public:
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.
@@ -132,7 +132,7 @@ private:
     RuntimeState* _state{};
     ObjectPool* _pool;
 
-    int _current_channel_idx; // index of current channel to send to if _random == true
+    int _current_channel_idx{0}; // index of current channel to send to if _random == true
 
     TPartitionType::type _part_type;
 
@@ -182,10 +182,10 @@ private:
     // Only sender will change this value, so no need to use lock to protect it.
     Status _close_status;
 
-    RuntimeProfile* _profile; // Allocated from _pool
-    RuntimeProfile::Counter* _serialize_chunk_timer;
+    RuntimeProfile* _profile{nullptr}; // Allocated from _pool
+    RuntimeProfile::Counter* _serialize_chunk_timer{nullptr};
     RuntimeProfile::Counter* _compress_timer{};
-    RuntimeProfile::Counter* _bytes_sent_counter;
+    RuntimeProfile::Counter* _bytes_sent_counter{nullptr};
     RuntimeProfile::Counter* _uncompressed_bytes_counter{};
     RuntimeProfile::Counter* _ignore_rows{};
 

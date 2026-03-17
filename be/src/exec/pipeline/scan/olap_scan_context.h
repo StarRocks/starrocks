@@ -26,7 +26,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks {
@@ -56,7 +56,7 @@ private:
     // TODO: use c++20 barrier after upgrading gcc
     class Barrier {
     public:
-        explicit Barrier() : _count(0), _current(0) {}
+        explicit Barrier() {}
 
         void arrive() {
             std::unique_lock<std::mutex> lock(_mutex);
@@ -73,8 +73,8 @@ private:
         }
 
     private:
-        std::size_t _count;
-        std::size_t _current;
+        std::size_t _count{0};
+        std::size_t _current{0};
         std::mutex _mutex;
         std::condition_variable _cv;
     };

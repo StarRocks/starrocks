@@ -34,7 +34,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
 
 namespace starrocks {
@@ -316,7 +316,7 @@ private:
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
-    size_t _total_fragments;
+    size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
     int64_t _delivery_deadline = 0;

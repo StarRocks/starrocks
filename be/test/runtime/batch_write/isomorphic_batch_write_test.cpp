@@ -24,6 +24,7 @@
 #include "common/util/bthreads/executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "http/http_common.h"
+#include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 

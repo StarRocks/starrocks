@@ -1225,8 +1225,9 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
         total_rows += new_metadata->rowsets(0).num_rows();
         total_size += new_metadata->rowsets(0).data_size();
     }
-    EXPECT_EQ(100, total_rows);
-    EXPECT_EQ(1000, total_size);
+    // Split metadata keeps the raw rowset stats. Delete vectors are applied later by get_tablet_stats().
+    EXPECT_EQ(150, total_rows);
+    EXPECT_EQ(1500, total_size);
 }
 
 TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {

@@ -42,9 +42,12 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
+#include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_executor.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {

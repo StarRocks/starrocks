@@ -41,7 +41,7 @@ private:
     const int fd_;
 };
 
-FdOutputStream::FdOutputStream(int fd) : _fd(fd), _sync_file_on_close(false), _closed(false), _sync_dir() {}
+FdOutputStream::FdOutputStream(int fd) : _fd(fd), _sync_dir() {}
 
 FdOutputStream::~FdOutputStream() {
     auto st = FdOutputStream::close();

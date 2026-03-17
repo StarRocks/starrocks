@@ -32,7 +32,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 class Spiller;

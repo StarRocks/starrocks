@@ -163,8 +163,8 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
                                          PermutationType& permutation, Tie& tie, DataComparator cmp,
                                          std::pair<int, int> range, bool build_tie, size_t limit = 0,
                                          size_t* limited = nullptr) {
-    auto lesser = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) < 0; };
-    auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
+    auto lesser = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) < 0; };
+    auto greater = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) > 0; };
     auto do_sort = [&](size_t first_iter, size_t last_iter) {
         auto begin = permutation.begin() + first_iter;
         auto end = permutation.begin() + last_iter;

@@ -110,7 +110,7 @@ Status MysqlTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 #endif
 }
 
-Status MysqlTableSink::close(RuntimeState* state, Status exec_status) {
+Status MysqlTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -116,7 +117,7 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+    static TypeDescriptor create_struct_type(const std::vector<std::string>& field_names,
                                              const std::vector<TypeDescriptor>& filed_types) {
         TypeDescriptor res;
         res.type = TYPE_STRUCT;

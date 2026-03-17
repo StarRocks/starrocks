@@ -216,6 +216,8 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
+// Maximum retry count for non-segment file copy during lake-to-lake replication
+CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -1016,6 +1018,8 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
+// The number of threads for automatic partition thread pool. Queue size is 10x thread count.
+CONF_Int64(automatic_partition_thread_pool_thread_num, "1000");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.

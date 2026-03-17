@@ -162,7 +162,7 @@ public:
 private:
     friend class ThreadPool;
     const std::string _name;
-    int _min_threads;
+    int _min_threads{0};
     int _max_threads;
     int _max_queue_size;
     MonoDelta _idle_timeout;
@@ -364,25 +364,25 @@ private:
     // Number of threads currently running.
     //
     // Protected by _lock.
-    int _num_threads;
+    int _num_threads{0};
 
     // Number of threads which are in the process of starting.
     // When these threads start, they will decrement this counter and
     // accordingly increment '_num_threads'.
     //
     // Protected by _lock.
-    int _num_threads_pending_start;
+    int _num_threads_pending_start{0};
 
     // Number of threads currently running and executing client tasks.
     //
     // Protected by _lock.
-    int _active_threads;
+    int _active_threads{0};
 
     // Total number of client tasks queued, either directly (_queue) or
     // indirectly (_tokens).
     //
     // Protected by _lock.
-    int _total_queued_tasks;
+    int _total_queued_tasks{0};
 
     // Last task executed timestamp
     MonoTime _last_active_timestamp;
@@ -535,7 +535,7 @@ private:
     ThreadPool* _pool;
 
     // Token state machine.
-    State _state;
+    State _state{State::IDLE};
 
     // Queued client tasks.
     PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> _entries;
@@ -546,9 +546,8 @@ private:
 
     // Number of worker threads currently executing tasks belonging to this
     // token.
-    int _active_threads;
+    int _active_threads{0};
 };
-
 // A class use to limit the number of tasks submitted to the thread pool.
 class ConcurrencyLimitedThreadPoolToken {
 public:
