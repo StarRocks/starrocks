@@ -2056,7 +2056,6 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     for (int i = 0; i < 4; ++i) {
         ASSERT_TRUE(column->get(i).is_null());
     }
-
 }
 
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
@@ -2064,8 +2063,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
-    auto* scan_range_id_slot =
-            _pool.add(new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
+    auto* scan_range_id_slot = _pool.add(
+            new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(scan_range_id_slot);
     param->reserved_field_slots = _pool.add(reserved_slots);
@@ -2093,7 +2092,6 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     ASSERT_EQ(8, column->get(1).get_int64());
     ASSERT_EQ(9, column->get(2).get_int64());
     ASSERT_EQ(10, column->get(3).get_int64());
-
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
@@ -2171,7 +2169,6 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralR
     for (int i = 0; i < 4; ++i) {
         ASSERT_TRUE(column->get(i).is_null());
     }
-
 }
 
 // Helper to build a tparquet::FileMetaData that includes the standard 6 read_cols

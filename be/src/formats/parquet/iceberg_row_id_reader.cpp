@@ -132,8 +132,8 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
                                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) {
     if (has_physical_reader()) {
         if (!_fallback_can_change_values()) {
-            return _delegate->page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                                         rg_first_row, rg_num_rows);
+            return _delegate->page_index_zone_map_filter(predicates, row_ranges, pred_relation, rg_first_row,
+                                                         rg_num_rows);
         }
         // Physical page stats only describe stored values, but this reader may replace NULLs with
         // inherited row-lineage values. Pruning on physical stats would be unsound here.
@@ -142,7 +142,8 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
     if (!_first_row_id.has_value()) {
         return false;
     }
-    SparseRange<int64_t> row_id_range(_first_row_id.value() + rg_first_row, _first_row_id.value() + rg_first_row + rg_num_rows);
+    SparseRange<int64_t> row_id_range(_first_row_id.value() + rg_first_row,
+                                      _first_row_id.value() + rg_first_row + rg_num_rows);
 
     if (pred_relation == CompoundNodeType::AND) {
         // For AND relation, apply all predicates sequentially with intersection
@@ -198,8 +199,7 @@ StatusOr<bool> IcebergRowIdReader::page_index_zone_map_filter(const std::vector<
     // Convert row_id range to row ranges
     for (size_t i = 0; i < row_id_range.size(); i++) {
         Range<int64_t> range = row_id_range[i];
-        row_ranges->add(
-                Range<uint64_t>(range.begin() - _first_row_id.value(), range.end() - _first_row_id.value()));
+        row_ranges->add(Range<uint64_t>(range.begin() - _first_row_id.value(), range.end() - _first_row_id.value()));
     }
 
     return true;
@@ -376,8 +376,8 @@ StatusOr<bool> IcebergLastUpdatedSequenceNumberReader::page_index_zone_map_filte
         CompoundNodeType pred_relation, const uint64_t rg_first_row, const uint64_t rg_num_rows) {
     if (has_physical_reader()) {
         if (!_fallback_can_change_values()) {
-            return _delegate->page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                                         rg_first_row, rg_num_rows);
+            return _delegate->page_index_zone_map_filter(predicates, row_ranges, pred_relation, rg_first_row,
+                                                         rg_num_rows);
         }
         // Physical page stats only describe stored values, but this reader may replace NULLs with
         // file-level fallback values. Pruning on physical stats would be unsound here.

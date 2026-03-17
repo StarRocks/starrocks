@@ -486,8 +486,8 @@ TEST_F(IcebergRowIdReaderTest, TestSequenceNumberPredicateFiltersDelegateWhenFal
 }
 
 TEST_F(IcebergRowIdReaderTest, TestSequenceNumberPredicateFiltersStayConservativeWhenFallbackCanChangeValues) {
-    IcebergLastUpdatedSequenceNumberReader reader(std::make_unique<MockPredicatePhysicalReader>(),
-                                                  true, Datum(static_cast<int64_t>(99)));
+    IcebergLastUpdatedSequenceNumberReader reader(std::make_unique<MockPredicatePhysicalReader>(), true,
+                                                  Datum(static_cast<int64_t>(99)));
     ASSERT_TRUE(reader.prepare().ok());
 
     TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_BIGINT);

@@ -20,7 +20,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.metric.ConnectorMetricsMgr;
-import com.starrocks.metric.IcebergMetricsMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;

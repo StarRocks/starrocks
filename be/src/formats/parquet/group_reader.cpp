@@ -497,12 +497,11 @@ Status GroupReader::_create_column_readers() {
     }
 
     if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
-        bool use_legacy_lookup_row_id = std::any_of(_param.reserved_field_slots->begin(),
-                                                    _param.reserved_field_slots->end(),
-                                                    [](const SlotDescriptor* slot) {
-                                                        return slot->col_name() == "_row_source_id" ||
-                                                               slot->col_name() == "_scan_range_id";
-                                                    });
+        bool use_legacy_lookup_row_id =
+                std::any_of(_param.reserved_field_slots->begin(), _param.reserved_field_slots->end(),
+                            [](const SlotDescriptor* slot) {
+                                return slot->col_name() == "_row_source_id" || slot->col_name() == "_scan_range_id";
+                            });
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
@@ -513,11 +512,10 @@ Status GroupReader::_create_column_readers() {
                         _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
                                 ? std::optional<int64_t>(_row_group_first_row_id)
                                 : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                : std::nullopt;
-                ColumnReaderPtr row_id_reader = reader != nullptr
-                                                        ? std::make_unique<IcebergRowIdReader>(std::move(reader),
-                                                                                               first_row_id)
-                                                        : std::make_unique<IcebergRowIdReader>(first_row_id);
+                                                           : std::nullopt;
+                ColumnReaderPtr row_id_reader =
+                        reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
+                                          : std::make_unique<IcebergRowIdReader>(first_row_id);
                 _column_readers.emplace(slot->id(), std::move(row_id_reader));
             } else if (slot->col_name() == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
@@ -534,11 +532,10 @@ Status GroupReader::_create_column_readers() {
                 } else if (!sequence_number_or.status().is_not_found()) {
                     return sequence_number_or.status();
                 }
-                ColumnReaderPtr seq_reader = reader != nullptr
-                                                     ? std::make_unique<IcebergLastUpdatedSequenceNumberReader>(
-                                                               std::move(reader), can_use_fallback, sequence_number)
-                                                     : std::make_unique<IcebergLastUpdatedSequenceNumberReader>(
-                                                               sequence_number);
+                ColumnReaderPtr seq_reader =
+                        reader != nullptr ? std::make_unique<IcebergLastUpdatedSequenceNumberReader>(
+                                                    std::move(reader), can_use_fallback, sequence_number)
+                                          : std::make_unique<IcebergLastUpdatedSequenceNumberReader>(sequence_number);
                 _column_readers.emplace(slot->id(), std::move(seq_reader));
             } else if (slot->col_name() == "_row_source_id") {
                 if (auto opt = get_backend_id(); opt.has_value()) {
