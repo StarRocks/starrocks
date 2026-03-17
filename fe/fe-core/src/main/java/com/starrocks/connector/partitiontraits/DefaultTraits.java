@@ -167,9 +167,9 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                     // If this partition is dropped, ignore it.
                     continue;
                 }
-                long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
-
                 MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
+                long basePartitionVersion = getComparablePartitionVersion(
+                        basePartitionInfo, latestPartitionInfo.get(basePartitionName));
                 // basePartitionVersion less than 0 is illegal
                 if ((basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion())
                         && basePartitionVersion >= 0) {
@@ -178,6 +178,22 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             }
         }
         return result;
+    }
+
+    private long getComparablePartitionVersion(MaterializedView.BasePartitionInfo basePartitionInfo,
+                                               PartitionInfo latestPartitionInfo) {
+        if (basePartitionInfo == null) {
+            return latestPartitionInfo.getVersion();
+        }
+        // Historical Iceberg MV metadata stored external partition version as modifiedTime. Keep the legacy
+        // comparison until that partition is refreshed once and rewritten with the new version token.
+        if (table.getType() == Table.TableType.ICEBERG
+                && basePartitionInfo.getVersion() == basePartitionInfo.getLastRefreshTime()) {
+            return latestPartitionInfo.getModifiedTime();
+        }
+        // Compare the connector-specific version token instead of modifiedTime directly. Some external systems
+        // (for example Iceberg) may expose timestamps that are not strictly monotonic across commits.
+        return latestPartitionInfo.getVersion();
     }
 
     @Override
