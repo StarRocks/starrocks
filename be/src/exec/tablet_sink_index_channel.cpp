@@ -800,6 +800,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     // Note: clear_chunk() alone is insufficient — protobuf retains internal buffers until
     // the Message object is destroyed.
     PTabletWriterAddChunksRequest().Swap(&request);
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::_send_request::after_swap", &request);
 
     return Status::OK();
 }
