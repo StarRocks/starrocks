@@ -473,13 +473,13 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+    // close() flushes the buffered chunk and triggers _send_request with eos=true,
+    // which serializes the chunk data and dispatches the RPC.
+    (void)sink->close(runtime_state.get(), Status::OK());
 
-    // Verify: before Swap the request had serialized data, after Swap it's cleared
+    // Verify: before Swap the request had serialized chunk data, after Swap it's cleared
     EXPECT_GT(request_size_before_swap, 0);
     EXPECT_EQ(request_size_after_swap, 0);
-
-    // Close with OK status — the RPC succeeded
-    (void)sink->close(runtime_state.get(), Status::OK());
 }
 
 } // namespace starrocks
