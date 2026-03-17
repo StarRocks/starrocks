@@ -656,4 +656,21 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getCostPlan(sql);
         assertPlanHasUnionAndAnalytic(plan, 4);
     }
+
+    @Test
+    void testWindowSkewDuplicatorRemapsSkewColumn() throws Exception {
+
+        String sql = "select p, s, " +
+                "sum(x) over ([skew|p(NULL)] partition by p order by s), " +
+                "avg(x) over ([skew|p(NULL)] partition by p order by x) " +
+                "from " + TABLE_NAME;
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+
+        assertContains(plan, "UNION");
+        assertContains(plan, "ANALYTIC");
+        assertNullSplit(plan);
+    }
 }
