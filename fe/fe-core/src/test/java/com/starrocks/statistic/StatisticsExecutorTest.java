@@ -332,7 +332,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         // Warehouse validation only happens in SHARED_DATA mode
         if (RunMode.isSharedDataMode()) {
             Assertions.assertTrue(analyzeStatus.getReason() != null &&
-                    analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+                    analyzeStatus.getReason().contains("Warehouse name: xxx not exist."));
         }
         connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
