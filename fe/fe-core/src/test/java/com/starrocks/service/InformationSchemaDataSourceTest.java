@@ -386,8 +386,8 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
                         "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
-                                "NULL | 'd1' | 'insert into t1 select * from t1' | '2024-01-02 03:04:05' | 0 | " +
-                                "NULL | '0%' | '' | NULL");
+                                "NULL | 'default_warehouse' | 'd1' | 'insert into t1 select * from t1' | " +
+                                "'2024-01-02 03:04:05' | 0 | NULL | '0%' | '' | NULL | NULL | '1970-01-01 08:00:00'");
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
