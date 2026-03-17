@@ -543,6 +543,27 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### automatic_partition_thread_pool_thread_num
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自动分区线程池的线程数。队列长度自动设置为线程数的 10 倍。
+- 引入版本：-
+
+##### create_tablet_worker_count
+
+- 默认值：3
+- 类型：Int
+- 单位：Threads
+- 是否动态：是
+- 描述：处理创建 Tablet 任务（TTaskType::CREATE）的线程池最大线程数。启动时用于初始化 AgentServer 的 CREATE 线程池，运行时修改会更新线程池上限。调大可提升批量建表/分区时的并发，调小可降低资源占用。
+- 引入版本：v3.2.0
+
+>>>>>>> 294abb92a6 ([Enhancement] Add config parameter for BE automatic partition thread pool (#70175))
 ##### avro_ignore_union_type_tag
 
 - 默认值：true
