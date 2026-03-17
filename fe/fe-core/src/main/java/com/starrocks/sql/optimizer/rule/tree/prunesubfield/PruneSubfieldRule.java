@@ -102,7 +102,9 @@ public class PruneSubfieldRule extends TransformationRule {
             NormalizeCastJsonExpr normalizer = new NormalizeCastJsonExpr();
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             project.getColumnRefMap().forEach((k, v) -> projectMap.put(k, v.accept(normalizer, null)));
-            project = new LogicalProjectOperator(projectMap);
+            Map<ColumnRefOperator, ScalarOperator> subProjectMap = Maps.newHashMap();
+            project.getCommonSubOperatorMap().forEach((k, v) -> subProjectMap.put(k, v.accept(normalizer, null)));
+            project = new LogicalProjectOperator(projectMap, subProjectMap);
 
             if (predicate != null) {
                 predicate = predicate.accept(normalizer, null);
@@ -113,6 +115,9 @@ public class PruneSubfieldRule extends TransformationRule {
         SubfieldExpressionCollector collector =
                 new SubfieldExpressionCollector(context.getSessionVariable().isCboPruneJsonSubfield());
         for (ScalarOperator value : project.getColumnRefMap().values()) {
+            value.accept(collector, null);
+        }
+        for (ScalarOperator value : project.getCommonSubOperatorMap().values()) {
             value.accept(collector, null);
         }
 

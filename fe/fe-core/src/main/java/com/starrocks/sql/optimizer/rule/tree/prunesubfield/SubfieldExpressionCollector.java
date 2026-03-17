@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -25,7 +26,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.Type;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /*
@@ -36,6 +39,8 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     private Set<String> checkFunctions;
     private final boolean enableJsonCollect;
     private boolean forPushDownSubFiled;
+    private Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap = Map.of();
+    private ColumnRefSet commonSubOperatorColumns = new ColumnRefSet();
 
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
@@ -56,10 +61,13 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
         return collector;
     }
 
-    public static SubfieldExpressionCollector buildPushdownCollector() {
+    public static SubfieldExpressionCollector buildPushdownCollector(
+            Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
         SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
         collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PUSHDOWN_FUNCTIONS);
         collector.forPushDownSubFiled = true;
+        collector.commonSubOperatorMap = Collections.unmodifiableMap(commonSubOperatorMap);
+        collector.commonSubOperatorColumns = new ColumnRefSet(commonSubOperatorMap.keySet());
         return collector;
     }
 
@@ -73,6 +81,9 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitVariableReference(ColumnRefOperator variable, Void context) {
+        if (commonSubOperatorMap.containsKey(variable)) {
+            visit(commonSubOperatorMap.get(variable), context);
+        }
         if (variable.getType().isComplexType() || variable.getType().isJsonType()
                 || variable.getType().isVariantType()) {
             complexExpressions.add(variable);
@@ -82,16 +93,19 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
-        if (collectionElementOp.getUsedColumns().isEmpty()) {
+        ColumnRefSet usedColumns = collectionElementOp.getUsedColumns();
+        if (usedColumns.isEmpty() || usedColumns.isIntersect(commonSubOperatorColumns)) {
             return null;
         }
+
         complexExpressions.add(collectionElementOp);
         return null;
     }
 
     @Override
     public Void visitSubfield(SubfieldOperator subfieldOperator, Void context) {
-        if (subfieldOperator.getUsedColumns().isEmpty()) {
+        ColumnRefSet usedColumns = subfieldOperator.getUsedColumns();
+        if (usedColumns.isEmpty() || usedColumns.isIntersect(commonSubOperatorColumns)) {
             return null;
         }
         complexExpressions.add(subfieldOperator);
@@ -109,7 +123,8 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitCall(CallOperator call, Void context) {
-        if (call.getUsedColumns().isEmpty()) {
+        ColumnRefSet usedColumns = call.getUsedColumns();
+        if (usedColumns.isEmpty() || usedColumns.isIntersect(commonSubOperatorColumns)) {
             return null;
         }
 

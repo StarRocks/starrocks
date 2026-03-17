@@ -123,6 +123,7 @@ public class MaterializedViewOptimizer {
                 return new MvPlanContext(false, "No query plan for it");
             }
             OptExpression mvPlan = plans.first;
+            QueryOptimizer.eliminateAllCommonSubOperatorMaps(mvPlan);
             boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
             // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
             String invalidPlanReason = "";

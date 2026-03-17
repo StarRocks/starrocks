@@ -277,7 +277,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 Projection projection = optExpression.getOp().getProjection();
                 ColumnRefSet encodedStringCols = ColumnRefSet.createByIds(context.getEncodedStringCols());
 
-                if (!projection.getUsedColumns().isIntersect(encodedStringCols)) {
+                if (!projection.getUsedInputColumns().isIntersect(encodedStringCols)) {
                     context.clear();
                 } else if (couldApplyStringDict(context, projection)) {
                     Projection newProjection = rewriteProjectOperator(projection, context);

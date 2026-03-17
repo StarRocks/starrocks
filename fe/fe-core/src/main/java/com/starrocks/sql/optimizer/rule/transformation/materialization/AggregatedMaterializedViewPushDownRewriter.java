@@ -107,7 +107,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         }
         // aggregate's projection
         if (aggOperator.getProjection() != null) {
-            usedCols.union(aggOperator.getProjection().getUsedColumns());
+            usedCols.union(aggOperator.getProjection().getUsedInputColumns());
         }
         // except aggregate's column refs
         usedCols.except(aggOperator.getAggregations().keySet());
@@ -128,7 +128,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
             usedCols.union(joinOperator.getPredicate().getUsedColumns());
         }
         if (joinOperator.getProjection() != null) {
-            usedCols.union(joinOperator.getProjection().getUsedColumns());
+            usedCols.union(joinOperator.getProjection().getUsedInputColumns());
         }
         return checkInputCols(inputCols, usedCols, "with join operator");
     }

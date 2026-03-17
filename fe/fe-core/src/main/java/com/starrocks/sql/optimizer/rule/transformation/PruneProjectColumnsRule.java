@@ -33,6 +33,7 @@ import com.starrocks.type.IntegerType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PruneProjectColumnsRule extends TransformationRule {
 
@@ -45,40 +46,36 @@ public class PruneProjectColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
 
-        ColumnRefSet requiredInputColumns = new ColumnRefSet();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
-        Map<ColumnRefOperator, ScalarOperator> newMap = Maps.newHashMap();
-        projectOperator.getColumnRefMap().forEach(((columnRefOperator, operator) -> {
-            if (requiredOutputColumns.contains(columnRefOperator)) {
-                requiredInputColumns.union(operator.getUsedColumns());
-                newMap.put(columnRefOperator, operator);
-            }
-            if (operator instanceof CallOperator) {
-                CallOperator callOperator = operator.cast();
-                if (FunctionSet.ASSERT_TRUE.equals(callOperator.getFnName())) {
-                    requiredInputColumns.union(operator.getUsedColumns());
-                    newMap.put(columnRefOperator, operator);
-                }
-            }
-        }));
+        Map<ColumnRefOperator, ScalarOperator> newMap = projectOperator.getColumnRefMap().entrySet().stream()
+                .filter(entry -> requiredOutputColumns.contains(entry.getKey()) || (entry.getValue() instanceof CallOperator &&
+                        FunctionSet.ASSERT_TRUE.equals(((CallOperator) entry.getValue()).getFnName())))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         if (newMap.isEmpty()) {
             ColumnRefOperator constCol = context.getColumnRefFactory()
                     .create("auto_fill_col", IntegerType.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
-        } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.getOptimizerOptions().isShortCircuit()) {
+            LogicalProjectOperator newProjectOperator =
+                    new LogicalProjectOperator(newMap, Maps.newHashMap(), projectOperator.getLimit());
+            return Lists.newArrayList(OptExpression.create(newProjectOperator, input.getInputs()));
+        }
+        if (newMap.equals(projectOperator.getColumnRefMap()) && context.getOptimizerOptions().isShortCircuit()) {
             // Change the requiredOutputColumns in context
-            requiredOutputColumns.union(requiredInputColumns);
+            requiredOutputColumns.union(projectOperator.getUsedInputColumns());
             // make sure this rule only executed once
             return Collections.emptyList();
         }
 
-        // Change the requiredOutputColumns in context
-        requiredOutputColumns.union(requiredInputColumns);
+        LogicalProjectOperator newProjectOperator =
+                new LogicalProjectOperator(newMap, Maps.newHashMap(projectOperator.getCommonSubOperatorMap()),
+                        projectOperator.getLimit());
+        newProjectOperator.compactCommonSubOperatorMap();
 
-        return Lists.newArrayList(OptExpression.create(
-                LogicalProjectOperator.builder().withOperator(projectOperator).setColumnRefMap(newMap).build(),
-                input.getInputs()));
+        // Change the requiredOutputColumns in context
+        requiredOutputColumns.union(newProjectOperator.getUsedInputColumns());
+
+        return Lists.newArrayList(OptExpression.create(newProjectOperator, input.getInputs()));
     }
 }

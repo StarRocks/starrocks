@@ -208,10 +208,19 @@ public class PruneUKFKJoinRule extends TransformationRule {
                 projectMap.put(entry.getKey(), entry.getValue());
             }
         }
+        Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOp.getCommonSubOperatorMap().entrySet()) {
+            if (entry.getValue().getUsedColumns().contains(property.ukColumnRef)) {
+                commonSubOperatorMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+            } else {
+                commonSubOperatorMap.put(entry.getKey(), entry.getValue());
+            }
+        }
 
         LogicalProjectOperator newProjectOp = new LogicalProjectOperator.Builder()
                 .withOperator(projectOp)
                 .setColumnRefMap(projectMap)
+                .setCommonSubOperatorMap(commonSubOperatorMap)
                 .build();
         return OptExpression.create(newProjectOp, filterOpt);
     }

@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
@@ -71,6 +73,7 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         OptExpression projectExpression = input.getInputs().get(0);
         LogicalProjectOperator projectOperator = projectExpression.getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> projectMap = projectOperator.getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> projectCommonMap = projectOperator.getCommonSubOperatorMap();
 
         ColumnRefSet topNRequiredInputColumns = topNOperator.getRequiredChildInputColumns();
 
@@ -109,6 +112,10 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> postProjectionMap = new HashMap<>(projectOperator.getColumnRefMap());
 
+        Map<Integer, ScalarOperator> commonSubOperatorById = new HashMap<>(projectCommonMap.size());
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectCommonMap.entrySet()) {
+            commonSubOperatorById.put(entry.getKey().getId(), entry.getValue());
+        }
         projectOperator.getColumnRefMap().forEach((columnRefOperator, scalarOperator) -> {
             if (topNRequiredInputColumns.contains(columnRefOperator) ||
                     mayBenefitFromPruningSubField(context, columnsWithAccessPath, scalarOperator)) {
@@ -125,13 +132,18 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
                 return;
             }
 
-            scalarOperator.getUsedColumns().getColumnRefOperators(context.getColumnRefFactory()).forEach(k -> {
-                preProjectionMap.put(k, k);
-            });
+            ScalarOperatorUtil.getUsedInputColumns(scalarOperator, commonSubOperatorById)
+                    .getColumnRefOperators(context.getColumnRefFactory()).forEach(k -> {
+                        preProjectionMap.put(k, k);
+                    });
         });
 
-        LogicalProjectOperator preProjectOperator = new LogicalProjectOperator(preProjectionMap);
-        LogicalProjectOperator postProjectOperator = new LogicalProjectOperator(postProjectionMap);
+        LogicalProjectOperator preProjectOperator =
+                new LogicalProjectOperator(preProjectionMap, Maps.newHashMap(projectCommonMap));
+        LogicalProjectOperator postProjectOperator =
+                new LogicalProjectOperator(postProjectionMap, Maps.newHashMap(projectCommonMap));
+        preProjectOperator.compactCommonSubOperatorMap();
+        postProjectOperator.compactCommonSubOperatorMap();
 
         OptExpression result = OptExpression.create(
                 postProjectOperator, OptExpression.create(

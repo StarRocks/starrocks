@@ -60,11 +60,11 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
 
     @Override
     public String toString() {
-        return "PhysicalHashJoinOperator{" +
-                "joinType=" + joinType +
-                ", joinPredicate=" + onPredicate +
-                ", limit=" + limit +
-                ", predicate=" + predicate +
+        return "PhysicalHashJoinOperator" + " {" +
+                "joinType='" + joinType + '\'' +
+                ", onPredicate='" + onPredicate + '\'' +
+                ", predicate='" + predicate + '\'' +
+                ", projection='" + projection + '\'' +
                 '}';
     }
 

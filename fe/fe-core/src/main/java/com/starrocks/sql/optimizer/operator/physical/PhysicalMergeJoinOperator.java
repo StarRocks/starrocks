@@ -49,11 +49,11 @@ public class PhysicalMergeJoinOperator extends PhysicalJoinOperator {
 
     @Override
     public String toString() {
-        return "PhysicalMergeJoinOperator{" +
-                "joinType=" + joinType +
-                ", joinPredicate=" + onPredicate +
-                ", limit=" + limit +
-                ", predicate=" + predicate +
+        return "PhysicalMergeJoinOperator" + " {" +
+                "joinType='" + joinType + '\'' +
+                ", onPredicate='" + onPredicate + '\'' +
+                ", predicate='" + predicate + '\'' +
+                ", projection='" + projection + '\'' +
                 '}';
     }
 

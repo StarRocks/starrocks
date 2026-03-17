@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -44,27 +43,28 @@ public class MergeTwoProjectRule extends TransformationRule {
         LogicalProjectOperator firstProject = (LogicalProjectOperator) input.getOp();
         LogicalProjectOperator secondProject = (LogicalProjectOperator) input.getInputs().get(0).getOp();
 
-        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(secondProject.getColumnRefMap());
-        Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
-            ScalarOperator result = rewriter.rewrite(entry.getValue());
-            if (result.isConstant()) {
-                // better to rewrite all expression, but it's unnecessary
-                result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            }
-            resultMap.put(entry.getKey(), result);
-        }
+        Map<ColumnRefOperator, ScalarOperator> resultOutputMap = Maps.newHashMap(firstProject.getColumnRefMap());
+        Map<ColumnRefOperator, ScalarOperator> resultCommonMap = Maps.newHashMap(firstProject.getCommonSubOperatorMap());
+
+        Map<ColumnRefOperator, ScalarOperator> promotedAssertTrues = Maps.newHashMap();
 
         // ASSERT_TRUE must be executed in the runtime, so it should be kept anyway.
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : secondProject.getColumnRefMap().entrySet()) {
-            if (entry.getValue() instanceof CallOperator) {
-                CallOperator callOp = entry.getValue().cast();
-                if (FunctionSet.ASSERT_TRUE.equals(callOp.getFnName())) {
-                    resultMap.put(entry.getKey(), entry.getValue());
-                }
+            if (entry.getValue() instanceof CallOperator &&
+                    FunctionSet.ASSERT_TRUE.equals(((CallOperator) entry.getValue()).getFnName())) {
+                promotedAssertTrues.put(entry.getKey(), entry.getValue());
+            } else {
+                resultCommonMap.put(entry.getKey(), entry.getValue());
             }
         }
+        if (!promotedAssertTrues.isEmpty()) {
+            ReplaceColumnRefRewriter promotedRewriter = new ReplaceColumnRefRewriter(promotedAssertTrues, false);
+            resultOutputMap.replaceAll((k, v) -> promotedRewriter.rewrite(v));
+            resultCommonMap.replaceAll((k, v) -> promotedRewriter.rewrite(v));
+            resultOutputMap.putAll(promotedAssertTrues);
+        }
+
+        resultCommonMap.putAll(secondProject.getCommonSubOperatorMap());
 
         // minimum value of limits on projections, but have to exclude unlimited(-1) case
         long limit = Stream.of(firstProject.getLimit(), secondProject.getLimit())
@@ -72,8 +72,10 @@ public class MergeTwoProjectRule extends TransformationRule {
                 .min(Long::compare)
                 .orElse(-1L);
 
-        OptExpression optExpression = new OptExpression(
-                new LogicalProjectOperator(resultMap, limit));
+        LogicalProjectOperator resultProject = new LogicalProjectOperator(resultOutputMap, resultCommonMap, limit);
+        resultProject.compactCommonSubOperatorMap();
+
+        OptExpression optExpression = new OptExpression(resultProject);
         optExpression.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(optExpression);
     }

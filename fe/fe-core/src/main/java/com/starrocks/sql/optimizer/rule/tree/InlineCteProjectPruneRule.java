@@ -54,7 +54,7 @@ public class InlineCteProjectPruneRule implements TreeRewriteRule {
             }
 
             Projection childProjection = child.getProjection();
-            if (!parentProjection.getUsedColumns().containsAny(childProjection.getOutputColumns())) {
+            if (!parentProjection.getUsedInputColumns().containsAny(childProjection.getOutputColumns())) {
                 child.setProjection(null);
             }
 

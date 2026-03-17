@@ -23,7 +23,9 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,14 +57,20 @@ public class JoinReorderHelper {
                 rightCols.union(right.getOutputColumns());
             }
         } else {
+            Map<Integer, ScalarOperator> commonSubOperatorById = new HashMap<>(projection.getCommonSubOperatorMap().size());
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getCommonSubOperatorMap().entrySet()) {
+                commonSubOperatorById.put(entry.getKey().getId(), entry.getValue());
+            }
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 ColumnRefOperator columnRefOperator = entry.getKey();
                 ScalarOperator scalarOperator = entry.getValue();
                 if (scalarOperator.getUsedColumns().isEmpty()) {
                     // do nothing
-                } else if (left.getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                } else if (left.getOutputColumns()
+                        .containsAll(ScalarOperatorUtil.getUsedInputColumns(scalarOperator, commonSubOperatorById))) {
                     leftCols.union(columnRefOperator.getId());
-                } else if (right.getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                } else if (right.getOutputColumns()
+                        .containsAll(ScalarOperatorUtil.getUsedInputColumns(scalarOperator, commonSubOperatorById))) {
                     rightCols.union(columnRefOperator.getId());
                 } else {
                     refBothChildCols.union(columnRefOperator.getId());
@@ -71,7 +79,6 @@ public class JoinReorderHelper {
         }
         return Lists.newArrayList(leftCols, rightCols, refBothChildCols);
     }
-
 
     public static boolean isAssoc(OptExpression bottomJoinExpr, OptExpression topJoinExpr) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinExpr.getOp();
@@ -99,7 +106,6 @@ public class JoinReorderHelper {
                     && !topJoinOnConditionCols.isIntersect(splitCols.get(0));
         }
     }
-
 
     public static boolean isLeftAsscom(OptExpression bottomJoinExpr, OptExpression topJoinExpr, boolean isInnerMode) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinExpr.getOp();

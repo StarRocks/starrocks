@@ -71,7 +71,7 @@ public class InnerToSemiRule extends TransformationRule {
                 if (opt.getOp().getProjection() != null) {
                     // in this case, opt.getOutputColumns will return column output by projection
                     // instead of column output by join operator
-                    joinOpOutputCols = opt.getOp().getProjection().getUsedColumns();
+                    joinOpOutputCols = opt.getOp().getProjection().getUsedInputColumns();
                 } else {
                     joinOpOutputCols = opt.getOutputColumns();
                 }

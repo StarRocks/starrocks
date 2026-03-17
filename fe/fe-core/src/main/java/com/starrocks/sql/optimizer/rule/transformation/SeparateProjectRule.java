@@ -43,7 +43,8 @@ public class SeparateProjectRule implements TreeRewriteRule {
             // Clear statistics to recompute statistics when calculating statistics later,
             // because some operators only recompute statistics when statistics is null.
             root.setStatistics(null);
-            return OptExpression.create(new LogicalProjectOperator(projection.getColumnRefMap()), root);
+            return OptExpression.create(
+                    new LogicalProjectOperator(projection.getColumnRefMap(), projection.getCommonSubOperatorMap()), root);
         } else {
             return root;
         }

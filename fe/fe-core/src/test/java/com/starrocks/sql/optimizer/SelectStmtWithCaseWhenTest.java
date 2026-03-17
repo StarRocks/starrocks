@@ -682,11 +682,11 @@ class SelectStmtWithCaseWhenTest {
         PlanTestBase.assertContains(plan, "6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [9: cast, DOUBLE, true] = [10: add, DOUBLE, true]\n" +
-                "  |  other predicates: CASE WHEN [16: array_length, INT, true] < 2 THEN 'bucket1' " +
-                "WHEN ([16: array_length, INT, true] >= 2) AND ([16: array_length, INT, true] < 4) " +
+                "  |  other predicates: CASE WHEN [15: array_length, INT, true] < 2 THEN 'bucket1' " +
+                "WHEN ([15: array_length, INT, true] >= 2) AND ([15: array_length, INT, true] < 4) " +
                 "THEN 'bucket2' ELSE NULL END IS NOT NULL\n" +
                 "  |    common sub expr:\n" +
-                "  |    <slot 16> : array_length(15: array_concat)\n" +
-                "  |    <slot 15> : array_concat(4: col_arr, 6: col_arr)");
+                "  |    <slot 14> : array_concat(4: col_arr, 6: col_arr)\n" +
+                "  |    <slot 15> : array_length(14: array_concat)");
     }
 }

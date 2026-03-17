@@ -249,10 +249,11 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     @Override
     public String toString() {
-        return "LOGICAL_JOIN" + " {" +
-                joinType.toString() +
-                ", onPredicate = " + onPredicate + ' ' +
-                ", Predicate = " + predicate +
+        return "LogicalJoinOperator" + " {" +
+                "joinType='" + joinType + '\'' +
+                ", onPredicate='" + onPredicate + '\'' +
+                ", predicate='" + predicate + '\'' +
+                ", projection='" + projection + '\'' +
                 '}';
     }
 

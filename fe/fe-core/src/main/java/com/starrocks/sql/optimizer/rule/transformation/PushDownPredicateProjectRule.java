@@ -95,6 +95,7 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         OptExpression child = input.getInputs().get(0);
 
         LogicalProjectOperator project = (LogicalProjectOperator) (child.getOp());
+        project.eliminateCommonSubOperatorMap();
 
         if (!context.getSessionVariable().getEnableLambdaPushDown()) {
             Map<ColumnRefOperator, ScalarOperator> m = project.getColumnRefMap();

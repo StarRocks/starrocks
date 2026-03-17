@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -428,6 +429,8 @@ public class QueryOptimizer extends Optimizer {
         }
         context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE2);
 
+        eliminateAllCommonSubOperatorMaps(tree);
+
         // do rule based mv rewrite if needed
         if (context.getQueryMaterializationContext().isNeedsFurtherMVRewrite()) {
             doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
@@ -490,6 +493,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+
+        eliminateAllCommonSubOperatorMaps(tree);
 
         // do rule based mv rewrite
         doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
@@ -659,6 +664,8 @@ public class QueryOptimizer extends Optimizer {
         if (!optimizerOptions.isRuleDisable(TF_MATERIALIZED_VIEW)
                 && sessionVariable.isEnableSyncMaterializedViewRewrite()
                 && !context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            eliminateAllCommonSubOperatorMaps(tree);
+
             // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
             // TODO: support adaptive for or-predicates to union all.
             if (SplitScanORToUnionRule.isForceRewrite()) {
@@ -781,6 +788,7 @@ public class QueryOptimizer extends Optimizer {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             // Clone the tree to avoid modifying the original tree stored in QueryMaterializationContext
             OptExpression treeWithView = MvUtils.cloneExpression(queryMaterializationContext.getQueryOptPlanWithView());
+            eliminateAllCommonSubOperatorMaps(treeWithView);
             // Derive logical property for the cloned tree to ensure it has complete metadata
             MvUtils.deriveLogicalProperty(treeWithView);
             OptimizerTraceUtil.logOptExpression("before ViewBasedMvRuleRewrite:\n%s", tree);
@@ -1119,5 +1127,27 @@ public class QueryOptimizer extends Optimizer {
             scheduler.pushTask(new PrepareCollectMetaTask(rootTaskContext, tree));
             scheduler.executeTasks(rootTaskContext);
         }
+    }
+
+    private static final OptExpressionVisitor<Void, Void> ELIMINATE_COMMON_SUB_OPS_VISITOR =
+            new OptExpressionVisitor<Void, Void>() {
+                @Override
+                public Void visit(OptExpression opt, Void context) {
+                    Operator op = opt.getOp();
+                    if (op.getProjection() != null) {
+                        op.getProjection().eliminateSubColumnRefMap();
+                    }
+                    if (op instanceof LogicalProjectOperator) {
+                        ((LogicalProjectOperator) op).eliminateCommonSubOperatorMap();
+                    }
+                    for (OptExpression child : opt.getInputs()) {
+                        child.getOp().accept(this, child, null);
+                    }
+                    return null;
+                }
+            };
+
+    public static void eliminateAllCommonSubOperatorMaps(OptExpression tree) {
+        tree.getOp().accept(ELIMINATE_COMMON_SUB_OPS_VISITOR, tree, null);
     }
 }

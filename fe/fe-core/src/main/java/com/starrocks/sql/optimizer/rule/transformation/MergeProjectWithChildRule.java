@@ -80,7 +80,8 @@ public class MergeProjectWithChildRule extends TransformationRule {
             return Lists.newArrayList(OptExpression.create(builder.build(), input.inputAt(0).getInputs()));
         }
 
-        builder.setProjection(new Projection(logicalProjectOperator.getColumnRefMap()));
+        builder.setProjection(
+                new Projection(logicalProjectOperator.getColumnRefMap(), logicalProjectOperator.getCommonSubOperatorMap()));
 
         return Lists.newArrayList(OptExpression.create(builder.build(), input.inputAt(0).getInputs()));
     }

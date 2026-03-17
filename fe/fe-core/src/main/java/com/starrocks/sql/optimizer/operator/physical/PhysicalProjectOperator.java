@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +48,10 @@ public class PhysicalProjectOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, ScalarOperator> getCommonSubOperatorMap() {
         return commonSubOperatorMap;
+    }
+
+    public List<Map.Entry<ColumnRefOperator, ScalarOperator>> getCommonSubOperatorMapInDependencyOrder() {
+        return ScalarOperatorUtil.topologicalSortCommonSubOperatorMap(commonSubOperatorMap);
     }
 
     @Override

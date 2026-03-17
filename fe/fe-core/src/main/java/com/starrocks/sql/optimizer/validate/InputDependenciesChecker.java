@@ -124,11 +124,11 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 for (ColumnOutputInfo col : rowOutputInfo.getColumnOutputInfo()) {
                     usedCols.union(col.getUsedColumns());
                 }
-                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo().values()) {
                     usedCols.union(col.getUsedColumns());
                 }
 
-                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo()) {
+                for (ColumnOutputInfo col : rowOutputInfo.getCommonColInfo().values()) {
                     usedCols.except(col.getColumnRef().getUsedColumns());
                 }
 

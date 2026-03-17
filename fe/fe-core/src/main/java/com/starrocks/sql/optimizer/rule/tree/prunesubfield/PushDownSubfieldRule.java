@@ -210,6 +210,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
             LogicalProjectOperator lpo = optExpression.getOp().cast();
             Map<ColumnRefOperator, ScalarOperator> pushDownProject = lpo.getColumnRefMap();
+            Map<ColumnRefOperator, ScalarOperator> commonMap = lpo.getCommonSubOperatorMap();
             ColumnRefSet pushDownExprUsedColumns = new ColumnRefSet();
 
             if (!context.pushDownExprRefs.isEmpty()) {
@@ -228,7 +229,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             }
 
             // collect push down expression
-            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector();
+            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector(commonMap);
             for (ScalarOperator value : pushDownProject.values()) {
                 // check repeat put complex column, like that
                 //      project( columnB: structA.b.c.d )
@@ -265,6 +266,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                     // parent has push down expression, must rewrite project node
                     optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
                             .setColumnRefMap(pushDownProject)
+                            .setCommonSubOperatorMap(Maps.newHashMap())
                             .build(), optExpression.getInputs());
                 }
                 return visitChildren(optExpression, childContext);
@@ -274,9 +276,12 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             ExpressionReplacer replacer = new ExpressionReplacer(childContext.pushDownExprRefsIndex);
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
             pushDownProject.forEach((k, v) -> newProjectMap.put(k, v.accept(replacer, null)));
+            Map<ColumnRefOperator, ScalarOperator> newCommonMap = Maps.newHashMap();
+            commonMap.forEach((k, v) -> newCommonMap.put(k, v.accept(replacer, null)));
 
             optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
                     .setColumnRefMap(newProjectMap)
+                    .setCommonSubOperatorMap(newCommonMap)
                     .build(), optExpression.getInputs());
             return visitChildren(optExpression, childContext);
         }

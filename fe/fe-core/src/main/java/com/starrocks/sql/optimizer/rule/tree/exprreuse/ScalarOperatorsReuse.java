@@ -94,6 +94,13 @@ public class ScalarOperatorsReuse {
         return operator.accept(rewriter, null);
     }
 
+    public static Map<Integer, Map<ScalarOperator, ColumnRefOperator>> collectCommonSubScalarOperators(
+            Projection projection,
+            List<ScalarOperator> scalarOperators,
+            ColumnRefFactory columnRefFactory) {
+        return collectCommonSubScalarOperators(projection, scalarOperators, Maps.newHashMap(), columnRefFactory);
+    }
+
     /**
      * Collect the common sub operators for the input operators
      * For [a+b, a+b+c, a+b+d], the common sub operators is [a + b]
@@ -101,9 +108,10 @@ public class ScalarOperatorsReuse {
     public static Map<Integer, Map<ScalarOperator, ColumnRefOperator>> collectCommonSubScalarOperators(
             Projection projection,
             List<ScalarOperator> scalarOperators,
+            Map<ColumnRefOperator, ScalarOperator> existingCommonMap,
             ColumnRefFactory columnRefFactory) {
         // 1. Recursively collect common sub operators for the input operators
-        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector();
+        CommonSubScalarOperatorCollector operatorCollector = new CommonSubScalarOperatorCollector(existingCommonMap);
         for (ScalarOperator operator : scalarOperators) {
             // To avoid stack overflow if the operator tree is too deep(eg: contains too many `or` functions), set a
             // limit to the depth of the operator tree.
@@ -172,6 +180,11 @@ public class ScalarOperatorsReuse {
                 return commonOperatorsMap.get(operator);
             }
             return operator;
+        }
+
+        @Override
+        public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+            return tryRewrite(variable);
         }
 
         @Override
@@ -269,7 +282,7 @@ public class ScalarOperatorsReuse {
             // only rewrite subfield operator if and only if child is DictionaryGetOperator
             if (predicate.getChild(0) instanceof DictionaryGetOperator) {
                 ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
-                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+                        predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
                 return tryRewrite(operator);
             }
             return predicate;
@@ -279,9 +292,9 @@ public class ScalarOperatorsReuse {
         public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator predicate, Void context) {
             ScalarOperator operator = new DictionaryGetOperator(
                     predicate.getChildren().stream().map(
-                        argument -> argument.accept(this, null)).collect(Collectors.toList()),
-                            predicate.getType(), predicate.getDictionaryId(),
-                                predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
+                            argument -> argument.accept(this, null)).collect(Collectors.toList()),
+                    predicate.getType(), predicate.getDictionaryId(),
+                    predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
             return tryRewrite(operator);
         }
 
@@ -330,7 +343,8 @@ public class ScalarOperatorsReuse {
         }
     }
 
-    record CommonResult(int depth, List<Integer> childrenGroup) {}
+    record CommonResult(int depth, List<Integer> childrenGroup) {
+    }
 
     private static class CommonSubScalarOperatorCollector
             extends ScalarOperatorVisitor<CommonResult, CommonOperatorContext> {
@@ -361,10 +375,15 @@ public class ScalarOperatorsReuse {
         // {[1] -> [a + b]}
         private final Map<Integer, Map<OperatorId, Integer>> operatorsByDepth = new HashMap<>();
         private final Map<Integer, Set<OperatorId>> commonOperatorsByDepth = new HashMap<>();
+        private final Map<ColumnRefOperator, ScalarOperator> existingCommonSubOperatorMap;
         private int currentId = 0;
 
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
+
+        public CommonSubScalarOperatorCollector(Map<ColumnRefOperator, ScalarOperator> existingCommonSubOperatorMap) {
+            this.existingCommonSubOperatorMap = existingCommonSubOperatorMap;
+        }
 
         public boolean hasLambdaFunction() {
             return hasLambdaFunction;
@@ -405,6 +424,24 @@ public class ScalarOperatorsReuse {
 
         @Override
         public CommonResult visit(ScalarOperator scalarOperator, CommonOperatorContext context) {
+            if (scalarOperator.isColumnRef()) {
+                ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator;
+                if (existingCommonSubOperatorMap.containsKey(columnRef)) {
+                    CommonResult result = visitChildren(existingCommonSubOperatorMap.get(columnRef), context);
+                    OperatorId id = new OperatorId(scalarOperator, result.childrenGroup);
+                    Map<OperatorId, Integer> level = operatorsByDepth.computeIfAbsent(result.depth + 1, c -> Maps.newHashMap());
+                    int group = level.computeIfAbsent(id, k -> currentId++);
+                    Set<OperatorId> commonGroup =
+                            commonOperatorsByDepth.computeIfAbsent(result.depth + 1, c -> Sets.newLinkedHashSet());
+                    commonGroup.add(id);
+                    return new CommonResult(result.depth + 1, List.of(group));
+                } else {
+                    OperatorId id = new OperatorId(scalarOperator, List.of());
+                    Map<OperatorId, Integer> level = operatorsByDepth.computeIfAbsent(0, c -> Maps.newLinkedHashMap());
+                    int group = level.computeIfAbsent(id, k -> currentId++);
+                    return new CommonResult(0, List.of(group));
+                }
+            }
             if (scalarOperator.isConstant() || scalarOperator.getChildren().isEmpty()) {
                 // leaf node
                 OperatorId id = new OperatorId(scalarOperator, List.of());
@@ -486,9 +523,12 @@ public class ScalarOperatorsReuse {
 
     public static Projection rewriteProjectionOrLambdaExpr(Projection projection, ColumnRefFactory columnRefFactory) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> existingCommonMap = projection.getCommonSubOperatorMap();
+
         List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
+
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubOperatorsByDepth = ScalarOperatorsReuse
-                .collectCommonSubScalarOperators(projection, scalarOperators,
+                .collectCommonSubScalarOperators(projection, scalarOperators, existingCommonMap,
                         columnRefFactory);
 
         Map<ScalarOperator, ColumnRefOperator> commonSubOperators =
@@ -523,6 +563,17 @@ public class ScalarOperatorsReuse {
             }
         }
 
+        if (!hasRewritten) {
+            for (ScalarOperator operator : existingCommonMap.values()) {
+                ScalarOperator rewriteOperator =
+                        ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(operator, commonSubOperators);
+                if (!rewriteOperator.equals(operator)) {
+                    hasRewritten = true;
+                    break;
+                }
+            }
+        }
+
         /*
          * 1. Rewrite the operator with the common sub operators
          * 2. Put the common sub operators to projection, we need to compute
@@ -549,13 +600,22 @@ public class ScalarOperatorsReuse {
                     newMap.put(kv.getKey(), rewriteOperator);
                 }
             }
+            existingCommonMap.replaceAll((k, v) -> {
+                ScalarOperator rewriteOperator =
+                        ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(v, commonSubOperators);
+                return rewriter.rewrite(rewriteOperator, rules);
+            });
 
             Map<ColumnRefOperator, ScalarOperator> newCommonMap =
                     Maps.newTreeMap(Comparator.comparingInt(ColumnRefOperator::getId));
             for (Map.Entry<ScalarOperator, ColumnRefOperator> kv : commonSubOperators.entrySet()) {
                 Preconditions.checkState(!newMap.containsKey(kv.getValue()));
-                ScalarOperator rewrittenOperator = rewriter.rewrite(kv.getKey(), rules);
-                newCommonMap.put(kv.getValue(), rewrittenOperator);
+                if (kv.getKey().isColumnRef() && existingCommonMap.containsKey(kv.getKey())) {
+                    newCommonMap.put(kv.getValue(), existingCommonMap.get(kv.getKey()));
+                } else {
+                    ScalarOperator rewrittenOperator = rewriter.rewrite(kv.getKey(), rules);
+                    newCommonMap.put(kv.getValue(), rewrittenOperator);
+                }
             }
 
             return new Projection(newMap, newCommonMap, projection.needReuseLambdaDependentExpr());

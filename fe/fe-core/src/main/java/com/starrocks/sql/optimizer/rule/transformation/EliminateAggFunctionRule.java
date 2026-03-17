@@ -103,7 +103,7 @@ public class EliminateAggFunctionRule extends TransformationRule {
 
         newAggCallMap.forEach((k, v) -> newProjectMap.put(k, k));
 
-        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
+        LogicalProjectOperator newProjectOp = new LogicalProjectOperator(newProjectMap);
 
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjectMap);
         final ScalarOperator newPredicate = rewriter.rewrite(aggOp.getPredicate());

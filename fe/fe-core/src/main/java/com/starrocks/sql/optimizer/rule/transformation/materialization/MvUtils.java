@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -1781,6 +1782,7 @@ public class MvUtils {
                 OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions));
         OptExpression optimizedViewPlan = optimizer.optimize(logicalTree,
                 new PhysicalPropertySet(), requiredColumns);
+        QueryOptimizer.eliminateAllCommonSubOperatorMaps(optimizedViewPlan);
         return optimizedViewPlan;
     }
 

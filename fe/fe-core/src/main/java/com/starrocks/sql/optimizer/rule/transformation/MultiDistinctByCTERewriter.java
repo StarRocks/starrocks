@@ -179,10 +179,8 @@ public class MultiDistinctByCTERewriter {
         }
 
         // Add project node
-        LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
-        builder.setColumnRefMap(columnRefMap);
-
-        OptExpression rightTree = OptExpression.create(builder.build(), allCteConsumes.get(0));
+        OptExpression rightTree =
+                OptExpression.create(new LogicalProjectOperator(columnRefMap, Maps.newHashMap()), allCteConsumes.get(0));
 
         // Add filter node
         if (aggregate.getPredicate() != null) {

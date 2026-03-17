@@ -240,10 +240,9 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                         .forEach(columnRef -> {
                             columnRefMap.put(columnRef, columnRef);
                         });
-                LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
-                builder.setColumnRefMap(columnRefMap);
 
-                OptExpression projectOpt = OptExpression.create(builder.build(), rankRelatedOptExp);
+                OptExpression projectOpt =
+                        OptExpression.create(new LogicalProjectOperator(columnRefMap, Maps.newHashMap()), rankRelatedOptExp);
 
                 return Collections.singletonList(OptExpression.create(filterOperator, projectOpt));
             }

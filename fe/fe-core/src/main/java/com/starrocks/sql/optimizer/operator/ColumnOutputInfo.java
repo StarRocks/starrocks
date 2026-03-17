@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 
 import java.util.Map;
 
@@ -61,6 +62,9 @@ public class ColumnOutputInfo {
         return scalarOperator.getUsedColumns();
     }
 
+    public ColumnRefSet getUsedInputColumns(Map<Integer, ScalarOperator> commonSubOperatorById) {
+        return ScalarOperatorUtil.getUsedInputColumns(scalarOperator, commonSubOperatorById);
+    }
 
     @Override
     public int hashCode() {

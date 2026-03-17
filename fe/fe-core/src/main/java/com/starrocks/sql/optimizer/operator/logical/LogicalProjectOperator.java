@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.property.DomainProperty;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -35,16 +36,36 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalProjectOperator extends LogicalOperator {
+    // Output columns
     private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+    // Hidden columns which might be referenced by output or other hidden columns
+    private Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         super(OperatorType.LOGICAL_PROJECT);
         this.columnRefMap = columnRefMap;
+        this.commonSubOperatorMap = Maps.newHashMap();
     }
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap, long limit) {
         super(OperatorType.LOGICAL_PROJECT);
         this.columnRefMap = columnRefMap;
+        this.commonSubOperatorMap = Maps.newHashMap();
+        this.limit = limit;
+    }
+
+    public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                  Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
+        super(OperatorType.LOGICAL_PROJECT);
+        this.columnRefMap = columnRefMap;
+        this.commonSubOperatorMap = commonSubOperatorMap;
+    }
+
+    public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                  Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap, long limit) {
+        super(OperatorType.LOGICAL_PROJECT);
+        this.columnRefMap = columnRefMap;
+        this.commonSubOperatorMap = commonSubOperatorMap;
         this.limit = limit;
     }
 
@@ -54,6 +75,26 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getCommonSubOperatorMap() {
+        return commonSubOperatorMap;
+    }
+
+    public List<Map.Entry<ColumnRefOperator, ScalarOperator>> getCommonSubOperatorMapInDependencyOrder() {
+        return ScalarOperatorUtil.topologicalSortCommonSubOperatorMap(commonSubOperatorMap);
+    }
+
+    public void compactCommonSubOperatorMap() {
+        ScalarOperatorUtil.compactCommonSubOperatorMap(columnRefMap, commonSubOperatorMap);
+    }
+
+    public void eliminateCommonSubOperatorMap() {
+        ScalarOperatorUtil.eliminateCommonSubOperatorMap(columnRefMap, commonSubOperatorMap);
+    }
+
+    public ColumnRefSet getUsedInputColumns() {
+        return ScalarOperatorUtil.getUsedInputColumns(columnRefMap, commonSubOperatorMap);
     }
 
     @Override
@@ -67,7 +108,7 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return new RowOutputInfo(columnRefMap, Maps.newHashMap());
+        return new RowOutputInfo(columnRefMap, commonSubOperatorMap);
     }
 
     @Override
@@ -76,13 +117,15 @@ public final class LogicalProjectOperator extends LogicalOperator {
             return new DomainProperty(Map.of());
         }
         DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
-
+        if (!commonSubOperatorMap.isEmpty()) {
+            childDomainProperty = childDomainProperty.projectDomainProperty(commonSubOperatorMap);
+        }
         return childDomainProperty.projectDomainProperty(columnRefMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), opType, columnRefMap);
+        return Objects.hash(super.hashCode(), opType, columnRefMap, commonSubOperatorMap);
     }
 
     @Override
@@ -97,12 +140,16 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
         LogicalProjectOperator that = (LogicalProjectOperator) o;
 
-        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
+        return columnRefMap.keySet().equals(that.columnRefMap.keySet())
+                && commonSubOperatorMap.keySet().equals(that.commonSubOperatorMap.keySet());
     }
 
     @Override
     public String toString() {
-        return "LogicalProjectOperator " + columnRefMap.keySet();
+        if (commonSubOperatorMap.isEmpty()) {
+            return "LogicalProjectOperator " + columnRefMap.keySet();
+        }
+        return "LogicalProjectOperator " + columnRefMap.keySet() + "; subExprs: " + commonSubOperatorMap.keySet();
     }
 
     @Override
@@ -130,11 +177,17 @@ public final class LogicalProjectOperator extends LogicalOperator {
         public Builder withOperator(LogicalProjectOperator operator) {
             super.withOperator(operator);
             builder.columnRefMap = operator.getColumnRefMap();
+            builder.commonSubOperatorMap = operator.getCommonSubOperatorMap();
             return this;
         }
 
         public Builder setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
             builder.columnRefMap = columnRefMap;
+            return this;
+        }
+
+        public Builder setCommonSubOperatorMap(Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
+            builder.commonSubOperatorMap = commonSubOperatorMap;
             return this;
         }
 

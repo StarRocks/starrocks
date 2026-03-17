@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 
 import java.util.ArrayList;
@@ -73,13 +74,12 @@ public class Projection {
         return new ArrayList<>(columnRefMap.keySet());
     }
 
-    public ColumnRefSet getUsedColumns() {
-        final ColumnRefSet usedColumns = new ColumnRefSet();
-        columnRefMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
-        commonSubOperatorMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
-        // remove some of columnRefMap's used columns which are from commonSubOperatorMap's output column
-        commonSubOperatorMap.keySet().stream().forEach(e -> usedColumns.except(e.getUsedColumns()));
-        return usedColumns;
+    /**
+     * Returns the set of input (child) column references used by this projection's expressions, excluding columns produced by
+     * common sub-operators.
+     */
+    public ColumnRefSet getUsedInputColumns() {
+        return ScalarOperatorUtil.getUsedInputColumns(columnRefMap, commonSubOperatorMap);
     }
 
     public ScalarOperator resolveColumnRef(ColumnRefOperator ref) {
@@ -95,6 +95,14 @@ public class Projection {
 
     public Map<ColumnRefOperator, ScalarOperator> getCommonSubOperatorMap() {
         return commonSubOperatorMap;
+    }
+
+    public void eliminateSubColumnRefMap() {
+        ScalarOperatorUtil.eliminateCommonSubOperatorMap(columnRefMap, commonSubOperatorMap);
+    }
+
+    public List<Map.Entry<ColumnRefOperator, ScalarOperator>> getCommonSubOperatorMapInDependencyOrder() {
+        return ScalarOperatorUtil.topologicalSortCommonSubOperatorMap(commonSubOperatorMap);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getAllMaps() {
@@ -171,7 +179,11 @@ public class Projection {
 
     @Override
     public String toString() {
-        return columnRefMap.values().toString();
+        String result = "columnRefMap=" + columnRefMap;
+        if (!commonSubOperatorMap.isEmpty()) {
+            result += ", commonSubOperatorMap=" + commonSubOperatorMap;
+        }
+        return result;
     }
 
     public Projection deepClone() {

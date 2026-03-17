@@ -283,8 +283,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Projection projection = node.getProjection();
         if (projection != null) {
+            Map<ColumnRefOperator, SubfieldOperator> commonSubfieldColumns = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getCommonSubOperatorMapInDependencyOrder()) {
+                if (entry.getValue() instanceof SubfieldOperator && (node instanceof LogicalScanOperator ||
+                        node instanceof PhysicalScanOperator)) {
+                    commonSubfieldColumns.put(entry.getKey(), (SubfieldOperator) entry.getValue());
+                } else {
+                    statisticsBuilder.addColumnStatistic(entry.getKey(),
+                            ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
+                }
+            }
+            if (!commonSubfieldColumns.isEmpty()) {
+                addSubFiledStatistics(node, commonSubfieldColumns, statisticsBuilder);
+            }
             Map<ColumnRefOperator, SubfieldOperator> subfieldColumns = Maps.newHashMap();
-            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 if (entry.getValue() instanceof SubfieldOperator && (node instanceof LogicalScanOperator ||
                         node instanceof PhysicalScanOperator)) {
@@ -294,7 +306,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                             ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
                 }
             }
-            // for subfield operator, we get the statistics from statistics storage
             if (!subfieldColumns.isEmpty()) {
                 addSubFiledStatistics(node, subfieldColumns, statisticsBuilder);
             }
@@ -1024,15 +1035,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap());
+        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMapInDependencyOrder());
     }
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap());
+        return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMapInDependencyOrder());
     }
 
-    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                    List<Map.Entry<ColumnRefOperator, ScalarOperator>> commonSubOperatorMapInDependencyOrder) {
         Preconditions.checkState(context.arity() == 1);
 
         Statistics.Builder builder = Statistics.builder();
@@ -1042,6 +1054,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics.Builder allBuilder = Statistics.builder();
         allBuilder.setOutputRowCount(inputStatistics.getOutputRowCount());
         allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMapInDependencyOrder) {
+            if (entry.getValue() instanceof SubfieldOperator && context.getOptExpression() != null) {
+                Operator child = context.getOptExpression().inputAt(0).getOp();
+                if (child instanceof LogicalScanOperator || child instanceof PhysicalScanOperator) {
+                    addSubFiledStatistics(child, ImmutableMap.of(entry.getKey(),
+                            (SubfieldOperator) entry.getValue()), allBuilder);
+                    continue;
+                }
+            }
+            ColumnStatistic outputStatistic =
+                    ExpressionStatisticCalculator.calculate(entry.getValue(), allBuilder.build());
+            allBuilder.addColumnStatistic(entry.getKey(), outputStatistic);
+        }
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
@@ -2034,10 +2060,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Projection projection = node.getProjection();
             if (projection != null) {
                 Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
+                        projection.getCommonSubOperatorMapInDependencyOrder()) {
+                    statisticsBuilder.addColumnStatistic(entry.getKey(),
+                            ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
+                }
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
-                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics()));
+                            ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
                 }
                 context.setStatistics(statisticsBuilder.build());
             }

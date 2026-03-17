@@ -358,7 +358,7 @@ public class CboTablePruneRule extends TransformationRule {
     List<OptExpression> handleLeftOrRightJoin(OptExpression joinOpt, OptExpression retainOpt) {
         Optional<Projection> joinProjection = Optional.ofNullable(joinOpt.getOp().getProjection());
         ColumnRefSet usedColRefSet =
-                joinProjection.map(Projection::getUsedColumns).orElse(joinOpt.getRowOutputInfo().getUsedColumnRefSet());
+                joinProjection.map(Projection::getUsedInputColumns).orElse(joinOpt.getRowOutputInfo().getUsedColumnRefSet());
 
         // If not all of used columns of output exprs of join operator only references retain-side
         // column refs, prune-side ScanOperator can not be pruned.

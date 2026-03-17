@@ -93,8 +93,18 @@ import java.util.stream.Collectors;
 public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     private String appendProjectionAndPredicate(Operator op) {
         StringBuilder sb = new StringBuilder();
-        if (op.getProjection() != null && !op.getProjection().getColumnRefMap().isEmpty()) {
-            sb.append(appendProject(op.getProjection().getColumnRefMap()));
+        if (op.getProjection() != null) {
+            if (!op.getProjection().getColumnRefMap().isEmpty()) {
+                sb.append(appendProject(op.getProjection().getColumnRefMap()));
+                if (!op.getProjection().getCommonSubOperatorMap().isEmpty()) {
+                    sb.append(", ");
+                    String subExprStr = op.getProjection().getCommonSubOperatorMap().entrySet()
+                            .stream()
+                            .map(e -> e.getKey() + "->" + e.getValue())
+                            .collect(Collectors.joining(", ", "commonSubOperatorMap=[", "]"));
+                    sb.append(subExprStr);
+                }
+            }
         }
         if (op.getPredicate() != null) {
             sb.append(", predicate=").append(op.getPredicate());
@@ -150,7 +160,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
-                appendProjectionAndPredicate(node) +
+                ", " + appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -160,7 +170,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", predicates=" + node.getScanOperatorPredicates() +
                 ", limit=" + node.getLimit() +
-                appendProjectionAndPredicate(node) +
+                ", " + appendProjectionAndPredicate(node) +
                 "}";
     }
 
@@ -222,6 +232,13 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalProject(LogicalProjectOperator node, Void context) {
         StringBuilder sb = new StringBuilder("LogicalProjectOperator {");
         sb.append(appendProject(node.getColumnRefMap()));
+        if (!node.getCommonSubOperatorMap().isEmpty()) {
+            String subExprStr = node.getCommonSubOperatorMap().entrySet()
+                    .stream()
+                    .map(e -> e.getKey() + "->" + e.getValue())
+                    .collect(Collectors.joining(", ", "subExprs=[", "]"));
+            sb.append(", ").append(subExprStr);
+        }
         sb.append("}");
         return sb.toString();
     }

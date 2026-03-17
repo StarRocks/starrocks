@@ -105,7 +105,8 @@ public class EliminateGroupByConstantRule extends TransformationRule {
 
         newAggCallMap.keySet().forEach(e -> topMap.put(e, e));
         newGroupByKeys.forEach(e -> topMap.put(e, e));
-        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(topMap).build();
+        // topMap contains constant values only. it doesn't need common map.
+        LogicalProjectOperator newProjectOp = new LogicalProjectOperator(topMap);
 
         LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                 .withOperator(aggOp)
@@ -121,7 +122,8 @@ public class EliminateGroupByConstantRule extends TransformationRule {
             result = OptExpression.create(newProjectOp,
                     OptExpression.create(newAggOp, input.inputAt(0).getInputs()));
         } else {
-            LogicalProjectOperator bottomProject = new LogicalProjectOperator(bottomMap);
+            LogicalProjectOperator bottomProject =
+                    new LogicalProjectOperator(bottomMap, Maps.newHashMap(projectOp.getCommonSubOperatorMap()));
             result = OptExpression.create(newProjectOp,
                     OptExpression.create(newAggOp,
                             OptExpression.create(bottomProject,

@@ -47,11 +47,11 @@ public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
 
     @Override
     public String toString() {
-        return "PhysicalNestLoopJoinOperator{" +
-                "joinType=" + joinType +
-                ", joinPredicate=" + onPredicate +
-                ", limit=" + limit +
-                ", predicate=" + predicate +
+        return "PhysicalNestLoopJoinOperator" + " {" +
+                "joinType='" + joinType + '\'' +
+                ", onPredicate='" + onPredicate + '\'' +
+                ", predicate='" + predicate + '\'' +
+                ", projection='" + projection + '\'' +
                 '}';
     }
 

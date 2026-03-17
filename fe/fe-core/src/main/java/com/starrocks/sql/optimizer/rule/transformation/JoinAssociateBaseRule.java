@@ -42,6 +42,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.compactCommonSubOperatorMap;
 
 public abstract class JoinAssociateBaseRule extends TransformationRule {
 
@@ -128,13 +131,34 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         OptExpression newTopJoinChild = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
 
         if (CollectionUtils.isNotEmpty(splitter.getTopJoinChildCols())) {
-            RowOutputInfo mergedRow = newTopJoinChild.getRowOutputInfo().addColsToRow(
-                    splitter.getTopJoinChildCols(),
-                    newTopJoinChild.getOp().getProjection() != null);
+            Map<ColumnRefOperator, ScalarOperator> newTopJoinChildColumnRefMap = Maps.newHashMap();
+            Map<ColumnRefOperator, ScalarOperator> newTopJoinChildCommonSubOperatorMap = Maps.newHashMap();
+            splitter.getTopJoinChildCols().forEach(col -> {
+                newTopJoinChildColumnRefMap.put(col.getColumnRef(), col.getScalarOp());
+            });
+            splitter.getCommonColInfo().forEach((k, v) -> {
+                newTopJoinChildCommonSubOperatorMap.put(v.getColumnRef(), v.getScalarOp());
+            });
+            compactCommonSubOperatorMap(newTopJoinChildColumnRefMap, newTopJoinChildCommonSubOperatorMap);
+
+            RowOutputInfo oldRowOutput = newTopJoinChild.getRowOutputInfo();
+
+            Map<ColumnRefOperator, ScalarOperator> oldColumnRefMap = oldRowOutput.getColumnRefMap();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(oldColumnRefMap, false);
+            newTopJoinChildColumnRefMap.replaceAll((k, v) -> rewriter.rewrite(v));
+            newTopJoinChildCommonSubOperatorMap.replaceAll((k, v) -> rewriter.rewrite(v));
+
+            newTopJoinChildColumnRefMap.putAll(oldColumnRefMap);
+
+            oldRowOutput.getCommonColInfo()
+                    .forEach((k, v) -> newTopJoinChildCommonSubOperatorMap.put(v.getColumnRef(), v.getScalarOp()));
+
+            compactCommonSubOperatorMap(newTopJoinChildColumnRefMap, newTopJoinChildCommonSubOperatorMap);
+
             Operator.Builder builder = OperatorBuilderFactory.build(newTopJoinChild.getOp());
 
             Operator childOp = builder.withOperator(newTopJoinChild.getOp())
-                    .setProjection(new Projection(mergedRow.getColumnRefMap())).build();
+                    .setProjection(new Projection(newTopJoinChildColumnRefMap, newTopJoinChildCommonSubOperatorMap)).build();
             newTopJoinChild = OptExpression.create(childOp, newTopJoinChild.getInputs());
         }
 
@@ -142,13 +166,35 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         OptExpression newBotJoinRightChild = input.inputAt(newBotJoinRightChildLoc[0]);
 
         if (CollectionUtils.isNotEmpty(splitter.getBotJoinChildCols())) {
-            RowOutputInfo mergedRow = newBotJoinLeftChild.getRowOutputInfo().addColsToRow(
-                    splitter.getBotJoinChildCols(),
-                    newBotJoinLeftChild.getOp().getProjection() != null);
+            Map<ColumnRefOperator, ScalarOperator> newBotJoinLeftChildColumnRefMap = Maps.newHashMap();
+            Map<ColumnRefOperator, ScalarOperator> newBotJoinLeftChildCommonSubOperatorMap = Maps.newHashMap();
+            splitter.getBotJoinChildCols().forEach(col -> {
+                newBotJoinLeftChildColumnRefMap.put(col.getColumnRef(), col.getScalarOp());
+            });
+            splitter.getCommonColInfo().forEach((k, v) -> {
+                newBotJoinLeftChildCommonSubOperatorMap.put(v.getColumnRef(), v.getScalarOp());
+            });
+            compactCommonSubOperatorMap(newBotJoinLeftChildColumnRefMap, newBotJoinLeftChildCommonSubOperatorMap);
+
+            RowOutputInfo oldRowOutput = newBotJoinLeftChild.getRowOutputInfo();
+
+            Map<ColumnRefOperator, ScalarOperator> oldColumnRefMap = oldRowOutput.getColumnRefMap();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(oldColumnRefMap, false);
+            newBotJoinLeftChildColumnRefMap.replaceAll((k, v) -> rewriter.rewrite(v));
+            newBotJoinLeftChildCommonSubOperatorMap.replaceAll((k, v) -> rewriter.rewrite(v));
+
+            newBotJoinLeftChildColumnRefMap.putAll(oldColumnRefMap);
+
+            oldRowOutput.getCommonColInfo()
+                    .forEach((k, v) -> newBotJoinLeftChildCommonSubOperatorMap.put(v.getColumnRef(), v.getScalarOp()));
+
+            compactCommonSubOperatorMap(newBotJoinLeftChildColumnRefMap, newBotJoinLeftChildCommonSubOperatorMap);
+
             Operator.Builder builder = OperatorBuilderFactory.build(newBotJoinLeftChild.getOp());
 
             Operator newBotJoinLeftChildOp = builder.withOperator(newBotJoinLeftChild.getOp())
-                    .setProjection(new Projection(mergedRow.getColumnRefMap())).build();
+                    .setProjection(new Projection(newBotJoinLeftChildColumnRefMap, newBotJoinLeftChildCommonSubOperatorMap))
+                    .build();
             newBotJoinLeftChild = OptExpression.create(newBotJoinLeftChildOp, newBotJoinLeftChild.getInputs());
         }
 
@@ -157,7 +203,13 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         Projection newBotJoinProjection = null;
         if (needProject(newBotJoinRowInfo, newBotJoinLeftChild, newBotJoinRightChild)) {
-            newBotJoinProjection = new Projection(newBotJoinRowInfo.getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> newBotJoinColumnRefMap = Maps.newHashMap(newBotJoinRowInfo.getColumnRefMap());
+            Map<ColumnRefOperator, ScalarOperator> newBotJoinCommonSubOperatorMap = Maps.newHashMap();
+            splitter.getCommonColInfo().forEach((k, v) -> {
+                newBotJoinCommonSubOperatorMap.put(v.getColumnRef(), v.getScalarOp());
+            });
+            compactCommonSubOperatorMap(newBotJoinColumnRefMap, newBotJoinCommonSubOperatorMap);
+            newBotJoinProjection = new Projection(newBotJoinColumnRefMap, newBotJoinCommonSubOperatorMap);
         }
 
         LogicalJoinOperator newBotJoin = newBottomJoinBuilder.setJoinType(newBotJoinType)
@@ -170,7 +222,10 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         Projection newTopJoinProjection = null;
 
         if (needProject(input.getRowOutputInfo(), newTopJoinChild, newBotJoinExpr)) {
-            newTopJoinProjection = new Projection(input.getRowOutputInfo().getColumnRefMap());
+            newTopJoinProjection = new Projection(input.getRowOutputInfo().getColumnRefMap(),
+                    input.getRowOutputInfo().getCommonColInfo().entrySet().stream().collect(
+                            Collectors.toMap(e -> e.getValue().getColumnRef(), e -> e.getValue().getScalarOp())
+                    ));
         }
 
         LogicalJoinOperator newTopJoin = newTopJoinBuilder.withOperator(topJoin)
@@ -191,13 +246,14 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return Lists.newArrayList(newTopJoinExpr);
     }
 
-
     protected ColumnRefSet deriveTopJoinChildOutputCols(OptExpression input) {
         OptExpression newTopJoinChildOpt = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
         RowOutputInfo oldBotJoinOutput = input.inputAt(0).getRowOutputInfo();
         ColumnRefSet cols = newTopJoinChildOpt.getRowOutputInfo().getOutputColumnRefSet();
+        Map<Integer, ScalarOperator> commonSubOperatorById =
+                Maps.transformValues(oldBotJoinOutput.getCommonColInfo(), ColumnOutputInfo::getScalarOp);
         for (ColumnOutputInfo entry : oldBotJoinOutput.getColumnOutputInfo()) {
-            if (entry.getUsedColumns().isIntersect(cols)) {
+            if (entry.getUsedInputColumns(commonSubOperatorById).isIntersect(cols)) {
                 cols.union(entry.getColumnRef());
             }
         }
@@ -207,14 +263,15 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
     protected ColumnRefSet deriveNewBotJoinColSet(RowOutputInfo topRow, ScalarOperator onCondition,
                                                   ScalarOperator predicate, ColumnRefSet columnRefSet) {
         ColumnRefSet requiredCols = new ColumnRefSet();
-
+        Map<Integer, ScalarOperator> commonSubOperatorById =
+                Maps.transformValues(topRow.getCommonColInfo(), ColumnOutputInfo::getScalarOp);
         if (!topRow.getColOutputInfo().isEmpty()) {
             for (ColumnOutputInfo col : topRow.getColOutputInfo().values()) {
-                requiredCols.union(col.getUsedColumns());
+                requiredCols.union(col.getUsedInputColumns(commonSubOperatorById));
             }
         } else {
             for (ColumnOutputInfo col : topRow.getOriginalColOutputInfo().values()) {
-                requiredCols.union(col.getUsedColumns());
+                requiredCols.union(col.getUsedInputColumns(commonSubOperatorById));
             }
         }
 
@@ -310,9 +367,14 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         // save columnOutputInfo which is constant
         List<ColumnOutputInfo> constCols = Lists.newArrayList();
 
+        // save common column info of the original projection
+        private final Map<Integer, ColumnOutputInfo> commonColInfo;
 
         public ProjectionSplitter(OptExpression input, ScalarOperator newBotJoinOnCondition) {
             RowOutputInfo rowOutputInfo = input.inputAt(0).getRowOutputInfo();
+            commonColInfo = Maps.newHashMap(rowOutputInfo.getCommonColInfo());
+            Map<Integer, ScalarOperator> commonSubOperatorById =
+                    Maps.transformValues(commonColInfo, ColumnOutputInfo::getScalarOp);
             OptExpression newBotJoinLeftChildOpt = input.
                     inputAt(newBotJoinLeftChildLoc[0]).inputAt(newBotJoinLeftChildLoc[1]);
             if (input.inputAt(0).getOp().getProjection() == null) {
@@ -323,9 +385,10 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 ColumnRefOperator columnRef = columnOutputInfo.getColumnRef();
                 ScalarOperator scalarOp = columnOutputInfo.getScalarOp();
                 if (!columnRef.equals(scalarOp)) {
-                    if (scalarOp.getUsedColumns().isEmpty()) {
+                    ColumnRefSet usedInputColumns = columnOutputInfo.getUsedInputColumns(commonSubOperatorById);
+                    if (usedInputColumns.isEmpty()) {
                         constCols.add(columnOutputInfo);
-                    } else if (leftChildCols.containsAll(scalarOp.getUsedColumns())) {
+                    } else if (leftChildCols.containsAll(usedInputColumns)) {
                         if (needPushToChild(newBotJoinOnCondition, columnOutputInfo)) {
                             botJoinChildCols.add(columnOutputInfo);
                         } else {
@@ -344,6 +407,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 return false;
             }
 
+            // predicates don't have projection-related common sub-expression, so no need to use getUsedInputColumns here.
             return newBotJoinOnCondition.getUsedColumns().contains(columnOutputInfo.getColumnRef());
         }
 
@@ -361,6 +425,10 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         public List<ColumnOutputInfo> getConstCols() {
             return constCols;
+        }
+
+        public Map<Integer, ColumnOutputInfo> getCommonColInfo() {
+            return commonColInfo;
         }
     }
 
