@@ -1733,6 +1733,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
 
+##### automatic_partition_thread_pool_thread_num
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自动分区线程池的线程数。队列长度自动设置为线程数的 10 倍。
+- 引入版本：-
+
 ##### create_tablet_worker_count
 
 - 默认值：3
