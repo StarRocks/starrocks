@@ -83,11 +83,16 @@ public class ExpressionStatisticCalculator {
 
         @Override
         public ColumnStatistic visit(ScalarOperator operator, Void context) {
-            if (!operator.getChildren().isEmpty()) {
+            if (operator.getChildren().size() > 1) {
                 return operator.getChild(0).accept(this, context);
             } else {
                 return ColumnStatistic.unknown();
             }
+        }
+
+        @Override
+        public ColumnStatistic visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
+            return operator.getChild(0).accept(this, context);
         }
 
         @Override
