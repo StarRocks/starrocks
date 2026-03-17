@@ -46,14 +46,8 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
         : _src_slot_descriptors(std::move(src_slot_descriptors)),
           _read_chunk_size(chunk_size),
           _tzinfo(cctz::utc_time_zone()),
-          _tzoffset_in_seconds(0),
-          _drop_nanoseconds_in_datetime(false),
-          _broker_load_mode(true),
-          _strict_mode(true),
-          _broker_load_filter(nullptr),
-          _num_rows_filtered(0),
-          _error_message_counter(0),
-          _lazy_load_ctx(nullptr) {
+
+          _broker_load_filter(nullptr) {
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }

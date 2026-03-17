@@ -109,8 +109,8 @@ private:
     // only used for `_first_value`
     MemPool _mem_pool;
 
-    ordinal_t _num_values;
-    uint32_t _num_data_pages;
+    ordinal_t _num_values{0};
+    uint32_t _num_data_pages{0};
     // remember the first value in current page
     faststring _first_value;
     PagePointer _last_data_page;
@@ -124,8 +124,8 @@ private:
     // builder for index pages of value index, null if write_value_index == false
     std::unique_ptr<IndexPageBuilder> _value_index_builder;
     // encoder for value index's key
-    const KeyCoder* _validx_key_coder;
-    const BlockCompressionCodec* _compress_codec;
+    const KeyCoder* _validx_key_coder{nullptr};
+    const BlockCompressionCodec* _compress_codec{nullptr};
 };
 
 } // namespace starrocks

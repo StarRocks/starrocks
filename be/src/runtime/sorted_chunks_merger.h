@@ -125,7 +125,7 @@ public:
     Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit) override;
 
 private:
-    const std::vector<ExprContext*>* _sort_exprs;
+    const std::vector<ExprContext*>* _sort_exprs{nullptr};
     SortDescs _sort_desc;
 
     std::unique_ptr<MergeCursorsCascade> _merger;

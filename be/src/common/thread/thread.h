@@ -307,9 +307,9 @@ private:
 
     Thread* _thread;
 
-    int _warn_after_ms;
-    int _warn_every_ms;
-    int _give_up_after_ms;
+    int _warn_after_ms{kDefaultWarnAfterMs};
+    int _warn_every_ms{kDefaultWarnEveryMs};
+    int _give_up_after_ms{kDefaultGiveUpAfterMs};
 };
 
 } //namespace starrocks

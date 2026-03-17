@@ -53,7 +53,7 @@ MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vect
                                      bool is_binary_format, RuntimeProfile* parent_profile)
         : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
-          _row_buffer(nullptr),
+
           _is_binary_format(is_binary_format) {}
 
 MysqlResultWriter::~MysqlResultWriter() {

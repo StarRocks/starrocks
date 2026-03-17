@@ -23,7 +23,7 @@ namespace starrocks {
 class CSVBuffer {
 public:
     // Does NOT take the ownership of |buff|.
-    CSVBuffer(char* buff, size_t cap) : _begin(buff), _position_offset(0), _limit_offset(0), _end(buff + cap) {}
+    CSVBuffer(char* buff, size_t cap) : _begin(buff), _end(buff + cap) {}
 
     void append(char c) {
         *(_begin + _limit_offset) = c;
@@ -84,8 +84,8 @@ public:
 
 private:
     char* _begin;
-    size_t _position_offset;
-    size_t _limit_offset;
+    size_t _position_offset{0};
+    size_t _limit_offset{0};
     char* _end;
 };
 

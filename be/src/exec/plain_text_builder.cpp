@@ -23,8 +23,7 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
         : _options(std::move(options)),
           _output_expr_ctxs(output_expr_ctxs),
           _output_stream(std::make_unique<io::FormattedOutputStreamFile>(std::move(writable_file),
-                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)),
-          _init(false) {}
+                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)) {}
 
 PlainTextBuilder::~PlainTextBuilder() = default;
 

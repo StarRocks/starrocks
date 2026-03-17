@@ -48,7 +48,7 @@ namespace starrocks::io {
         if (UNLIKELY(is_closed)) return Status::InternalError("file has been close()d"); \
     } while (0)
 
-FdInputStream::FdInputStream(int fd) : _fd(fd), _errno(0), _offset(0), _close_on_delete(false), _is_closed(false) {}
+FdInputStream::FdInputStream(int fd) : _fd(fd) {}
 
 FdInputStream::~FdInputStream() {
     if (_close_on_delete) {

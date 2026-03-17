@@ -61,7 +61,7 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
 
 MetaReaderParams::MetaReaderParams() : chunk_size(config::vector_chunk_size) {}
 
-MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
+MetaReader::MetaReader() {}
 
 Status MetaReader::open() {
     return Status::OK();

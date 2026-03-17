@@ -30,10 +30,10 @@ namespace starrocks {
 SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
           _tnode(tnode),
-          _is_init(false),
+
           _table_name(tnode.schema_scan_node.table_name),
           _tuple_id(tnode.schema_scan_node.tuple_id),
-          _dest_tuple_desc(nullptr),
+
           _schema_scanner(nullptr) {
     _name = "schema_scan";
 }
