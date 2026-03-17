@@ -46,6 +46,7 @@
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/batch_write/batch_write_mgr.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
@@ -989,6 +990,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
+    auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {

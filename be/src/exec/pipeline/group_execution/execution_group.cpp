@@ -104,6 +104,8 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
                 });
 
         if (!submitted) {
+            auto mem_tracker = driver->fragment_ctx()->runtime_state()->instance_mem_tracker();
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             Status status = driver->prepare_local_state(state);
             if (!status.ok()) {
                 Status* expected = nullptr;
@@ -124,6 +126,8 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
 
 Status ExecutionGroup::prepare_active_drivers_sequentially(RuntimeState* state) {
     return for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
+        auto mem_tracker = state->instance_mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
         RETURN_IF_ERROR(driver->prepare_local_state(state));
         return Status::OK();
     });
