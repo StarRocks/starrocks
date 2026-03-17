@@ -126,7 +126,9 @@ public class SqlCredentialRedactor {
     );
 
     private static final Pattern IDENTIFIED_WITH_PATTERN = Pattern.compile(
-            "(IDENTIFIED\\s+WITH\\s+[^\\s]+\\s+(?:BY|AS)\\s+)" +
+            "(IDENTIFIED\\s+WITH\\s+)" +
+                    "([^\\s]+)" +
+                    "(\\s+(?:BY|AS)\\s+)" +
                     "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
@@ -139,6 +141,7 @@ public class SqlCredentialRedactor {
     );
 
     private static final String REDACTED_VALUE = "***";
+    private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
      * Redact sensitive credentials from SQL string.
@@ -153,7 +156,7 @@ public class SqlCredentialRedactor {
 
         sql = redactKeyValueCredentials(sql);
         sql = redactSqlCredentialClause(sql, IDENTIFIED_BY_PATTERN, 1, 2, 3);
-        sql = redactSqlCredentialClause(sql, IDENTIFIED_WITH_PATTERN, 1, 2, 3);
+        sql = redactIdentifiedWithClause(sql);
         sql = redactSqlCredentialClause(sql, SET_PASSWORD_PATTERN, 1, 2, 3, 4);
         return sql;
     }
@@ -192,6 +195,33 @@ public class SqlCredentialRedactor {
         }
 
         // Append remaining text
+        result.append(sql, lastEnd, sql.length());
+        return result.toString();
+    }
+
+    private static String redactIdentifiedWithClause(String sql) {
+        Matcher matcher = IDENTIFIED_WITH_PATTERN.matcher(sql);
+        StringBuilder result = new StringBuilder(sql.length() + 32);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            result.append(sql, lastEnd, matcher.start());
+
+            String plugin = matcher.group(2);
+            if (LDAP_SIMPLE_AUTH_PLUGIN.equalsIgnoreCase(plugin)) {
+                result.append(sql, matcher.start(), matcher.end());
+            } else {
+                result.append(matcher.group(1)).append(plugin).append(matcher.group(3));
+                if (matcher.group(4) != null) {
+                    result.append('\'').append(REDACTED_VALUE).append('\'');
+                } else if (matcher.group(5) != null) {
+                    result.append('"').append(REDACTED_VALUE).append('"');
+                } else {
+                    result.append(REDACTED_VALUE);
+                }
+            }
+            lastEnd = matcher.end();
+        }
+
         result.append(sql, lastEnd, sql.length());
         return result.toString();
     }
