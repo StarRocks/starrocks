@@ -859,13 +859,15 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
 
                 if (sortKeyModified) {
-                    List<String> oldSortKey = indexMeta.getSortKeyIdxes().stream()
-                            .map(i -> indexMeta.getSchema().get(i).getName())
+                    List<ColumnId> oldSortKeyColumnIds = indexMeta.getSortKeyIdxes().stream()
+                            .map(i -> indexMeta.getSchema().get(i).getColumnId())
                             .collect(Collectors.toList());
-                    List<String> newSortKey = indexMeta.getSortKeyIdxes().stream()
-                            .map(i -> schemaForFinding.get(i).getName())
+                    Set<ColumnId> oldSortKeyColumnIdSet = new HashSet<>(oldSortKeyColumnIds);
+                    List<ColumnId> newSortKeyColumnIds = schemaForFinding.stream()
+                            .map(Column::getColumnId)
+                            .filter(oldSortKeyColumnIdSet::contains)
                             .collect(Collectors.toList());
-                    if (!oldSortKey.equals(newSortKey)) {
+                    if (!oldSortKeyColumnIds.equals(newSortKeyColumnIds)) {
                         throw new DdlException("Can not modify column[" + modColumn.getName() +
                             "] to change sort key order by ALTER TABLE MODIFY COLUMN, " +
                                 "please use ALTER TABLE ORDER BY instead");
