@@ -905,7 +905,8 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_init_context());
 
     // reverse scan_range
-    if (!_opts.asc_hint) {
+    // when desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range
+    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
         _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
 
