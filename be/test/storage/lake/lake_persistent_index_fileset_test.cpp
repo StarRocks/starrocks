@@ -284,6 +284,65 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_init_standalone_sstable) {
     ASSERT_EQ("standalone.sst", fileset.standalone_sstable_filename());
 }
 
+// Test that standalone sstable (no range) preserves fileset_id from metadata
+// when it already has one. This is the upgrade scenario: sstables created in
+// older versions (e.g., 3.5) have no range but get a fileset_id written by 4.1
+// during a previous publish. On reload, the fileset_id must be preserved so
+// that compaction txn logs referencing it can still match.
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_preserves_existing_fileset_id) {
+    auto original_fileset_id = UniqueId::gen_uid();
+
+    // Create sstable with fileset_id but clear range (simulating upgrade from 3.5)
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("upgraded.sst", 0, 100, &sst_pb, &original_fileset_id));
+    sst_pb.clear_range(); // Remove range to simulate old-version sstable
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    // Single-sstable init overload
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sst));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    // The fileset_id must match the original, not a newly generated random one
+    ASSERT_EQ(original_fileset_id.to_string(), fileset.fileset_id().to_string());
+}
+
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_preserves_existing_fileset_id_vector_init) {
+    auto original_fileset_id = UniqueId::gen_uid();
+
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("upgraded_vec.sst", 0, 100, &sst_pb, &original_fileset_id));
+    sst_pb.clear_range();
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+    std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
+    sstables.push_back(std::move(sst));
+
+    // Vector init overload
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sstables));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    ASSERT_EQ(original_fileset_id.to_string(), fileset.fileset_id().to_string());
+}
+
+// Test that standalone sstable without fileset_id still gets a generated one
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_without_fileset_id_generates_new_one) {
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("legacy.sst", 0, 100, &sst_pb, nullptr));
+    sst_pb.clear_range();
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sst));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    // Should have a valid (non-zero) generated fileset_id
+    ASSERT_NE(UniqueId(0, 0).to_string(), fileset.fileset_id().to_string());
+}
+
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_multiple_standalone_error) {
     std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
 
