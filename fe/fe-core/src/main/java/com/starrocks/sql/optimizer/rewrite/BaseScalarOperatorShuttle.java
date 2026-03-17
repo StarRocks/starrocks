@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -126,6 +127,10 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                     LambdaFunctionOperator lambda = (LambdaFunctionOperator) op;
                     return new LambdaFunctionOperator(lambda.getRefColumns(), childOps.get(0), lambda.getType()); })
                 .put(CloneOperator.class, (op, childOps) -> new CloneOperator(childOps.get(0)))
+                .put(DictionaryGetOperator.class, (op, childOps) -> {
+                    DictionaryGetOperator dictGet = (DictionaryGetOperator) op;
+                    return new DictionaryGetOperator(childOps, dictGet.getType(), dictGet.getDictionaryId(),
+                            dictGet.getDictionaryTxnId(), dictGet.getKeySize(), dictGet.getNullIfNotExist()); })
                 .build();
     }
 
@@ -267,6 +272,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitDictQueryOperator(DictQueryOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator operator, Void context) {
         return shuttleIfUpdate(operator);
     }
 
