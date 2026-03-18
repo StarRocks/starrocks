@@ -3328,15 +3328,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 過去のタブレット SPLIT/MERGE ジョブの最大保持期間。
 - Introduced in: v4.1.0
 
-##### `tablet_reshard_colocate_max_tablets`
-
-- Default: 1048576
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 1 つの BE/CN にコロケーション可能なタブレットの上限数。
-- Introduced in: v4.1.0
-
 ### 共有データ
 
 ##### `aws_s3_access_key`

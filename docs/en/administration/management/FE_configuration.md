@@ -3328,15 +3328,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
 
-##### `tablet_reshard_colocate_max_tablets`
-
-- Default: 1048576
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of tablets that can be colocated in a single BE/CN.
-- Introduced in: v4.1.0
-
 ### Shared-data
 
 ##### `aws_s3_access_key`

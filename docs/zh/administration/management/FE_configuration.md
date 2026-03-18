@@ -3327,15 +3327,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
 
-##### `tablet_reshard_colocate_max_tablets`
-
-- 默认值: 1048576
-- 类型: Int
-- 单位: -
-- 是否可变: Yes
-- 描述: 单个 BE/CN 中最多可 Colocate 的 Tablet 数量。
-- 引入版本: v4.1.0
-
 ### 共享数据
 
 ##### `aws_s3_access_key`

@@ -484,7 +484,7 @@ Parameter:
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
   - A tablet will be merged if both the following conditions are met:
-    - The size of the tablet is **smaller** than `tablet_reshard_target_size`.
+    - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
 For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
@@ -1418,17 +1418,21 @@ ALTER TABLE table1 SPLIT TABLETS
 (9588955, 9588956, 9588957);
 ```
 
-- Merge all tablets that meet the conditions in the table to a target size of 1 GB (Default).
+- Merge all tablets that meet the conditions in the table to a target size of 2 GB.
 
 ```SQL
-ALTER TABLE table1 MERGE TABLETS;
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - Merge all tablets that meet the conditions in specific partitions.
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
-PARTITIONS (p1, p2, p3);
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - Merge specific tablets by ID.
@@ -1436,7 +1440,9 @@ PARTITIONS (p1, p2, p3);
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959);
+(9588958, 9588959)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 ## References

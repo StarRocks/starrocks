@@ -486,10 +486,10 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
   - MERGE が実行される条件：
-    - Tablet のサイズが `tablet_reshard_target_size` を**下回る**こと。
+    - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
-詳しい例については、[タブレットの分割または結合](#タブレットの分割または結合)を参照してください。
+詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
 
 ### 列の変更（列の追加/削除、列順の変更、列コメントの変更）
 
@@ -1397,7 +1397,7 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
-### タブレットの分割または結合
+### Tablet の分割または結合
 
 - 表内にあるすべての条件を満たすタブレットを、1 GB (デフォルト) を目標サイズとして分割する。
 
@@ -1419,17 +1419,21 @@ ALTER TABLE table1 SPLIT TABLETS
 (9588955, 9588956, 9588957);
 ```
 
-- 表内にあるすべての条件を満たすタブレットを、1 GB (デフォルト) を目標サイズとして結合する。
+- 表内にあるすべての条件を満たすタブレットを、2 GB を目標サイズとして結合する。
 
 ```SQL
-ALTER TABLE table1 MERGE TABLETS;
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - パーティション内にあるすべての条件を満たすタブレットを結合する。
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
-PARTITIONS (p1, p2, p3);
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - ID ごとに特定のタブレットを結合する。
@@ -1437,7 +1441,9 @@ PARTITIONS (p1, p2, p3);
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959);
+(9588958, 9588959)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 ## 参考文献
@@ -1447,4 +1453,3 @@ ALTER TABLE table1 MERGE TABLETS
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```

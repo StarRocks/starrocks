@@ -485,7 +485,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
   - 触发合并（MERGE）的条件：
-    - Tablet 的大小**小于** `tablet_reshard_target_size`。
+    - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
 详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
@@ -1422,14 +1422,18 @@ ALTER TABLE table1 SPLIT TABLETS
 - 将表中所有符合条件的 Tablet 合并，目标大小为 1 GB（默认值）。
 
 ```SQL
-ALTER TABLE table1 MERGE TABLETS;
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - 将指定分区中所有满足条件的 Tablet 合并。
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
-PARTITIONS (p1, p2, p3);
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 - 按 ID 合并特定 Tablet。
@@ -1437,7 +1441,9 @@ PARTITIONS (p1, p2, p3);
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959);
+(9588958, 9588959)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
 ```
 
 ## 相关参考
@@ -1447,4 +1453,3 @@ ALTER TABLE table1 MERGE TABLETS
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```
