@@ -479,7 +479,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 パラメータ：
 
-- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：1 GB。
+- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：1 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
 
   - SPLIT が実行される条件：
     - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
@@ -1441,9 +1441,7 @@ PROPERTIES (
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959)
-PROPERTIES (
-    "tablet_reshard_target_size"="2147483648");
+(9588958, 9588959);
 ```
 
 ## 参考文献

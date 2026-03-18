@@ -478,7 +478,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 参数说明：
 
-- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：1 GB。
+- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：1 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
 
   - 触发拆分（SPLIT）的条件：
     - Tablet 的大小**大于** `tablet_reshard_target_size`。
@@ -1441,9 +1441,7 @@ PROPERTIES (
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959)
-PROPERTIES (
-    "tablet_reshard_target_size"="2147483648");
+(9588958, 9588959);
 ```
 
 ## 相关参考
