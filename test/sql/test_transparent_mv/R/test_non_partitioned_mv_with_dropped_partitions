@@ -108,9 +108,11 @@ DROP DATABASE db_${uuid0};
 set catalog mv_iceberg_${uuid0};
 -- result:
 -- !result
-DROP DATABASE mv_iceberg_db_${uuid0};
+DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1;
 -- result:
-E: (1064, 'Database mv_iceberg_db_4099d441c7e64a828de16c8ffa5853f5 not empty')
+-- !result
+DROP DATABASE mv_iceberg_db_${uuid0} FORCE;
+-- result:
 -- !result
 DROP CATALOG mv_iceberg_${uuid0};
 -- result:

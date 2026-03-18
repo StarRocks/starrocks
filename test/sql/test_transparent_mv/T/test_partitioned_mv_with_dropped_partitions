@@ -100,5 +100,6 @@ DROP MATERIALIZED VIEW partitioned_mv_loose;
 DROP MATERIALIZED VIEW partitioned_mv_force;
 DROP DATABASE db_${uuid0};
 set catalog mv_iceberg_${uuid0};
-DROP DATABASE mv_iceberg_db_${uuid0};
+DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1;
+DROP DATABASE mv_iceberg_db_${uuid0} FORCE;
 DROP CATALOG mv_iceberg_${uuid0};
