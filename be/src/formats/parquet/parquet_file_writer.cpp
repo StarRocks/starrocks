@@ -264,7 +264,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::
         fields.push_back(std::move(node));
     }
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 Status ParquetFileWriter::init() {

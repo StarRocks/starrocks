@@ -489,7 +489,7 @@ Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
             }
         }
 
-        field->set_sub_fields(std::move(new_fields));
+        field->set_sub_fields(new_fields);
     }
     return Status::OK();
 }

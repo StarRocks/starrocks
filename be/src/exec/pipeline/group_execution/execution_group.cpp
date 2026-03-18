@@ -139,7 +139,7 @@ void NormalExecutionGroup::submit_active_drivers() {
 }
 
 void NormalExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
-    _pipelines.emplace_back(std::move(pipeline));
+    _pipelines.emplace_back(pipeline);
     _num_pipelines = _pipelines.size();
 }
 
@@ -200,7 +200,7 @@ void ColocateExecutionGroup::submit_active_drivers() {
 }
 
 void ColocateExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
-    _pipelines.emplace_back(std::move(pipeline));
+    _pipelines.emplace_back(pipeline);
     _num_pipelines = _pipelines.size();
 }
 

@@ -403,7 +403,7 @@ TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field) 
             field_names.emplace_back(child.name);
             children.emplace_back(variant_typed_desc_from_parquet_field(&child));
         }
-        return TypeDescriptor::create_struct_type(std::move(field_names), std::move(children));
+        return TypeDescriptor::create_struct_type(field_names, children);
     }
     case ColumnType::SCALAR:
         return variant_scalar_typed_desc_from_parquet_field(field);

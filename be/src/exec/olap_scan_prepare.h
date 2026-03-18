@@ -178,7 +178,7 @@ private:
 
 class ScanConjunctsManager {
 public:
-    explicit ScanConjunctsManager(ScanConjunctsManagerOptions&& opts);
+    explicit ScanConjunctsManager(const ScanConjunctsManagerOptions& opts);
 
     Status parse_conjuncts();
 

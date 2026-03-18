@@ -724,7 +724,7 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && column->is_nullable()) {
             // upgrade to nullable column
             size_t col_size = columns[i]->size();
-            columns[i] = NullableColumn::create(std::move(columns[i]), NullColumn::create(col_size, 0));
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(col_size, 0));
         }
         columns[i]->as_mutable_raw_ptr()->append(*column);
         FAIL_POINT_TRIGGER_EXECUTE(hash_join_append_bad_alloc, {

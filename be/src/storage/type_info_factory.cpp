@@ -32,7 +32,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
         const ColumnMetaPB& value_meta = column_meta_pb.children_columns(1);
         TypeInfoPtr key_type_info = get_type_info(key_meta);
         TypeInfoPtr value_type_info = get_type_info(value_meta);
-        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+        return get_map_type_info(key_type_info, value_type_info);
     }
     if (type == TYPE_STRUCT) {
         std::vector<TypeInfoPtr> field_types;
@@ -56,7 +56,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
         const TabletColumn& value_meta = col.subcolumn(1);
         TypeInfoPtr key_type_info = get_type_info(key_meta);
         TypeInfoPtr value_type_info = get_type_info(value_meta);
-        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+        return get_map_type_info(key_type_info, value_type_info);
     }
     if (col.type() == TYPE_STRUCT) {
         std::vector<TypeInfoPtr> field_types;

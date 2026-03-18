@@ -1,3 +1,4 @@
+// NOLINTBEGIN
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -5829,3 +5830,5 @@ XXH_PUBLIC_API void XXH3_generateSecret_fromSeed(void* secretBuffer, XXH64_hash_
 #if defined(__cplusplus)
 }
 #endif
+
+// NOLINTEND

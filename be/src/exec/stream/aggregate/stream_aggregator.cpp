@@ -299,7 +299,7 @@ Status StreamAggregator::_output_result_changes_without_retract(size_t chunk_siz
     Int8Column::MutablePtr ops = Int8Column::create();
     ops->append_value_multiple_times(&INSERT_OP, chunk_size);
 
-    auto final_result_chunk = _build_output_chunk(group_by_columns, std::move(agg_result_columns), false);
+    auto final_result_chunk = _build_output_chunk(group_by_columns, agg_result_columns, false);
     *result_chunk = StreamChunkConverter::make_stream_chunk(std::move(final_result_chunk), std::move(ops));
 
     return Status::OK();

@@ -565,7 +565,7 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         }
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, std::move(col));
+        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
 
         // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
         if (slot->is_nullable()) {

@@ -135,14 +135,14 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

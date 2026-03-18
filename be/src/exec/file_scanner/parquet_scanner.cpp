@@ -139,7 +139,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
             }
 
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
-            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), std::move(column));
+            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
         }
         auto range = _scan_range.ranges.at(_next_file - 1);

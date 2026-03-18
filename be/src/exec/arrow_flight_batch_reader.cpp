@@ -20,7 +20,7 @@
 namespace starrocks {
 
 ArrowFlightBatchReader::ArrowFlightBatchReader(ResultBufferMgr* result_buffer_mgr, const TUniqueId& query_id)
-        : _result_buffer_mgr(result_buffer_mgr), _query_id(std::move(query_id)) {}
+        : _result_buffer_mgr(result_buffer_mgr), _query_id(query_id) {}
 
 arrow::Status ArrowFlightBatchReader::init() {
     _schema = _result_buffer_mgr->get_arrow_schema(_query_id);

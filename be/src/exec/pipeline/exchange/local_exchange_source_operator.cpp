@@ -49,7 +49,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     // unpack chunk's const column, since Chunk#append_selective cannot be const column
     chunk->unpack_and_duplicate_const_columns();
 
-    _partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
+    _partition_chunk_queue.emplace(std::move(chunk), indexes, from, size, memory_usage);
     _partition_rows_num += size;
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, size);
@@ -74,7 +74,7 @@ Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::optional<st
     _partition_key2partial_chunks[partition_key].queue.push(std::move(chunk));
     _partition_key2partial_chunks[partition_key].num_rows += num_rows;
     _partition_key2partial_chunks[partition_key].memory_usage += memory_usage;
-    _partition_key2partial_chunks[partition_key].partition_key_datum = std::move(partition_datum);
+    _partition_key2partial_chunks[partition_key].partition_key_datum = partition_datum;
 
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, num_rows);

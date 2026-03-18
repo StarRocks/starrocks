@@ -115,7 +115,7 @@ void CompactionManager::submit_compaction_task(const CompactionCandidate& compac
             << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
             << ", candidates_size:" << candidates_size();
     auto manager = this;
-    auto tablet = std::move(compaction_candidate.tablet);
+    auto tablet = compaction_candidate.tablet;
     auto type = compaction_candidate.type;
     auto st = _compaction_pool->submit_func([tablet, task_id, manager, type] {
         auto compaction_task = tablet->create_compaction_task();

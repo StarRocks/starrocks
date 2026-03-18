@@ -195,7 +195,7 @@ Status PushBrokerReader::_convert_chunk(const ChunkPtr& from, ChunkPtr* to) {
 
         const SlotDescriptor* slot_desc = _tuple_desc->slots().at(i);
         const TypeDescriptor& type_desc = slot_desc->type();
-        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, std::move(from_col));
+        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, from_col);
 
         switch (type_desc.type) {
         case TYPE_OBJECT:

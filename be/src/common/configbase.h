@@ -89,7 +89,7 @@ inline std::string MutableString::value() const {
 }
 
 inline MutableString& MutableString::operator=(std::string s) {
-    _str.Modify(update_value, std::move(s));
+    _str.Modify(update_value, s);
     return *this;
 }
 

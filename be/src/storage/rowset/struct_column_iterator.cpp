@@ -80,8 +80,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(ColumnReader* _read
                                                              std::unique_ptr<ColumnIterator> null_iter,
                                                              std::vector<std::unique_ptr<ColumnIterator>> field_iters,
                                                              const ColumnAccessPath* path) {
-    return std::make_unique<StructColumnIterator>(_reader, std::move(null_iter), std::move(field_iters),
-                                                  std::move(path));
+    return std::make_unique<StructColumnIterator>(_reader, std::move(null_iter), std::move(field_iters), path);
 }
 
 StructColumnIterator::StructColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
