@@ -1678,18 +1678,30 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
 
 // Check missing files, like segment, delete vector, pk index sst, cols file
 static Status check_missing_files(const TabletMetadata& metadata, const lake::TabletManager* tablet_mgr,
-                                  ::starrocks::TabletMetadataEntry* entry) {
+                                  ::starrocks::TabletMetadataEntry* entry,
+                                  std::unordered_set<std::string>& known_existing_files,
+                                  std::unordered_set<std::string>& known_missing_files) {
     std::unordered_set<std::string> missing_files;
     std::shared_ptr<FileSystem> fs = nullptr;
     auto check_file = [&](const std::string& path, const std::string& filename) -> Status {
+        if (known_existing_files.count(filename)) {
+            return Status::OK();
+        }
+        if (known_missing_files.count(filename)) {
+            missing_files.emplace(filename);
+            return Status::OK();
+        }
         if (fs == nullptr) {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(path));
         }
         auto st = fs->path_exists(path);
         if (st.is_not_found()) {
+            known_missing_files.emplace(filename);
             missing_files.emplace(filename);
         } else if (!st.ok()) {
             return st;
+        } else {
+            known_existing_files.emplace(filename);
         }
         return Status::OK();
     };
@@ -1783,6 +1795,12 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
                 [&, tablet_id, max_version, min_version, tablet_result] {
                     DeferOp defer([&] { latch.count_down(); });
 
+                    // Cache file existence check results across versions to avoid redundant
+                    // object storage accesses. Higher versions are built on lower versions,
+                    // so files in higher versions are very likely present in lower versions too.
+                    std::unordered_set<std::string> known_existing_files;
+                    std::unordered_set<std::string> known_missing_files;
+
                     // get tablet metadatas within the specified version range
                     for (int64_t version = max_version; version >= min_version; --version) {
                         // don't fill meta cache to avoid polluting the cache
@@ -1795,7 +1813,8 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
                             entry->mutable_metadata()->CopyFrom(*tablet_metadata);
 
                             if (enable_check_missing_files) {
-                                auto check_st = check_missing_files(*tablet_metadata, _tablet_mgr, entry);
+                                auto check_st = check_missing_files(*tablet_metadata, _tablet_mgr, entry,
+                                                                    known_existing_files, known_missing_files);
                                 if (!check_st.ok()) {
                                     check_st.to_protobuf(tablet_result->mutable_status());
                                     return;
