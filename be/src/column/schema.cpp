@@ -171,8 +171,7 @@ void Schema::append(const FieldPtr& field) {
         _name_to_index->emplace(field->name(), _fields.size() - 1);
     } else {
         if (_name_to_index_append_buffer == nullptr) {
-            _name_to_index_append_buffer =
-                    std::make_shared<std::unordered_map<std::string_view, size_t>>();
+            _name_to_index_append_buffer = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index_append_buffer->emplace(field->name(), _fields.size() - 1);
     }
