@@ -32,6 +32,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -1216,7 +1217,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
         summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, getStringByType());
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isAborted ? "Aborted" : "Finished");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);

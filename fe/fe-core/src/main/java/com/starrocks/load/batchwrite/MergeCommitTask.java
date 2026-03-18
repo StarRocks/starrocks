@@ -38,6 +38,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -639,7 +640,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             summaryProfile.addInfoString(ProfileManager.QUERY_STATE, taskState.name());
             summaryProfile.addInfoString("State Message", taskStateMessage);
             summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, LOAD_TYPE_NAME);
-            summaryProfile.addInfoString("StarRocks Version",
+            summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                     String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
             summaryProfile.addInfoString("Default Db", tableRef.getDbName());
             summaryProfile.addInfoString("Table", tableRef.getTableName());
@@ -647,7 +648,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, warehouseName);
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(collectProfileCostMs.get()));
-            summaryProfile.addInfoString("IsProfileAsync", String.valueOf(true));
+            summaryProfile.addInfoString(ProfileKeyDictionary.IS_PROFILE_ASYNC, String.valueOf(true));
             summaryProfile.addInfoString("Pending Time",
                     DebugUtil.getPrettyStringMs(loadTimeTrace.pendingCostMs.get()));
             summaryProfile.addInfoString("Label", label);
