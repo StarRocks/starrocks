@@ -476,4 +476,3 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
 }
 
 } // namespace starrocks
-
