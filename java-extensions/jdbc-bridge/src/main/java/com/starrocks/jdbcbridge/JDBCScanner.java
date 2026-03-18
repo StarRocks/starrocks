@@ -30,8 +30,17 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -43,6 +52,8 @@ import java.util.Set;
 import java.util.UUID;
 
 public class JDBCScanner {
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
+
     private String driverLocation;
     private HikariDataSource dataSource;
     private JDBCScanContext scanContext;
@@ -53,11 +64,16 @@ public class JDBCScanner {
     private List<String> resultColumnClassNames;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
+    private final boolean isOracleDriver;
+    private final ZoneId queryTimeZone;
+    private ZoneId oracleSessionTimeZone;
     ClassLoader classLoader;
 
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
         this.scanContext = scanContext;
+        this.isOracleDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("oracle");
+        this.queryTimeZone = resolveQueryTimeZone(scanContext.getQueryTimeZone());
     }
 
     public void open() throws Exception {
@@ -92,6 +108,7 @@ public class JDBCScanner {
         classLoader = cacheItem.getClassLoader();
 
         connection = dataSource.getConnection();
+        initOracleSessionTimeZoneIfNeeded();
         connection.setAutoCommit(false);
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY);
@@ -126,6 +143,18 @@ public class JDBCScanner {
 
     private static String computeCacheKey(String username, String password, String jdbcUrl) {
         return username + "/" + password + "/" + jdbcUrl;
+    }
+
+    private void initOracleSessionTimeZoneIfNeeded() throws Exception {
+        if (!isOracleDriver) {
+            return;
+        }
+        try (PreparedStatement getSessionTimeZoneStmt = connection.prepareStatement("SELECT SESSIONTIMEZONE FROM DUAL");
+                ResultSet rs = getSessionTimeZoneStmt.executeQuery()) {
+            if (rs.next()) {
+                oracleSessionTimeZone = resolveOracleSessionTimeZone(rs.getString(1));
+            }
+        }
     }
 
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
@@ -189,19 +218,22 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = resultObject;
                 } else if (resultObject instanceof Blob) {
                     dataColumn[resultNumRows] = resultObject;
-                } else if (dataColumn instanceof String[] && resultObject instanceof String) {
-                    // if both sides are String, assign value directly to avoid additional calls to getString
-                    dataColumn[resultNumRows] = resultObject;
-                } else if (!(dataColumn instanceof String[])) {
+                } else if (dataColumn instanceof String[]) {
+                    if (shouldConvertOracleTemporalStringColumn(i)) {
+                        dataColumn[resultNumRows] = convertOracleTemporalValueToString(i, resultObject);
+                    } else if (resultObject instanceof String) {
+                        // if both sides are String, assign value directly to avoid additional calls to getString
+                        dataColumn[resultNumRows] = resultObject;
+                    } else {
+                        dataColumn[resultNumRows] = resultSet.getString(i + 1);
+                    }
+                } else {
                     if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
                         dataColumn[resultNumRows] = new BigInteger(resultObject.toString());
                     } else {
                         // for other general class type, assign value directly
                         dataColumn[resultNumRows] = resultObject;
                     }
-                } else {
-                    // for non-general class type, use string representation
-                    dataColumn[resultNumRows] = resultSet.getString(i + 1);
                 }
             }
             resultNumRows++;
@@ -223,5 +255,128 @@ public class JDBCScanner {
         if (connection != null) {
             connection.close();
         }
+    }
+
+    private static final DateTimeFormatter OFFSET_TS_FORMATTER = new DateTimeFormatterBuilder()
+            .appendPattern("yyyy-MM-dd HH:mm:ss")
+            .optionalStart()
+            .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+            .optionalEnd()
+            .appendLiteral(' ')
+            .appendOffset("+HH:MM", "+00:00")
+            .toFormatter();
+
+    private static final DateTimeFormatter ZONE_TS_FORMATTER = new DateTimeFormatterBuilder()
+            .appendPattern("yyyy-MM-dd HH:mm:ss")
+            .optionalStart()
+            .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+            .optionalEnd()
+            .appendLiteral(' ')
+            .appendZoneId()
+            .toFormatter();
+
+    private ZoneId resolveQueryTimeZone(String queryTimeZoneValue) {
+        if (!isOracleDriver || queryTimeZoneValue == null || queryTimeZoneValue.isEmpty()) {
+            return null;
+        }
+        try {
+            return ZoneId.of(queryTimeZoneValue);
+        } catch (DateTimeException ignored) {
+            try {
+                return ZoneId.of(queryTimeZoneValue, ZoneId.SHORT_IDS);
+            } catch (DateTimeException ex) {
+                throw new IllegalArgumentException("invalid query time zone: " + queryTimeZoneValue, ex);
+            }
+        }
+    }
+
+    private ZoneId resolveOracleSessionTimeZone(String sessionTimeZoneValue) {
+        if (sessionTimeZoneValue == null || sessionTimeZoneValue.isEmpty()) {
+            return null;
+        }
+        String normalized = sessionTimeZoneValue.trim();
+        try {
+            if (normalized.startsWith("+") || normalized.startsWith("-")) {
+                return ZoneOffset.of(normalized);
+            }
+            if (normalized.matches("^\\d{2}:\\d{2}$")) {
+                return ZoneOffset.of("+" + normalized);
+            }
+            return ZoneId.of(normalized);
+        } catch (DateTimeException ignored) {
+            try {
+                return ZoneId.of(normalized, ZoneId.SHORT_IDS);
+            } catch (DateTimeException ex) {
+                throw new IllegalArgumentException("invalid oracle session time zone: " + sessionTimeZoneValue, ex);
+            }
+        }
+    }
+
+    private boolean isOracleTimestampWithLocalTimeZoneClass(String className) {
+        return "oracle.sql.TIMESTAMPLTZ".equals(className);
+    }
+
+    private boolean isOracleTimestampWithTimeZoneClass(String className) {
+        return "oracle.sql.TIMESTAMPTZ".equals(className);
+    }
+
+    private boolean isOracleTemporalClass(String className) {
+        return "oracle.sql.TIMESTAMP".equals(className) ||
+                isOracleTimestampWithLocalTimeZoneClass(className) ||
+                isOracleTimestampWithTimeZoneClass(className);
+    }
+
+    private boolean shouldConvertOracleTemporalStringColumn(int columnIndex) {
+        return isOracleDriver && queryTimeZone != null && isOracleTemporalClass(resultColumnClassNames.get(columnIndex));
+    }
+
+    private String convertOracleTemporalValueToString(int columnIndex, Object resultObject) throws Exception {
+        String className = resultColumnClassNames.get(columnIndex);
+        int jdbcColumnIndex = columnIndex + 1;
+
+        if (isOracleTimestampWithLocalTimeZoneClass(className) && queryTimeZone != null) {
+            Timestamp ts = resultSet.getTimestamp(jdbcColumnIndex);
+            if (ts == null) {
+                return null;
+            }
+            ZoneId sourceTimeZone = oracleSessionTimeZone != null ? oracleSessionTimeZone : ZoneId.systemDefault();
+            LocalDateTime converted = ts.toLocalDateTime().atZone(sourceTimeZone)
+                    .withZoneSameInstant(queryTimeZone).toLocalDateTime();
+            return converted.format(DATETIME_FORMATTER);
+        }
+
+        String value;
+        if (resultObject instanceof String) {
+            value = (String) resultObject;
+        } else {
+            value = resultSet.getString(jdbcColumnIndex);
+        }
+        if (!isOracleTimestampWithTimeZoneClass(className)) {
+            return value;
+        }
+        return normalizeTimestampStringToQueryTimeZone(value);
+    }
+
+    private String normalizeTimestampStringToQueryTimeZone(String value) {
+        if (value == null || queryTimeZone == null) {
+            return value;
+        }
+
+        // Try offset format first: 2026-03-12 09:30:15.123456 +08:00
+        try {
+            OffsetDateTime odt = OffsetDateTime.parse(value, OFFSET_TS_FORMATTER);
+            return odt.atZoneSameInstant(queryTimeZone).toLocalDateTime().format(DATETIME_FORMATTER);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        // Try zone format: 2026-03-12 09:30:15.123456 Asia/Shanghai
+        try {
+            ZonedDateTime zdt = ZonedDateTime.parse(value, ZONE_TS_FORMATTER);
+            return zdt.withZoneSameInstant(queryTimeZone).toLocalDateTime().format(DATETIME_FORMATTER);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        // Fallback to original if not parseable
+        return value;
     }
 }
