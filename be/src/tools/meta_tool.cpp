@@ -124,7 +124,7 @@ DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
               "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap, "
-              "dump_lake_persistent_index_sst");
+              "dump_lake_persistent_index_sst, dump_page_footer");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -183,6 +183,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=show_meta --pb_meta_path=<path>
     dump_ordinal_index:
       {progname} --operation=dump_ordinal_index --file=</path/to/segment/file> --column_index=<column index>
+    dump_page_footer:
+      {progname} --operation=dump_page_footer --file=</path/to/segment/file> --column_index=<column index>
     verify_page_checksum:
       {progname} --operation=verify_page_checksum --file=</path/to/segment/file> --page_offset=<page offset> --page_size=<page size>
     show_segment_footer:
@@ -884,6 +886,111 @@ void dump_ordinal_index(const std::string& file_name, const int32_t column_index
     for (const ColumnMetaPB& child_col_meta : column_meta.children_columns()) {
         dump_ordinal_index(child_col_meta, input_file.get());
     }
+}
+
+void dump_page_footer_at(RandomAccessFile* input_file, const PagePointer& pp, const std::string& label,
+                         size_t* num_values, size_t* uncompressed_size) {
+    if (pp.size < 8) {
+        std::cout << label << ": page too small (" << pp.size << " bytes)" << std::endl;
+        return;
+    }
+    std::unique_ptr<char[]> buf(new char[pp.size]);
+    auto st = input_file->read_at_fully(pp.offset, buf.get(), pp.size);
+    if (!st.ok()) {
+        std::cout << label << ": read failed: " << st << std::endl;
+        return;
+    }
+    // Page layout: [body | PageFooterPB | footer_size(4 bytes) | checksum(4 bytes)]
+    uint32_t footer_size = starrocks::decode_fixed32_le((uint8_t*)buf.get() + pp.size - 8);
+    uint32_t footer_offset = pp.size - 8 - footer_size;
+    PageFooterPB footer;
+    if (!footer.ParseFromArray(buf.get() + footer_offset, footer_size)) {
+        std::cout << label << ": failed to parse PageFooterPB" << std::endl;
+        return;
+    }
+    if (num_values != nullptr) {
+        *num_values = footer.data_page_footer().num_values();
+    }
+    if (uncompressed_size != nullptr) {
+        *uncompressed_size = footer.uncompressed_size();
+    }
+    std::string json;
+    json2pb::Pb2JsonOptions json_options;
+    json_options.pretty_json = true;
+    json2pb::ProtoMessageToJson(footer, &json, json_options);
+    std::cout << label << ": offset=" << pp.offset << " size=" << pp.size << std::endl;
+    std::cout << json << std::endl;
+}
+
+void dump_page_footer(const std::string& file_name, int32_t column_index) {
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto input_file = std::move(res).value();
+    SegmentFooterPB footer;
+    auto status = get_segment_footer(input_file.get(), &footer);
+    if (!status.ok()) {
+        std::cout << "get footer failed: " << status.to_string() << std::endl;
+        return;
+    }
+
+    if (column_index < 0 || column_index >= footer.columns_size()) {
+        std::cout << "invalid column_index " << column_index << ", segment has " << footer.columns_size() << " columns"
+                  << std::endl;
+        return;
+    }
+
+    const ColumnMetaPB& column_meta = footer.columns(column_index);
+    std::cout << "Column " << column_index << ": type=" << column_meta.type()
+              << " encoding=" << EncodingTypePB_Name(column_meta.encoding())
+              << " compression=" << CompressionTypePB_Name(column_meta.compression())
+              << " num_rows=" << column_meta.num_rows() << std::endl;
+
+    // Dump dictionary page footer if present
+    if (column_meta.has_dict_page()) {
+        PagePointer dict_pp(column_meta.dict_page());
+        dump_page_footer_at(input_file.get(), dict_pp, "DICT_PAGE", nullptr, nullptr);
+    }
+
+    size_t page_total_bytes = 0;
+    size_t page_total_values = 0;
+    size_t page_total_uncompressed_size = 0;
+    // Load ordinal index and dump each data page footer
+    for (const auto& index_meta : column_meta.indexes()) {
+        if (index_meta.type() != ColumnIndexTypePB::ORDINAL_INDEX) {
+            continue;
+        }
+        const OrdinalIndexPB& ordinal_index_meta = index_meta.ordinal_index();
+        auto reader = std::make_unique<OrdinalIndexReader>();
+        starrocks::IndexReadOptions opts;
+        starrocks::OlapReaderStatistics stats;
+        opts.use_page_cache = false;
+        opts.read_file = input_file.get();
+        opts.stats = &stats;
+
+        auto load_st = reader->load(opts, ordinal_index_meta, column_meta.num_rows());
+        if (!load_st.ok()) {
+            std::cout << "load ordinal index failed: " << load_st.status() << std::endl;
+            return;
+        }
+
+        std::cout << "Total data pages: " << reader->num_data_pages() << std::endl;
+        auto iter = reader->begin();
+        while (iter.valid()) {
+            auto pp = iter.page();
+            size_t num_values = 0, uncompressed_size = 0;
+            std::string label = "DATA_PAGE(" + std::to_string(iter.page_index()) + ")";
+            dump_page_footer_at(input_file.get(), pp, label, &num_values, &uncompressed_size);
+            page_total_bytes += pp.size;
+            page_total_uncompressed_size += uncompressed_size;
+            page_total_values += num_values;
+            iter.next();
+        }
+    }
+    std::cout << "page_total_bytes=" << page_total_bytes << ", page_total_values=" << page_total_values
+              << ", page_total_uncompressed_size=" << page_total_uncompressed_size << std::endl;
 }
 
 // This function will check the consistency of tablet meta and segment_footer
@@ -1623,6 +1730,16 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         dump_ordinal_index(FLAGS_file, FLAGS_column_index);
+    } else if (FLAGS_operation == "dump_page_footer") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump page footer" << std::endl;
+            return -1;
+        }
+        if (FLAGS_column_index == -1) {
+            std::cout << "no column_index flag for dump page footer" << std::endl;
+            return -1;
+        }
+        dump_page_footer(FLAGS_file, FLAGS_column_index);
     } else if (FLAGS_operation == "verify_page_checksum") {
         if (FLAGS_file == "") {
             std::cout << "no file flag for verify page checksum" << std::endl;
