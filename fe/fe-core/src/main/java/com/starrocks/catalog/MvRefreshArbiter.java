@@ -26,22 +26,14 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-<<<<<<< HEAD
-import com.starrocks.sql.common.PCell;
-=======
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.common.PCellUtils;
->>>>>>> e378f0dd06 ([BugFix] Fix MV rewrite ignoring dropped partitions in base table  (#70130))
+import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
 import java.util.List;
-=======
->>>>>>> e378f0dd06 ([BugFix] Fix MV rewrite ignoring dropped partitions in base table  (#70130))
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;

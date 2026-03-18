@@ -326,21 +326,14 @@ public abstract class MVTimelinessArbiter {
                 return null;
             }
         }
-<<<<<<< HEAD
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
-            adds.keySet().stream().forEach(mvPartitionName ->
-                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
-=======
-        PCellSortedSet adds = diff.getAdds();
-        PCellSortedSet deletes = diff.getDeletes();
-        if (adds != null && !adds.isEmpty()) {
-            mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
->>>>>>> e378f0dd06 ([BugFix] Fix MV rewrite ignoring dropped partitions in base table  (#70130))
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(adds.keySet());
         }
-        if (deletes != null && !deletes.isEmpty()) {
-            mvUpdateInfo.getMVToRefreshPCells().addAll(deletes);
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(deletes.keySet());
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
@@ -402,20 +395,15 @@ public abstract class MVTimelinessArbiter {
                 return null;
             }
         }
-<<<<<<< HEAD
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
-=======
-        PCellSortedSet adds = diff.getAdds();
-        PCellSortedSet deletes = diff.getDeletes();
->>>>>>> e378f0dd06 ([BugFix] Fix MV rewrite ignoring dropped partitions in base table  (#70130))
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
-            adds.keySet().stream().forEach(mvPartitionName ->
-                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(adds.keySet());
         }
-        if (deletes != null && !deletes.isEmpty()) {
-            mvUpdateInfo.getMVToRefreshPCells().addAll(deletes);
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(deletes.keySet());
         }
         return mvUpdateInfo;
     }
