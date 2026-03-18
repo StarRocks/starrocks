@@ -212,7 +212,7 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
     task_ctx->unit = std::move(unit);
     task_ctx->request_tuple_id = request_tuple_id;
     task_ctx->source_node_id = source_id;
-    task_ctx->request_chunk = std::move(request_chunk);
+    task_ctx->request_chunk = request_chunk;
     task_ctx->scan_node_id = row_pos_desc->get_scan_node_id();
 
     switch (row_position_type) {

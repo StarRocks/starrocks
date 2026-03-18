@@ -195,7 +195,7 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -465,7 +465,7 @@ Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t s
     auto& partitioner = _random_partitioners[sink_driver_sequence];
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -501,7 +501,7 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
         std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
                 std::make_shared<std::vector<uint32_t>>(num_rows);
         RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     }
     return Status::OK();
 }

@@ -245,7 +245,7 @@ private:
 };
 
 LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
-        : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
+        : _query_id(query_id), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }

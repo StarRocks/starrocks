@@ -359,7 +359,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
 
 class S3FileSystem : public FileSystem {
 public:
-    S3FileSystem(const FSOptions& options) : _options(std::move(options)) {}
+    S3FileSystem(const FSOptions& options) : _options(options) {}
     ~S3FileSystem() override = default;
 
     S3FileSystem(const S3FileSystem&) = delete;

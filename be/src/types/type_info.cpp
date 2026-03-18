@@ -313,7 +313,7 @@ TypeInfoPtr get_type_info(const TypeDescriptor& type_desc) {
         const TypeDescriptor& value_desc = type_desc.children[1];
         TypeInfoPtr key_type_info = get_type_info(key_desc);
         TypeInfoPtr value_type_info = get_type_info(value_desc);
-        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+        return get_map_type_info(key_type_info, value_type_info);
     } else if (type_desc.is_struct_type()) {
         std::vector<TypeInfoPtr> field_types;
         field_types.reserve(type_desc.children.size());

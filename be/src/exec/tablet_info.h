@@ -107,7 +107,7 @@ class OlapTableLocationParam {
 public:
     explicit OlapTableLocationParam(const TOlapTableLocationParam& t_param) {
         for (auto& location : t_param.tablets) {
-            _tablets.emplace(location.tablet_id, std::move(location));
+            _tablets.emplace(location.tablet_id, location);
         }
     }
 

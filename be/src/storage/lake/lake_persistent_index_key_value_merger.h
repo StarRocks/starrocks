@@ -35,7 +35,7 @@ class KeyValueMerger {
 public:
     explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, bool merge_base_level,
                             TabletManager* tablet_mgr, int64_t tablet_id, bool enable_multiple_output_files)
-            : _key(std::move(key)),
+            : _key(key),
               _max_rss_rowid(max_rss_rowid),
               _merge_base_level(merge_base_level),
               _tablet_mgr(tablet_mgr),

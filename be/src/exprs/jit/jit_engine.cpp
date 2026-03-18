@@ -281,25 +281,20 @@ static inline void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis 
                 llvm::FunctionPassManager function_pm;
 
                 llvm::InstCombinePass inst_combine_pass;
-                llvm::PromotePass promote_pass;
                 llvm::GVNPass gvn_pass;
-                llvm::NewGVNPass new_gvn_pass;
-                llvm::SimplifyCFGPass simplify_cfg_pass;
-                llvm::LoopVectorizePass loop_vectorize_pass;
                 llvm::SLPVectorizerPass slp_vectorize_pass;
 
                 function_pm.addPass(std::move(inst_combine_pass));
-                function_pm.addPass(std::move(promote_pass));
+                function_pm.addPass(llvm::PromotePass());
                 function_pm.addPass(std::move(gvn_pass));
-                function_pm.addPass(std::move(new_gvn_pass));
-                function_pm.addPass(std::move(simplify_cfg_pass));
-                function_pm.addPass(std::move(loop_vectorize_pass));
+                function_pm.addPass(llvm::NewGVNPass());
+                function_pm.addPass(llvm::SimplifyCFGPass());
+                function_pm.addPass(llvm::LoopVectorizePass());
                 function_pm.addPass(std::move(slp_vectorize_pass));
 
                 module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
-                llvm::GlobalOptPass global_opt;
-                module_pm.addPass(std::move(global_opt));
+                module_pm.addPass(llvm::GlobalOptPass());
             });
 
     auto module_pm = pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
@@ -451,7 +446,7 @@ static inline StatusOr<JITCallablePtr> optimize_and_finalize_module(const std::s
                                        " error: " + llvm::toString(sym.takeError()));
     }
     JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
-    return std::make_shared<JITCallable>(std::move(mem_mgr), std::move(fn_ptr));
+    return std::make_shared<JITCallable>(std::move(mem_mgr), fn_ptr);
 }
 
 #ifndef BE_TEST

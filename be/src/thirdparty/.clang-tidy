@@ -1,0 +1,2 @@
+# Third-party code: keep only naming checks.
+Checks: '-*,readability-identifier-naming'

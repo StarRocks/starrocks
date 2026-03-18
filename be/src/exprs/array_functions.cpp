@@ -136,7 +136,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
     RETURN_IF_ERROR(result);
 
     if (nullable_array != nullptr) {
-        return NullableColumn::create(std::move(result.value()), nullable_array->null_column());
+        return NullableColumn::create(result.value(), nullable_array->null_column());
     }
     return result;
 }
@@ -372,7 +372,7 @@ private:
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target))
             DCHECK_EQ(nullable->size(), result->size());
-            return NullableColumn::create(std::move(result), nullable->null_column());
+            return NullableColumn::create(result, nullable->null_column());
         }
 
         return _array_remove_non_nullable(down_cast<const ArrayColumn&>(*array), *target);
@@ -714,7 +714,7 @@ private:
         if (data_column->is_nullable()) {
             DCHECK_EQ(nullable_column->size(), result->size());
             if (nullable_column->has_null()) {
-                result = NullableColumn::create(std::move(result), nullable_column->null_column()->clone());
+                result = NullableColumn::create(result, nullable_column->null_column()->clone());
             }
         }
 
@@ -1053,7 +1053,7 @@ private:
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col))
         DCHECK_EQ(array_col->size(), result->size());
-        return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
+        return NullableColumn::create(result, merge_nullcolum(array_nullable, target_nullable));
     }
 };
 
@@ -1728,7 +1728,7 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     }
 
     if (null_result) {
-        return NullableColumn::create(std::move(dest_column), std::move(null_result));
+        return NullableColumn::create(dest_column, std::move(null_result));
     } else {
         return dest_column;
     }

@@ -85,7 +85,7 @@ private:
             : Expr(rhs),
               _cast_to_type_desc(rhs._cast_to_type_desc),
               _throw_exception_if_err(rhs._throw_exception_if_err),
-              _constant_res(rhs._constant_res != nullptr ? std::move(*(rhs._constant_res)).mutate() : nullptr) {}
+              _constant_res(rhs._constant_res != nullptr ? Column::mutate(ColumnPtr(rhs._constant_res)) : nullptr) {}
 
     Slice _unquote(Slice slice) const;
     Slice _trim(Slice slice) const;
@@ -163,7 +163,7 @@ private:
 class CastJsonToMap final : public Expr {
 public:
     CastJsonToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastJsonToMap(const CastJsonToMap& rhs) : Expr(rhs) {}
 
@@ -235,7 +235,7 @@ private:
 class CastVariantToMap final : public Expr {
 public:
     CastVariantToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
-            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+            : Expr(node), _key_cast_expr(key_cast_expr), _value_cast_expr(value_cast_expr) {}
 
     CastVariantToMap(const CastVariantToMap& rhs) : Expr(rhs) {}
 
@@ -352,9 +352,9 @@ private:
 //   cast STRUCT<tinyint, tinyint> to STRUCT<int, int>
 class CastStructExpr final : public Expr {
 public:
-    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts,
-                   std::vector<int> source_field_indices)
-            : Expr(node), _field_casts(std::move(field_casts)),
+    CastStructExpr(const TExprNode& node, std::vector<Expr*> field_casts, std::vector<int> source_field_indices)
+            : Expr(node),
+              _field_casts(std::move(field_casts)),
               _source_field_indices(std::move(source_field_indices)) {}
 
     ~CastStructExpr() override = default;
