@@ -216,7 +216,9 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             return modifiedTime;
         }
         // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
-        // persist epoch milliseconds. Normalize the legacy comparison branch to micros to avoid false positives.
+        // persist epoch milliseconds. 1e14 micros is about 1973-03-03, so any present-day epoch timestamp below
+        // that threshold is almost certainly millis rather than micros. Normalize the legacy comparison branch to
+        // micros to avoid false positives.
         return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
     }
 

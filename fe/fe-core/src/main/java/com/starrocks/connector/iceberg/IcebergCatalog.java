@@ -70,6 +70,13 @@ import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 public interface IcebergCatalog extends MemoryTrackable {
     Logger DEFAULT_LOGGER = LogManager.getLogger(IcebergCatalog.class);
     String EMPTY_PARTITION_NAME = "";
+    // Iceberg PARTITIONS metadata table column offsets.
+    int UNPARTITIONED_LAST_UPDATED_AT_COLUMN_INDEX = 7;
+    int UNPARTITIONED_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX = 8;
+    int PARTITION_DATA_COLUMN_INDEX = 0;
+    int SPEC_ID_COLUMN_INDEX = 1;
+    int PARTITION_LAST_UPDATED_AT_COLUMN_INDEX = 9;
+    int PARTITION_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX = 10;
 
     default Logger getLogger() {
         return DEFAULT_LOGGER;
@@ -315,9 +322,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             // Get the last updated time of the table according to the table schema
                             // last_updated_at can be null if the referenced snapshot has been expired.
                             // Use Long wrapper to avoid NPE during auto-unboxing.
-                            long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
+                            long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row,
+                                    UNPARTITIONED_LAST_UPDATED_AT_COLUMN_INDEX,
                                     EMPTY_PARTITION_NAME, snapshotId);
-                            long version = getPartitionVersion(icebergTable, row, 8,
+                            long version = getPartitionVersion(icebergTable, row,
+                                    UNPARTITIONED_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX,
                                     EMPTY_PARTITION_NAME, snapshotId);
                             partition = new Partition(lastUpdated, version);
                             break;
@@ -325,11 +334,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                     }
                 }
                 if (partition == null) {
-                    long tableLastestSnapshotTime = getTableLastestSnapshotTime(icebergTable, logger);
+                    long tableLatestSnapshotTime = getTableLatestSnapshotTime(icebergTable, logger);
                     long tableLatestSnapshotVersion = getTableLatestSnapshotVersion(icebergTable, logger);
                     logger.warn("The unpartitioned table [{}] has no partitions in PartitionsTable, " +
-                            "using {} as last updated time", nativeTable.name(), tableLastestSnapshotTime);
-                    partition = new Partition(tableLastestSnapshotTime, tableLatestSnapshotVersion);
+                            "using {} as last updated time", nativeTable.name(), tableLatestSnapshotTime);
+                    partition = new Partition(tableLatestSnapshotTime, tableLatestSnapshotVersion);
                 }
                 partitionMap.put(EMPTY_PARTITION_NAME, partition);
             } catch (IOException e) {
@@ -354,8 +363,8 @@ public interface IcebergCatalog extends MemoryTrackable {
                     try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
                         for (StructLike row : rows) {
                             // Get the partition data/spec id/last updated time according to the table schema
-                            StructProjection partitionData = row.get(0, StructProjection.class);
-                            int specId = row.get(1, Integer.class);
+                            StructProjection partitionData = row.get(PARTITION_DATA_COLUMN_INDEX, StructProjection.class);
+                            int specId = row.get(SPEC_ID_COLUMN_INDEX, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
 
                             // Old partition specs may be referenced in metadata even if they have been deleted. Skip them.
@@ -366,8 +375,10 @@ public interface IcebergCatalog extends MemoryTrackable {
                             String partitionName =
                                     PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
                             long lastUpdated =
-                                    getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                            long version = getPartitionVersion(icebergTable, row, 10, partitionName, snapshotId);
+                                    getPartitionLastUpdatedTime(icebergTable, row, PARTITION_LAST_UPDATED_AT_COLUMN_INDEX,
+                                            partitionName, snapshotId);
+                            long version = getPartitionVersion(icebergTable, row,
+                                    PARTITION_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX, partitionName, snapshotId);
                             Partition partition = new Partition(lastUpdated, version, specId);
                             partitionMap.put(partitionName, partition);
                         }
@@ -404,7 +415,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
         if (lastUpdated == -1) {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
-            lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
+            lastUpdated = getTableLatestSnapshotTime(icebergTable, logger);
             logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
                     "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
         }
@@ -438,8 +449,8 @@ public interface IcebergCatalog extends MemoryTrackable {
         return getTableLatestSnapshotVersion(icebergTable, logger);
     }
 
-    private long getTableLastestSnapshotTime(IcebergTable icebergTable,
-                                             Logger logger) {
+    private long getTableLatestSnapshotTime(IcebergTable icebergTable,
+                                            Logger logger) {
         Table nativeTable = icebergTable.getNativeTable();
         // currentSnapshot() is Iceberg's canonical pointer to the latest snapshot in the table's current metadata.
         // We intentionally do not scan table.snapshots(): the fallback only needs the current head snapshot time.

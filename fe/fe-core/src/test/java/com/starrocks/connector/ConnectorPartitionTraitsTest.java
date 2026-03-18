@@ -301,6 +301,8 @@ public class ConnectorPartitionTraitsTest {
 
     @Test
     public void testDefaultTraitsKeepsLegacyIcebergMillisAndMicrosCompatible() {
+        long legacyModifiedTimeMillis = 1_710_000_000_000L;
+        long latestModifiedTimeMicros = 1_710_000_000_000_000L;
         DefaultTraits traits = new DefaultTraits() {
             @Override
             public boolean isSupportPCTRefresh() {
@@ -347,7 +349,7 @@ public class ConnectorPartitionTraitsTest {
                 return Map.of("p1", new PartitionInfo() {
                     @Override
                     public long getModifiedTime() {
-                        return 100_000L;
+                        return latestModifiedTimeMicros;
                     }
 
                     @Override
@@ -373,7 +375,8 @@ public class ConnectorPartitionTraitsTest {
         // Historical metadata may have stored modifiedTime in milliseconds while current Iceberg partition
         // metadata uses microseconds for the same wall-clock instant.
         context.getBaseTableRefreshInfo(baseTableInfo)
-                .put("p1", new MaterializedView.BasePartitionInfo(-1, 100L, 100L));
+                .put("p1", new MaterializedView.BasePartitionInfo(-1, legacyModifiedTimeMillis,
+                        legacyModifiedTimeMillis));
 
         Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
         Assertions.assertEquals(Set.of(), updated);
