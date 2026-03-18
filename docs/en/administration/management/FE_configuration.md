@@ -3292,6 +3292,51 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the Range-based Distribution semantic for table creation.
 - Introduced in: v4.1.0
 
+##### `tablet_reshard_max_parallel_tablets`
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that can be split or merged in parallel.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- Default: 1073741824 (1 GB)
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of new tablets that an old tablet can be split into.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- Default: 259200000 (72 hours)
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_colocate_max_tablets`
+
+- Default: 1048576
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that can be colocated in a single BE/CN.
+- Introduced in: v4.1.0
+
 ### Shared-data
 
 ##### `aws_s3_access_key`
