@@ -1649,7 +1649,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_int<TYPE_INT>(ctx.get(), columns).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(4, v->get_data()[0]);
     }
 
@@ -1668,7 +1668,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(9, v->get_data()[0]);
     }
 
@@ -1751,7 +1751,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_string(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(8, v->get_data()[0]);
     }
 
@@ -1768,7 +1768,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_date(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(3, v->get_data()[0]);
     }
 
@@ -1785,7 +1785,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_datetime(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(0, v->get_data()[0]);
     }
 
