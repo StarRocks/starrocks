@@ -20,10 +20,15 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     private static MTable m1;
@@ -256,6 +262,30 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
+        });
+    }
+
+    @Test
+    public void testTransparentRewritePreservesSemanticsWhenMvCopyLockFails() {
+        withPartialScanMv(() -> {
+            MaterializedView mv = getMv("test", "mv0");
+            long mvDbId = mv.getDbId();
+            long mvTableId = mv.getId();
+            new MockUp<Locker>() {
+                @Mock
+                public boolean tryLockTableWithIntensiveDbLock(Invocation invocation, Long dbId, Long tableId,
+                                                               LockType lockType, long timeout, TimeUnit unit) {
+                    if (lockType == LockType.READ && mvDbId == dbId && mvTableId == tableId) {
+                        return false;
+                    }
+                    return invocation.proceed(dbId, tableId, lockType, timeout, unit);
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ":UNION");
+            PlanTestBase.assertContains(plan, "mv0");
+            PlanTestBase.assertContains(plan, "m1");
         });
     }
 
