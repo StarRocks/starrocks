@@ -68,6 +68,7 @@ public class ClusterSnapshot {
         this.finishedTimeMs = snapshot.finishedTimeMs;
         this.feJournalId = snapshot.feJournalId;
         this.starMgrJournalId = snapshot.starMgrJournalId;
+        this.clusterSnapshotInfo = snapshot.clusterSnapshotInfo;
     }
 
     public void setJournalIds(long feJournalId, long starMgrJournalId) {

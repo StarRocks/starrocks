@@ -29,6 +29,7 @@ import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
+import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -1320,13 +1321,14 @@ public class ExternalClusterSnapshotJobTest {
         Assertions.assertEquals(200L, sv.getVTabletGroupId());
     }
 
+    // ==================== Tests for fire-and-forget runCleaningJob ====================
+
     @Test
-    public void testRunCleaningJobSuccess() throws Exception {
+    public void testRunCleaningJobFireAndForget() throws Exception {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
                 storageVolumeName, System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.CLEANING);
 
-        // Create a snapshot diff with deleted partitions
         Object diff = createSnapshotDiffWithDeletedPartition();
         setSnapshotDiff(job, diff);
 
@@ -1334,17 +1336,23 @@ public class ExternalClusterSnapshotJobTest {
         mockWarehouseAliveNodes();
         mockGetVirtualTabletId();
 
+        // Verify default cleaningCompleted is true
+        Assertions.assertTrue(job.isCleaningCompleted());
+
         CheckpointController feController = new CheckpointController("fe", null, "");
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        // Use reflection to call protected method
         java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
                 "runCleaningJob", SnapshotJobContext.class);
         method.setAccessible(true);
         method.invoke(job, context);
 
+        // runCleaningJob should immediately transition to FINISHED
         Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        // cleaningCompleted should be false (tasks dispatched, not yet confirmed)
+        Assertions.assertFalse(job.isCleaningCompleted());
+        // Tasks should have been created
         Assertions.assertNotNull(job.getLakeSnapshotBatchTask());
     }
 
@@ -1354,7 +1362,6 @@ public class ExternalClusterSnapshotJobTest {
                 storageVolumeName, System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.CLEANING);
 
-        // Create a snapshot diff with both deleted and changed partitions
         Object diff = createEmptySnapshotDiff();
         @SuppressWarnings("unchecked")
         List<Object> deletedPartitions = (List<Object>) diff.getClass().getMethod("getDeletedPartitions").invoke(diff);
@@ -1379,16 +1386,13 @@ public class ExternalClusterSnapshotJobTest {
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        // Use reflection to call protected method
         java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
                 "runCleaningJob", SnapshotJobContext.class);
         method.setAccessible(true);
         method.invoke(job, context);
 
         Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
-        AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-        Assertions.assertNotNull(batchTask);
-        Assertions.assertTrue(batchTask.getAllTasks().size() > 0);
+        Assertions.assertFalse(job.isCleaningCompleted());
     }
 
     @Test
@@ -1397,11 +1401,10 @@ public class ExternalClusterSnapshotJobTest {
                 storageVolumeName, System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.CLEANING);
 
-        // Create a snapshot diff with deleted partitions
         Object diff = createSnapshotDiffWithDeletedPartition();
         setSnapshotDiff(job, diff);
 
-        // Mock aggregator to fail (returns 0)
+        // Mock aggregator to fail (returns 0) -> createDeleteClusterSnasphotTasks throws
         mockAggregatorFailure();
         mockGetVirtualTabletId();
 
@@ -1409,11 +1412,8 @@ public class ExternalClusterSnapshotJobTest {
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        // Use reflection to call protected method
-        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
-                "runCleaningJob", SnapshotJobContext.class);
-        method.setAccessible(true);
-        method.invoke(job, context);
+        // run() catches the exception and sets ERROR state
+        job.run(context);
 
         Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
     }
@@ -1424,7 +1424,6 @@ public class ExternalClusterSnapshotJobTest {
                 storageVolumeName, System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.CLEANING);
 
-        // Create an empty snapshot diff
         Object diff = createEmptySnapshotDiff();
         setSnapshotDiff(job, diff);
 
@@ -1434,16 +1433,30 @@ public class ExternalClusterSnapshotJobTest {
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        // Use reflection to call protected method
         java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
                 "runCleaningJob", SnapshotJobContext.class);
         method.setAccessible(true);
         method.invoke(job, context);
 
         Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        Assertions.assertFalse(job.isCleaningCompleted());
         AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
         Assertions.assertNotNull(batchTask);
         Assertions.assertEquals(0, batchTask.getAllTasks().size());
+    }
+
+    @Test
+    public void testCleaningCompletedFieldInCopyConstructor() throws Exception {
+        ExternalClusterSnapshotJob original = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        original.setCleaningCompleted(false);
+
+        ExternalClusterSnapshotJob copy = new ExternalClusterSnapshotJob(original);
+        Assertions.assertFalse(copy.isCleaningCompleted());
+
+        original.setCleaningCompleted(true);
+        ExternalClusterSnapshotJob copy2 = new ExternalClusterSnapshotJob(original);
+        Assertions.assertTrue(copy2.isCleaningCompleted());
     }
 
     @Test
@@ -1452,7 +1465,6 @@ public class ExternalClusterSnapshotJobTest {
                 storageVolumeName, System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.CLEANING);
 
-        // Create a snapshot diff with deleted partitions
         Object diff = createSnapshotDiffWithDeletedPartition();
         setSnapshotDiff(job, diff);
 
@@ -1460,9 +1472,294 @@ public class ExternalClusterSnapshotJobTest {
         mockWarehouseAliveNodes();
         mockGetVirtualTabletId();
 
-        // Replay should call runCleaningJob
+        // Replay should call runCleaningJob which transitions to FINISHED
         job.replay();
 
         Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        Assertions.assertFalse(job.isCleaningCompleted());
+    }
+
+    // ==================== Tests for scheduler retryPendingCleanup ====================
+
+    @Test
+    public void testRetryPendingCleanupSkipsNonExternalJob() throws Exception {
+        // Add a non-external ClusterSnapshotJob
+        ClusterSnapshotJob normalJob = new ClusterSnapshotJob(1L, "test", storageVolumeName,
+                System.currentTimeMillis());
+        normalJob.setState(ClusterSnapshotJobState.FINISHED);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, normalJob);
+
+        // retryPendingCleanup should simply skip it without errors
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // No exception thrown - pass
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupSkipsAlreadyCleanedJob() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(true); // already cleaned
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // cleaningCompleted should remain true
+        Assertions.assertTrue(job.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupSkipsNonFinishedJob() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.UPLOADING); // not FINISHED
+        job.setCleaningCompleted(false);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // Should not have changed anything
+        Assertions.assertFalse(job.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupSkipsStillRunningTasks() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockGetVirtualTabletId();
+
+        // Set up a batch task with running (not finished) tasks
+        AgentBatchTask batchTask = new AgentBatchTask();
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, -1L, true,
+                true, 100L, 1L);
+        batchTask.addTask(task);
+        // task is not finished yet
+
+        java.lang.reflect.Field batchField = ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
+        batchField.setAccessible(true);
+        batchField.set(job, batchTask);
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // Should still be not completed since tasks are still running
+        Assertions.assertFalse(job.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupMarksCompletedOnAllSuccess() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+
+        // Create a batch task with finished, successful tasks
+        AgentBatchTask batchTask = new AgentBatchTask();
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, -1L, true,
+                true, 100L, 1L);
+        task.setFinished(true);
+        batchTask.addTask(task);
+
+        java.lang.reflect.Field batchField = ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
+        batchField.setAccessible(true);
+        batchField.set(job, batchTask);
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // All tasks succeeded -> cleaningCompleted should be true
+        Assertions.assertTrue(job.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupRetriesOnFailedTasks() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockGetVirtualTabletId();
+
+        // Create a batch task with finished but failed task
+        AgentBatchTask batchTask = new AgentBatchTask();
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, -1L, true,
+                true, 100L, 1L);
+        task.setFinished(true);
+        task.setFailed(true);
+        task.setErrorMsg("delete failed on CN");
+        batchTask.addTask(task);
+
+        java.lang.reflect.Field batchField = ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
+        batchField.setAccessible(true);
+        batchField.set(job, batchTask);
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // Should still be not completed, but new tasks should have been dispatched
+        Assertions.assertFalse(job.isCleaningCompleted());
+        // The batch task should have been replaced with new tasks
+        AgentBatchTask newBatchTask = job.getLakeSnapshotBatchTask();
+        Assertions.assertNotNull(newBatchTask);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupHandlesNullSnapshotDiff() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+        // snapshotDiff is null by default
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // snapshotDiff is null -> should mark cleaningCompleted as true
+        Assertions.assertTrue(job.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupEmptyBatchTask() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockGetVirtualTabletId();
+
+        // Empty batch task (taskNum == 0) -> should re-create and dispatch tasks
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        // Tasks should have been created
+        Assertions.assertFalse(job.isCleaningCompleted());
+        AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
+        Assertions.assertNotNull(batchTask);
+        Assertions.assertTrue(batchTask.getTaskNum() > 0);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    // ==================== Tests for ClusterSnapshotMgr job expiry protection ====================
+
+    @Test
+    public void testClearFinishedJobSkipsPendingCleanup() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false); // still has pending cleanup
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public void clearClusterSnapshotFromRemote(ClusterSnapshotJob j) throws StarRocksException {
+                // Mock implementation
+            }
+        };
+
+        clusterSnapshotMgr.clearFinishedAutomatedClusterSnapshot(null);
+
+        // Job should NOT be expired because cleaningCompleted is false
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testClearFinishedJobExpiresCompletedCleanup() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(true); // cleanup done
+
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public void clearClusterSnapshotFromRemote(ClusterSnapshotJob j) throws StarRocksException {
+                // Mock implementation
+            }
+        };
+
+        clusterSnapshotMgr.clearFinishedAutomatedClusterSnapshot(null);
+
+        // Job should be expired since cleaningCompleted is true
+        Assertions.assertEquals(ClusterSnapshotJobState.DELETED, job.getState());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
     }
 }

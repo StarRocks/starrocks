@@ -545,7 +545,11 @@ public class LeaderImpl {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().finishSnapshotTask(
                     (ExternalClusterSnapshotTask) task, request);
         } finally {
-            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+            // Keep failed tasks in queue for automatic retry via heartbeat re-dispatch,
+            // only remove if task succeeded or exhausted retries (failedTimes >= 3)
+            if (task.isFinished() || task.getFailedTimes() >= 3) {
+                AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+            }
         }
     }
 

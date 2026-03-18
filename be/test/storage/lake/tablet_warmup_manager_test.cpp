@@ -24,6 +24,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"
+#include "common/config.h"
 #include "common/thread/threadpool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"

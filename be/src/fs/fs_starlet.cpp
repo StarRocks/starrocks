@@ -701,7 +701,7 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) 
     // For non-S3 storage types (use_raw_path=false), use default configuration
     // Starlet will use normalize_path to combine sys.root with the relative path
 #ifdef BE_TEST
-    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
+    absl::StatusOr<starrocks::FileSystemHandle> fs_st(absl::UnimplementedError(""));
     TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
     if (absl::IsUnimplemented(fs_st.status())) {
         fs_st = g_worker->get_shard_filesystem(shard_id, conf);

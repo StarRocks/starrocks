@@ -121,12 +121,18 @@ void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int
     auto rpc_ctx_ptr = std::make_unique<BackendSnapshotRpcCtx>(UploadSnapshotFilesRequestPB(node_req), // Copy request
                                                                std::move(node_cntl), std::move(node_resp), &rpc_ctx);
 
-    // Send async RPC
-    stub->upload_snapshot_files(rpc_ctx_ptr->cntl.get(), &rpc_ctx_ptr->request, rpc_ctx_ptr->response.get(),
-                                brpc::NewCallback(cluster_snapshot_rpc_cb, rpc_ctx_ptr->cntl.get(),
-                                                  rpc_ctx_ptr->response.get(), rpc_ctx_ptr.get()));
-
+    // Cache raw pointers before moving ownership, then add to rpc_ctx BEFORE
+    // dispatching the async RPC to prevent use-after-free: if the RPC completes
+    // instantly, the callback may count_down() the latch, allowing the main
+    // thread's wait() to return and destroy rpc_ctx before add_rpc_context runs.
+    auto* cntl_raw = rpc_ctx_ptr->cntl.get();
+    auto* resp_raw = rpc_ctx_ptr->response.get();
+    auto* ctx_raw = rpc_ctx_ptr.get();
     rpc_ctx.add_rpc_context(std::move(rpc_ctx_ptr));
+
+    // Send async RPC (ownership already transferred to rpc_ctx)
+    stub->upload_snapshot_files(cntl_raw, &ctx_raw->request, resp_raw,
+                                brpc::NewCallback(cluster_snapshot_rpc_cb, cntl_raw, resp_raw, ctx_raw));
 }
 
 Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id, int64_t pre_version,

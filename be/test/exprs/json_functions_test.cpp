@@ -193,7 +193,7 @@ TEST_F(JsonFunctionsTest, get_json_string_scalar) {
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-        for (int j = 0; j < std::size(values); ++j) {
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
             ASSERT_EQ(length_strings[j], v->get_slice(j).to_string());
         }
 

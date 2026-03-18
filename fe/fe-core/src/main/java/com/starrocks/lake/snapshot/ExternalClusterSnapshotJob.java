@@ -58,6 +58,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     @SerializedName(value = "snapshotDiff")
     private ClusterSnapshotDiff snapshotDiff;
 
+    @SerializedName(value = "cleaningCompleted")
+    private boolean cleaningCompleted = true;
+
     private AgentBatchTask lakeSnapshotBatchTask = new AgentBatchTask();
 
     // for deserialization
@@ -74,6 +77,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     public ExternalClusterSnapshotJob(ExternalClusterSnapshotJob other) {
         super(other);
         this.snapshotDiff = other.snapshotDiff;
+        this.cleaningCompleted = other.cleaningCompleted;
     }
 
     @Override
@@ -114,6 +118,8 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         // create data snapshot tasks
         createUploadClusterSnapshotTasks();
+        // Persist UPLOADING only once, after snapshotDiff and tasks are fully prepared,
+        // so that replay can reconstruct the complete state.
         persistStateChange(ClusterSnapshotJobState.UPLOADING);
     }
 
@@ -123,7 +129,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         if (!batchTask.isFinished()) {
             LOG.info("data snapshot tasks not finished. job: {}", getId());
             List<AgentTask> tasks = batchTask.getUnfinishedTasks(2000);
-            AgentTask task = tasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny()
+            AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny()
                     .orElse(null);
             if (task != null) {
                 throw new StarRocksException("data snapshot task failed after try three times: " + task.getErrorMsg());
@@ -138,7 +144,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         }
         // check upload status
         List<AgentTask> allTasks = batchTask.getAllTasks();
-        AgentTask failedTask = allTasks.stream().filter(t -> (t.isFailed() || t.getFailedTimes() >= 3)).findAny()
+        AgentTask failedTask = allTasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny()
                 .orElse(null);
         if (failedTask != null) {
             throw new StarRocksException(
@@ -159,19 +165,25 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
     @Override
     protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
-        try {
-            createDeleteClusterSnasphotTasks();
-            persistStateChange(ClusterSnapshotJobState.FINISHED);
-            // Update metric with the FE image creation time when snapshot job finishes successfully
-            if (feImageCreatedTimeMs > 0) {
-                MetricRepo.GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(feImageCreatedTimeMs);
-            }
-            // Update success counter for external snapshot job
-            MetricRepo.COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS.increase(1L);
-        } catch (StarRocksException e) {
-            LOG.warn("failed to create delete cluster snapshot tasks when run finished job {}", getId(), e);
-            persistStateChange(ClusterSnapshotJobState.ERROR);
+        createDeleteClusterSnasphotTasks();
+        cleaningCompleted = false;
+        persistStateChange(ClusterSnapshotJobState.FINISHED);
+        if (feImageCreatedTimeMs > 0) {
+            MetricRepo.GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(feImageCreatedTimeMs);
         }
+        MetricRepo.COUNTER_EXTERNAL_SNAPSHOT_JOB_SUCCESS.increase(1L);
+    }
+
+    public boolean isCleaningCompleted() {
+        return cleaningCompleted;
+    }
+
+    public void setCleaningCompleted(boolean cleaningCompleted) {
+        this.cleaningCompleted = cleaningCompleted;
+    }
+
+    public ClusterSnapshotDiff getSnapshotDiff() {
+        return snapshotDiff;
     }
 
     @Override
@@ -210,6 +222,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
             task.setFinished(true);
         } else {
+            task.failed();
             task.setFailed(true);
             String errorMsg = "Unknown error";
             if (request.getTask_status().isSetError_msgs() && !request.getTask_status().getError_msgs().isEmpty()) {
@@ -350,7 +363,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                  lakeSnapshotBatchTask.getAllTasks().size());
     }
 
-    private void createDeleteClusterSnasphotTasks() throws StarRocksException {
+    void createDeleteClusterSnasphotTasks() throws StarRocksException {
         long vTabletId = getVirtualTabletId();
         lakeSnapshotBatchTask = new AgentBatchTask();
         for (PartitionVersionInfo partition : snapshotDiff.getDeletedPartitions()) {
@@ -360,8 +373,8 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             }
             partition.setAggregatorNodeId(aggregatorNodeId);
             PartitionKey partitionKey = partition.getPartitionKey();
-            ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
-                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), 
+            ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
+                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
                     -1, -1, true, true, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
             lakeSnapshotBatchTask.addTask(task);
         }
@@ -374,9 +387,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             partition.getCurrentPartitionInfo().setAggregatorNodeId(aggregatorNodeId);
             PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
-                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), 
+                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
                     -1, -1, partition.isPreviousFileBundling(), false, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
-            List<TComputeNodeTablets> computeNodeTablets = 
+            List<TComputeNodeTablets> computeNodeTablets =
                             collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
             task.setComputeNodeTablets(computeNodeTablets);
             lakeSnapshotBatchTask.addTask(task);
