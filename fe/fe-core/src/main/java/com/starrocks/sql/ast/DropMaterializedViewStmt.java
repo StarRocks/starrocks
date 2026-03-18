@@ -19,17 +19,20 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
- * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
+ * DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
  * <p>
- * Parameters
- * IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.
- * mv_name: The name of the materialized view to remove.
- * db_name: The name of db to which materialized view belongs.
- * table_name: The name of table to which materialized view belongs.
+ * Parameters:
+ * <ul>
+ *   <li>IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.</li>
+ *   <li>database: Optional database name that qualifies the materialized view.</li>
+ *   <li>mv_name: The name of the materialized view to remove, optionally qualified by database.</li>
+ *   <li>FORCE: Optional keyword to cancel stuck sync MV build jobs and restore table state so the MV can be dropped.</li>
+ * </ul>
  */
 public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/DropMaterializedViewStmt.java
     private final TableName dbMvName;
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
@@ -40,14 +43,50 @@ public class DropMaterializedViewStmt extends DdlStmt {
         super(pos);
         this.ifExists = ifExists;
         this.dbMvName = dbMvName;
+=======
+    /** True when FORCE is specified; used only for sync MVs. */
+    private final boolean forceDrop;
+    private TableRef tableRef;
+
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef) {
+        this(ifExists, false, tableRef, NodePosition.ZERO);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, TableRef tableRef, NodePosition pos) {
+        this(ifExists, false, tableRef, pos);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, boolean forceDrop, TableRef tableRef, NodePosition pos) {
+        super(pos);
+        this.ifExists = ifExists;
+        this.forceDrop = forceDrop;
+        this.tableRef = tableRef;
+>>>>>>> 625ce2965e ([Enhancement] Force Drop Sync MV recovery feature added (#70029)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/DropMaterializedViewStmt.java
     }
 
     public boolean isSetIfExists() {
         return ifExists;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/DropMaterializedViewStmt.java
     public String getMvName() {
         return dbMvName.getTbl();
+=======
+    public boolean isForceDrop() {
+        return forceDrop;
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+>>>>>>> 625ce2965e ([Enhancement] Force Drop Sync MV recovery feature added (#70029)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/DropMaterializedViewStmt.java
     }
 
     public String getDbName() {
