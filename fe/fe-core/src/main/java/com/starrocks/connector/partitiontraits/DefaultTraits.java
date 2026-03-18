@@ -186,7 +186,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                             normalizeIcebergModifiedTimeToMicros(basePartitionModifiedTime);
                     long normalizedLatestPartitionModifiedTime =
                             normalizeIcebergModifiedTimeToMicros(latestPartitionModifiedTime);
-                    if (basePartitionVersion == basePartitionModifiedTime) {
+                    if (basePartitionVersion == -1 || basePartitionVersion == basePartitionModifiedTime) {
                         // 1. for historical iceberg mv, the version is the modified time
                         if (normalizedLatestPartitionModifiedTime >= 0
                                 && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
@@ -194,8 +194,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                         }
                     } else {
                         // 2. for new iceberg mv, the version is the snapshot sequence number
-                        if (latestPartitionVersion >= 0 && (latestPartitionVersion > basePartitionVersion 
-                                || normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime)) {
+                        if (latestPartitionVersion >= 0 && (latestPartitionVersion > basePartitionVersion)) {
                             result.add(basePartitionName);
                         }
                     }
@@ -219,22 +218,6 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
         // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
         // persist epoch milliseconds. Normalize the legacy comparison branch to micros to avoid false positives.
         return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
-    }
-
-    private long getComparablePartitionVersion(MaterializedView.BasePartitionInfo basePartitionInfo,
-                                               PartitionInfo latestPartitionInfo) {
-        if (basePartitionInfo == null) {
-            return latestPartitionInfo.getVersion();
-        }
-        // Historical Iceberg MV metadata stored external partition version as modifiedTime. Keep the legacy
-        // comparison until that partition is refreshed once and rewritten with the new version token.
-        if (table.getType() == Table.TableType.ICEBERG
-                && basePartitionInfo.getVersion() == basePartitionInfo.getLastRefreshTime()) {
-            return latestPartitionInfo.getModifiedTime();
-        }
-        // Compare the connector-specific version token instead of modifiedTime directly. Some external systems
-        // (for example Iceberg) may expose timestamps that are not strictly monotonic across commits.
-        return latestPartitionInfo.getVersion();
     }
 
     @Override
