@@ -114,6 +114,66 @@ public class JDBCMetadata implements ConnectorMetadata {
         return driverName;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Creates the appropriate SchemaResolver based on configuration.
+     * Priority:
+     * 1. If schema_resolver property is specified, use that resolver
+     * 2. Otherwise, auto-detect based on driver class name
+     */
+    private JDBCSchemaResolver createSchemaResolver() {
+        // Check for explicit schema_resolver property first
+        String schemaResolverType = properties.get(JDBCResource.SCHEMA_RESOLVER);
+        if (schemaResolverType != null && !schemaResolverType.trim().isEmpty()) {
+            return createSchemaResolverFromProperty(schemaResolverType.trim());
+        }
+
+        // Fall back to driver class name detection
+        String driverClass = properties.get(JDBCResource.DRIVER_CLASS).toLowerCase();
+        if (driverClass.contains("mysql")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("postgresql")) {
+            return new PostgresSchemaResolver();
+        } else if (driverClass.contains("mariadb")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("clickhouse")) {
+            return new ClickhouseSchemaResolver(properties);
+        } else if (driverClass.contains("oracle")) {
+            return new OracleSchemaResolver(properties);
+        } else if (driverClass.contains("sqlserver")) {
+            return new SqlServerSchemaResolver();
+        } else {
+            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
+            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+        }
+    }
+
+    /**
+     * Creates a SchemaResolver from the explicitly specified resolver type.
+     * @param resolverType the type of resolver (e.g., "postgresql", "mysql")
+     * @return the appropriate JDBCSchemaResolver instance
+     */
+    private JDBCSchemaResolver createSchemaResolverFromProperty(String resolverType) {
+        switch (resolverType.toLowerCase()) {
+            case "postgresql":
+                return new PostgresSchemaResolver();
+            case "mysql":
+                return new MysqlSchemaResolver();
+            case "oracle":
+                return new OracleSchemaResolver();
+            case "sqlserver":
+                return new SqlServerSchemaResolver();
+            case "clickhouse":
+                return new ClickhouseSchemaResolver(properties);
+            default:
+                throw new StarRocksConnectorException(
+                        "Unknown schema_resolver: " + resolverType +
+                        ". Supported values: " + String.join(", ", SUPPORTED_SCHEMA_RESOLVERS));
+        }
+    }
+
+>>>>>>> 4bc3153231 ([Enhancement] oracle jdbc type mapping (#70315))
     String getJdbcUrl() {
         String jdbcUrl = properties.get(JDBCResource.URI);
         // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
