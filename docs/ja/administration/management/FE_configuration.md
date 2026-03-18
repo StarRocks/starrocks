@@ -3283,6 +3283,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE が各 BE からタブレット統計を取得する時間間隔。
 - Introduced in: -
 
+##### `enable_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: テーブル作成時に Range-based Distribution セマンティクスを有効化するかどうか。
+- Introduced in: v4.1.0
+
 ### 共有データ
 
 ##### `aws_s3_access_key`

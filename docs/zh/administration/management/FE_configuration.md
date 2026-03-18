@@ -3282,6 +3282,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 从每个 BE 获取 tablet 统计信息的时间间隔。
 - 引入版本: -
 
+##### `enable_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为建表启用 Range-based Distribution 语意。
+- 引入版本: v4.1.0
+
 ### 共享数据
 
 ##### `aws_s3_access_key`

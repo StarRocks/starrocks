@@ -326,8 +326,18 @@ key_type(k1[,k2 ...])
   :::
 
 :::note
-当使用其他 key_type 创建表时，值列不需要指定聚合类型，AGGREGATE KEY 除外。
+当使用其他 key type 创建表时，值列不需要指定聚合类型，AGGREGATE KEY 除外。
 :::
+
+### 基于范围的分布
+
+从 v4.1 版本开始，StarRocks 支持 **基于范围的分布语义**（默认禁用），该功能由 FE 配置项 `enable_range_distribution` 控制。数据将根据键列的数据范围进行排序。
+
+基于范围的分布语义与默认语义在以下方面有所不同：
+- 如果显式指定了键类型（AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY），且未指定 DISTRIBUTED BY 子句，则数据默认按范围分布。
+- 如果未指定键类型、DISTRIBUTED BY 子句或 ORDER BY 子句，则会创建采用随机分桶策略的明细表。
+- 如果未指定键类型和 DISTRIBUTED BY 子句，但指定了 ORDER BY 子句，则将创建采用基于范围的分布策略的明细表。在此情况下，DUPLICATE KEY 等同于 ORDER BY 子句，反之亦然。
+- 如果同时指定了 DUPLICATE KEY 和 ORDER BY 子句，则仅 ORDER BY 子句生效，而 DUPLICATE KEY 将被忽略。
 
 ## COMMENT
 
@@ -486,6 +496,10 @@ StarRocks 支持哈希分桶和随机分桶。如果您不配置分桶，StarRoc
   - 分桶列的值不能更新。
   - 指定后，分桶列不能修改。
   - 自 StarRocks v2.5.7 起，创建表时无需设置桶的数量。StarRocks 会自动设置桶的数量。如果您想设置此参数，请参见 [设置桶的数量](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets)。
+
+- 基于范围的分布
+
+  从 v4.1 版本开始，StarRocks 支持 **基于范围的分布语义**（默认禁用），该功能由 FE 配置项 `enable_range_distribution` 控制。详细内容，参考[基于范围的分布](#基于范围的分布)。
 
 ## Rollup 索引
 

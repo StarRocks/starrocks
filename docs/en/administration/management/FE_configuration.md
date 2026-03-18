@@ -3283,6 +3283,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+##### `enable_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Range-based Distribution semantic for table creation.
+- Introduced in: v4.1.0
+
 ### Shared-data
 
 ##### `aws_s3_access_key`
