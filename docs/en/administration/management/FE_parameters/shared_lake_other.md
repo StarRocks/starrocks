@@ -8,8 +8,6 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
-
 # FE Configuration
 
 <FEConfigMethod />
@@ -1376,4 +1374,3 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
 - Introduced in: v4.0.0
 
-<EditionSpecificFEItem />

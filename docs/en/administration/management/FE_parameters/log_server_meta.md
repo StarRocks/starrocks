@@ -604,6 +604,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## Server
 
+<EditionSpecificFEItem />
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000

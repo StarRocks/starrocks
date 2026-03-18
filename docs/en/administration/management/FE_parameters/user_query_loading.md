@@ -8,8 +8,6 @@ import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.md
 
 import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
-
 # FE Configuration
 
 <FEConfigMethod />
