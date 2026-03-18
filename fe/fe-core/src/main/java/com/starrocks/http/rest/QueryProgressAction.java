@@ -34,9 +34,7 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ProfileManager;
-import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -84,8 +82,7 @@ public class QueryProgressAction extends RestBaseAction {
             } else {
                 try {
                     result = ExplainAnalyzer.analyze(profileElement.plan,
-                            RuntimeProfileParser.parseFrom(
-                                    CompressionUtils.gzipDecompressString(profileElement.profileContent)));
+                            profileElement.getRuntimeProfile());
                 } catch (Exception e) {
                     result = "Failed to get query progress, query_id:" + queryId;
                     LOG.warn(result, e);
