@@ -39,8 +39,38 @@ import static java.lang.Math.max;
 
 public class OracleSchemaResolver extends JDBCSchemaResolver {
 
+    public static final String ORACLE_NUMBER_DEFAULT_SCALE = "oracle.number.default-scale";
+    public static final String ORACLE_NUMBER_ROUNDING_MODE = "oracle.number.rounding-mode";
+    // control DATE / TIMESTAMP / TIMESTAMP WITH LOCAL TIME ZONE
+    public static final String ORACLE_TEMPORAL_TO_DATETIME = "oracle.temporal.to-datetime";
+    // control TIMESTAMP WITH TIME ZONE
+    public static final String ORACLE_TIMESTAMPTZ_TO_DATETIME = "oracle.timestamptz.to-datetime";
+
+    // Fallback scale used when Oracle does not provide explicit scale information (e.g. NUMBER).
+    private final int defaultNumberScale;
+    private final boolean timestampToDatetime;
+    private final boolean timestampTzToDatetime;
+
     public OracleSchemaResolver() {
+        this(Map.of());
+    }
+
+    public OracleSchemaResolver(Map<String, String> properties) {
         this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
+        String scaleValue = properties.getOrDefault(ORACLE_NUMBER_DEFAULT_SCALE, "6");
+        this.timestampToDatetime = Boolean.parseBoolean(properties.getOrDefault(ORACLE_TEMPORAL_TO_DATETIME, "false"));
+        this.timestampTzToDatetime = Boolean.parseBoolean(properties.getOrDefault(ORACLE_TIMESTAMPTZ_TO_DATETIME, "false"));
+
+        int parsedScale;
+        try {
+            parsedScale = Integer.parseInt(scaleValue);
+        } catch (NumberFormatException e) {
+            parsedScale = 6;
+        }
+        // Scale must be non-negative and cannot exceed the maximum decimal precision (38).
+        parsedScale = Math.min(Math.max(parsedScale, 0),
+                PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128));
+        this.defaultNumberScale = parsedScale;
     }
 
     @Override
@@ -94,7 +124,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case Types.NUMERIC:
             // NUMBER
             case 3:
-                primitiveType = PrimitiveType.DECIMAL32;
+                primitiveType = PrimitiveType.DECIMAL128;
                 break;
             case Types.CHAR:
             case Types.NCHAR:
@@ -123,30 +153,61 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                     return TypeFactory.createVarbinary(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.DATE:
-                primitiveType = PrimitiveType.DATE;
+                primitiveType = timestampToDatetime ? PrimitiveType.DATETIME : PrimitiveType.DATE;
                 break;
-            // Don't support timestamp type, just convert it to string
+            // Timestamp types are mapped to VARCHAR by default and can be promoted to DATETIME via catalog properties.
             case Types.TIMESTAMP:
             // TIMESTAMP WITH LOCAL TIME ZONE
             case -102:
+                if (timestampToDatetime) {
+                    primitiveType = PrimitiveType.DATETIME;
+                } else {
+                    return TypeFactory.createVarcharType(64);
+                }
+                break;
             // TIMESTAMP WITH TIME ZONE
             case -101:
-                return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                if (timestampTzToDatetime) {
+                    primitiveType = PrimitiveType.DATETIME;
+                } else {
+                    return TypeFactory.createVarcharType(64);
+                }
+                break;
+
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
 
-        if (primitiveType != PrimitiveType.DECIMAL32) {
+        if (primitiveType != PrimitiveType.DECIMAL128) {
             return TypeFactory.createType(primitiveType);
         } else {
+            // Map negative scale to decimal(p + abs(s), 0) to preserve Oracle NUMBER integer width after rounding.
+            int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
             int precision = columnSize + max(-digits, 0);
-            // if user not specify numeric precision and scale, the default value is 0,
-            // we can't defer the precision and scale, can only deal it as string.
-            if (precision == 0) {
-                return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
+            int scale = digits;
+            boolean undefinedPrecisionNumber = (digits == -127) || (columnSize <= 0 && digits <= 0);
+
+            if (undefinedPrecisionNumber) {
+                precision = maxPrecision;
+                scale = defaultNumberScale;
             }
-            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
+
+            if (precision < scale) {
+                scale = (maxPrecision > scale ? scale : maxPrecision);
+                precision = scale;
+            }
+
+            // Ensure precision covers the chosen scale and does not exceed the maximum supported.
+            if (precision > maxPrecision || precision <= 0) {
+                throw new StarRocksConnectorException(String.format(
+                        "Oracle column precision %d/column size %d exceeds StarRocks limit (%d) or is invalid; " +
+                                "please redefine the column or set catalog properties %s/%s to control mapping.",
+                        precision, columnSize, maxPrecision, ORACLE_NUMBER_DEFAULT_SCALE, ORACLE_NUMBER_ROUNDING_MODE));
+            }
+
+            return TypeFactory.createUnifiedDecimalType(precision, max(scale, 0));
         }
     }
 
