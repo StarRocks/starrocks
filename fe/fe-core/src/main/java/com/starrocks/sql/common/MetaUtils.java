@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableOperation;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -284,6 +285,37 @@ public class MetaUtils {
             }
         }
         return columns;
+    }
+
+    /**
+     * Resolves the colocate columns for a range distribution table.
+     * Colocate columns must be a prefix of the sort key (range distribution columns).
+     *
+     * @param olapTable the table
+     * @param colocateColumnNames the explicitly specified colocate column names,
+     *                            or null for default (all sort key columns)
+     * @return the resolved colocate columns
+     * @throws DdlException if colocateColumnNames is not a valid prefix of sort key
+     */
+    public static List<Column> getRangeColocateColumns(OlapTable olapTable,
+                                                        List<String> colocateColumnNames) throws DdlException {
+        List<Column> sortKeyColumns = getRangeDistributionColumns(olapTable);
+        if (colocateColumnNames == null) {
+            return sortKeyColumns;
+        }
+        List<Column> result = new ArrayList<>();
+        for (int i = 0; i < colocateColumnNames.size(); i++) {
+            if (i >= sortKeyColumns.size()
+                    || !sortKeyColumns.get(i).getName()
+                        .equalsIgnoreCase(colocateColumnNames.get(i))) {
+                throw new DdlException(
+                        "Colocate columns must be a prefix of sort key columns. Sort key: "
+                        + sortKeyColumns.stream().map(Column::getName)
+                            .collect(Collectors.joining(",")));
+            }
+            result.add(sortKeyColumns.get(i));
+        }
+        return result;
     }
 
     public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
