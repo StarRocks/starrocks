@@ -796,6 +796,7 @@
       "configs": [
         "lake_replication_slow_log_ms",
         "lake_replication_read_buffer_size",
+        "lake_replication_max_file_copy_retry",
         "enable_lake_segment_metadata_filter",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
