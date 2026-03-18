@@ -1,4 +1,4 @@
--- name: test_mv_refresh_force_partition_type_config
+-- name: test_mv_refresh_force_partition_type_config @sequential
 
 -- Test the mv_refresh_force_partition_type config
 -- This config forces MV refresh regardless of whether base tables have changed
