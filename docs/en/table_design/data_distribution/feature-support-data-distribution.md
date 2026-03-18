@@ -109,7 +109,7 @@ From v4.1 onwards, the maximum size of a tablet is changed to 100 GB.
     </tr>
 </table>
 
-###  Differences between partitioning strategies
+### Differences between partitioning strategies
 
 <table>
     <tr>
