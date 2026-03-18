@@ -35,7 +35,7 @@
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
-namespace starrocks {
+        namespace starrocks {
 
 #define CHECK_JAVA_EXCEPTION(env, error_message)                                        \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                               \
@@ -45,340 +45,339 @@ namespace starrocks {
         return Status::InternalError(fmt::format("{}, error: {}", error_message, err)); \
     }
 
-Status JDBCScanner::open(RuntimeState* state) {
-    RETURN_IF_ERROR(detect_java_runtime());
+    Status JDBCScanner::open(RuntimeState * state) {
+        RETURN_IF_ERROR(detect_java_runtime());
 
-    _init_profile();
+        _init_profile();
 
-    RETURN_IF_ERROR(_init_jdbc_bridge());
+        RETURN_IF_ERROR(_init_jdbc_bridge());
 
-    RETURN_IF_ERROR(_init_jdbc_scan_context(state));
+        RETURN_IF_ERROR(_init_jdbc_scan_context(state));
 
-    RETURN_IF_ERROR(_init_jdbc_scanner());
+        RETURN_IF_ERROR(_init_jdbc_scanner());
 
-    RETURN_IF_ERROR(_init_column_class_name(state));
+        RETURN_IF_ERROR(_init_column_class_name(state));
 
-    RETURN_IF_ERROR(_init_jdbc_util());
+        RETURN_IF_ERROR(_init_jdbc_util());
 
-    return Status::OK();
-}
-
-Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    bool has_next = false;
-    RETURN_IF_ERROR(_has_next(&has_next));
-    if (!has_next) {
-        *eos = true;
         return Status::OK();
     }
-    jobject jchunk = nullptr;
-    size_t jchunk_rows = 0;
-    LOCAL_REF_GUARD(jchunk);
-    RETURN_IF_ERROR(_get_next_chunk(&jchunk, &jchunk_rows));
-    RETURN_IF_ERROR(_fill_chunk(jchunk, jchunk_rows, chunk));
-    return Status::OK();
-}
 
-Status JDBCScanner::close(RuntimeState* state) {
-    return _close_jdbc_scanner();
-}
-
-Status JDBCScanner::_init_jdbc_bridge() {
-    // 1. construct JDBCBridge
-    auto& h = JVMFunctionHelper::getInstance();
-    auto* env = h.getEnv();
-
-    auto jdbc_bridge_cls = env->FindClass(JDBC_BRIDGE_CLASS_NAME);
-    DCHECK(jdbc_bridge_cls != nullptr);
-    _jdbc_bridge_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_bridge_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_bridge_cls);
-
-    ASSIGN_OR_RETURN(_jdbc_bridge, _jdbc_bridge_cls->newInstance());
-
-    // 2. set class loader
-    jmethodID set_class_loader = env->GetMethodID(_jdbc_bridge_cls->clazz(), "setClassLoader", "(Ljava/lang/String;)V");
-    DCHECK(set_class_loader != nullptr);
-
-    jstring driver_location = env->NewStringUTF(_scan_ctx.driver_path.c_str());
-    LOCAL_REF_GUARD_ENV(env, driver_location);
-    env->CallVoidMethod(_jdbc_bridge.handle(), set_class_loader, driver_location);
-    CHECK_JAVA_EXCEPTION(env, "set class loader failed")
-
-    return Status::OK();
-}
-
-Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
-    // scan
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-
-    jclass scan_context_cls = env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
-    DCHECK(scan_context_cls != nullptr);
-    LOCAL_REF_GUARD_ENV(env, scan_context_cls);
-
-    static constexpr const char* scan_context_constructor_signature =
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-            "Ljava/lang/String;IIIIIJJ)V";
-    jmethodID constructor = env->GetMethodID(scan_context_cls, "<init>", scan_context_constructor_signature);
-    jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
-    LOCAL_REF_GUARD_ENV(env, driver_class_name);
-    jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
-    LOCAL_REF_GUARD_ENV(env, jdbc_url);
-    jstring user = env->NewStringUTF(_scan_ctx.user.c_str());
-    LOCAL_REF_GUARD_ENV(env, user);
-    jstring passwd = env->NewStringUTF(_scan_ctx.passwd.c_str());
-    LOCAL_REF_GUARD_ENV(env, passwd);
-    jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
-    LOCAL_REF_GUARD_ENV(env, sql);
-    jstring query_time_zone = env->NewStringUTF(state->timezone().c_str());
-    LOCAL_REF_GUARD_ENV(env, query_time_zone);
-    int statement_fetch_size = state->chunk_size();
-    int connection_pool_size = config::jdbc_connection_pool_size;
-    if (UNLIKELY(connection_pool_size <= 0)) {
-        connection_pool_size = DEFAULT_JDBC_CONNECTION_POOL_SIZE;
-    }
-    int minimum_idle_connections = config::jdbc_minimum_idle_connections;
-    if (UNLIKELY(minimum_idle_connections < 0 || minimum_idle_connections > connection_pool_size)) {
-        minimum_idle_connections = connection_pool_size;
-    }
-    int idle_timeout_ms = config::jdbc_connection_idle_timeout_ms;
-    if (UNLIKELY(idle_timeout_ms < MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS)) {
-        idle_timeout_ms = MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS;
-    }
-
-    // use query timeout or default value of HikariConfig
-    int connection_timeout_ms =
-            state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
-    // some driver (like sqlserver) needs connection timeout less than 65536
-    connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
-    connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
-
-    // maximum lifetime of a connection in the pool
-    int64_t max_lifetime_ms = config::jdbc_connection_max_lifetime_ms;
-    if (max_lifetime_ms < MINIMUM_MAX_LIFETIME_MS) {
-        LOG(WARNING) << "jdbc_connection_max_lifetime_ms=" << max_lifetime_ms << " is below minimum "
-                     << MINIMUM_MAX_LIFETIME_MS << ", using default " << DEFAULT_MAX_LIFETIME_MS;
-        max_lifetime_ms = DEFAULT_MAX_LIFETIME_MS;
-    }
-
-    // keepalive frequency: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
-    int64_t keepalive_time_ms = config::jdbc_connection_keepalive_time_ms;
-    if (keepalive_time_ms != KEEPALIVE_DISABLED) {
-        if (keepalive_time_ms < MINIMUM_KEEPALIVE_TIME_MS || keepalive_time_ms >= max_lifetime_ms) {
-            LOG(WARNING) << "jdbc_connection_keepalive_time_ms=" << keepalive_time_ms
-                         << " is invalid (must be 0 or >= " << MINIMUM_KEEPALIVE_TIME_MS << " and < " << max_lifetime_ms
-                         << "), disabling keepalive";
-            keepalive_time_ms = KEEPALIVE_DISABLED;
+    Status JDBCScanner::get_next(RuntimeState * state, ChunkPtr * chunk, bool* eos) {
+        bool has_next = false;
+        RETURN_IF_ERROR(_has_next(&has_next));
+        if (!has_next) {
+            *eos = true;
+            return Status::OK();
         }
-    }
-    auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
-                                   query_time_zone, statement_fetch_size, connection_pool_size,
-                                   minimum_idle_connections, idle_timeout_ms, connection_timeout_ms,
-                                   static_cast<jlong>(max_lifetime_ms), static_cast<jlong>(keepalive_time_ms));
-    _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
-    LOCAL_REF_GUARD_ENV(env, scan_ctx);
-    CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
-
-    return Status::OK();
-}
-
-Status JDBCScanner::_init_jdbc_scanner() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-
-    jmethodID get_scanner =
-            env->GetMethodID(_jdbc_bridge_cls->clazz(), "getScanner",
-                             "(Lcom/starrocks/jdbcbridge/JDBCScanContext;)Lcom/starrocks/jdbcbridge/JDBCScanner;");
-    DCHECK(get_scanner != nullptr);
-
-    auto jdbc_scanner = env->CallObjectMethod(_jdbc_bridge.handle(), get_scanner, _jdbc_scan_context.handle());
-    _jdbc_scanner = env->NewGlobalRef(jdbc_scanner);
-    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
-    CHECK_JAVA_EXCEPTION(env, "get JDBCScanner failed")
-
-    auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
-    _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
-
-    DCHECK(_jdbc_scanner_cls != nullptr);
-    // init jmethod
-    _scanner_has_next = env->GetMethodID(_jdbc_scanner_cls->clazz(), "hasNext", "()Z");
-    DCHECK(_scanner_has_next != nullptr);
-    _scanner_get_next_chunk = env->GetMethodID(_jdbc_scanner_cls->clazz(), "getNextChunk", "()Ljava/util/List;");
-
-    _scanner_result_rows = env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultNumRows", "()I");
-    DCHECK(_scanner_result_rows != nullptr);
-
-    DCHECK(_scanner_get_next_chunk != nullptr);
-    _scanner_close = env->GetMethodID(_jdbc_scanner_cls->clazz(), "close", "()V");
-    DCHECK(_scanner_close != nullptr);
-
-    // open scanner
-    jmethodID scanner_open = env->GetMethodID(_jdbc_scanner_cls->clazz(), "open", "()V");
-    DCHECK(scanner_open != nullptr);
-
-    env->CallVoidMethod(_jdbc_scanner.handle(), scanner_open);
-    CHECK_JAVA_EXCEPTION(env, "open JDBCScanner failed")
-
-    return Status::OK();
-}
-
-void JDBCScanner::_init_profile() {
-    _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
-    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunkTime");
-    _runtime_profile->add_info_string("Query", _scan_ctx.sql);
-}
-
-StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
-    return TypeCheckerManager::getInstance().checkType(java_class, slot_desc);
-}
-
-Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-
-    jmethodID get_result_column_class_names =
-            env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultColumnClassNames", "()Ljava/util/List;");
-    DCHECK(get_result_column_class_names != nullptr);
-
-    jobject column_class_names = env->CallObjectMethod(_jdbc_scanner.handle(), get_result_column_class_names);
-    CHECK_JAVA_EXCEPTION(env, "get JDBC result column class name failed")
-    LOCAL_REF_GUARD_ENV(env, column_class_names);
-
-    auto& helper = JVMFunctionHelper::getInstance();
-    JavaListStub list_stub(column_class_names);
-    ASSIGN_OR_RETURN(int len, list_stub.size());
-
-    _result_chunk = std::make_shared<Chunk>();
-    for (int i = 0; i < len; i++) {
-        ASSIGN_OR_RETURN(jobject jelement, list_stub.get(i));
-        LOCAL_REF_GUARD_ENV(env, jelement);
-        std::string class_name = helper.to_string((jstring)(jelement));
-        ASSIGN_OR_RETURN(auto ret_type, _precheck_data_type(class_name, _slot_descs[i]));
-        _column_class_names.emplace_back(class_name);
-        _result_column_types.emplace_back(ret_type);
-        // intermediate means the result type from JDBC Scanner
-        // Some types cannot be written directly to the column,
-        // so we need to write directly to the intermediate type and then cast to the target type:
-        // eg:
-        // JDBC(java.sql.Date) -> SR(TYPE_VARCHAR) -> SR(cast(varchar as TYPE_DATE))
-        auto intermediate = TypeDescriptor(ret_type);
-        auto result_column = ColumnHelper::create_column(intermediate, true);
-        _result_chunk->append_column(std::move(result_column), i);
-        auto column_ref = _pool.add(new ColumnRef(intermediate, i));
-        // TODO: add check cast status
-        Expr* cast_expr = nullptr;
-        if (ret_type != _slot_descs[i]->type().type) {
-            cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref, &_pool,
-                                                             true);
-        } else {
-            // clone to reuse result_chunk
-            cast_expr = CloneExpr::from_child(column_ref, &_pool);
-        }
-
-        _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
-    }
-    RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
-
-    return Status::OK();
-}
-
-Status JDBCScanner::_init_jdbc_util() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-
-    // init JDBCUtil method
-    auto jdbc_util_cls = env->FindClass(JDBC_UTIL_CLASS_NAME);
-    DCHECK(jdbc_util_cls != nullptr);
-    _jdbc_util_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_util_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_util_cls);
-
-    _util_format_date =
-            env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
-    DCHECK(_util_format_date != nullptr);
-    _util_format_localdatetime = env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatLocalDatetime",
-                                                        "(Ljava/time/LocalDateTime;)Ljava/lang/String;");
-    DCHECK(_util_format_localdatetime != nullptr);
-    return Status::OK();
-}
-
-Status JDBCScanner::_has_next(bool* result) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-    jboolean ret = env->CallBooleanMethod(_jdbc_scanner.handle(), _scanner_has_next);
-    CHECK_JAVA_EXCEPTION(env, "call JDBCScanner hasNext failed")
-    *result = ret;
-    return Status::OK();
-}
-
-Status JDBCScanner::_get_next_chunk(jobject* chunk, size_t* num_rows) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-    SCOPED_TIMER(_profile.io_timer);
-    COUNTER_UPDATE(_profile.io_counter, 1);
-    *chunk = env->CallObjectMethod(_jdbc_scanner.handle(), _scanner_get_next_chunk);
-    CHECK_JAVA_EXCEPTION(env, "getNextChunk failed")
-    *num_rows = env->CallIntMethod(_jdbc_scanner.handle(), _scanner_result_rows);
-    CHECK_JAVA_EXCEPTION(env, "getResultNumRows failed")
-    return Status::OK();
-}
-
-Status JDBCScanner::_close_jdbc_scanner() {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
-    if (_jdbc_scanner.handle() == nullptr) {
+        jobject jchunk = nullptr;
+        size_t jchunk_rows = 0;
+        LOCAL_REF_GUARD(jchunk);
+        RETURN_IF_ERROR(_get_next_chunk(&jchunk, &jchunk_rows));
+        RETURN_IF_ERROR(_fill_chunk(jchunk, jchunk_rows, chunk));
         return Status::OK();
     }
-    env->CallVoidMethod(_jdbc_scanner.handle(), _scanner_close);
-    CHECK_JAVA_EXCEPTION(env, "close JDBCScanner failed")
 
-    _jdbc_scanner.clear();
-    _jdbc_scan_context.clear();
-    _jdbc_bridge.clear();
-    _jdbc_util_cls.reset();
-    _jdbc_scanner_cls.reset();
-    _jdbc_bridge_cls.reset();
-    return Status::OK();
-}
+    Status JDBCScanner::close(RuntimeState * state) { return _close_jdbc_scanner(); }
 
-Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk) {
-    SCOPED_TIMER(_profile.fill_chunk_timer);
-    // get result from JNI
-    {
-        auto& helper = JVMFunctionHelper::getInstance();
-        auto* env = helper.getEnv();
-        JavaListStub list_stub(jchunk);
-        COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
-        (*chunk)->reset();
+    Status JDBCScanner::_init_jdbc_bridge() {
+        // 1. construct JDBCBridge
+        auto& h = JVMFunctionHelper::getInstance();
+        auto* env = h.getEnv();
 
-        for (size_t i = 0; i < _slot_descs.size(); i++) {
-            ASSIGN_OR_RETURN(jobject jcolumn, list_stub.get(i));
-            LOCAL_REF_GUARD_ENV(env, jcolumn);
-            auto* result_column = _result_chunk->get_column_raw_ptr_by_index(i);
-            auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
-            RETURN_IF_ERROR(st);
-            down_cast<NullableColumn*>(result_column)->update_has_null();
-        }
+        auto jdbc_bridge_cls = env->FindClass(JDBC_BRIDGE_CLASS_NAME);
+        DCHECK(jdbc_bridge_cls != nullptr);
+        _jdbc_bridge_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_bridge_cls));
+        LOCAL_REF_GUARD_ENV(env, jdbc_bridge_cls);
+
+        ASSIGN_OR_RETURN(_jdbc_bridge, _jdbc_bridge_cls->newInstance());
+
+        // 2. set class loader
+        jmethodID set_class_loader =
+                env->GetMethodID(_jdbc_bridge_cls->clazz(), "setClassLoader", "(Ljava/lang/String;)V");
+        DCHECK(set_class_loader != nullptr);
+
+        jstring driver_location = env->NewStringUTF(_scan_ctx.driver_path.c_str());
+        LOCAL_REF_GUARD_ENV(env, driver_location);
+        env->CallVoidMethod(_jdbc_bridge.handle(), set_class_loader, driver_location);
+        CHECK_JAVA_EXCEPTION(env, "set class loader failed")
+
+        return Status::OK();
     }
 
-    // convert intermediate results type to output chunks
-    // TODO: avoid the cast overhead when from type == to type
-    for (size_t col_idx = 0; col_idx < _slot_descs.size(); col_idx++) {
-        SlotDescriptor* slot_desc = _slot_descs[col_idx];
-        // use reference, then we check the column's nullable and set the final result to the referred column.
-        ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        ASSIGN_OR_RETURN(auto result, _cast_exprs[col_idx]->evaluate(_result_chunk.get()));
-        // unfold const_nullable_column to avoid error down_cast.
-        // unpack_and_duplicate_const_column is not suitable, we need set correct type.
-        result = ColumnHelper::unfold_const_column(slot_desc->type(), num_rows, std::move(result));
-        if (column->is_nullable() == result->is_nullable()) {
-            column = result;
-        } else if (column->is_nullable() && !result->is_nullable()) {
-            column = NullableColumn::create(result, NullColumn::create(num_rows));
-        } else if (!column->is_nullable() && result->is_nullable()) {
-            if (result->has_null()) {
-                return Status::DataQualityError(
-                        fmt::format("Unexpected NULL value occurs on NOT NULL column[{}]", slot_desc->col_name()));
+    Status JDBCScanner::_init_jdbc_scan_context(RuntimeState * state) {
+        // scan
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+        jclass scan_context_cls = env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
+        DCHECK(scan_context_cls != nullptr);
+        LOCAL_REF_GUARD_ENV(env, scan_context_cls);
+
+        static constexpr const char* scan_context_constructor_signature =
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+                "Ljava/lang/String;IIIIIJJ)V";
+        jmethodID constructor = env->GetMethodID(scan_context_cls, "<init>", scan_context_constructor_signature);
+        jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
+        LOCAL_REF_GUARD_ENV(env, driver_class_name);
+        jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
+        LOCAL_REF_GUARD_ENV(env, jdbc_url);
+        jstring user = env->NewStringUTF(_scan_ctx.user.c_str());
+        LOCAL_REF_GUARD_ENV(env, user);
+        jstring passwd = env->NewStringUTF(_scan_ctx.passwd.c_str());
+        LOCAL_REF_GUARD_ENV(env, passwd);
+        jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
+        LOCAL_REF_GUARD_ENV(env, sql);
+        jstring query_time_zone = env->NewStringUTF(state->timezone().c_str());
+        LOCAL_REF_GUARD_ENV(env, query_time_zone);
+        int statement_fetch_size = state->chunk_size();
+        int connection_pool_size = config::jdbc_connection_pool_size;
+        if (UNLIKELY(connection_pool_size <= 0)) {
+            connection_pool_size = DEFAULT_JDBC_CONNECTION_POOL_SIZE;
+        }
+        int minimum_idle_connections = config::jdbc_minimum_idle_connections;
+        if (UNLIKELY(minimum_idle_connections < 0 || minimum_idle_connections > connection_pool_size)) {
+            minimum_idle_connections = connection_pool_size;
+        }
+        int idle_timeout_ms = config::jdbc_connection_idle_timeout_ms;
+        if (UNLIKELY(idle_timeout_ms < MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS)) {
+            idle_timeout_ms = MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS;
+        }
+
+        // use query timeout or default value of HikariConfig
+        int connection_timeout_ms =
+                state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
+        // some driver (like sqlserver) needs connection timeout less than 65536
+        connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
+        connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
+
+        // maximum lifetime of a connection in the pool
+        int64_t max_lifetime_ms = config::jdbc_connection_max_lifetime_ms;
+        if (max_lifetime_ms < MINIMUM_MAX_LIFETIME_MS) {
+            LOG(WARNING) << "jdbc_connection_max_lifetime_ms=" << max_lifetime_ms << " is below minimum "
+                         << MINIMUM_MAX_LIFETIME_MS << ", using default " << DEFAULT_MAX_LIFETIME_MS;
+            max_lifetime_ms = DEFAULT_MAX_LIFETIME_MS;
+        }
+
+        // keepalive frequency: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+        int64_t keepalive_time_ms = config::jdbc_connection_keepalive_time_ms;
+        if (keepalive_time_ms != KEEPALIVE_DISABLED) {
+            if (keepalive_time_ms < MINIMUM_KEEPALIVE_TIME_MS || keepalive_time_ms >= max_lifetime_ms) {
+                LOG(WARNING) << "jdbc_connection_keepalive_time_ms=" << keepalive_time_ms
+                             << " is invalid (must be 0 or >= " << MINIMUM_KEEPALIVE_TIME_MS << " and < "
+                             << max_lifetime_ms << "), disabling keepalive";
+                keepalive_time_ms = KEEPALIVE_DISABLED;
             }
-            column = down_cast<const NullableColumn*>(result.get())->data_column();
         }
+        auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
+                                       query_time_zone, statement_fetch_size, connection_pool_size,
+                                       minimum_idle_connections, idle_timeout_ms, connection_timeout_ms,
+                                       static_cast<jlong>(max_lifetime_ms), static_cast<jlong>(keepalive_time_ms));
+        _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
+        LOCAL_REF_GUARD_ENV(env, scan_ctx);
+        CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
+
+        return Status::OK();
     }
-    return Status::OK();
-}
+
+    Status JDBCScanner::_init_jdbc_scanner() {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+        jmethodID get_scanner =
+                env->GetMethodID(_jdbc_bridge_cls->clazz(), "getScanner",
+                                 "(Lcom/starrocks/jdbcbridge/JDBCScanContext;)Lcom/starrocks/jdbcbridge/JDBCScanner;");
+        DCHECK(get_scanner != nullptr);
+
+        auto jdbc_scanner = env->CallObjectMethod(_jdbc_bridge.handle(), get_scanner, _jdbc_scan_context.handle());
+        _jdbc_scanner = env->NewGlobalRef(jdbc_scanner);
+        LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+        CHECK_JAVA_EXCEPTION(env, "get JDBCScanner failed")
+
+        auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
+        _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
+        LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+
+        DCHECK(_jdbc_scanner_cls != nullptr);
+        // init jmethod
+        _scanner_has_next = env->GetMethodID(_jdbc_scanner_cls->clazz(), "hasNext", "()Z");
+        DCHECK(_scanner_has_next != nullptr);
+        _scanner_get_next_chunk = env->GetMethodID(_jdbc_scanner_cls->clazz(), "getNextChunk", "()Ljava/util/List;");
+
+        _scanner_result_rows = env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultNumRows", "()I");
+        DCHECK(_scanner_result_rows != nullptr);
+
+        DCHECK(_scanner_get_next_chunk != nullptr);
+        _scanner_close = env->GetMethodID(_jdbc_scanner_cls->clazz(), "close", "()V");
+        DCHECK(_scanner_close != nullptr);
+
+        // open scanner
+        jmethodID scanner_open = env->GetMethodID(_jdbc_scanner_cls->clazz(), "open", "()V");
+        DCHECK(scanner_open != nullptr);
+
+        env->CallVoidMethod(_jdbc_scanner.handle(), scanner_open);
+        CHECK_JAVA_EXCEPTION(env, "open JDBCScanner failed")
+
+        return Status::OK();
+    }
+
+    void JDBCScanner::_init_profile() {
+        _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+        _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
+        _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
+        _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunkTime");
+        _runtime_profile->add_info_string("Query", _scan_ctx.sql);
+    }
+
+    StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
+        return TypeCheckerManager::getInstance().checkType(java_class, slot_desc);
+    }
+
+    Status JDBCScanner::_init_column_class_name(RuntimeState * state) {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+        jmethodID get_result_column_class_names =
+                env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultColumnClassNames", "()Ljava/util/List;");
+        DCHECK(get_result_column_class_names != nullptr);
+
+        jobject column_class_names = env->CallObjectMethod(_jdbc_scanner.handle(), get_result_column_class_names);
+        CHECK_JAVA_EXCEPTION(env, "get JDBC result column class name failed")
+        LOCAL_REF_GUARD_ENV(env, column_class_names);
+
+        auto& helper = JVMFunctionHelper::getInstance();
+        JavaListStub list_stub(column_class_names);
+        ASSIGN_OR_RETURN(int len, list_stub.size());
+
+        _result_chunk = std::make_shared<Chunk>();
+        for (int i = 0; i < len; i++) {
+            ASSIGN_OR_RETURN(jobject jelement, list_stub.get(i));
+            LOCAL_REF_GUARD_ENV(env, jelement);
+            std::string class_name = helper.to_string((jstring)(jelement));
+            ASSIGN_OR_RETURN(auto ret_type, _precheck_data_type(class_name, _slot_descs[i]));
+            _column_class_names.emplace_back(class_name);
+            _result_column_types.emplace_back(ret_type);
+            // intermediate means the result type from JDBC Scanner
+            // Some types cannot be written directly to the column,
+            // so we need to write directly to the intermediate type and then cast to the target type:
+            // eg:
+            // JDBC(java.sql.Date) -> SR(TYPE_VARCHAR) -> SR(cast(varchar as TYPE_DATE))
+            auto intermediate = TypeDescriptor(ret_type);
+            auto result_column = ColumnHelper::create_column(intermediate, true);
+            _result_chunk->append_column(std::move(result_column), i);
+            auto column_ref = _pool.add(new ColumnRef(intermediate, i));
+            // TODO: add check cast status
+            Expr* cast_expr = nullptr;
+            if (ret_type != _slot_descs[i]->type().type) {
+                cast_expr = VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(), column_ref,
+                                                                 &_pool, true);
+            } else {
+                // clone to reuse result_chunk
+                cast_expr = CloneExpr::from_child(column_ref, &_pool);
+            }
+
+            _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
+        }
+        RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
+        RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
+
+        return Status::OK();
+    }
+
+    Status JDBCScanner::_init_jdbc_util() {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+        // init JDBCUtil method
+        auto jdbc_util_cls = env->FindClass(JDBC_UTIL_CLASS_NAME);
+        DCHECK(jdbc_util_cls != nullptr);
+        _jdbc_util_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_util_cls));
+        LOCAL_REF_GUARD_ENV(env, jdbc_util_cls);
+
+        _util_format_date =
+                env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
+        DCHECK(_util_format_date != nullptr);
+        _util_format_localdatetime = env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatLocalDatetime",
+                                                            "(Ljava/time/LocalDateTime;)Ljava/lang/String;");
+        DCHECK(_util_format_localdatetime != nullptr);
+        return Status::OK();
+    }
+
+    Status JDBCScanner::_has_next(bool* result) {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+        jboolean ret = env->CallBooleanMethod(_jdbc_scanner.handle(), _scanner_has_next);
+        CHECK_JAVA_EXCEPTION(env, "call JDBCScanner hasNext failed")
+        *result = ret;
+        return Status::OK();
+    }
+
+    Status JDBCScanner::_get_next_chunk(jobject * chunk, size_t * num_rows) {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+        SCOPED_TIMER(_profile.io_timer);
+        COUNTER_UPDATE(_profile.io_counter, 1);
+        *chunk = env->CallObjectMethod(_jdbc_scanner.handle(), _scanner_get_next_chunk);
+        CHECK_JAVA_EXCEPTION(env, "getNextChunk failed")
+        *num_rows = env->CallIntMethod(_jdbc_scanner.handle(), _scanner_result_rows);
+        CHECK_JAVA_EXCEPTION(env, "getResultNumRows failed")
+        return Status::OK();
+    }
+
+    Status JDBCScanner::_close_jdbc_scanner() {
+        auto* env = JVMFunctionHelper::getInstance().getEnv();
+        if (_jdbc_scanner.handle() == nullptr) {
+            return Status::OK();
+        }
+        env->CallVoidMethod(_jdbc_scanner.handle(), _scanner_close);
+        CHECK_JAVA_EXCEPTION(env, "close JDBCScanner failed")
+
+        _jdbc_scanner.clear();
+        _jdbc_scan_context.clear();
+        _jdbc_bridge.clear();
+        _jdbc_util_cls.reset();
+        _jdbc_scanner_cls.reset();
+        _jdbc_bridge_cls.reset();
+        return Status::OK();
+    }
+
+    Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr * chunk) {
+        SCOPED_TIMER(_profile.fill_chunk_timer);
+        // get result from JNI
+        {
+            auto& helper = JVMFunctionHelper::getInstance();
+            auto* env = helper.getEnv();
+            JavaListStub list_stub(jchunk);
+            COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
+            (*chunk)->reset();
+
+            for (size_t i = 0; i < _slot_descs.size(); i++) {
+                ASSIGN_OR_RETURN(jobject jcolumn, list_stub.get(i));
+                LOCAL_REF_GUARD_ENV(env, jcolumn);
+                auto* result_column = _result_chunk->get_column_raw_ptr_by_index(i);
+                auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
+                RETURN_IF_ERROR(st);
+                down_cast<NullableColumn*>(result_column)->update_has_null();
+            }
+        }
+
+        // convert intermediate results type to output chunks
+        // TODO: avoid the cast overhead when from type == to type
+        for (size_t col_idx = 0; col_idx < _slot_descs.size(); col_idx++) {
+            SlotDescriptor* slot_desc = _slot_descs[col_idx];
+            // use reference, then we check the column's nullable and set the final result to the referred column.
+            ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+            ASSIGN_OR_RETURN(auto result, _cast_exprs[col_idx]->evaluate(_result_chunk.get()));
+            // unfold const_nullable_column to avoid error down_cast.
+            // unpack_and_duplicate_const_column is not suitable, we need set correct type.
+            result = ColumnHelper::unfold_const_column(slot_desc->type(), num_rows, std::move(result));
+            if (column->is_nullable() == result->is_nullable()) {
+                column = result;
+            } else if (column->is_nullable() && !result->is_nullable()) {
+                column = NullableColumn::create(result, NullColumn::create(num_rows));
+            } else if (!column->is_nullable() && result->is_nullable()) {
+                if (result->has_null()) {
+                    return Status::DataQualityError(
+                            fmt::format("Unexpected NULL value occurs on NOT NULL column[{}]", slot_desc->col_name()));
+                }
+                column = down_cast<const NullableColumn*>(result.get())->data_column();
+            }
+        }
+        return Status::OK();
+    }
 
 } // namespace starrocks
