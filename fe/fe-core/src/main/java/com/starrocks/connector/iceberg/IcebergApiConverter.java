@@ -379,7 +379,7 @@ public class IcebergApiConverter {
         return fullSchema;
     }
 
-    private static String toInitialDefaultValueString(Types.NestedField field) {
+    public static String toInitialDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, false);
     }
 

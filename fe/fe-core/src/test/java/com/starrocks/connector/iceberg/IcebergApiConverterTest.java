@@ -937,4 +937,31 @@ public class IcebergApiConverterTest {
         assertNotNull(field.initialDefault());
     }
 
+    @Test
+    public void testDifferingInitialAndWriteDefaults() {
+        // Case A: Both initial-default and write-default set to different values
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("c_both").withId(1)
+                .ofType(Types.IntegerType.get()).withInitialDefault(5).withWriteDefault(10).build());
+        // Case B: Only write-default (no initial-default)
+        fields.add(Types.NestedField.optional("c_write_only").withId(2)
+                .ofType(Types.IntegerType.get()).withWriteDefault(10).build());
+        // Case C: Only initial-default (no write-default)
+        fields.add(Types.NestedField.optional("c_initial_only").withId(3)
+                .ofType(Types.IntegerType.get()).withInitialDefault(5).build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+
+        // toFullSchemas stores write-default (for INSERT path), falling back to initial-default
+        assertEquals("10", columns.get(0).getDefaultValue()); // write-default wins
+        assertEquals("10", columns.get(1).getDefaultValue()); // write-default only
+        assertEquals("5", columns.get(2).getDefaultValue());  // initial-default as fallback
+
+        // toInitialDefaultValueString returns ONLY the initial-default
+        assertEquals("5", IcebergApiConverter.toInitialDefaultValueString(schema.findField("c_both")));
+        assertNull(IcebergApiConverter.toInitialDefaultValueString(schema.findField("c_write_only")));
+        assertEquals("5", IcebergApiConverter.toInitialDefaultValueString(schema.findField("c_initial_only")));
+    }
+
 }
