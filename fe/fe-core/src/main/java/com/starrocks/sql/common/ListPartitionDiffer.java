@@ -91,11 +91,10 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         }
 
         Map<String, PCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        // Track occupied partition names to ensure uniqueness - includes both existing destination partitions
-        // and newly generated result partitions
-        Set<String> occupiedPartitionNames = null;
+        Map<String, PCell> occupiedPartitions = null;
         if (isEnsureUniqueResultNames) {
-            occupiedPartitionNames = Sets.newHashSet(dstListMap.keySet());
+            occupiedPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            occupiedPartitions.putAll(dstListMap);
         }
         for (Map.Entry<String, PCell> srcEntry : srcListMap.entrySet()) {
             String pName = srcEntry.getKey();
@@ -116,15 +115,15 @@ public final class ListPartitionDiffer extends PartitionDiffer {
 
                 // Optionally ensure the output partition name is unique against both existing destination partitions
                 // and newly generated result partitions.
-                if (occupiedPartitionNames != null) {
-                    if (occupiedPartitionNames.contains(pName)) {
+                if (occupiedPartitions != null) {
+                    if (occupiedPartitions.containsKey(pName)) {
                         try {
-                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, result);
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, occupiedPartitions);
                         } catch (Exception e) {
                             throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
                         }
                     }
-                    occupiedPartitionNames.add(pName);
+                    occupiedPartitions.put(pName, newValue);
                 }
 
                 result.put(pName, newValue);

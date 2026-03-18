@@ -299,10 +299,10 @@ public class SyncPartitionUtilsTest {
     @Test
     public void testDiffListWithExistingPartitionNameConflict() {
         // Same partition name with different values (e.g. domain values that sanitize to same partition name)
-        PCellSortedSet baseListMap = PCellSortedSet.of();
+        Map<String, PCell> baseListMap = Maps.newHashMap();
         addIntoListPartitionMap(baseListMap, "psampledomain2ecom", "sample-domain.com");
 
-        PCellSortedSet mvListMap = PCellSortedSet.of();
+        Map<String, PCell> mvListMap = Maps.newHashMap();
         addIntoListPartitionMap(mvListMap, "psampledomain2ecom", "sample-domain2.com");
 
         Map<String, PListCell> diff = diffList(baseListMap, mvListMap);
