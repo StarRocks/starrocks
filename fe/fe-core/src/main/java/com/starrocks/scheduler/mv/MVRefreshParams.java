@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.common.PListCell;
 import org.apache.commons.collections4.CollectionUtils;
@@ -47,7 +48,61 @@ public class MVRefreshParams {
     }
 
     public boolean isForce() {
+<<<<<<< HEAD
         return isForce;
+=======
+        if (this.isTentative) {
+            return true;
+        }
+        if (Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
+            return true;
+        }
+        MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy =
+                mv.getPartitionRefreshStrategy();
+        if (partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE) {
+            return true;
+        }
+        // Check if force refresh is enabled for this partition type via config
+        return isForceRefreshByConfig();
+    }
+
+    /**
+     * Check if force refresh is enabled for this MV's partition type via config.
+     * Config value is a bitmap:
+     * - 0: disabled (default)
+     * - 1: force refresh non-partitioned MV
+     * - 2: force refresh range partitioned MV
+     * - 4: force refresh list partitioned MV
+     */
+    private boolean isForceRefreshByConfig() {
+        int configValue = Config.mv_refresh_force_partition_type;
+        if (configValue == 0) {
+            return false;
+        }
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned() && (configValue & 1) != 0) {
+            return true;
+        }
+        if (partitionInfo.isRangePartition() && (configValue & 2) != 0) {
+            return true;
+        }
+        if (partitionInfo.isListPartition() && (configValue & 4) != 0) {
+            return true;
+        }
+        return false;
+    }
+
+    public boolean isNonTentativeForce() {
+        return isForce() && !isTentative;
+    }
+
+    public void setIsTentative(boolean tentative) {
+        this.isTentative = tentative;
+    }
+
+    public boolean isTentative() {
+        return isTentative;
+>>>>>>> 90e2b980c4 ([BugFix] Add mv_refresh_force_partition_type config to support force mv refresh  (#70381))
     }
 
     public boolean isCompleteRefresh() {
