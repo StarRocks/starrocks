@@ -194,7 +194,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                         }
                     } else {
                         // 2. for new iceberg mv, the version is the snapshot sequence number
-                        if (latestPartitionVersion >= 0 && (latestPartitionVersion > basePartitionVersion)) {
+                        if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionVersion) {
                             result.add(basePartitionName);
                         }
                     }
