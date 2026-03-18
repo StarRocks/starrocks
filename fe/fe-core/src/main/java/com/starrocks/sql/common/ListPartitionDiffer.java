@@ -55,26 +55,14 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * @param mvItems the partition name to its list partition cell of the mv
      * @return the list partition diff between the base table and the mv
      */
-<<<<<<< HEAD
     public static PartitionDiff getListPartitionDiff(Map<String, PCell> baseItems,
-                                                     Map<String, PCell> mvItems,
-                                                     Set<String> uniqueResultNames) {
+                                                     Map<String, PCell> mvItems) {
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         // for addition, we need to ensure the partition name is unique in case-insensitive
-        Map<String, PCell> adds = diffList(baseItems, mvItems, uniqueResultNames);
+        Map<String, PCell> adds = diffList(baseItems, mvItems, true);
         // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
-        Map<String, PCell> deletes = diffList(mvItems, baseItems, null);
-=======
-    public static PartitionDiff getListPartitionDiff(PCellSortedSet baseItems,
-                                                     PCellSortedSet mvItems) {
-        // This synchronization method has a one-to-one correspondence
-        // between the base table and the partition of the mv.
-        // for addition, we need to ensure the partition name is unique in case-insensitive
-        PCellSortedSet adds = diffList(baseItems, mvItems, true);
-        // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
-        PCellSortedSet deletes = diffList(mvItems, baseItems, false);
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
+        Map<String, PCell> deletes = diffList(mvItems, baseItems, false);
         return new PartitionDiff(adds, deletes);
     }
 
@@ -86,24 +74,15 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * NOTE: StarRocks partition names are case-insensitive, so output map keys must also be distinct in
      * case-insensitive when this option is enabled.
      */
-<<<<<<< HEAD
     public static Map<String, PCell> diffList(Map<String, PCell> srcListMap,
                                               Map<String, PCell> dstListMap,
-                                              Set<String> uniqueResultNames) {
+                                              boolean isEnsureUniqueResultNames) {
         if (CollectionUtils.sizeIsEmpty(srcListMap)) {
             return Maps.newHashMap();
-=======
-    public static PCellSortedSet diffList(PCellSortedSet srcPCells,
-                                          PCellSortedSet dstPCells,
-                                          boolean isEnsureUniqueResultNames) {
-        if (srcPCells == null || srcPCells.isEmpty()) {
-            return PCellSortedSet.of();
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
         }
 
         // PListCell may contain multi values, we need to ensure they are not duplicated from each other
         // NOTE: dstListMap's partition items may be duplicated, we need to collect them first
-<<<<<<< HEAD
         Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
         for (PCell l : dstListMap.values()) {
             Preconditions.checkArgument(l instanceof PListCell, "PListCell expected");
@@ -112,32 +91,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         }
 
         Map<String, PCell> result = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        // Track occupied partition names to ensure uniqueness - includes both existing destination partitions
+        // and newly generated result partitions
+        Set<String> occupiedPartitionNames = null;
+        if (isEnsureUniqueResultNames) {
+            occupiedPartitionNames = Sets.newHashSet(dstListMap.keySet());
+        }
         for (Map.Entry<String, PCell> srcEntry : srcListMap.entrySet()) {
             String pName = srcEntry.getKey();
             PListCell srcItem = (PListCell) srcEntry.getValue();
 
             if (srcItem.equals(dstListMap.get(pName))) {
-=======
-        // Use TreeMap to maintain sorted order for efficient merge-join operations
-        Map<PListCell, PListCell> dstAtomMaps = dstPCells
-                .stream()
-                .flatMap(l -> {
-                    PListCell pListCell = (PListCell) l.cell();
-                    return pListCell.toSingleValueCells().stream().map(x -> Map.entry(x, pListCell));
-                })
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-                        (v1, v2) -> v1, Maps::newTreeMap));
-        PCellSortedSet result = PCellSortedSet.of();
-        PCellSortedSet occupiedPartitions = null;
-        if (isEnsureUniqueResultNames) {
-            occupiedPartitions = PCellSortedSet.of();
-            occupiedPartitions.addAll(dstPCells);
-        }
-        for (PCellWithName srcPCell : srcPCells.getPartitions()) {
-            String pName = srcPCell.name();
-            PListCell srcItem = (PListCell) srcPCell.cell();
-            if (dstPCells.containsPCellWithName(srcPCell)) {
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
                 continue;
             }
 
@@ -147,35 +111,20 @@ public final class ListPartitionDiffer extends PartitionDiffer {
                     .collect(Collectors.toList());
             if (!srcDistinctAtoms.isEmpty()) {
                 srcDistinctAtoms.forEach(atom -> dstAtomMaps.put(atom, srcItem));
-<<<<<<< HEAD
                 PListCell newValue = new PListCell(
                         srcDistinctAtoms.stream().map(PListAtom::getPartitionItem).collect(Collectors.toList()));
 
-                // ensure the partition name is unique
-                if (uniqueResultNames != null) {
-                    if (uniqueResultNames.contains(pName)) {
-                        try {
-                            // it's fine to use result to keep it unique here, since we always
-                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, result);
-=======
-                List<List<String>> newSrcItems = srcDistinctAtoms
-                        .stream()
-                        .map(PListCell::getPartitionItems)
-                        .map(items -> items.get(0))
-                        .collect(Collectors.toList());
-                PListCell newSrcValue = new PListCell(newSrcItems);
                 // Optionally ensure the output partition name is unique against both existing destination partitions
                 // and newly generated result partitions.
-                if (occupiedPartitions != null) {
-                    if (occupiedPartitions.containsName(pName)) {
+                if (occupiedPartitionNames != null) {
+                    if (occupiedPartitionNames.contains(pName)) {
                         try {
-                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newSrcValue, occupiedPartitions);
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newValue, result);
                         } catch (Exception e) {
                             throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
                         }
                     }
-                    occupiedPartitions.add(PCellWithName.of(pName, newSrcValue));
+                    occupiedPartitionNames.add(pName);
                 }
 
                 result.put(pName, newValue);
@@ -326,16 +275,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         // collect all base table partition cells
         Map<String, PCell> allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
 
-<<<<<<< HEAD
-        // ensure the result partition name is unique in case-insensitive
-        Set<String> uniqueResultNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        uniqueResultNames.addAll(mvPartitionNameToListMap.keySet());
-
-        PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems,
-                mvPartitionNameToListMap, uniqueResultNames);
-=======
         PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
 
         // collect external partition column mapping
         Map<Table, Map<String, Set<String>>> externalPartitionMaps = Maps.newHashMap();

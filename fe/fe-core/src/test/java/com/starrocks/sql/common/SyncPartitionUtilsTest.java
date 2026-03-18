@@ -186,19 +186,11 @@ public class SyncPartitionUtilsTest {
         return toRangeMap(result);
     }
 
-<<<<<<< HEAD
     private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
                                             Map<String, PCell> mvListMap) {
-        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
-                mvListMap.keySet().stream().collect(Collectors.toSet()));
+        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap, true);
         return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
-=======
-    private Map<String, PListCell> diffList(PCellSortedSet baseListMap,
-                                            PCellSortedSet mvListMap) {
-        PCellSortedSet result = ListPartitionDiffer.diffList(baseListMap, mvListMap, true);
-        return result.getPartitions().stream()
-                .collect(Collectors.toMap(PCellWithName::name, entry -> (PListCell) entry.cell()));
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
+
     }
 
     @Test
