@@ -791,6 +791,17 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
             << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
 
+    // Force-release protobuf memory under the current (process) tracker context.
+    // _serialize_chunk() allocated protobuf memory inside SCOPED(nullptr), which falls back
+    // to process_mem_tracker via CurrentThread::mem_tracker(). But `add_chunk` is destroyed
+    // after the SCOPED ends (under instance_mem_tracker / query_pool hierarchy).
+    // Swap transfers ownership to a temporary destroyed here (under process_mem_tracker),
+    // preventing the protobuf deallocation from being incorrectly charged to query_pool.
+    // Note: clear_chunk() alone is insufficient — protobuf retains internal buffers until
+    // the Message object is destroyed.
+    PTabletWriterAddChunksRequest().Swap(&request);
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::_send_request::after_swap", &request);
+
     return Status::OK();
 }
 

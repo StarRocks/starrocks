@@ -407,4 +407,79 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
 }
 
+// Verify that _send_request() releases protobuf memory via Swap before returning.
+// This prevents cross-tracker memory accounting mismatch where protobuf memory allocated
+// under process_mem_tracker (via SCOPED(nullptr)) would be freed under instance_mem_tracker.
+TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
+    TQueryOptions query_options;
+    query_options.__set_batch_size(4096);
+    query_options.__set_query_timeout(3600);
+    auto runtime_state = _build_runtime_state(query_options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_OK(sink->prepare(runtime_state.get()));
+
+    size_t request_size_before_swap = 0;
+    size_t request_size_after_swap = 0;
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::_send_request::after_swap");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+        RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+        RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [&](void* arg) {
+        RefCountClosure<PTabletWriterOpenResult>* closure = (RefCountClosure<PTabletWriterOpenResult>*)arg;
+        EXPECT_FALSE(closure->cntl.Failed());
+        EXPECT_EQ(TStatusCode::OK, closure->result.status().status_code());
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+        RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+        PTabletWriterAddChunksRequest* request = std::get<1>(*rpc_tuple);
+        // Capture request size before Swap — should contain serialized chunk data
+        request_size_before_swap = request->ByteSizeLong();
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [&](void* arg) {
+        std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>* rpc_pair =
+                (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+        *rpc_pair->second = true;
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::_send_request::after_swap", [&](void* arg) {
+        PTabletWriterAddChunksRequest* request = (PTabletWriterAddChunksRequest*)arg;
+        // After Swap, request should be empty — protobuf memory released
+        request_size_after_swap = request->ByteSizeLong();
+    });
+
+    ASSERT_OK(sink->open(runtime_state.get()));
+    auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
+    ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+    // close() flushes the buffered chunk and triggers _send_request with eos=true,
+    // which serializes the chunk data and dispatches the RPC.
+    (void)sink->close(runtime_state.get(), Status::OK());
+
+    // Verify: before Swap the request had serialized chunk data, after Swap it's cleared
+    EXPECT_GT(request_size_before_swap, 0);
+    EXPECT_EQ(request_size_after_swap, 0);
+}
+
 } // namespace starrocks
