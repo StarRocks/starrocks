@@ -19,11 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
->>>>>>> 2b213f9f98 ([Enhancement] enable information_schema show comments for external catalogs (#70197))
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
@@ -46,11 +42,8 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
->>>>>>> 2b213f9f98 ([Enhancement] enable information_schema show comments for external catalogs (#70197))
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
