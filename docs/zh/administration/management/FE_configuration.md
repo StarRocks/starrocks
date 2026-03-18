@@ -3864,6 +3864,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于共享数据集群。
 - 引入版本: v3.3.7, v3.4.0, v3.5.0
 
+##### `lake_repair_metadata_fetch_max_version_batch_size`
+
+- 默认值：160
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Tablet 修复时获取 Tablet 元数据的版本扫描最大批次大小。批次大小从 5 开始，每次翻倍增长，直到达到此最大值。较大的值允许单次批量获取更多版本，通过跨版本文件存在性缓存提高修复效率。如果设置的值小于 5，运行时会自动调整为 5。
+- 引入版本：-
+
 ##### `enable_iceberg_commit_queue`
 
 - 默认值: true
