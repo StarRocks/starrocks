@@ -22,12 +22,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
->>>>>>> ae0cbc274a ([BugFix] Fix FileSystemExpirationChecker blocking on slow HDFS close (#70311))
+import com.starrocks.common.UserException;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -401,7 +397,7 @@ public class HdfsFsManager {
      * On success the returned HdfsFs has its lock held — the caller MUST release it in a
      * finally block.
      */
-    private HdfsFs acquireCachedFileSystem(HdfsFsIdentity identity) throws StarRocksException {
+    private HdfsFs acquireCachedFileSystem(HdfsFsIdentity identity) throws UserException {
         for (int attempt = 0; attempt < MAX_CACHE_ACQUIRE_RETRIES; attempt++) {
             cachedFileSystem.putIfAbsent(identity, new HdfsFs(identity));
             HdfsFs fileSystem = cachedFileSystem.get(identity);
@@ -416,7 +412,7 @@ public class HdfsFsManager {
             // Entry was evicted while we waited for the lock — unlock and retry.
             fileSystem.getLock().unlock();
         }
-        throw new StarRocksException(
+        throw new UserException(
                 "Failed to acquire cached file system for " + identity + " after " + MAX_CACHE_ACQUIRE_RETRIES + " retries");
     }
 
