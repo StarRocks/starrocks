@@ -400,9 +400,6 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
 }
 
-<<<<<<< HEAD
-} // namespace starrocks
-=======
 // Verify that _send_request() releases protobuf memory via Swap before returning.
 // This prevents cross-tracker memory accounting mismatch where protobuf memory allocated
 // under process_mem_tracker (via SCOPED(nullptr)) would be freed under instance_mem_tracker.
@@ -479,4 +476,4 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
 }
 
 } // namespace starrocks
->>>>>>> 47ffa39f14 ([BugFix] Fix query_pool memory tracker going negative during ingestion (#70228))
+
