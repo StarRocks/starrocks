@@ -966,7 +966,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 }
             }
         }
-
     }
 
     // Process txn logs AFTER metadata processing, so that retained_files collected from
@@ -1006,8 +1005,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
                 if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
-                    RETURN_IF_ERROR(
-                            delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter, retained_files));
+                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter,
+                                                              retained_files));
                 }
             }
             // delete txnlog
