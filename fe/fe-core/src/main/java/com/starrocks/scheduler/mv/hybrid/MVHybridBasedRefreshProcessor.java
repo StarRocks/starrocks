@@ -72,6 +72,11 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         if (!mvRefreshParams.isCompleteRefresh()) {
             return false;
         }
+        // if force refresh is requested, bypass IVM and use PCT directly, which correctly handles
+        // force semantics (clears visibleVersionMap, drops partitions, forces full re-materialization).
+        if (mvRefreshParams.isNonTentativeForce()) {
+            return false;
+        }
         return true;
     }
 

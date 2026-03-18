@@ -3822,6 +3822,21 @@ public class Config extends ConfigBase {
     public static boolean enable_materialized_view_concurrent_prepare = true;
 
     /**
+     * Force refresh materialized view regardless of whether base tables have changed or not.
+     * This is useful for external tables where MV cannot accurately detect changes.
+     * Use a bitmap to control which partition types are affected:
+     * - 0: disabled (default), keep current behavior
+     * - 1: force refresh non-partitioned MV
+     * - 2: force refresh range partitioned MV
+     * - 4: force refresh list partitioned MV
+     * Combine values (e.g., 7 = 1+2+4) to force refresh multiple types.
+     */
+    @ConfField(mutable = true, comment = "Force refresh MV regardless of base table changes. " +
+            "0: disabled (default), 1: non-partitioned, 2: range partitioned, 4: list partitioned. " +
+            "Combine values for multiple types.")
+    public static int mv_refresh_force_partition_type = 0;
+
+    /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
      */
