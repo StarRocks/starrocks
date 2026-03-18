@@ -468,9 +468,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     [
         { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
     ｜
-        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) 
-                  ...
-        }
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) }
     ]
 [PROPERTIES (
     "tablet_reshard_target_size"="<target_size>")
