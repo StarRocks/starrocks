@@ -338,8 +338,12 @@ public abstract class MVTimelinessArbiter {
             }
         }
         PCellSortedSet adds = diff.getAdds();
+        PCellSortedSet deletes = diff.getDeletes();
         if (adds != null && !adds.isEmpty()) {
             mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
+        }
+        if (deletes != null && !deletes.isEmpty()) {
+            mvUpdateInfo.getMVToRefreshPCells().addAll(deletes);
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
@@ -403,9 +407,13 @@ public abstract class MVTimelinessArbiter {
             }
         }
         PCellSortedSet adds = diff.getAdds();
+        PCellSortedSet deletes = diff.getDeletes();
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (adds != null && !adds.isEmpty()) {
             mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
+        }
+        if (deletes != null && !deletes.isEmpty()) {
+            mvUpdateInfo.getMVToRefreshPCells().addAll(deletes);
         }
         return mvUpdateInfo;
     }

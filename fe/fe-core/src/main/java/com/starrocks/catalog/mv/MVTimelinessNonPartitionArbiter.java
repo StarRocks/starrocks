@@ -31,6 +31,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
@@ -73,6 +74,12 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
                     mvBaseTableUpdateInfo.getToRefreshPCells() != null &&
                     !mvBaseTableUpdateInfo.getToRefreshPCells().isEmpty()) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
+                return MvUpdateInfo.fullRefresh(mv);
+            }
+
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, tableInfo, table)) {
+                logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }
         }
