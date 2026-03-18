@@ -47,13 +47,15 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     }
 
     /**
-     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
+     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into
+     * result.
      *
      * Compare the partition of the base table and the partition of the mv.
      * @param baseItems the partition name to its list partition cell of the base table
      * @param mvItems the partition name to its list partition cell of the mv
      * @return the list partition diff between the base table and the mv
      */
+<<<<<<< HEAD
     public static PartitionDiff getListPartitionDiff(Map<String, PCell> baseItems,
                                                      Map<String, PCell> mvItems) {
         // This synchronization method has a one-to-one correspondence
@@ -62,6 +64,16 @@ public final class ListPartitionDiffer extends PartitionDiffer {
         Map<String, PCell> adds = diffList(baseItems, mvItems, true);
         // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
         Map<String, PCell> deletes = diffList(mvItems, baseItems, false);
+=======
+    public static PartitionDiff getListPartitionDiff(PCellSortedSet baseItems,
+                                                     PCellSortedSet mvItems) {
+        // This synchronization method has a one-to-one correspondence
+        // between the base table and the partition of the mv.
+        // for addition, we need to ensure the partition name is unique in case-insensitive
+        PCellSortedSet adds = diffList(baseItems, mvItems, true);
+        // for deletion, we don't need to ensure the partition name is unique since mvItems is used as the reference
+        PCellSortedSet deletes = diffList(mvItems, baseItems, false);
+>>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
         return new PartitionDiff(adds, deletes);
     }
 
@@ -73,15 +85,24 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * NOTE: StarRocks partition names are case-insensitive, so output map keys must also be distinct in
      * case-insensitive when this option is enabled.
      */
+<<<<<<< HEAD
     public static Map<String, PCell> diffList(Map<String, PCell> srcListMap,
                                               Map<String, PCell> dstListMap,
                                               boolean isEnsureUniqueResultNames) {
         if (CollectionUtils.sizeIsEmpty(srcListMap)) {
             return Maps.newHashMap();
+=======
+    public static PCellSortedSet diffList(PCellSortedSet srcPCells,
+                                          PCellSortedSet dstPCells,
+                                          boolean isEnsureUniqueResultNames) {
+        if (srcPCells == null || srcPCells.isEmpty()) {
+            return PCellSortedSet.of();
+>>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
         }
 
         // PListCell may contain multi values, we need to ensure they are not duplicated from each other
         // NOTE: dstListMap's partition items may be duplicated, we need to collect them first
+<<<<<<< HEAD
         Map<PListAtom, PListCell> dstAtomMaps = Maps.newHashMap();
         for (PCell l : dstListMap.values()) {
             Preconditions.checkArgument(l instanceof PListCell, "PListCell expected");
@@ -100,11 +121,80 @@ public final class ListPartitionDiffer extends PartitionDiffer {
             PListCell srcItem = (PListCell) srcEntry.getValue();
 
             if (srcItem.equals(dstListMap.get(pName))) {
+=======
+        // Use TreeMap to maintain sorted order for efficient merge-join operations
+        Map<PListCell, PListCell> dstAtomMaps = dstPCells
+                .stream()
+                .flatMap(l -> {
+                    PListCell pListCell = (PListCell) l.cell();
+                    return pListCell.toSingleValueCells().stream().map(x -> Map.entry(x, pListCell));
+                })
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (v1, v2) -> v1, Maps::newTreeMap));
+        PCellSortedSet result = PCellSortedSet.of();
+        PCellSortedSet occupiedPartitions = null;
+        if (isEnsureUniqueResultNames) {
+            occupiedPartitions = PCellSortedSet.of();
+            occupiedPartitions.addAll(dstPCells);
+        }
+        for (PCellWithName srcPCell : srcPCells.getPartitions()) {
+            String pName = srcPCell.name();
+            PListCell srcItem = (PListCell) srcPCell.cell();
+            if (dstPCells.containsPCellWithName(srcPCell)) {
+>>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
                 continue;
             }
 
+<<<<<<< HEAD
             // distinct atoms
             List<PListAtom> srcDistinctAtoms = srcItem.toAtoms().stream()
+=======
+            if (!srcDistinctAtoms.isEmpty()) {
+                srcDistinctAtoms.forEach(atom -> dstAtomMaps.put(atom, srcItem));
+                List<List<String>> newSrcItems = srcDistinctAtoms
+                        .stream()
+                        .map(PListCell::getPartitionItems)
+                        .map(items -> items.get(0))
+                        .collect(Collectors.toList());
+                PListCell newSrcValue = new PListCell(newSrcItems);
+                // Optionally ensure the output partition name is unique against both existing destination partitions
+                // and newly generated result partitions.
+                if (occupiedPartitions != null) {
+                    if (occupiedPartitions.containsName(pName)) {
+                        try {
+                            pName = AnalyzerUtils.calculateUniquePartitionName(pName, newSrcValue, occupiedPartitions);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Fail to calculate unique partition name: " + e.getMessage());
+                        }
+                    }
+                    occupiedPartitions.add(PCellWithName.of(pName, newSrcValue));
+                }
+                result.add(PCellWithName.of(pName, newSrcValue));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Filter out atoms that exist in dstAtomMaps using merge-join algorithm.
+     * This is more efficient than checking containsKey for each atom when dealing with sorted collections.
+     * @param srcAtoms source atoms (will be sorted)
+     * @param dstAtomMaps destination atom map (must be sorted, e.g., TreeMap)
+     * @return list of atoms in srcAtoms that are not in dstAtomMaps
+     */
+    private static List<PListCell> filterDistinctAtoms(Set<PListCell> srcAtoms,
+                                                       Map<PListCell, PListCell> dstAtomMaps) {
+        if (srcAtoms.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        if (dstAtomMaps.isEmpty()) {
+            return Lists.newArrayList(srcAtoms);
+        }
+
+        // For small sets, direct containsKey check is more efficient
+        if (srcAtoms.size() < 10) {
+            return srcAtoms.stream()
+>>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
                     .filter(atom -> !dstAtomMaps.containsKey(atom))
                     .collect(Collectors.toList());
             if (!srcDistinctAtoms.isEmpty()) {
