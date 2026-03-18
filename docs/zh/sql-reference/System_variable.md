@@ -221,6 +221,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: int
 * **引入版本**: v3.5.3
 
+### cbo_cte_force_materialize
+
+* **描述**: 设置为 `true` 时，优化器将强制对每个 CTE 进行物化（produce/consume），与引用次数无关。需要将 `cbo_cte_reuse` 设为 `true`（并启用 Pipeline Engine）才能生效。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: Boolean
+* **引入版本**: -
+
 ### cbo_cte_reuse
 
 * **描述**: 控制优化器是否可以通过重用 Common Table Expression (CTE) 重写 multi-distinct 聚合查询（CBO 的 CTE‑reuse 重写）。启用时，Planner ）可能会为多列 DISTINCT、偏斜聚合或当统计信息表明 CTE 重写更高效时选择基于 CTE 的重写；此配置项也会尊重 `prefer_cte_rewrite` hint。禁用时，不允许基于 CTE 的重写，Planner 将尝试 multi-function 重写；如果查询需要 CTE（例如，多列 DISTINCT 或 multi-function 重写无法处理的函数），Planner 将抛出错误。注意：只有在 Pipeline Engine 打开时 CTE 重用才生效。

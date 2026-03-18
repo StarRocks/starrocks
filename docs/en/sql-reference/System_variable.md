@@ -239,6 +239,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: int
 * **Introduced in**: v3.5.3
 
+### cbo_cte_force_materialize
+
+* **Description**: When setting to `true`, the optimizer will force every CTE to be materialized (produce/consume), regardless of reference count. Requires `cbo_cte_reuse` to be `true` (and pipeline engine enabled) to take effect.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: Boolean
+* **Introduced in**: -
+
 ### cbo_cte_reuse
 
 * **Description**: Controls whether the optimizer may rewrite multi-distinct aggregate queries by reusing a Common Table Expression (CTE) (the CBO CTE‑reuse rewrite). When enabled, the planner (RewriteMultiDistinctRule) may choose a CTE-based rewrite for multi-column distincts, skewed aggregations, or when statistics indicate the CTE rewrite is more efficient; it also respects the `prefer_cte_rewrite` hint. When disabled, CTE-based rewrite is not allowed and the planner will attempt the multi-function rewrite; if a query requires CTE (for example, multi-column DISTINCT or functions that cannot be handled by multi-function rewrite) the planner will raise a user error. Note: the effective setting checked by the optimizer is the logical AND of this flag and the pipeline engine flag — i.e. `isCboCteReuse()` returns this variable AND `enablePipelineEngine`, so CTE reuse is only effective when `enablePipelineEngine` is on.

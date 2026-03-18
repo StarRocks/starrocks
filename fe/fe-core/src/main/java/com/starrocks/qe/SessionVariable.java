@@ -432,6 +432,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_FORCE_REUSE_NODE_COUNT = "cbo_cte_force_reuse_node_count";
     public static final String CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY =
             "cbo_cte_force_reuse_limit_without_order_by";
+    public static final String CBO_CTE_FORCE_MATERIALIZE = "cbo_cte_force_materialize";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -1435,6 +1436,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // When false, allow inline even if CTE has LIMIT without ORDER BY (may cause inconsistent results).
     @VarAttr(name = CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY, flag = VariableMgr.INVISIBLE)
     private boolean cboCTEForceReuseLimitWithoutOrderBy = true;
+
+    @VarAttr(name = CBO_CTE_FORCE_MATERIALIZE)
+    private boolean cboCTEForceMaterialize = false;
 
     @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean preferCTERewrite = false;
@@ -3495,6 +3499,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCTEForceReuseLimitWithoutOrderBy(boolean cboCTEForceReuseLimitWithoutOrderBy) {
         this.cboCTEForceReuseLimitWithoutOrderBy = cboCTEForceReuseLimitWithoutOrderBy;
+    }
+
+    public boolean isCboCTEForceMaterialize() {
+        return cboCTEForceMaterialize;
+    }
+
+    public void setCboCTEForceMaterialize(boolean cboCTEForceMaterialize) {
+        this.cboCTEForceMaterialize = cboCTEForceMaterialize;
     }
 
     public double getCboPruneShuffleColumnRate() {

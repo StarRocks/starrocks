@@ -182,7 +182,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()),
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit(),
+                        session.getSessionVariable().isCboCTEForceMaterialize()),
                 new MVTransformerContext(session, true));
     }
 
@@ -219,8 +220,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     public LogicalPlan transform(Relation relation) {
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             QueryRelation queryRelation = (QueryRelation) relation;
-            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1)) {
-                // all cte is only referenced once, no need to reuse
+            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1)
+                    && !cteContext.isForceMaterialize()) {
                 return visit(relation);
             }
 
@@ -242,7 +243,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
-            if (cteRelation.getRefs() <= 1 || cteContext.isForceInline()) {
+            if ((cteRelation.getRefs() <= 1 || cteContext.isForceInline()) && !cteContext.isForceMaterialize()) {
                 continue;
             }
 

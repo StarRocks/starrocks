@@ -34,7 +34,8 @@ public class TransformerContext {
             MVTransformerContext mvTransformerContext) {
         this(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit()), mvTransformerContext);
+                new CTETransformerContext(session.getSessionVariable().getCboCTEMaxLimit(),
+                        session.getSessionVariable().isCboCTEForceMaterialize()), mvTransformerContext);
     }
 
     public TransformerContext(

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -60,6 +61,7 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(0);
         connectContext.getSessionVariable().setCboCTEForceReuseLimitWithoutOrderBy(true);
+        connectContext.getSessionVariable().setCboCTEForceMaterialize(false);
     }
 
     @ParameterizedTest
@@ -1187,5 +1189,20 @@ public class CTEPlanTest extends PlanTestBase {
         // Should not force CTE reuse when variable is disabled
         // (CTE reuse decision will be based on other factors like ratio and consume count)
         // Note: The actual behavior depends on CTE reuse ratio and consume count
+    }
+
+    @Test
+    public void testCTEForceMaterializeSingleUse() throws Exception {
+        String sql = "with x0 as (select * from t0) select * from x0";
+
+        // Without force materialization, single-use CTE is inlined (no MultiCastDataSinks)
+        connectContext.getSessionVariable().setCboCTEForceMaterialize(false);
+        String plan = getFragmentPlan(sql);
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"), plan);
+
+        // With force materialization, single-use CTE is NOT inlined
+        connectContext.getSessionVariable().setCboCTEForceMaterialize(true);
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
     }
 }

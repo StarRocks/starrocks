@@ -52,6 +52,8 @@ public class CTEContext {
 
     private boolean enableCTE;
 
+    private boolean forceMaterialize;
+
     private final List<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
@@ -76,6 +78,10 @@ public class CTEContext {
 
     public void setEnableCTE(boolean enableCTE) {
         this.enableCTE = enableCTE;
+    }
+
+    public void setForceMaterialize(boolean forceMaterialize) {
+        this.forceMaterialize = forceMaterialize;
     }
 
     public void setInlineCTERatio(double ratio) {
@@ -165,8 +171,12 @@ public class CTEContext {
         }
 
         // 1. Disable CTE reuse
-        // 2. CTE consume only use once
-        if (!enableCTE || consumeNums.getOrDefault(cteId, 0) <= 1) {
+        if (!enableCTE) {
+            return true;
+        }
+
+        // 2. CTE consume only use once (skip when force materialization is on)
+        if (!forceMaterialize && consumeNums.getOrDefault(cteId, 0) <= 1) {
             return true;
         }
 

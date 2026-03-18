@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -31,17 +30,20 @@ public class CTETransformerContext {
     // When the node count of cte is 0, disable the force reuse optimization.
     // cte id -> node count
     private final Map<Integer, Integer> cteIdToNodeCount;
-    
+
     private final AtomicInteger uniqueId;
 
     private final int cteMaxLimit;
 
-    public CTETransformerContext(int cteMaxLimit) {
+    private final boolean forceMaterialize;
+
+    public CTETransformerContext(int cteMaxLimit, boolean forceMaterialize) {
         this.cteExpressions = new HashMap<>();
         this.cteRefIdMapping = new HashMap<>();
         this.cteIdToNodeCount = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
+        this.forceMaterialize = forceMaterialize;
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {
@@ -108,5 +110,9 @@ public class CTETransformerContext {
 
     public boolean isForceInline() {
         return cteRefIdMapping.size() > cteMaxLimit;
+    }
+
+    public boolean isForceMaterialize() {
+        return forceMaterialize;
     }
 }

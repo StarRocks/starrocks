@@ -98,6 +98,7 @@ public class OptimizerContext {
         this.cteContext.setEnableCTE(getSessionVariable().isCboCteReuse());
         this.cteContext.setInlineCTERatio(getSessionVariable().getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(getSessionVariable().getCboCTEMaxLimit());
+        this.cteContext.setForceMaterialize(getSessionVariable().isCboCTEForceMaterialize());
 
         this.optimizerOptions = new OptimizerOptions();
         this.enableJoinIsNullPredicateDerive = getSessionVariable().isCboDeriveJoinIsNullPredicate();

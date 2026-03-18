@@ -40,19 +40,12 @@ public class ForceCTEReuseRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        boolean shouldForceReuse = false;
-
-        // Always force reuse for non-deterministic functions
-        if (hasNonDeterministicFunction(input)) {
-            shouldForceReuse = true;
-        }
-
-        // Force reuse for LIMIT without ORDER BY if enabled by session variable
-        if (context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy() && hasLimitWithoutOrderBy(input)) {
-            shouldForceReuse = true;
-        }
-
-        if (shouldForceReuse) {
+        // - Always force reuse when the session variable specifies so
+        // - Always force reuse for non-deterministic functions
+        // - Force reuse for LIMIT without ORDER BY if enabled by session variable
+        if (context.getSessionVariable().isCboCTEForceMaterialize()
+                || hasNonDeterministicFunction(input)
+                || (context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy() && hasLimitWithoutOrderBy(input))) {
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
             CTEContext cteContext = context.getCteContext();
             int cteId = produce.getCteId();
