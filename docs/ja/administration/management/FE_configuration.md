@@ -3283,6 +3283,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE が各 BE からタブレット統計を取得する時間間隔。
 - Introduced in: -
 
+##### `enable_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: テーブル作成時に Range-based Distribution セマンティクスを有効化するかどうか。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_parallel_tablets`
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: 並行して分割または結合できるタブレット数の最大値。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- Default: 1073741824 (1 GB)
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: SPLIT または MERGE 操作後のテーブルのターゲットサイズ。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: 古いタブレットを分割できる新しいタブレットの最大数。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- Default: 259200000 (72 hours)
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: 過去のタブレット SPLIT/MERGE ジョブの最大保持期間。
+- Introduced in: v4.1.0
+
 ### 共有データ
 
 ##### `aws_s3_access_key`

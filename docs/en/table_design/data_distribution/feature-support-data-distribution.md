@@ -57,6 +57,10 @@ This document outlines the partitioning and bucketing features supported by Star
     </tr>
 </table>
 
+:::note
+From v4.1 onwards, the maximum size of a tablet is changed to 100 GB.
+:::
+
 ## Partitioning
 
 <table>
@@ -105,7 +109,7 @@ This document outlines the partitioning and bucketing features supported by Star
     </tr>
 </table>
 
-###  Differences between partitioning strategies
+### Differences between partitioning strategies
 
 <table>
     <tr>

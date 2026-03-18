@@ -13,6 +13,7 @@ ALTER TABLE は既存のテーブルを修正します。以下を含みます:
 - [テーブル、パーティション、ロールアップ、または列の名前変更](#rename)
 - [テーブルコメントの修正](#alter-table-comment-from-v31)
 - [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
+- [Tablet サイズの調整](#tablet-サイズの調整)
 - [バケッティング方法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
 - [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
 - [ロールアップの作成/削除](#modify-rollup)
@@ -443,6 +444,52 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
+
+### Tablet サイズの調整
+
+StarRocks は v4.1 以降、Tablet の分割（SPLIT）および結合（MERGE）をサポートしており、Tablet サイズを動的に管理できます。これにより、データスキューに対処するための適応的な仕組みが提供されます。
+
+SPLIT の構文：
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+MERGE の構文：
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+パラメータ：
+
+- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：1 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
+
+  - SPLIT が実行される条件：
+    - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
+    - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
+
+  - MERGE が実行される条件：
+    - 隣接する 2 つのタブレットの合計サイズが `tablet_reshard_target_size` を**下回る**こと。
+    - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
+
+詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
 
 ### 列の変更（列の追加/削除、列順の変更、列コメントの変更）
 
@@ -1350,6 +1397,53 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
+### Tablet の分割または結合
+
+- 表内にあるすべての条件を満たすタブレットを、1 GB (デフォルト) を目標サイズとして分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- パーティション内にあるすべての条件を満たすタブレットを分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- ID ごとに特定のタブレットを分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- 表内にあるすべての条件を満たすタブレットを、2 GB を目標サイズとして結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- パーティション内にあるすべての条件を満たすタブレットを結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- ID ごとに特定のタブレットを結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
+```
+
 ## 参考文献
 
 - [CREATE TABLE](CREATE_TABLE.md)
@@ -1357,4 +1451,3 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```
