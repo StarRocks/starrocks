@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public abstract class DefaultTraits extends ConnectorPartitionTraits {
@@ -167,7 +168,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                     // If this partition is dropped, ignore it.
                     continue;
                 }
-                long latestPartitionInfo = latestPartitionInfo.get(basePartitionName);
+                PartitionInfo latestPartition = latestPartitionInfo.get(basePartitionName);
 
                 MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
                 if (basePartitionInfo == null) {
@@ -179,23 +180,28 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                 if (table.getType() == Table.TableType.ICEBERG) {
                     long basePartitionVersion = basePartitionInfo.getVersion();
                     long basePartitionModifiedTime = basePartitionInfo.getLastRefreshTime();
-                    long latestPartitionVersion = latestPartitionInfo.getVersion();
-                    long latestPartitionModifiedTime = latestPartitionInfo.getModifiedTime();
+                    long latestPartitionVersion = latestPartition.getVersion();
+                    long latestPartitionModifiedTime = latestPartition.getModifiedTime();
+                    long normalizedBasePartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(basePartitionModifiedTime);
+                    long normalizedLatestPartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(latestPartitionModifiedTime);
                     if (basePartitionVersion == basePartitionModifiedTime) {
                         // 1. for historical iceberg mv, the version is the modified time
-                        if (latestPartitionModifiedTime >= 0 && latestPartitionModifiedTime != basePartitionModifiedTime) {
+                        if (normalizedLatestPartitionModifiedTime >= 0
+                                && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
                             result.add(basePartitionName);
                         }
                     } else {
                         // 2. for new iceberg mv, the version is the snapshot sequence number
-                        if (latestPartitionVersion >= 0 && (latestPartitionVersion != basePartitionVersion 
-                                || latestPartitionModifiedTime > basePartitionModifiedTime)) {
+                        if (latestPartitionVersion >= 0 && (latestPartitionVersion > basePartitionVersion 
+                                || normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime)) {
                             result.add(basePartitionName);
                         }
                     }
                 } else {
                     // TODO: correct the logic here by comparing version and modified time
-                    long latestPartitionVersion = latestPartitionInfo.getModifiedTime();
+                    long latestPartitionVersion = latestPartition.getModifiedTime();
                     // basePartitionVersion less than 0 is illegal
                     if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionInfo.getVersion()) {
                         result.add(basePartitionName);
@@ -204,6 +210,15 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
             }
         }
         return result;
+    }
+
+    private long normalizeIcebergModifiedTimeToMicros(long modifiedTime) {
+        if (modifiedTime < 0) {
+            return modifiedTime;
+        }
+        // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
+        // persist epoch milliseconds. Normalize the legacy comparison branch to micros to avoid false positives.
+        return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
     }
 
     private long getComparablePartitionVersion(MaterializedView.BasePartitionInfo basePartitionInfo,
