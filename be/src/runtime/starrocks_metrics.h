@@ -380,6 +380,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
     METRICS_DEFINE_THREAD_POOL(cluster_snapshot);
+    METRICS_DEFINE_THREAD_POOL(automatic_partition);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 
