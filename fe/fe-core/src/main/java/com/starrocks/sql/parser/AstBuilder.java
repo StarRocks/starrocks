@@ -1481,12 +1481,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<String> partitionNames = null;
-        if (context.string() != null && !context.string().isEmpty()) {
+        if (context.string() != null) {
             partitionNames = context.string().stream()
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
-        boolean isForce = context.FORCE() != null;
-        return new RefreshTableStmt(targetTableName, partitionNames, isForce, createPos(context));
+        return new RefreshTableStmt(targetTableName, partitionNames, createPos(context));
     }
 
     @Override
