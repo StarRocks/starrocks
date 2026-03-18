@@ -176,6 +176,7 @@
         "report_exec_rpc_request_retry_num",
         "query_cache_num_lanes_per_driver",
         "local_exchange_buffer_mem_limit_per_driver",
+        "local_exchange_buffer_mem_limit_by_consumer_dop",
         "streaming_agg_limited_memory_size",
         "partition_hash_join_probe_limit_size",
         "streaming_agg_chunk_buffer_size",
