@@ -14,6 +14,7 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
+- [调整 Tablet 大小](#调整-tablet-大小)
 - [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
 - [创建或删除 rollup index](#操作-rollup-index-语法)
 - [修改 bitmap index](#bitmap-index-修改)
@@ -442,6 +443,52 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
+
+### 调整 Tablet 大小
+
+从 v4.1 起，StarRocks 支持对 Tablet 进行拆分（SPLIT）和合并（MERGE），从而实现对 Tablet 大小的动态管理，并提供一种自适应的数据倾斜处理机制。
+
+SPLIT 语法：
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+MERGE 语法：
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+参数说明：
+
+- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：1 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
+
+  - 触发拆分（SPLIT）的条件：
+    - Tablet 的大小**大于** `tablet_reshard_target_size`。
+    - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+
+  - 触发合并（MERGE）的条件：
+    - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
+    - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+
+详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
 
 ### 修改列（添加/删除列，改变列的顺序或注释）
 
@@ -1350,6 +1397,53 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
+### 拆分或合并 Tablet
+
+- 将表中所有符合条件的 Tablet 拆分，目标大小为 1 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- 将指定分区中所有满足条件的 Tablet 拆分。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- 按 ID 拆分特定 Tablet。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- 将表中所有符合条件的 Tablet 合并，目标大小为 1 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- 将指定分区中所有满足条件的 Tablet 合并。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- 按 ID 合并特定 Tablet。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
+```
+
 ## 相关参考
 
 - [CREATE TABLE](CREATE_TABLE.md)
@@ -1357,4 +1451,3 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```
