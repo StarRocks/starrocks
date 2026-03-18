@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #include "gen_cpp/parquet_types.h"
 #include "gen_cpp/types.pb.h"
 #include "util/raw_container.h"
@@ -22,7 +24,13 @@ namespace parquet {
 class FileMetaData;
 } // namespace parquet
 
+namespace starrocks {
+class Column;
+}
+
 namespace starrocks::parquet {
+
+struct ParquetField;
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
@@ -47,6 +55,13 @@ public:
 
     static std::string get_file_cache_key(CacheType type, const std::string& filename, int64_t modification_time,
                                           uint64_t file_size);
+
+    static bool get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                 size_t* out_row);
+
+    static bool has_non_null_value(const Column* column, size_t num_rows);
+
+    static bool has_non_null_binary_value(const Column* column, size_t num_rows);
 
 private:
     inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
