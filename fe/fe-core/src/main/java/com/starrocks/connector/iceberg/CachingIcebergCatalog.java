@@ -344,47 +344,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService, boolean force) {
+    public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
-
-        // Force refresh: clear all cache and reload from delegate
-        if (force) {
-            LOG.info("Force refresh iceberg table {}.{} - clearing all cache", dbName, tableName);
-            tables.invalidate(icebergTableName);
-            partitionCache.invalidate(icebergTableName);
-            metaFileCacheMap.remove(icebergTableName);
-            tableLatestAccessTime.remove(icebergTableName);
-            tableLatestRefreshTime.remove(icebergTableName);
-
-            // Reload the latest table metadata from the underlying catalog
-            try {
-                BaseTable updatedTable = (BaseTable) delegate.getTable(dbName, tableName);
-                if (updatedTable != null) {
-                    LOG.info("Reloaded iceberg table {}.{} from delegate after force refresh", dbName, tableName);
-                    tables.put(icebergTableName, updatedTable);
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to reload iceberg table {}.{} from delegate", dbName, tableName, e);
-            }
-            return;
-        }
-
         if (tables.getIfPresent(icebergTableName) == null) {
-            // Table not in cache, invalidate partition cache and reload from delegate
             partitionCache.invalidate(icebergTableName);
-            // Load the latest table metadata from the underlying catalog to ensure
-            // subsequent queries see the most recent data. This is critical for MV refresh
-            // scenarios where the table metadata may have been evicted from cache but
-            // the underlying Iceberg table has been updated.
-            try {
-                BaseTable updatedTable = (BaseTable) delegate.getTable(dbName, tableName);
-                if (updatedTable != null) {
-                    LOG.info("Reload iceberg table {}.{} from delegate during refresh", dbName, tableName);
-                    tables.put(icebergTableName, updatedTable);
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to reload iceberg table {}.{} from delegate", dbName, tableName, e);
-            }
         } else {
             BaseTable currentTable = (BaseTable) tables.getIfPresent(icebergTableName);
             BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
@@ -477,7 +440,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     continue;
                 }
 
-                refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor, false);
+                refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, 
                         identifier.tableName, e);
