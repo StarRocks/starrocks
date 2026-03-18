@@ -30,11 +30,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TabletMeta;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Config;
->>>>>>> 3783f49ef3 ([Enhancement] Optimize cloud native tablet repair with exponential batch growth (#70386))
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
