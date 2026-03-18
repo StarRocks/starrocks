@@ -319,15 +319,25 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 - AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
 - UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
-- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
+- DUPLICATE KEY: Identical content in key columns co-exists in StarRocks. It can be used to store detailed data or data with no aggregation attributes.
 
   :::note
   DUPLICATE KEY is the default type. Data will be sequenced according to key columns.
   :::
 
 :::note
-Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+Value columns do not need to specify aggregation types when other key type is used to create tables with the exception of AGGREGATE KEY.
 :::
+
+### Range-based Distribution
+
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns. 
+
+The range-based distribution semantic is different from the default semantic in the following aspects:
+- If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
+- If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
+- If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
+- If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
 
 ## COMMENT
 
@@ -487,6 +497,10 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+
+- Range-based distribution
+
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. For detailed information, see [Range-based distribution](#range-based-distribution).
 
 ## Rollup index
 

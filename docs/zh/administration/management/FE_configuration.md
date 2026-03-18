@@ -283,7 +283,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当此项设置为 `true` 时，内部统计/审计条目将作为紧凑的 JSON 对象写入统计审计日志记录器。JSON 包含键 "executeType" (InternalType: QUERY 或 DML)、"queryId"、"sql" 和 "time"（已用毫秒）。当设置为 `false` 时，相同的信息将记录为单个格式化文本行（"statistic execute: ... | QueryId: [...] | SQL: ..."）。启用 JSON 可改进机器解析并与日志处理器集成，但也会导致原始 SQL 文本包含在日志中，这可能会暴露敏感信息并增加日志大小。
+- 描述: 当此项设置为 `true` 时，内部统计/审计条目将作为紧凑的 JSON 对象写入统计审计日志记录器。JSON 包含键 "executeType" (Internal类型: QUERY 或 DML)、"queryId"、"sql" 和 "time"（已用毫秒）。当设置为 `false` 时，相同的信息将记录为单个格式化文本行（"statistic execute: ... | QueryId: [...] | SQL: ..."）。启用 JSON 可改进机器解析并与日志处理器集成，但也会导致原始 SQL 文本包含在日志中，这可能会暴露敏感信息并增加日志大小。
 - 引入版本: -
 
 ##### `internal_log_modules`
@@ -2998,7 +2998,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `enable_strict_storage_medium_check`
 
-- Default: false
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
@@ -3281,6 +3281,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 从每个 BE 获取 tablet 统计信息的时间间隔。
 - 引入版本: -
+
+##### `enable_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为建表启用 Range-based Distribution 语意。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_max_parallel_tablets`
+
+- 默认值: 10240
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 可并行拆分或合并的 Tablet 最大数量。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- 默认值: 1073741824 (1 GB)
+- 类型: Int
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 执行 SPLIT 或 MERGE 操作后，Tablet 的目标大小。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- 默认值: 259200000 (72 hours)
+- 类型: Int
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
+- 引入版本: v4.1.0
 
 ### 共享数据
 
