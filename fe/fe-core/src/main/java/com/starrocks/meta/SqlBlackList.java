@@ -19,7 +19,6 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.ImageWriter;
@@ -29,13 +28,10 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.AddBackendBlackListStmt;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,6 +46,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 // Used by sql's blacklist
@@ -107,6 +104,27 @@ public class SqlBlackList {
         }
     }
 
+    public void addBlackSql(AddSqlBlackListStmt addSqlBlackListStmt) {
+        Pattern sqlPattern = null;
+        String sql = addSqlBlackListStmt.getSql().trim().toLowerCase().replaceAll(" +", " ")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ");
+        if (!sql.isEmpty()) {
+            try {
+                sqlPattern = Pattern.compile(sql);
+            } catch (PatternSyntaxException e) {
+                throw new SemanticException("Sql syntax error: %s", e.getMessage());
+            }
+        }
+
+        if (sqlPattern == null) {
+            throw new SemanticException("Sql pattern cannot be empty");
+        }
+
+        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
+    }
+
     public void deleteBlackSql(DelSqlBlackListStmt delSqlBlackListStmt) {
         List<Long> indexs = delSqlBlackListStmt.getIndexs();
         if (indexs != null) {
@@ -116,18 +134,6 @@ public class SqlBlackList {
                             GlobalStateMgr.getCurrentState().getSqlBlackList().delete(id);
                         }
                     });
-        }
-    }
-
-    public void addBlackSql(AddBackendBlackListStmt addBackendBlackListStmt, ConnectContext context)
-            throws StarRocksException {
-        Authorizer.check(addBackendBlackListStmt, context);
-        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (sis.getBackend(beId) == null) {
-                throw new StarRocksException("Not found backend: " + beId);
-            }
-            SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
     }
 
