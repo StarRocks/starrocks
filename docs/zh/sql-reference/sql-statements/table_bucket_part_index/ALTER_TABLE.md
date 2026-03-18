@@ -451,15 +451,11 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 SPLIT 语法：
 
 ```SQL
-ALTER TABLE <table_name> SPLIT
-    [
-        { TABLET | TABLETS } { PARTITION (<partition_name>) | 
-                               PARTITIONS (<partition_name1>, <partition_name2>, ...) 
-        } 
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
     ｜
-        { TABLET (<tablet_id>) | 
-          TABLETS (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) 
-        }
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
     ]
 [PROPERTIES (
     "tablet_reshard_target_size"="<target_size>")
@@ -469,15 +465,11 @@ ALTER TABLE <table_name> SPLIT
 MERGE 语法：
 
 ```SQL
-ALTER TABLE <table_name> MERGE
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     [
-        { TABLET | TABLETS } { PARTITION (<partition_name>) |
-                               PARTITIONS (<partition_name1>, <partition_name2>, ...) 
-        } 
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
     ｜
-        { TABLET (<tablet_id1>, <tablet_id2>, ...) | 
-          TABLETS (<tablet_id1>, <tablet_id2>, ...) 
-                  (<tablet_id3>, <tablet_id4>, ...) 
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) 
                   ...
         }
     ]
@@ -1409,47 +1401,37 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### 拆分或合并 Tablet
 
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 1 GB。
+- 将表中所有符合条件的 Tablet 拆分，目标大小为 1 GB（默认值）。
 
 ```SQL
-ALTER TABLE table1 SPLIT TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+ALTER TABLE table1 SPLIT TABLETS;
 ```
 
 - 将指定分区中所有满足条件的 Tablet 拆分。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS
-PARTITION (p1)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+PARTITION (p1);
 ```
 
 - 按 ID 拆分特定 Tablet。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS
-(9588955, 9588956, 9588957)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+(9588955, 9588956, 9588957);
 ```
 
-- 将表中所有符合条件的 Tablet 合并，目标大小为 1 GB。
+- 将表中所有符合条件的 Tablet 合并，目标大小为 1 GB（默认值）。
 
 ```SQL
-ALTER TABLE table1 MERGE TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+ALTER TABLE table1 MERGE TABLETS;
 ```
 
 - 将指定分区中所有满足条件的 Tablet 合并。
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
-PARTITIONS (p1, p2, p3)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+PARTITIONS (p1, p2, p3);
 ```
 
 - 按 ID 合并特定 Tablet。
@@ -1457,9 +1439,7 @@ PROPERTIES (
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+(9588958, 9588959);
 ```
 
 ## 相关参考

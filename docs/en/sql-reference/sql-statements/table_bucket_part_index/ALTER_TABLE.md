@@ -450,15 +450,11 @@ StarRocks supports splitting and merging tablets from v4.1 onwards, allowing dyn
 Syntax for SPLIT:
 
 ```SQL
-ALTER TABLE <table_name> SPLIT
-    [
-        { TABLET | TABLETS } { PARTITION (<partition_name>) | 
-                               PARTITIONS (<partition_name1>, <partition_name2>, ...) 
-        } 
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
     ｜
-        { TABLET (<tablet_id>) | 
-          TABLETS (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) 
-        }
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
     ]
 [PROPERTIES (
     "tablet_reshard_target_size"="<target_size>")
@@ -468,15 +464,11 @@ ALTER TABLE <table_name> SPLIT
 Syntax for MERGE:
 
 ```SQL
-ALTER TABLE <table_name> MERGE
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     [
-        { TABLET | TABLETS } { PARTITION (<partition_name>) |
-                               PARTITIONS (<partition_name1>, <partition_name2>, ...) 
-        } 
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
     ｜
-        { TABLET (<tablet_id1>, <tablet_id2>, ...) | 
-          TABLETS (<tablet_id1>, <tablet_id2>, ...) 
-                  (<tablet_id3>, <tablet_id4>, ...) 
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) 
                   ...
         }
     ]
@@ -1408,47 +1400,37 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### SPLIT or MERGE tablets
 
-- Split all tablets that meet the conditions in the table to a target size of 1 GB.
+- Split all tablets that meet the conditions in the table to a target size of 1 GB (Default).
 
 ```SQL
-ALTER TABLE table1 SPLIT TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+ALTER TABLE table1 SPLIT TABLETS;
 ```
 
 - Split all tablets that meet the conditions in a partition.
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS
-PARTITION (p1)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+PARTITION (p1);
 ```
 
 - Split specific tablets by ID.
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS
-(9588955, 9588956, 9588957)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+(9588955, 9588956, 9588957);
 ```
 
-- Merge all tablets that meet the conditions in the table to a target size of 1 GB.
+- Merge all tablets that meet the conditions in the table to a target size of 1 GB (Default).
 
 ```SQL
-ALTER TABLE table1 MERGE TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+ALTER TABLE table1 MERGE TABLETS;
 ```
 
 - Merge all tablets that meet the conditions in specific partitions.
 
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
-PARTITIONS (p1, p2, p3)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+PARTITIONS (p1, p2, p3);
 ```
 
 - Merge specific tablets by ID.
@@ -1456,9 +1438,7 @@ PROPERTIES (
 ```SQL
 ALTER TABLE table1 MERGE TABLETS
 (9588955, 9588956, 9588957)
-(9588958, 9588959)
-PROPERTIES (
-    "tablet_reshard_target_size"="1073741824");
+(9588958, 9588959);
 ```
 
 ## References
