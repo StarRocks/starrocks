@@ -130,8 +130,25 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(DictionaryGetOperator.class, (op, childOps) -> {
                     DictionaryGetOperator dictGet = (DictionaryGetOperator) op;
                     return new DictionaryGetOperator(childOps, dictGet.getType(), dictGet.getDictionaryId(),
-                            dictGet.getDictionaryTxnId(), dictGet.getKeySize(), dictGet.getNullIfNotExist()); })
+                            dictGet.getDictionaryTxnId(), dictGet.getKeySize(),
+                            getNullIfNotExistForClone(dictGet, childOps)); })
                 .build();
+    }
+
+    private static boolean getNullIfNotExistForClone(DictionaryGetOperator dictGet, List<ScalarOperator> childOps) {
+        // dictionary_get(dict_name, key1, ..., keyN [, null_if_not_exist])
+        // If null_if_not_exist child exists and is a non-null bool literal, keep field in sync with rewritten child.
+        int expectedArgsWithFlag = dictGet.getKeySize() + 2;
+        if (childOps.size() == expectedArgsWithFlag) {
+            ScalarOperator nullIfNotExist = childOps.get(childOps.size() - 1);
+            if (nullIfNotExist instanceof ConstantOperator) {
+                ConstantOperator constant = (ConstantOperator) nullIfNotExist;
+                if (constant.getType().isBoolean() && !constant.isNull()) {
+                    return constant.getBoolean();
+                }
+            }
+        }
+        return dictGet.getNullIfNotExist();
     }
 
     public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {

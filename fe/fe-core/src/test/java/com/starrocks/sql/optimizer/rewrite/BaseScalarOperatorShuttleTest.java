@@ -501,4 +501,32 @@ class BaseScalarOperatorShuttleTest {
         assertEquals(100L, newDictGet.getDictionaryId());
     }
 
+
+    @Test
+    void testDictionaryGetOperatorRewriteNullIfNotExist() {
+        ColumnRefOperator key = new ColumnRefOperator(1, INT, "key", true);
+        DictionaryGetOperator dictGet = new DictionaryGetOperator(
+                Lists.newArrayList(
+                        ConstantOperator.createVarchar("test_db.user_mapping_dict"),
+                        key,
+                        ConstantOperator.createBoolean(true)),
+                INT, 100L, 200L, 1, true);
+
+        BaseScalarOperatorShuttle toggleBool = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitConstant(ConstantOperator literal, Void context) {
+                if (literal.getType().isBoolean() && !literal.isNull()) {
+                    return ConstantOperator.createBoolean(!literal.getBoolean());
+                }
+                return literal;
+            }
+        };
+
+        ScalarOperator result = toggleBool.visitDictionaryGetOperator(dictGet, null);
+        assert result instanceof DictionaryGetOperator;
+        DictionaryGetOperator rewritten = (DictionaryGetOperator) result;
+        assertEquals(ConstantOperator.FALSE, rewritten.getChild(2));
+        assertEquals(false, rewritten.getNullIfNotExist());
+    }
+
 }
