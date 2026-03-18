@@ -127,8 +127,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate = new RESTSessionCatalog();
             configureHadoopConf(delegate, conf);
             delegate.initialize(name, restCatalogProperties);
-            if (delegate.authManager() instanceof RefreshingAuthManager) {
-                ((RefreshingAuthManager) delegate.authManager()).keepRefreshed(true);
+            Object authManager = delegate.authManager();
+            if (authManager instanceof RefreshingAuthManager) {
+                ((RefreshingAuthManager) authManager).keepRefreshed(true);
             }
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
