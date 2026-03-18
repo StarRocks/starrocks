@@ -359,7 +359,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
 
 class S3FileSystem : public FileSystem {
 public:
-    S3FileSystem(FSOptions options) : _options(std::move(options)) {}
+    S3FileSystem(const FSOptions& options) : _options(options) {}
     ~S3FileSystem() override = default;
 
     S3FileSystem(const S3FileSystem&) = delete;
@@ -572,9 +572,9 @@ Status S3FileSystem::rename_file(const std::string& src, const std::string& targ
 
 StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
     // call `is_directory()` to check if 'path' is an valid path
-    Status status = S3FileSystem::is_directory(path).status();
+    const Status status = S3FileSystem::is_directory(path).status();
     if (!status.ok()) {
-        return std::move(status);
+        return status;
     }
     return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
                      .free = std::numeric_limits<int64_t>::max(),
