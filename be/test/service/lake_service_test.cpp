@@ -4277,6 +4277,166 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
     }
 }
 
+TEST_F(LakeServiceTest, test_check_missing_files_across_versions) {
+    // Validates that missing files are correctly reported across multiple versions
+    // when check_missing_files is enabled, including files shared between versions
+    // and files unique to a single version.
+
+    auto publish_version = [&](int64_t base_version, int64_t new_version) {
+        auto txn_log = generate_write_txn_log(1, 10 * new_version, 100 * new_version);
+        CHECK_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(base_version);
+        request.set_new_version(new_version);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_log.txn_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        CHECK_EQ(0, response.failed_tablets_size());
+        CHECK_EQ(0, response.status().status_code());
+    };
+
+    publish_version(1, 2);
+    publish_version(2, 3);
+    publish_version(3, 4);
+
+    // 1. All files exist: check across versions 2-4, no missing files expected
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(TStatusCode::OK, tablet_result.status().status_code());
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            ASSERT_EQ(0, entry.missing_files_size())
+                    << "version " << entry.metadata().version() << " should have no missing files";
+        }
+    }
+
+    // 2. Delete a segment that is shared across versions 2, 3, 4
+    //    (the segment added in version 2 appears in all subsequent versions)
+    {
+        // First, get version 4 metadata to find the segment from version 2
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(4);
+        request.set_max_version(4);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.tablet_results_size());
+        ASSERT_EQ(1, response.tablet_results(0).metadata_entries_size());
+        const auto& metadata = response.tablet_results(0).metadata_entries(0).metadata();
+        // Version 4 should have 3 rowsets (from version 2, 3, 4)
+        ASSERT_EQ(3, metadata.rowsets_size());
+
+        // Delete the segment from the first rowset (added in version 2)
+        std::string shared_seg = metadata.rowsets(0).segments(0);
+        ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, shared_seg)));
+
+        // Now check missing files across versions 2-4
+        response.Clear();
+        request.Clear();
+        cntl.Reset();
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(TStatusCode::OK, tablet_result.status().status_code());
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        // The deleted segment is shared across versions 2, 3, 4.
+        // Version 4 is checked first (max_version), should detect the missing file via fs check.
+        // Versions 3 and 2 should detect the same missing file via the cache (no extra fs check).
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            bool found_missing = false;
+            for (int j = 0; j < entry.missing_files_size(); j++) {
+                if (entry.missing_files(j) == shared_seg) {
+                    found_missing = true;
+                    break;
+                }
+            }
+            ASSERT_TRUE(found_missing) << "version " << entry.metadata().version() << " should report " << shared_seg
+                                       << " as missing";
+        }
+    }
+
+    // 3. Delete a segment only present in version 4 (not shared with lower versions)
+    {
+        // Get version 4 metadata to find the segment unique to version 4
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(4);
+        request.set_max_version(4);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        const auto& metadata = response.tablet_results(0).metadata_entries(0).metadata();
+        ASSERT_EQ(3, metadata.rowsets_size());
+
+        // The last rowset's segment is unique to version 4
+        std::string unique_seg = metadata.rowsets(2).segments(0);
+        ASSERT_OK(fs::remove(_tablet_mgr->segment_location(_tablet_id, unique_seg)));
+
+        // Check missing files across versions 2-4
+        response.Clear();
+        request.Clear();
+        cntl.Reset();
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_min_version(2);
+        request.set_max_version(4);
+        request.set_check_missing_files(true);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(1, response.tablet_results_size());
+        const auto& tablet_result = response.tablet_results(0);
+        ASSERT_EQ(3, tablet_result.metadata_entries_size());
+
+        // Only version 4 should report unique_seg as missing
+        for (const auto& entry : tablet_result.metadata_entries()) {
+            bool has_unique_seg_missing = false;
+            for (int j = 0; j < entry.missing_files_size(); j++) {
+                if (entry.missing_files(j) == unique_seg) {
+                    has_unique_seg_missing = true;
+                    break;
+                }
+            }
+            if (entry.metadata().version() == 4) {
+                ASSERT_TRUE(has_unique_seg_missing) << "version 4 should report " << unique_seg << " as missing";
+            } else {
+                ASSERT_FALSE(has_unique_seg_missing) << "version " << entry.metadata().version()
+                                                     << " should NOT report " << unique_seg << " as missing";
+            }
+        }
+    }
+}
+
 TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
     // 1. check request
     // 1.1 missing tablet_metadatas
