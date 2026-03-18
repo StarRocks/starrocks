@@ -330,7 +330,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
@@ -352,15 +351,8 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
 
     // result column is mutable, use non-const raw pointer
     RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-        }
+    for (auto i = 0; i < size; i++) {
+        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
     }
 #define ABS(x) ((x) < 0 ? -(x) : (x))
     for (int i = 0; i < size; i++) {
@@ -389,28 +381,20 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
-    uint8_t* raw_null_flags = null_flags->get_data().data();
+    const auto& raw_null_flags = null_flags->immutable_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
-    const RunTimeCppType<Type>* raw_c0 = int_col->get_data().data();
+    const auto& raw_c0 = int_col->immutable_data();
     MutableColumnPtr res = RunTimeColumnType<Type>::create();
     res->resize_uninitialized(size);
 
     // result column is mutable, use non-const raw pointer
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-        }
+    auto& raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data();
+    for (auto i = 0; i < size; i++) {
+        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
     }
 #define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
     for (int i = 0; i < size; i++) {
@@ -436,32 +420,20 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const RunTimeCppType<Type>* raw_c0 = col->get_data().data();
+    const auto& raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-
-    if (c0_is_const) {
-        int64_t val = raw_c0[0];
-        murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            int64_t val = raw_c0[i];
-            murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
+    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
+    for (auto i = 0; i < size; i++) {
+        int64_t val = raw_c0[i];
+        murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
+        raw_res[i] = (raw_res[i] & INT_MAX) % width;
     }
 
     if (has_null) {
@@ -478,30 +450,19 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     auto raw_c0 = col->immutable_data();
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
+    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
 
-    if (c0_is_const) {
-        murmur_hash3_x86_32(raw_c0[0].data, raw_c0[0].size, 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
+    for (auto i = 0; i < size; i++) {
+        murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, &raw_res[i]);
+        raw_res[i] = (raw_res[i] & INT_MAX) % width;
     }
 
     if (has_null) {
@@ -515,32 +476,21 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const RunTimeCppType<TYPE_DATE>* raw_c0 = col->get_data().data();
+    const auto& raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
+    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
 
-    if (c0_is_const) {
-        int64_t val = raw_c0[0].julian() - date::UNIX_EPOCH_JULIAN;
-        murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            int64_t val = raw_c0[i].julian() - date::UNIX_EPOCH_JULIAN;
-            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
+    for (auto i = 0; i < size; i++) {
+        int64_t val = raw_c0[i].julian() - date::UNIX_EPOCH_JULIAN;
+        murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[i]);
+        raw_res[i] = (raw_res[i] & INT_MAX) % width;
     }
 
     if (has_null) {
@@ -554,40 +504,24 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const RunTimeCppType<TYPE_DATETIME>* raw_c0 = col->get_data().data();
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
+    const auto& raw_c0 = col->immutable_data();
+    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
 
-    if (c0_is_const) {
-        int64_t result = timestamp::to_julian(raw_c0[0].timestamp());
+    for (auto i = 0; i < size; i++) {
+        int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
         result *= SECS_PER_DAY;
         result -= timestamp::UNIX_EPOCH_SECONDS;
         result *= 1000000L;
-        result += timestamp::to_time(raw_c0[0].timestamp());
-        murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
-            result *= SECS_PER_DAY;
-            result -= timestamp::UNIX_EPOCH_SECONDS;
-            result *= 1000000L;
-            result += timestamp::to_time(raw_c0[i].timestamp());
-            murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
+        result += timestamp::to_time(raw_c0[i].timestamp());
+        murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
+        raw_res[i] = (raw_res[i] & INT_MAX) % width;
     }
 
     if (has_null) {
@@ -624,33 +558,20 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
-    bool c0_is_const = false;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
-    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        auto result = raw_c0[0];
+    const auto& raw_c0 = decimalv3_col->immutable_data();
+    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
+    for (auto i = 0; i < size; i++) {
+        auto result = raw_c0[i];
         auto byte_array = int_to_byte_array(result);
-        murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            auto result = raw_c0[i];
-            auto byte_array = int_to_byte_array(result);
-            murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
+        murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[i]);
+        raw_res[i] = (raw_res[i] & INT_MAX) % width;
     }
 
     if (has_null) {
@@ -893,7 +814,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     auto& null_data = null_flags->get_data();
     uint8_t* raw_null_flags = null_data.data();
 
-    // If c2 is not const, than we need to keep the originl scale
+    // If c2 is not const, than we need to keep the original scale
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
     if (c0_is_const && c1_is_const) {
         bool is_over_flow;
