@@ -2138,6 +2138,46 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
 - Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
 
+### Hive write FE metrics
+
+#### hive_write_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert` or `overwrite`)
+- Description: Total number of `INSERT` or `INSERT OVERWRITE` tasks that target Hive tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `write_type` distinguishes between the operation types.
+
+#### hive_write_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total execution time of Hive write tasks (`INSERT`, `INSERT OVERWRITE`) in milliseconds. The duration of each task is added after it ends. `write_type` distinguishes between the operation types.
+
+#### hive_write_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total written bytes from Hive write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the total size of data files written to the Hive table. `write_type` distinguishes between the operation types.
+
+#### hive_write_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total written rows from Hive write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the number of rows written to the Hive table. `write_type` distinguishes between the operation types.
+
+#### hive_write_files
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total number of data files written to Hive from write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the count of data files written to the Hive table. `write_type` distinguishes between the operation types.
+
 ### DataCache metrics
 
 DataCache metrics provide visibility into cache capacity, usage, and hit rate for data caching.

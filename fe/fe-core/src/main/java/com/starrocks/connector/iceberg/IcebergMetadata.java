@@ -71,7 +71,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.metric.IcebergMetricsMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -556,8 +556,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Convert ScalarOperator to Iceberg Expression
         Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
         if (deleteExpr == null) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail("Failed to convert predicate to Iceberg expression", deleteType);
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    "Failed to convert predicate to Iceberg expression", deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
             throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
         }
 
@@ -580,19 +582,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.DELETED_RECORDS_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.REMOVED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
             throw new StarRocksConnectorException("Failed to execute metadata delete on %s.%s: %s",
                     dbName, tableName, e.getMessage());
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         // Invalidate cache after commit
@@ -1862,17 +1865,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            // Delete failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -1954,18 +1959,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
                 long writtenBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
-                IcebergMetricsMgr.increaseIcebergWriteRows(writtenRows, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteBytes(writtenBytes, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteFiles(dataFiles.size(), writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
+                ConnectorMetricsMgr.increaseWriteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenRows, writeType);
+                ConnectorMetricsMgr.increaseWriteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenBytes, writeType);
+                ConnectorMetricsMgr.increaseWriteFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG, dataFiles.size(), writeType);
             } else {
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergWriteTotalFail(e, writeType);
+            // Write failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(System.currentTimeMillis() - startMs, writeType);
+            ConnectorMetricsMgr.increaseWriteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, writeType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);

@@ -19,7 +19,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
-import com.starrocks.metric.IcebergMetricsMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -116,7 +116,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         String tableName = context.stmt().getTableName();
         long startMs = System.currentTimeMillis();
         boolean success = false;
-        String failureReason = IcebergMetricsMgr.classifyFailReason((String) null);
+        String failureReason = ConnectorMetricsMgr.classifyFailReason((String) null);
         IcebergRewriteDataJob.RewriteMetrics metrics = IcebergRewriteDataJob.RewriteMetrics.EMPTY;
 
         VelocityContext velCtx = new VelocityContext();
@@ -153,7 +153,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
             metrics = job.execute();
             success = true;
         } catch (Exception e) {
-            failureReason = IcebergMetricsMgr.classifyFailReason(e);
+            failureReason = ConnectorMetricsMgr.classifyFailReason(e);
             LOGGER.error("failed to rewrite data files for iceberg table {}.{}",
                     stmt.getDbName(), stmt.getTableName(), e);
             throw new StarRocksConnectorException("execute rewrite data files for iceberg table %s.%s failed: %s",
@@ -207,16 +207,21 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                                                IcebergRewriteDataJob.RewriteMetrics metrics, String failureReason) {
         String compactionType = "manual";
         if (success) {
-            IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
+            ConnectorMetricsMgr.increaseCompactionTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, compactionType);
         } else {
-            IcebergMetricsMgr.increaseIcebergCompactionTotal("failed", failureReason, compactionType);
+            ConnectorMetricsMgr.increaseCompactionTotal(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    "failed", failureReason, compactionType);
         }
-        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(durationMs, compactionType);
+        ConnectorMetricsMgr.increaseCompactionDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                durationMs, compactionType);
         if (!success) {
             return;
         }
-        IcebergMetricsMgr.increaseIcebergCompactionInputFiles(metrics.getRewrittenDataFilesCount(), compactionType);
-        IcebergMetricsMgr.increaseIcebergCompactionOutputFiles(metrics.getAddedDataFilesCount(), compactionType);
-        IcebergMetricsMgr.increaseIcebergCompactionRemovedDeleteFiles(metrics.getRewrittenDeleteFilesCount(), compactionType);
+        ConnectorMetricsMgr.increaseCompactionInputFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getRewrittenDataFilesCount(), compactionType);
+        ConnectorMetricsMgr.increaseCompactionOutputFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getAddedDataFilesCount(), compactionType);
+        ConnectorMetricsMgr.increaseCompactionRemovedDeleteFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                metrics.getRewrittenDeleteFilesCount(), compactionType);
     }
 }
