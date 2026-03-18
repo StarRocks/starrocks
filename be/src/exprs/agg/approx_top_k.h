@@ -328,14 +328,9 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         init_state_if_necessary(ctx, state);
-        if constexpr (IsSlice<CppType>) {
-            const auto value = ColumnHelper::get_binary_slice(columns[0], row_num);
-            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
-        } else {
-            const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
-            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
-        }
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
+        const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
+        this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -456,19 +451,10 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if constexpr (IsSlice<CppType>) {
-            ColumnHelper::with_binary_data_column(columns[0], [&](const auto* typed_column) {
-                for (size_t i = frame_start; i < frame_end; i++) {
-                    const auto value = typed_column->get_slice(i);
-                    this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
-                }
-            });
-        } else {
-            const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            for (size_t i = frame_start; i < frame_end; i++) {
-                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
-                this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
-            }
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
+        for (size_t i = frame_start; i < frame_end; i++) {
+            const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
+            this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
         }
     }
 

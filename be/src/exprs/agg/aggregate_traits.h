@@ -122,6 +122,7 @@ struct AggDataTypeTraits<lt, ArrayGuard<lt>> {
 template <LogicalType lt>
 struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
     using ColumnType = RunTimeColumnType<lt>;
+    using LargeColumnType = RunTimeLargeColumnType<lt>;
     using ValueType = Buffer<uint8_t>;
     using RefType = Slice;
 
@@ -135,7 +136,11 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
     }
 
     static RefType get_row_ref(const Column& column, size_t row) {
-        return ColumnHelper::as_raw_column<ColumnType>(&column)->get_slice(row);
+        if (UNLIKELY(column.is_large_binary())) {
+            return ColumnHelper::as_raw_column<LargeColumnType>(&column)->get_slice(row);
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(&column)->get_slice(row);
+        }
     }
 
     static RefType get_ref(const ValueType& value) { return Slice(value.data(), value.size()); }
