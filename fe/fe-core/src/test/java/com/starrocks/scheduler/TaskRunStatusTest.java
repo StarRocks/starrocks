@@ -37,6 +37,29 @@ public class TaskRunStatusTest {
     }
 
     @Test
+    public void testGetWarehouseNameReturnsDefaultWhenPropertiesNull() {
+        TaskRunStatus status = new TaskRunStatus();
+        // properties is null by default
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, status.getWarehouseName());
+    }
+
+    @Test
+    public void testGetWarehouseNameReturnsDefaultWhenWarehouseKeyAbsent() {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setProperties(new HashMap<>());
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, status.getWarehouseName());
+    }
+
+    @Test
+    public void testGetWarehouseNameReturnsValueFromProperties() {
+        TaskRunStatus status = new TaskRunStatus();
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, "my_warehouse");
+        status.setProperties(props);
+        Assertions.assertEquals("my_warehouse", status.getWarehouseName());
+    }
+
+    @Test
     public void getLastRefreshStateReturnsStateWhenNotMVTask() {
         TaskRunStatus taskRunStatus = new TaskRunStatus();
         taskRunStatus.setState(Constants.TaskRunState.PENDING);

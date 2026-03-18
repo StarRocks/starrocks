@@ -26,11 +26,11 @@ import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
-import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotSelectionStrategyV2;
 import com.starrocks.qe.scheduler.slot.SlotTracker;
 import com.starrocks.scheduler.Constants;
@@ -381,8 +381,8 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         starRocksAssert.query("select * from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
                         "NULL | 't_1024' | '2024-01-02 03:04:05' | '2024-01-02 03:04:05' | 'SUCCESS' | " +
-                                "NULL | 'default_warehouse' | 'd1' | 'insert into t1 select * from t1' " +
-                                "| '2024-01-02 03:04:05' | 0 | NULL | '0%' | '' | NULL");
+                                "NULL | 'default_warehouse' | 'd1' | 'insert into t1 select * from t1' | " +
+                                "'2024-01-02 03:04:05' | 0 | NULL | '0%' | '' | NULL | NULL | '1970-01-01 08:00:00'");
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where task_name = 't_1024' ")
                 .explainContains("     constant exprs: ",
@@ -621,7 +621,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
-        new MockUp<SlotManager>() {
+        new MockUp<WarehouseSlotManager>() {
             @Mock
             public Map<Long, BaseSlotTracker> getWarehouseIdToSlotTracker() {
                 Map<Long, BaseSlotTracker> result = Maps.newHashMap();
@@ -682,7 +682,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
     public void testWarehouseQueriesEvaluation() throws Exception {
         starRocksAssert.withDatabase("d1").useDatabase("d1");
         LogicalSlot slot1 = generateSlot(1);
-        new MockUp<SlotManager>() {
+        new MockUp<WarehouseSlotManager>() {
             @Mock
             public List<LogicalSlot> getSlots() {
                 List<LogicalSlot> result = Lists.newArrayList();
