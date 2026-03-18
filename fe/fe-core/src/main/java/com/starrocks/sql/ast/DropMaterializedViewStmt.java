@@ -19,31 +19,44 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
- * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
+ * DROP MATERIALIZED VIEW [ IF EXISTS ] [database.]mv_name [FORCE]
  * <p>
- * Parameters
- * IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.
- * mv_name: The name of the materialized view to remove.
- * db_name: The name of db to which materialized view belongs.
- * table_name: The name of table to which materialized view belongs.
+ * Parameters:
+ * <ul>
+ *   <li>IF EXISTS: Do not throw an error if the materialized view does not exist. A notice is issued in this case.</li>
+ *   <li>database: Optional database name that qualifies the materialized view.</li>
+ *   <li>mv_name: The name of the materialized view to remove, optionally qualified by database.</li>
+ *   <li>FORCE: Optional keyword to cancel stuck sync MV build jobs and restore table state so the MV can be dropped.</li>
+ * </ul>
  */
 public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
+    /** True when FORCE is specified; used only for sync MVs. */
+    private final boolean forceDrop;
     private final TableName dbMvName;
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
-        this(ifExists, dbMvName, NodePosition.ZERO);
+        this(ifExists, false, dbMvName, NodePosition.ZERO);
     }
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, NodePosition pos) {
+        this(ifExists, false, dbMvName, pos);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, boolean forceDrop, TableName dbMvName, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
+        this.forceDrop = forceDrop;
         this.dbMvName = dbMvName;
     }
 
     public boolean isSetIfExists() {
         return ifExists;
+    }
+
+    public boolean isForceDrop() {
+        return forceDrop;
     }
 
     public String getMvName() {

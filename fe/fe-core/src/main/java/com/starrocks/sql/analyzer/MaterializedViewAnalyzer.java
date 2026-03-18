@@ -1554,7 +1554,8 @@ public class MaterializedViewAnalyzer {
             Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, mvName.getCatalog(),
                     mvName.getDb(), mvName.getTbl());
             // Check mv dependency
-            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null
+                    && !stmt.isForceDrop()) {
                 Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();
