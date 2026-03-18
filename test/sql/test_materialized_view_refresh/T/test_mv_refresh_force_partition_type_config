@@ -1,0 +1,178 @@
+-- name: test_mv_refresh_force_partition_type_config @sequential
+
+-- Test the mv_refresh_force_partition_type config
+-- This config forces MV refresh regardless of whether base tables have changed
+
+-- Test 1: Non-partitioned MV with config = 1
+admin set frontend config ("mv_refresh_force_partition_type" = "1");
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create non-partitioned base table
+CREATE TABLE `t1` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t1 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+-- Create non-partitioned MV
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+AS SELECT * FROM t1;
+
+-- First refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+-- Second refresh without explicit FORCE - should still refresh because of config
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- Test 2: Range partitioned MV with config = 1 (should NOT force refresh)
+CREATE TABLE `t2` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (k1) (
+START ("2020-10-01") END ("2022-03-04") EVERY (INTERVAL 15 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t2 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY k1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT * FROM t2;
+
+-- First refresh
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+select * from test_mv2 order by k1, k2;
+
+-- Second refresh without explicit FORCE - should skip because config=1 only affects non-partitioned MVs
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+select * from test_mv2 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv2;
+
+-- Test 3: Change config to 2 (range partitioned only)
+admin set frontend config ("mv_refresh_force_partition_type" = "2");
+
+CREATE MATERIALIZED VIEW test_mv3
+PARTITION BY k1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT * FROM t2;
+
+-- First refresh
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+select * from test_mv3 order by k1, k2;
+
+-- Second refresh without explicit FORCE - should refresh because config=2 affects range partitioned MVs
+REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+select * from test_mv3 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv3;
+drop table t2;
+
+-- Test 4: List partitioned MV with config = 4
+admin set frontend config ("mv_refresh_force_partition_type" = "4");
+
+CREATE TABLE t3 (
+    k1 date,
+    k2 int,
+    k3 int 
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc("day", k1), k2;
+
+INSERT INTO t3 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv4
+partition by (date_trunc("day", k1), k2)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS select k1, k2, sum(k3) from t3 group by k1, k2;
+
+-- First refresh
+REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+select * from test_mv4 order by k1, k2;
+
+-- Second refresh without explicit FORCE - should refresh because config=4 affects list partitioned MVs
+REFRESH MATERIALIZED VIEW test_mv4 WITH SYNC MODE;
+select * from test_mv4 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv4;
+drop table t3;
+
+-- Test 5: Combined config value (7 = 1+2+4)
+admin set frontend config ("mv_refresh_force_partition_type" = "7");
+
+-- Recreate tables and MVs
+CREATE TABLE `t4` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t4 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+-- Non-partitioned MV
+CREATE MATERIALIZED VIEW test_mv5
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+AS SELECT * FROM t4;
+
+REFRESH MATERIALIZED VIEW test_mv5 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW test_mv5 WITH SYNC MODE;
+select * from test_mv5 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv5;
+
+-- Range partitioned MV
+CREATE TABLE `t5` (
+    `k1` date,
+    `k2` int,
+    `k3` int
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (k1) (
+START ("2020-10-01") END ("2022-03-04") EVERY (INTERVAL 15 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3;
+
+INSERT INTO t5 VALUES ("2020-11-10",1,1),("2020-11-11",2,2),("2020-11-12",3,3);
+
+CREATE MATERIALIZED VIEW test_mv6
+PARTITION BY k1
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="-1")
+AS SELECT * FROM t5;
+
+REFRESH MATERIALIZED VIEW test_mv6 WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW test_mv6 WITH SYNC MODE;
+select * from test_mv6 order by k1, k2;
+
+DROP MATERIALIZED VIEW test_mv6;
+drop table t5;
+
+-- Reset config to default
+drop table t4;
+admin set frontend config ("mv_refresh_force_partition_type" = "0");
+drop database db_${uuid0} force;
