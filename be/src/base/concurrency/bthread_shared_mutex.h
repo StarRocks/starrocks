@@ -30,7 +30,7 @@ private:
     typedef bthread::ConditionVariable _cv_type;
 
 public:
-    BThreadSharedMutex() {}
+    BThreadSharedMutex() = default;
     ~BThreadSharedMutex() { assert(_state == 0); }
 
     BThreadSharedMutex(const BThreadSharedMutex&) = delete;

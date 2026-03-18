@@ -668,7 +668,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     size_t size = 0;
     const auto& tablets_shard = _tablets_shards[_cur_shard];
     std::shared_lock rlock(tablets_shard.lock);
-    for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
         if (_shard_visited_tablet_ids.find(tablet_id) == _shard_visited_tablet_ids.end()) {
             tablets->push_back(tablet_ptr);
             _shard_visited_tablet_ids.insert(tablet_id);
@@ -701,7 +701,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     TabletSharedPtr best_tablet;
     for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
         std::shared_lock rlock(_tablets_shards[i].lock);
-        for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
+        for (const auto& [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }

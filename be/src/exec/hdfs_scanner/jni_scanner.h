@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <bit>
+#include <cstdint>
+
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -111,10 +114,12 @@ private:
     int _chunk_meta_index;
 
     void reset_chunk_meta(long chunk_meta) {
-        _chunk_meta_ptr = static_cast<long*>(reinterpret_cast<void*>(chunk_meta));
+        _chunk_meta_ptr = std::bit_cast<long*>(static_cast<std::uintptr_t>(chunk_meta));
         _chunk_meta_index = 0;
     }
-    void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
+    void* next_chunk_meta_as_ptr() {
+        return std::bit_cast<void*>(static_cast<std::uintptr_t>(_chunk_meta_ptr[_chunk_meta_index++]));
+    }
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
 };
 

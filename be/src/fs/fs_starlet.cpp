@@ -525,7 +525,7 @@ public:
     }
 
     StatusOr<SpaceInfo> space(const std::string& path) override {
-        const Status status = is_directory(path).status();
+        Status status = is_directory(path).status();
         if (!status.ok()) {
             return status;
         }
