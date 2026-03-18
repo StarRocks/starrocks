@@ -33,7 +33,6 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.LiteralExpr;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,8 +88,8 @@ public class CatalogUtils {
         long partitionId = partition.getId();
         if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
-            List<String> values = MapUtils.emptyIfNull(listInfo.getIdToValues()).get(partitionId);
-            List<List<String>> multiValues = MapUtils.emptyIfNull(listInfo.getIdToMultiValues()).get(partitionId);
+            List<String> values = listInfo.getIdToValues().get(partitionId);
+            List<List<String>> multiValues = listInfo.getIdToMultiValues().get(partitionId);
             if (values != null && !values.isEmpty()) {
                 return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
                         .collect(Collectors.joining(",")) + ")";
@@ -120,8 +119,13 @@ public class CatalogUtils {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     // add more information for user
+                    // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    String existedValues = formatExistedPartitionValues(olapTable, existedPartition);
+                    if (existedPartition == null) {
+                        existedPartition = olapTable.getPartition(partitionName, true);
+                    }
+                    String existedValues = existedPartition != null
+                            ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
                     String currentValues = partitionDesc.toString();
                     LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
                             existedValues, currentValues);
