@@ -414,7 +414,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    ColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->get_data();
     // result column is mutable, use non-const raw pointer
@@ -470,7 +470,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    ColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->get_data();
     // result column is mutable, use non-const raw pointer
@@ -498,7 +498,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    ColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->get_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
@@ -552,7 +552,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    ColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = decimalv3_col->get_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
