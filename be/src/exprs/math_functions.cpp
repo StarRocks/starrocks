@@ -457,16 +457,8 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-<<<<<<< HEAD
     auto raw_c0 = col->get_proxy_data();
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
-            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-=======
-    auto raw_c0 = col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
 
     for (auto i = 0; i < size; i++) {
         murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, &raw_res[i]);
