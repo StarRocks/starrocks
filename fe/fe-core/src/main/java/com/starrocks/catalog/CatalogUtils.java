@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -79,6 +80,34 @@ public class CatalogUtils {
         }
     }
 
+    /**
+     * Format partition values from an existing partition for log comparison.
+     */
+    private static String formatExistedPartitionValues(OlapTable olapTable, Partition partition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        long partitionId = partition.getId();
+        if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = listInfo.getIdToValues().get(partitionId);
+            List<List<String>> multiValues = listInfo.getIdToMultiValues().get(partitionId);
+            if (values != null && !values.isEmpty()) {
+                return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+            if (multiValues != null && !multiValues.isEmpty()) {
+                return "VALUES IN (" + multiValues.stream()
+                        .map(row -> "(" + row.stream().map(v -> "'" + v + "'")
+                                .collect(Collectors.joining(",")) + ")")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+            Range<PartitionKey> range = rangeInfo.getRange(partitionId);
+            return range != null ? range.toString() : "null";
+        }
+        return "unknown";
+    }
+
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
                                                                       List<PartitionDesc> partitionDescs)
             throws DdlException {
@@ -90,9 +119,16 @@ public class CatalogUtils {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     // add more information for user
+                    // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
-                            existedPartition, partitionDesc);
+                    if (existedPartition == null) {
+                        existedPartition = olapTable.getPartition(partitionName, true);
+                    }
+                    String existedValues = existedPartition != null
+                            ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
+                    String currentValues = partitionDesc.toString();
+                    LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
+                            existedValues, currentValues);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }

@@ -17,7 +17,7 @@
 
 #include "http/http_client.h"
 
-#include "common/config.h"
+#include "common/config_http_fwd.h"
 #include "fs/fs_util.h"
 
 namespace starrocks {

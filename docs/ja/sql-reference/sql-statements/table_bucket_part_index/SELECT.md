@@ -4,59 +4,69 @@ displayed_sidebar: docs
 
 # SELECT
 
-## 説明
-
-1 つ以上のテーブル、ビュー、またはマテリアライズドビューからデータをクエリします。SELECT 文は一般的に次の句で構成されます。
+SELECT は、1 つ以上のテーブル、ビュー、またはマテリアライズドビューからデータをクエリします。SELECT ステートメントは、通常、次の句で構成されます。
 
 - [WITH](#with)
-- [WHERE と演算子](#where-and-operators)
+- [Join](#join)
+- [ORDER BY](#order-by)
 - [GROUP BY](#group-by)
 - [HAVING](#having)
+- [LIMIT](#limit)
+- [OFFSET](#offset)
 - [UNION](#union)
 - [INTERSECT](#intersect)
 - [EXCEPT/MINUS](#exceptminus)
-- [ORDER BY](#order-by)
-- [LIMIT](#limit)
-- [OFFSET](#offset)
-- [Joins](#join)
-- [サブクエリ](#subquery)
 - [DISTINCT](#distinct)
-- [エイリアス](#alias)
+- [サブクエリ](#サブクエリ)
+- [WHERE と演算子](#Where-と-Operator)
+- [エイリアス](#エイリアス)
+- [PIVOT](#pivot)
+- [EXCLUDE](#exclude)
+- [RECURSIVE](#recursive)
 
-SELECT は独立した文として、または他の文にネストされた句として機能します。SELECT 句の出力は、他の文の入力として使用できます。
+SELECT は、独立したステートメントまたは他のステートメントにネストされた句として機能します。SELECT 句の出力は、他のステートメントの入力として使用できます。
 
-StarRocks のクエリ文は基本的に SQL92 標準に準拠しています。ここでは、サポートされている SELECT の使用法について簡単に説明します。
+StarRocks のクエリステートメントは、基本的に SQL92 標準に準拠しています。サポートされている SELECT の使用方法について簡単に説明します。
 
 > **NOTE**
 >
 > StarRocks 内部テーブルのテーブル、ビュー、またはマテリアライズドビューからデータをクエリするには、これらのオブジェクトに対する SELECT 権限が必要です。外部データソースのテーブル、ビュー、またはマテリアライズドビューからデータをクエリするには、対応する external catalog に対する USAGE 権限が必要です。
 
-### WITH
+## WITH
 
-SELECT 文の前に追加できる句で、SELECT 内で複数回参照される複雑な式にエイリアスを定義します。
+SELECT ステートメントの前に追加できる句で、SELECT 内で複数回参照される複雑な式のエイリアスを定義します。
 
-CRATE VIEW に似ていますが、句で定義されたテーブル名と列名はクエリ終了後に永続化されず、実際のテーブルや VIEW の名前と競合しません。
+CREATE VIEW と似ていますが、句で定義されたテーブル名とカラム名はクエリ終了後も保持されず、実際のテーブルまたは VIEW の名前と競合しません。
 
 WITH 句を使用する利点は次のとおりです。
 
-クエリ内の重複を減らし、便利でメンテナンスが容易です。
+便利でメンテナンスが容易で、クエリ内の重複を減らすことができます。
 
-クエリの最も複雑な部分を別々のブロックに抽象化することで、SQL コードを読みやすく理解しやすくします。
+クエリの最も複雑な部分を個別のブロックに抽象化することで、SQL コードをより簡単に読み、理解することができます。
 
-例:
+例：
 
 ```sql
--- 外部レベルで 1 つのサブクエリを定義し、UNION ALL クエリの初期段階の一部として内部レベルで別のサブクエリを定義します。
+-- Define one subquery at the outer level, and another at the inner level as part of the initial stage of the UNION ALL query.
 
 with t1 as (select 1),t2 as (select 2)
 select * from t1 union all select * from t2;
 ```
 
-### Join
+## Join
 
-ジョイン操作は、2 つ以上のテーブルからデータを結合し、それらの一部の列の結果セットを返します。
+Join （ジョイン）オペレーションは、2つ以上のテーブルからデータを結合し、それらのテーブルからいくつかのカラムの結果セットを返します。
 
-StarRocks は、自己ジョイン、クロスジョイン、内部ジョイン、外部ジョイン、セミジョイン、アンチジョインをサポートしています。外部ジョインには、左ジョイン、右ジョイン、フルジョインが含まれます。
+StarRocks は、以下のジョインをサポートしています。
+- [Self Join](#self-join)
+- [Cross Join](#cross-join)
+- [Inner Join](#inner-join)
+- [Outer Join](#outer-join) （Left Join、Right Join、Full Join を含む）
+- [Semi Join](#semi-join)
+- [Anti Join](#anti-join)
+- [Equi-join and Non-equi-join](#equi-join-と-non-equi-join)
+- [USING 句を使用した Join](#using-句を使用した-Join)
+- [ASOF Join](#asof-join)
 
 構文:
 
@@ -87,25 +97,25 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 [ WHERE where_clauses ]
 ```
 
-#### Self Join
+### Self Join
 
-StarRocks は自己ジョインをサポートしており、これは自己ジョインと自己ジョインです。たとえば、同じテーブルの異なる列が結合されます。
+StarRocks は、Self Join をサポートしています。たとえば、同じテーブルの異なるカラムが Join されます。
 
-実際には、自己ジョインを識別する特別な構文はありません。自己ジョインのジョイン条件の両側は同じテーブルから来ます。
+実際には、Self Join を識別するための特別な構文はありません。Self Join における Join の両側の条件は、同じテーブルから来ています。
 
-それらに異なるエイリアスを割り当てる必要があります。
+異なるエイリアスを割り当てる必要があります。
 
-例:
+例：
 
 ```sql
 SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHERE lhs.id = rhs.parent;
 ```
 
-#### Cross Join
+### Cross Join
 
-クロスジョインは多くの結果を生成する可能性があるため、クロスジョインは注意して使用する必要があります。
+Cross Join は大量の結果を生成する可能性があるため、使用には注意が必要です。
 
-クロスジョインを使用する必要がある場合でも、フィルター条件を使用して、返される結果が少ないことを確認する必要があります。例:
+どうしても Cross Join を使用する必要がある場合でも、フィルタ条件を使用し、返される結果が少なくなるようにする必要があります。例：
 
 ```sql
 SELECT * FROM t1, t2;
@@ -113,13 +123,13 @@ SELECT * FROM t1, t2;
 SELECT * FROM t1 CROSS JOIN t2;
 ```
 
-#### Inner Join
+### Inner Join
 
-内部ジョインは最もよく知られており、一般的に使用されるジョインです。両方のテーブルの列が同じ値を含む場合に結合される、2 つの類似したテーブルから要求された列の結果を返します。
+Inner Join は、最もよく知られ、一般的に使用される Join です。2 つの類似したテーブルから要求された列の結果を返し、両方のテーブルの列に同じ値が含まれている場合に Join されます。
 
-両方のテーブルの列名が同じ場合は、完全な名前 (table_name.column_name の形式) を使用するか、列名にエイリアスを付ける必要があります。
+両方のテーブルの列名が同じ場合は、完全名 (table_name.column_name の形式) を使用するか、列名にエイリアスを付ける必要があります。
 
-例:
+例：
 
 次の 3 つのクエリは同等です。
 
@@ -131,9 +141,9 @@ SELECT t1.id, c1, c2 FROM t1 JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Outer Join
+### Outer Join
 
-外部ジョインは、左または右のテーブル、または両方のすべての行を返します。他のテーブルに一致するデータがない場合は、NULL に設定されます。例:
+Outer Join は、左または右のテーブル、または両方のテーブルのすべての行を返します。別のテーブルに一致するデータがない場合は、NULL に設定します。例：
 
 ```sql
 SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id;
@@ -143,13 +153,13 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### 同等および不等ジョイン
+### 等価 Join と不等 Join
 
-通常、ユーザーは最も等しいジョインを使用し、ジョイン条件の演算子が等号であることを要求します。
+通常、等価 Join が最も一般的に使用される結合です。結合条件の演算子として等号が必要です。
 
-不等ジョインは、ジョイン条件に!=、等号を使用できます。不等ジョインは多数の結果を生成し、計算中にメモリ制限を超える可能性があります。
+不等 Join は結合条件として `!=` を使用します。不等 Join は大量の結果を生成し、計算中にメモリ制限を超える可能性があります。
 
-注意して使用してください。不等ジョインは内部ジョインのみをサポートします。例:
+使用には注意が必要です。不等 Join は Inner Join のみをサポートします。例：
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -157,43 +167,46 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
 ```
 
-#### Semi Join
+### Semi Join
 
-左セミジョインは、右テーブルのデータと一致する左テーブルの行のみを返します。右テーブルのデータと一致する行数に関係なく、この行は左テーブルから最大 1 回返されます。右セミジョインは同様に機能しますが、返されるデータは右テーブルです。
+Left Semi Join は、右テーブルのデータと一致する左テーブルの行のみを返します。右テーブルの行がいくつ一致するかは関係ありません。
 
-例:
+左テーブルのこの行は、最大で1回返されます。Right Semi Join も同様に機能しますが、返されるデータは右テーブルになります。
+
+例：
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Anti Join
+### Anti Join
 
-左アンチジョインは、右テーブルと一致しない左テーブルの行のみを返します。
+Left Anti Join は、右側のテーブルに一致しない左側のテーブルの行のみを返します。
 
-右アンチジョインはこの比較を逆にし、左テーブルと一致しない右テーブルの行のみを返します。例:
+Right Anti Join はこの比較を逆にして、左側のテーブルに一致しない右側のテーブルの行のみを返します。例：
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Equi-join と Non-equi-join
+### Equi-join と Non-equi-join
 
-StarRocks がサポートするさまざまなジョインは、指定されたジョイン条件に応じて、等価ジョインと非等価ジョインに分類できます。
+StarRocks がサポートするさまざまなジョインは、ジョインで指定されたジョイン条件に応じて、Equi-join と Non-equi-join に分類できます。
 
-| **Equi-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
-| -------------------------- | ------------------------------------------------------------ |
-| **Non-equi-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+| **Join タイプ** | **バリアント**                                                      |
+| -------------- | ----------------------------------------------------------------- |
+| Equi-join      | Self join、cross join、inner join、outer join、semi join、anti join |
+| Non-equi-join  | cross join、inner join、left semi join、left anti join、outer join  |
 
-- Equi-joins
+- Equi-join
   
-  等価ジョインは、`=` 演算子によって 2 つのジョイン項目が結合されるジョイン条件を使用します。例: `a JOIN b ON a.id = b.id`.
+  Equi-join は、2 つのジョインアイテムが `=` 演算子で結合されるジョイン条件を使用します。例：`a JOIN b ON a.id = b.id`。
 
-- Non-equi-joins
+- Non-equi-join
   
-  非等価ジョインは、`<`, `<=`, `>`, `>=`, または `<>` などの比較演算子によって 2 つのジョイン項目が結合されるジョイン条件を使用します。例: `a JOIN b ON a.id < b.id`. 非等価ジョインは等価ジョインよりも遅く実行されます。非等価ジョインを使用する際には注意が必要です。
+  Non-equi-join は、2 つのジョインアイテムが `<`、`<=`、`>`、`>=`、`<>` などの比較演算子で結合されるジョイン条件を使用します。例：`a JOIN b ON a.id < b.id`。Non-equi-join は Equi-join よりも実行速度が遅くなります。Non-equi-join を使用する場合は注意することをお勧めします。
 
-  次の 2 つの例は、非等価ジョインを実行する方法を示しています。
+  次の 2 つの例は、Non-equi-join を実行する方法を示しています。
 
   ```SQL
   SELECT t1.id, c1, c2 
@@ -205,68 +218,68 @@ StarRocks がサポートするさまざまなジョインは、指定された�
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-#### USING 句による Join
+### USING 句を使用した Join
 
-v4.0.2 以降、StarRocks では `ON` 句に加え、`USING` 句による Join 条件の指定をサポートしています。これにより、同名の列を用いた等値結合を簡略化できます。例：`SELECT * FROM t1 JOIN t2 USING (id)`。
+v4.0.2以降、StarRocks は `ON` に加えて、`USING` 句によるジョイン条件の指定をサポートしています。これにより、同じ名前の列を持つ等価ジョインを簡素化できます。例：`SELECT * FROM t1 JOIN t2 USING (id)`。
 
-**バージョン間の差異:**
+**バージョン間の違い：**
 
-- **v4.0.2 以前のバージョン**
+- **v4.0.2より前のバージョン**
   
-  `USING` は構文上の簡略化として扱われ、内部的には `ON` 条件に変換されます。結果には左テーブルと右テーブルの両方の USING 列が個別の列として含まれ、USING 列を参照する際にはテーブルエイリアス修飾子（例: `t1.id`）の使用が許可されます。
+  `USING` は構文糖として扱われ、内部的に `ON` 条件に変換されます。結果には、左と右のテーブル両方からの USING 列が個別の列として含まれ、USING 列を参照する際にはテーブルエイリアス修飾子（例：`t1.id`）が許可されていました。
 
-  例:
+  例：
 
   ```SQL
-  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 2 つの独立した id 列を返す
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- Returns two separate id columns
   ```
 
-- **v4.0.2 以降のバージョン**
+- **v4.0.2 以降**
   
-  StarRocks は SQL 標準の `USING` セマンティクスを実装しています。主な機能は以下の通りです：
+  StarRocks は、SQL 標準の `USING` セマンティクスを実装しています。主な機能は次のとおりです。
   
-  - `FULL OUTER JOIN` を含むすべての Join タイプがサポートされています。
-  - USING 列は結果において単一の結合列として表示されます。FULL OUTER JOIN の場合、`COALESCE(left.col, right.col)` のセマンティクスが使用されます。
-  - USING 列に対してテーブルエイリアス修飾子（例: `t1.id`）はサポートされなくなりました。修飾なしの列名（例: `id`）を使用する必要があります。
-  - `SELECT *`の結果では、列の順序は `[USING 列、左テーブルの非 USING 列、右テーブルの非 USING 列]` となります。
+  - `FULL OUTER JOIN` を含む、すべてのジョインタイプがサポートされています。
+  - USING カラムは、結果に単一の結合されたカラムとして表示されます。FULL OUTER JOIN の場合、`COALESCE(left.col, right.col)` セマンティクスが使用されます。
+  - テーブルエイリアス修飾子 (例: `t1.id`) は、USING カラムではサポートされなくなりました。非修飾カラム名 (例: `id`) を使用する必要があります。
+  - `SELECT *` の結果の場合、カラムの順序は `[USING カラム, 左側の非 USING カラム, 右側の非 USING カラム]` となります。
 
-  例:
+  例：
 
   ```SQL
-  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ エラー: 列 'id' が曖昧
-  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正しい: 単一の統合された id 列を返す
-  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN がサポートされる
+  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ Error: Column 'id' is ambiguous
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ Correct: Returns a single coalesced 'id' column
+  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN is supported
   ```
 
-これらの変更により、StarRocks の動作は SQL 標準準拠データベースと一致するようになりました。
+これらの変更は、StarRocks の動作を SQL 標準に準拠したデータベースに合わせるものです。
 
-## ASOF Join
+### ASOF Join
 
-ASOF Join は、時系列分析でよく利用される時間型または範囲型の結合方式です。これは、特定のキーに対する等値条件と、時間やシーケンスフィールドに対する非等値条件（例: `t1.time >= t2.time`）を組み合わせてテーブルを結合します。実行時には、左側テーブルの各行に対して、右側テーブルから「直近でかつ指定時間を超えない」行を選択します。v4.0 以降でサポートされています。
+ASOF Join は、時系列分析で一般的に使用される時間ベースまたは範囲ベースのジョインの一種です。特定のキーが等しいことと、時間フィールドまたはシーケンスフィールドに関する不等式条件（例：`t1.time >= t2.time`）に基づいて、2 つのテーブルをジョインできます。ASOF Join は、左側のテーブルの各行に対して、右側のテーブルから最も新しい一致する行を選択します。v4.0 以降でサポートされています。
 
-実際の時系列データ分析では、以下のような課題がよく発生します：
-- データ収集タイミングのずれ（例: センサーごとのサンプリング間隔の違い）
-- イベント発生時刻と記録時刻のわずかな差異
-- ある時刻に最も近い過去の記録を検索する必要
+実際のシナリオでは、時系列データを含む分析は、多くの場合、次の課題に直面します。
+- データ収集タイミングのずれ（異なるセンサーのサンプリング時間など）
+- イベントの発生時刻と記録時刻のわずかなずれ
+- 特定のタイムスタンプに最も近い過去のレコードを見つける必要性
 
-従来の等値結合（INNER JOIN）はこのようなデータを扱うと大きなデータ損失につながりやすく、不等値結合は性能上の問題を引き起こしやすいです。ASOF Join はこれらの課題を解決するために設計されています。
+従来の等価ジョイン（INNER Join）では、このようなデータを処理する際にデータが大幅に失われることがよくあります。一方、不等式ジョインではパフォーマンスの問題が発生する可能性があります。ASOF Join は、これらの特定の課題に対処するために設計されました。
 
-ASOF Join がよく利用されるケース：
+ASOF Join は、一般的に次のような場合に使用されます。
 
 - **金融市場分析**
-  - 株価と取引量の対応付け
-  - 異なる市場のデータを揃える
-  - デリバティブ価格決定用の参照データマッチング
+  - 株価と取引量のマッチング
+  - 異なる市場からのデータの調整
+  - デリバティブ価格の参照データマッチング
 - **IoT データ処理**
-  - 複数センサーのデータストリームの同期
-  - デバイス状態変化との相関付け
-  - 時系列データの補間処理
+  - 複数のセンサーデータストリームの調整
+  - デバイスの状態変化の相関付け
+  - 時系列データの補間
 - **ログ分析**
-  - システムイベントとユーザー操作の対応付け
-  - 異なるサービスのログを照合
-  - 障害解析と問題追跡
+  - システムイベントとユーザーアクションの相関付け
+  - 異なるサービスからのログのマッチング
+  - 障害分析と問題追跡
 
-### 構文
+構文：
 
 ```SQL
 SELECT [select_list]
@@ -278,15 +291,15 @@ ASOF LEFT JOIN right_table [AS right_alias]
 [ORDER BY ...]
 ```
 
-- `ASOF LEFT JOIN`：時間やシーケンスに基づき、最も近い行を選択する非等値結合。左テーブルのすべての行を返し、右テーブルで未一致の場合は NULL を返します。
-- `equality_condition`：通常の等値条件（例: 銘柄コードや ID の一致）。
-- `asof_condition`：範囲条件で、通常は `left.time >= right.time` と記述し、`left.time` を超えない最新の `right.time` を検索します。
+- `ASOF LEFT JOIN`: 時間またはシーケンスで最も近い一致に基づいて、非等価ジョインを実行します。 ASOF LEFT JOIN は、左側のテーブルからすべての行を返し、一致しない右側の行を NULL で埋めます。
+- `equality_condition`: 標準的な等価制約（たとえば、ティッカーシンボルまたは ID の一致）。
+- `asof_condition`: 通常 `left.time >= right.time` として記述される範囲条件で、`left.time` を超えない最新の `right.time` レコードを検索することを示します。
 
 :::note
-`asof_condition`では、DATE型とDATETIME型のみがサポートされています。また、`asof_condition`は1つだけサポートされています。
+`asof_condition` では DATE 型と DATETIME 型のみがサポートされています。また、サポートされる `asof_condition` は 1 つのみです。
 :::
 
-### 例
+例：
 
 ```SQL
 SELECT *
@@ -296,21 +309,21 @@ AND h.when >= p.when
 ORDER BY ALL;
 ```
 
-### 制限事項
+制限事項：
 
-- 現在サポートされるのは Inner Join（デフォルト）と Left Outer Join のみ。
-- `asof_condition` では DATE 型と DATETIME 型のみ利用可能。
-- `asof_condition` は 1 つのみ指定可能。
+- 現在、Inner Join (デフォルト) と Left Outer Join のみがサポートされています。
+- `asof_condition` では、DATE 型と DATETIME 型のみがサポートされています。
+- `asof_condition` は 1 つのみサポートされています。
 
-### ORDER BY
+## ORDER BY
 
-SELECT 文の ORDER BY 句は、1 つ以上の列からの値を比較して結果セットをソートします。
+SELECTステートメントのORDER BY句は、1つまたは複数のカラムの値を比較して、結果セットをソートします。
 
-ORDER BY は時間とリソースを消費する操作です。すべての結果を 1 つのノードに送信してマージした後に結果をソートする必要があるためです。ソートは ORDER BY を使用しないクエリよりも多くのメモリリソースを消費します。
+ORDER BYは、すべての結果を1つのノードに送信してマージしてからソートする必要があるため、時間とリソースを消費する操作です。ソートは、ORDER BYなしのクエリよりも多くのメモリリソースを消費します。
 
-したがって、ソートされた結果セットから最初の `N` 結果のみが必要な場合は、LIMIT 句を使用してメモリ使用量とネットワークオーバーヘッドを削減できます。LIMIT 句が指定されていない場合、デフォルトで最初の 65535 結果が返されます。
+したがって、ソートされた結果セットから最初の`N`個の結果のみが必要な場合は、LIMIT句を使用できます。これにより、メモリ使用量とネットワークオーバーヘッドが削減されます。LIMIT句が指定されていない場合、デフォルトで最初の65535個の結果が返されます。
 
-構文:
+**構文**
 
 ```sql
 ORDER BY <column_name> 
@@ -318,60 +331,59 @@ ORDER BY <column_name>
     [NULLS FIRST | NULLS LAST]
 ```
 
-`ASC` は、結果を昇順で返すことを指定します。`DESC` は、結果を降順で返すことを指定します。順序が指定されていない場合、デフォルトは ASC (昇順) です。例:
+**パラメータ**
+
+- `ASC` は、結果を昇順で返すように指定します。
+- `DESC` は、結果を降順で返すように指定します。順序が指定されていない場合、デフォルトは ASC （昇順）です。
+- `NULLS FIRST` は、NULL 値を非 NULL 値よりも前に返すことを示します。
+- `NULLS LAST` は、NULL 値を非 NULL 値よりも後に返すことを示します。
+
+**例**
 
 ```sql
 select * from big_table order by tiny_column, short_column desc;
-```
-
-NULL 値のソート順: `NULLS FIRST` は、NULL 値が非 NULL 値の前に返されることを示します。`NULLS LAST` は、NULL 値が非 NULL 値の後に返されることを示します。
-
-例:
-
-```sql
 select  *  from  sales_record  order by  employee_id  nulls first;
 ```
 
-### GROUP BY
+## GROUP BY
 
-GROUP BY 句は集計関数と一緒に使用されることがよくあります。GROUP BY で指定された列は集計操作に参加しません。
+GROUP BY句は、集計関数と組み合わせて使用されることがよくあります。GROUP BY句で指定された列は、集計演算には参加しません。
 
-#### 構文
+**構文**
 
-  ```sql
-  SELECT
-  ...
-  aggregate_function() [ FILTER ( where boolean_expression ) ]
-  ...
-  FROM ...
-  [ ... ]
-  GROUP BY [
-      , ... |
-      GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
-      ROLLUP(expr  [ , expr [ , ... ] ]) |
-      CUBE(expr  [ , expr [ , ... ] ])
-      ]
-  [ ... ]
-  ```
+```sql
+SELECT
+...
+aggregate_function() [ FILTER ( where boolean_expression ) ]
+...
+FROM ...
+[ ... ]
+GROUP BY [
+    , ... |
+    GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
+    ROLLUP(expr  [ , expr [ , ... ] ]) |
+    CUBE(expr  [ , expr [ , ... ] ])
+    ]
+[ ... ]
+```
 
-#### パラメータ
+**パラメータ**
 
-- `FILTER` は集計関数と一緒に使用することができます。フィルタリングされた行のみが集約関数の計算に参加します。
+- `FILTER` は、集計関数と一緒に使用できます。フィルターされた行のみが集計関数の計算に参加します。
 
-  > **注意**
+  > **NOTE**
   >
-  > FILTER 句は AVG、COUNT、MAX、MIN、SUM、ARRAY_AGG、ARRAY_AGG_DISTINCT 関数でのみサポートされています。
-  > FILTER 句は COUNT DISTINCT ではサポートされていません。
-  > FILTER 句が指定されている場合、ARRAY_AGG 関数と ARRAY_AGG_DISTINCT 関数では ORDER BY 句は使用できません。
+  > - FILTER句は、AVG、COUNT、MAX、MIN、SUM、ARRAY_AGG、およびARRAY_AGG_DISTINCT関数でのみサポートされています。
+  > - FILTER句は、COUNT DISTINCTではサポートされていません。
+  > - FILTER句が指定されている場合、ARRAY_AGG関数およびARRAY_AGG_DISTINCT関数内ではORDER BY句は許可されません。
 
-- `GROUPING SETS`、`CUBE`、`ROLLUP` は GROUP BY 句の拡張です。GROUP BY 句では、これらを使用して複数の集合をグループ化した集約を行うことができます。結果は、複数の GROUP BY 句の UNION と同等です。
+- `GROUPING SETS` 、 `CUBE` 、および `ROLLUP` は、GROUP BY句の拡張です。 GROUP BY句では、複数のセットのグループ化された集計を実現するために使用できます。結果は、複数のGROUP BY句のUNIONの結果と同等です。
 
+**例**
 
-#### 例
+例1： `FILTER`
 
-例 1: `FILTER` の例
-
-  以下の 2 つのクエリは等価である。
+  次の2つのクエリは同等です。
 
   ```sql
   SELECT
@@ -380,7 +392,7 @@ GROUP BY 句は集計関数と一緒に使用されることがよくありま�
     SUM(CASE WHEN gender = 'F' THEN 1 ELSE 0 END) AS female_users
   FROM users;
   ```
-  
+
   ```sql
   SELECT
     COUNT(*) AS total_users,
@@ -389,10 +401,10 @@ GROUP BY 句は集計関数と一緒に使用されることがよくありま�
   FROM users;
   ```
 
-例 2: `GROUPING SETS`、`CUBE`、`ROLLUP` の例
+例2：`GROUPING SETS`、`CUBE`、および `ROLLUP`
 
-  `ROLLUP(a,b,c)` は以下の `GROUPING SETS` 句と等価である。
-  
+`ROLLUP(a,b,c)` は、次の `GROUPING SETS` 句と同等です。
+
     ```sql
     GROUPING SETS (
     (a,b,c),
@@ -401,9 +413,9 @@ GROUP BY 句は集計関数と一緒に使用されることがよくありま�
     (     )
     )
     ```
-  
-  `CUBE (a, b, c)` は以下の `GROUPING SETS` 句と等価である。
-  
+
+`CUBE (a, b, c)` は、次の `GROUPING SETS` 句と同等です。
+
     ```sql
     GROUPING SETS (
     ( a, b, c ),
@@ -416,9 +428,9 @@ GROUP BY 句は集計関数と一緒に使用されることがよくありま�
     (         )
     )
     ```
-  
-  実際のデータセットでテストする。
-  
+
+実際のデータセットでテストします。
+
     ```sql
     SELECT * FROM t;
     +------+------+------+
@@ -470,13 +482,13 @@ GROUP BY 句は集計関数と一緒に使用されることがよくありま�
     9 rows in set (0.02 sec)
     ```
 
-### HAVING
+## HAVING
 
 HAVING 句は、テーブル内の行データをフィルタリングするのではなく、集計関数の結果をフィルタリングします。
 
-一般的に、HAVING は集計関数 (COUNT()、SUM()、AVG()、MIN()、MAX() など) と GROUP BY 句と一緒に使用されます。
+一般的に、HAVING は集計関数 (COUNT()、SUM()、AVG()、MIN()、MAX() など) および GROUP BY 句とともに使用されます。
 
-例:
+**例**
 
 ```sql
 select tiny_column, sum(short_column) 
@@ -512,21 +524,21 @@ having tiny_column > 1;
 1 row in set (0.07 sec)
 ```
 
-### LIMIT
+## LIMIT
 
-LIMIT 句は、返される行の最大数を制限するために使用されます。返される行の最大数を設定することで、StarRocks のメモリ使用量を最適化するのに役立ちます。
+LIMIT 句は、返される行の最大数を制限するために使用されます。返される行の最大数を設定すると、StarRocks がメモリ使用量を最適化するのに役立ちます。
 
 この句は主に次のシナリオで使用されます。
 
-トップ N クエリの結果を返します。
+Top-N クエリの結果を返します。
 
-以下の表に含まれる内容を考えてみてください。
+以下のテーブルに含まれる内容を検討してください。
 
-テーブル内のデータ量が多いため、または where 句があまり多くのデータをフィルタリングしないために、クエリ結果セットのサイズを制限する必要があります。
+テーブル内のデータ量が多いため、または WHERE 句がデータをあまりフィルタリングしないため、クエリ結果セットのサイズを制限する必要があります。
 
-使用方法: LIMIT 句の値は数値リテラル定数でなければなりません。
+使用上の注意：LIMIT 句の値は、数値リテラル定数でなければなりません。
 
-例:
+**例**
 
 ```plain text
 mysql> select tiny_column from small_table limit 1;
@@ -553,15 +565,15 @@ mysql> select tiny_column from small_table limit 10000;
 2 rows in set (0.01 sec)
 ```
 
-### OFFSET
+## OFFSET
 
-OFFSET 句は、結果セットが最初の数行をスキップし、次の結果を直接返すようにします。
+OFFSET 句を使用すると、結果セットは最初の数行をスキップし、後続の結果を直接返します。
 
-結果セットはデフォルトで行 0 から始まるため、offset 0 と offset なしは同じ結果を返します。
+結果セットはデフォルトで行 0 から始まるため、OFFSET 0 と OFFSET なしは同じ結果を返します。
 
-一般的に、OFFSET 句は ORDER BY および LIMIT 句と一緒に使用する必要があります。
+一般的に、OFFSET 句は ORDER BY 句および LIMIT 句と組み合わせて使用する必要があります。
 
-例:
+例：
 
 ```plain text
 mysql> select varchar_column from big_table order by varchar_column limit 3;
@@ -613,30 +625,32 @@ mysql> select varchar_column from big_table order by varchar_column limit 1 offs
 1 row in set (0.02 sec)
 ```
 
-注意: order by なしで offset 構文を使用することは許可されていますが、この場合 offset は意味を持ちません。
+注: order by なしで offset 構文を使用することは許可されていますが、この時点では offset は意味がありません。
 
-この場合、limit 値のみが取得され、offset 値は無視されます。したがって、order by なしでは意味がありません。
+この場合、limit 値のみが取得され、offset 値は無視されます。したがって、order by は不要です。
 
-結果セットの最大行数を超えるオフセットでも結果は得られます。ユーザーには、order by と一緒に offset を使用することをお勧めします。
+Offset が結果セットの最大行数を超えても、結果は表示されます。ユーザーは order by とともに offset を使用することをお勧めします。
 
-### UNION
+## UNION
 
 複数のクエリの結果を結合します。
 
-**構文:**
+**構文**
 
 ```sql
 query_1 UNION [DISTINCT | ALL] query_2
 ```
 
-- DISTINCT (デフォルト) は一意の行のみを返します。UNION は UNION DISTINCT と同等です。
-- ALL は重複を含むすべての行を結合します。重複排除はメモリを多く消費するため、UNION ALL を使用するクエリはより高速でメモリ消費が少なくなります。パフォーマンスを向上させるために、UNION ALL を使用してください。
+**パラメータ**
+
+- `DISTINCT` (デフォルト): 一意の行のみを返します。UNION は UNION DISTINCT と同等です。
+- `ALL`: 重複を含むすべての行を結合します。重複排除はメモリを大量に消費するため、UNION ALL を使用したクエリの方が高速で、メモリ消費量も少なくなります。パフォーマンスを向上させるには、UNION ALL を使用してください。
 
 > **NOTE**
 >
-> 各クエリ文は同じ数の列を返す必要があり、列は互換性のあるデータ型を持っている必要があります。
+> 各クエリステートメントは、同じ数の列を返し、列は互換性のあるデータ型を持っている必要があります。
 
-**例:**
+**例**
 
 テーブル `select1` と `select2` を作成します。
 
@@ -667,7 +681,7 @@ INSERT INTO select2 VALUES
     (7,8);
 ```
 
-例 1: 重複を含む 2 つのテーブル内のすべての ID を返します。
+例1: 重複を含め、2つのテーブル内のすべてのIDを返します。
 
 ```Plaintext
 mysql> (select id from select1) union all (select id from select2) order by id;
@@ -688,7 +702,7 @@ mysql> (select id from select1) union all (select id from select2) order by id;
 11 rows in set (0.02 sec)
 ```
 
-例 2: 2 つのテーブル内のすべての一意の ID を返します。次の 2 つの文は同等です。
+例 2：2 つのテーブルにある一意の ID をすべて返します。次の 2 つのステートメントは同等です。
 
 ```Plaintext
 mysql> (select id from select1) union (select id from select2) order by id;
@@ -717,7 +731,7 @@ mysql> (select id from select1) union distinct (select id from select2) order by
 5 rows in set (0.02 sec)
 ```
 
-例 3: 2 つのテーブル内のすべての一意の ID のうち、最初の 3 つの ID を返します。次の 2 つの文は同等です。
+例3：2つのテーブルにあるすべてのユニークなIDのうち、最初の3つのIDを返します。以下の2つのステートメントは同等です。
 
 ```SQL
 mysql> (select id from select1) union distinct (select id from select2)
@@ -745,11 +759,11 @@ limit 3;
 3 rows in set (0.01 sec)
 ```
 
-### INTERSECT
+## INTERSECT
 
-複数のクエリの結果の交差を計算します。つまり、すべての結果セットに現れる結果です。この句は、結果セットの中で一意の行のみを返します。ALL キーワードはサポートされていません。
+複数のクエリの結果の共通部分、つまりすべての結果セットに現れる結果を計算します。この句は、結果セットの中から一意の行のみを返します。ALL キーワードはサポートされていません。
 
-**構文:**
+**構文**
 
 ```SQL
 query_1 INTERSECT [DISTINCT] query_2
@@ -758,13 +772,13 @@ query_1 INTERSECT [DISTINCT] query_2
 > **NOTE**
 >
 > - INTERSECT は INTERSECT DISTINCT と同等です。
-> - 各クエリ文は同じ数の列を返す必要があり、列は互換性のあるデータ型を持っている必要があります。
+> - 各クエリステートメントは、同じ数のカラムを返し、カラムは互換性のあるデータ型を持っている必要があります。
 
-**例:**
+**Examples**
 
-UNION で使用される 2 つのテーブル。
+UNION の 2 つのテーブルが使用されます。
 
-両方のテーブルに共通する一意の `(id, price)` の組み合わせを返します。次の 2 つの文は同等です。
+両方のテーブルに共通する個別の `(id, price)` の組み合わせを返します。次の 2 つのステートメントは同等です。
 
 ```Plaintext
 mysql> (select id, price from select1) intersect (select id, price from select2)
@@ -788,11 +802,11 @@ order by id;
 +------+-------+
 ```
 
-### EXCEPT/MINUS
+## EXCEPT/MINUS
 
-右側のクエリに存在しない左側のクエリの一意の結果を返します。EXCEPT は MINUS と同等です。
+左側のクエリの結果のうち、右側のクエリに存在しない重複を除いた結果を返します。EXCEPT は MINUS と同等です。
 
-**構文:**
+**構文**
 
 ```SQL
 query_1 {EXCEPT | MINUS} [DISTINCT] query_2
@@ -800,14 +814,14 @@ query_1 {EXCEPT | MINUS} [DISTINCT] query_2
 
 > **NOTE**
 >
-> - EXCEPT は EXCEPT DISTINCT と同等です。ALL キーワードはサポートされていません。
-> - 各クエリ文は同じ数の列を返す必要があり、列は互換性のあるデータ型を持っている必要があります。
+> - EXCEPT は EXCEPT DISTINCT と同等です。 ALL キーワードはサポートされていません。
+> - 各クエリステートメントは、同じ数のカラムを返し、カラムは互換性のあるデータ型でなければなりません。
 
-**例:**
+**Examples**
 
-UNION で使用される 2 つのテーブル。
+UNION の 2 つのテーブルが使用されます。
 
-`select1` にあり、`select2` に見つからない一意の `(id, price)` の組み合わせを返します。
+`select1` にあり、`select2` にはない個別の `(id, price)` の組み合わせを返します。
 
 ```Plaintext
 mysql> (select id, price from select1) except (select id, price from select2)
@@ -827,22 +841,22 @@ order by id;
 +------+-------+
 ```
 
-### DISTINCT
+## DISTINCT
 
-DISTINCT キーワードは結果セットの重複を排除します。例:
+DISTINCT キーワードは、結果セットから重複する行を削除します。 例：
 
 ```SQL
--- 1 つの列から一意の値を返します。
+-- Returns the unique values from one column.
 select distinct tiny_column from big_table limit 2;
 
--- 複数の列から一意の値の組み合わせを返します。
+-- Returns the unique combinations of values from multiple columns.
 select distinct tiny_column, int_column from big_table limit 2;
 ```
 
-DISTINCT は集計関数 (通常は count 関数) と一緒に使用でき、count (distinct) は 1 つ以上の列に含まれる異なる組み合わせの数を計算するために使用されます。
+DISTINCT は、集計関数（通常はカウント関数）とともに使用でき、count (distinct) は、1つ以上のカラムに含まれる異なる組み合わせの数を計算するために使用されます。
 
 ```SQL
--- 1 つの列から一意の値をカウントします。
+-- Counts the unique values from one column.
 select count(distinct tiny_column) from small_table;
 ```
 
@@ -856,29 +870,29 @@ select count(distinct tiny_column) from small_table;
 ```
 
 ```SQL
--- 複数の列から一意の値の組み合わせをカウントします。
+-- Counts the unique combinations of values from multiple columns.
 select count(distinct tiny_column, int_column) from big_table limit 2;
 ```
 
-StarRocks は、複数の集計関数で同時に distinct を使用することをサポートしています。
+StarRocks は、distinct を使用した複数の集計関数を同時にサポートしています。
 
 ```SQL
--- 複数の集計関数から一意の値を個別にカウントします。
+-- Count the unique value from multiple aggregation function separately.
 select count(distinct tiny_column, int_column), count(distinct varchar_column) from big_table;
 ```
 
-### サブクエリ
+## サブクエリ
 
-サブクエリは関連性に基づいて 2 つのタイプに分類されます。
+サブクエリは、関連性に関して次の2つのタイプに分類されます。
 
-- 非相関サブクエリは、外部クエリとは独立して結果を取得します。
-- 相関サブクエリは、外部クエリからの値を必要とします。
+- 非相関サブクエリ：外側のクエリとは独立して結果を取得します。
+- 相関サブクエリ：外側のクエリからの値を必要とします。
 
-#### 非相関サブクエリ
+#### 相関のないサブクエリ
 
-非相関サブクエリは [NOT] IN および EXISTS をサポートします。
+相関のないサブクエリは、[NOT] IN と EXISTS をサポートしています。
 
-例:
+**例**
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
@@ -888,13 +902,13 @@ SELECT * FROM t1 WHERE (x,y) [NOT] IN (SELECT x,y FROM t2 LIMIT 2);
 SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 ```
 
-v3.0 以降、`SELECT... FROM... WHERE... [NOT] IN` の WHERE 句で複数のフィールドを指定できます。たとえば、2 番目の SELECT 文の `WHERE (x,y)` です。
+v3.0 以降では、`SELECT... FROM... WHERE... [NOT] IN` の WHERE 句で複数のフィールドを指定できます。たとえば、2 番目の SELECT ステートメントの `WHERE (x,y)` などです。
 
 #### 相関サブクエリ
 
-関連サブクエリは [NOT] IN および [NOT] EXISTS をサポートします。
+相関サブクエリは、[NOT] IN と [NOT] EXISTS をサポートします。
 
-例:
+**例**
 
 ```sql
 SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
@@ -902,117 +916,117 @@ SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
 SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 ```
 
-サブクエリはスカラー量子クエリもサポートしています。これは、無関係なスカラー量子クエリ、関連するスカラー量子クエリ、および一般的な関数のパラメータとしてのスカラー量子クエリに分けられます。
+サブクエリは、スカラー量子クエリもサポートしています。これは、無相関スカラー量子クエリ、相関スカラー量子クエリ、および一般関数のパラメータとしてのスカラー量子クエリに分類できます。
 
-例:
+**例**
 
-1. = 記号を持つ非相関スカラー量子クエリ。たとえば、最高賃金の人物の情報を出力します。
+1. 述語が=符号の、無相関スカラー量子クエリ。たとえば、最も高い賃金を持つ人物に関する情報を出力します。
 
     ```sql
     SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
     ```
 
-2. `>`, `<` などの述語を持つ非相関スカラー量子クエリ。たとえば、平均以上の賃金を受け取る人々の情報を出力します。
+2. 相関のないスカラー量子クエリ（述語`>`、`<`などを使用）。例えば、平均より高い給与を得ている人々の情報を出力します。
 
     ```sql
     SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
     ```
 
-3. 関連するスカラー量子クエリ。たとえば、各部門の最高賃金情報を出力します。
+3. 関連するスカラー量子クエリ。たとえば、各部署の最高給与情報を出力します。
 
     ```sql
     SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
     ```
 
-4. スカラー量子クエリは通常の関数のパラメータとして使用されます。
+4. スカラー量子クエリは、通常の関数のパラメーターとして使用されます。
 
     ```sql
     SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
     ```
 
-### WHERE と演算子
+## Where と Operator
 
-SQL 演算子は比較に使用される一連の関数であり、select 文の where 句で広く使用されます。
+SQL operator は、比較に使用される一連の関数であり、select ステートメントの where 句で広く使用されています。
 
-#### 算術演算子
+### 算術演算子
 
-算術演算子は通常、左、右、およびほとんどの場合左オペランドを含む式に現れます。
+算術演算子は通常、左オペランド、右オペランド、そして多くの場合、左オペランドを含む式に現れます。
 
-**+ および -**: 単項または 2 項演算子として使用できます。単項演算子として使用される場合、たとえば +1、-2.5、または -col_ name は、値が +1 または -1 で乗算されることを意味します。
+**+ と -**: 単項演算子または二項演算子として使用できます。単項演算子として使用する場合、+1、-2.5、-col_name のように、値に +1 または -1 を掛けることを意味します。
 
-したがって、セル演算子 + は変更されていない値を返し、セル演算子 - はその値の符号ビットを変更します。
+したがって、単項演算子 + は変更されていない値を返し、単項演算子 - はその値の符号ビットを変更します。
 
-ユーザーは 2 つのセル演算子を重ねることができます。たとえば、+5 (正の値を返す)、-+2 または +2 (負の値を返す) ですが、ユーザーは 2 つの連続した - 記号を使用できません。
+ユーザーは、+5 (正の値を返す)、-+2 または +-2 (負の値を返す) のように、2 つの単項演算子を重ねることができますが、2 つの連続する - 符号を使用することはできません。
 
-なぜなら、-- は次の文でコメントとして解釈されるためです (ユーザーが 2 つの記号を使用できる場合、2 つの記号の間にスペースまたは括弧が必要です。たとえば、-(-2) または - -2 は実際には + 2 になります)。
+なぜなら、-- は次のステートメントではコメントとして解釈されるからです (ユーザーが 2 つの - 符号を使用できる場合、2 つの - 符号の間にスペースまたは括弧が必要です。例えば、-(-2) または - -2 のように、実際には +2 になります)。
 
-+ または - が 2 項演算子である場合、たとえば 2+2、3+1.5、または col1+col2 は、左の値が右の値に加算または減算されることを意味します。左と右の値は両方とも数値型でなければなりません。
++ または - が二項演算子の場合、2+2、3+1.5、col1+col2 のように、左側の値に右側の値を加算または減算することを意味します。左右の値はどちらも数値型である必要があります。
 
-**および/**: それぞれ乗算と除算を表します。両側のオペランドはデータ型である必要があります。2 つの数値が乗算されるとき。
+**\* と /**: それぞれ乗算と除算を表します。両側のオペランドはデータ型である必要があります。2 つの数値を乗算する場合。
 
-必要に応じて、小さいオペランドが昇格される場合があります (たとえば、SMALLINT から INT または BIGINT への昇格)。式の結果は次の大きな型に昇格されます。
+必要に応じて、より小さいオペランドが昇格される場合があります (例えば、SMALLINT から INT または BIGINT へ)。式の結果は、次に大きい型に昇格されます。
 
-たとえば、TINYINT を INT で乗算すると、BIGINT 型の結果が生成されます。2 つの数値が乗算されるとき、両方のオペランドと式の結果は精度の損失を避けるために DOUBLE 型として解釈されます。
+例えば、TINYINT に INT を掛けると、BIGINT 型の結果が生成されます。2 つの数値を乗算する場合、精度が失われるのを避けるために、オペランドと式の両方の結果は DOUBLE 型として解釈されます。
 
 ユーザーが式の結果を別の型に変換したい場合は、CAST 関数を使用して変換する必要があります。
 
-**%**: 剰余演算子。左オペランドを右オペランドで割った余りを返します。左と右のオペランドは両方とも整数でなければなりません。
+**%**: 剰余演算子。左オペランドを右オペランドで割った余りを返します。左右のオペランドはどちらも整数である必要があります。
 
-**&, | および ^**: ビット演算子は、2 つのオペランドに対してビット単位の AND、ビット単位の OR、ビット単位の XOR 操作の結果を返します。両方のオペランドは整数型である必要があります。
+**&、| と ^**: ビット単位演算子は、2 つのオペランドに対するビット単位 AND、ビット単位 OR、ビット単位 XOR 演算の結果を返します。両方のオペランドには整数型が必要です。
 
-ビット演算子の 2 つのオペランドの型が一致しない場合、小さい型のオペランドが大きい型のオペランドに昇格され、対応するビット単位の操作が実行されます。
+ビット単位演算子の 2 つのオペランドの型が一致しない場合、より小さい型のオペランドはより大きい型のオペランドに昇格され、対応するビット単位演算が実行されます。
 
-1 つの式に複数の算術演算子が現れることがあり、ユーザーは対応する算術式を括弧で囲むことができます。算術演算子には、算術演算子と同じ機能を表す対応する数学関数が通常ありません。
+複数の算術演算子を式に記述でき、ユーザーは対応する算術式を括弧で囲むことができます。算術演算子には通常、算術演算子と同じ機能を表現する対応する数学関数はありません。
 
-たとえば、% 演算子を表す MOD() 関数はありません。逆に、数学関数には対応する算術演算子がありません。たとえば、べき乗関数 POW() には対応する ** 累乗演算子がありません。
+例えば、% 演算子を表す MOD() 関数はありません。逆に、数学関数には対応する算術演算子はありません。例えば、べき乗関数 POW() には対応する ** 指数演算子はありません。
 
-ユーザーは、サポートされている算術関数を Mathematical Functions セクションで確認できます。
+サポートされている算術関数は、数学関数セクションで確認できます。
 
-#### Between 演算子
+### Between Operator
 
-where 句では、式を上下の境界と比較することができます。式が下限以上であり、上限以下である場合、比較の結果は true です。
+where 句では、式を上限と下限の両方と比較できます。式が下限以上で、上限以下の場合、比較の結果は true になります。
 
-構文:
+構文：
 
 ```sql
 expression BETWEEN lower_bound AND upper_bound
 ```
 
-データ型: 通常、式は数値型に評価されますが、他のデータ型もサポートしています。下限と上限の両方が比較可能な文字であることを保証する必要がある場合は、cast() 関数を使用できます。
+データ型：通常、式は数値型に評価されますが、他のデータ型もサポートします。下限と上限の両方が比較可能な文字であることを保証する必要がある場合は、cast() 関数を使用できます。
 
-使用方法: オペランドが文字列型の場合、上限で始まる長い文字列は上限と一致しないことに注意してください。これは上限よりも大きいです。たとえば、"between 'A' and 'M'" は 'MJ' と一致しません。
+ 使用上の注意：オペランドが文字列型の場合、上限で始まる長い文字列は上限と一致しないことに注意してください。これは上限よりも大きいためです。たとえば、"between 'A' and 'M'" は 'MJ' と一致しません。
 
-式が正しく機能することを確認する必要がある場合は、upper()、lower()、substr()、trim() などの関数を使用できます。
+ 式が正しく動作することを確認する必要がある場合は、upper()、lower()、substr()、trim() などの関数を使用できます。
 
-例:
+ 例：
 
 ```sql
 select c1 from t1 where month between 1 and 6;
 ```
 
-#### 比較演算子
+### 比較演算子
 
-比較演算子は 2 つの値を比較するために使用されます。`=`, `!=`, `>=` はすべてのデータ型に適用されます。
+比較演算子は、2つの値を比較するために使用されます。`=`、`!=`、`>=` はすべてのデータ型に適用されます。
 
-`<>` と `!=` 演算子は同等であり、2 つの値が等しくないことを示します。
+`<>` 演算子と `!=` 演算子は同等であり、2つの値が等しくないことを示します。
 
-#### In 演算子
+### In Operator
 
-In 演算子は VALUE コレクションと比較し、コレクション内の要素のいずれかと一致する場合に TRUE を返します。
+In operator は、VALUE コレクションと比較し、コレクション内のいずれかの要素と一致する場合に TRUE を返します。
 
-パラメータと VALUE コレクションは比較可能でなければなりません。IN 演算子を使用するすべての式は、OR で接続された同等の比較として記述できますが、IN の構文はより簡単で正確であり、StarRocks が最適化しやすくなります。
+パラメータと VALUE コレクションは比較可能である必要があります。IN operator を使用するすべての式は、OR で接続された同等の比較として記述できますが、IN の構文はよりシンプルで、より正確で、StarRocks が最適化しやすくなっています。
 
-例:
+例：
 
 ```sql
 select * from small_table where tiny_column in (1,2);
 ```
 
-#### Like 演算子
+### Like Operator
 
-この演算子は文字列と比較するために使用されます。'_' (アンダースコア) は 1 文字に一致し、'%' は複数の文字に一致します。パラメータは完全な文字列と一致する必要があります。通常、文字列の末尾に '%' を置くことがより実用的です。
+この operator は、文字列との比較に使用されます。'\_'（アンダースコア）は単一の文字に一致し、'%' は複数の文字に一致します。パラメーターは文字列全体と一致する必要があります。通常、文字列の末尾に'%'を配置する方が実用的です。
 
-例:
+例：
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column like 'm%';
@@ -1038,17 +1052,17 @@ mysql> select varchar_column from small_table where varchar_column like 'm____';
 1 row in set (0.01 sec)
 ```
 
-#### 論理演算子
+### 論理演算子
 
-論理演算子は BOOL 値を返します。単項および複数の演算子を含み、各演算子は BOOL 値を返す式であるパラメータを処理します。サポートされている演算子は次のとおりです。
+論理演算子は BOOL 値を返します。これには、単項演算子と多項演算子が含まれ、それぞれが BOOL 値を返す式であるパラメータを処理します。サポートされている演算子は次のとおりです。
 
-AND: 2 項演算子であり、左と右のパラメータが両方とも TRUE と評価される場合、AND 演算子は TRUE を返します。
+AND: 2 項演算子。AND 演算子は、左右のパラメータが両方とも TRUE として計算される場合に TRUE を返します。
 
-OR: 2 項演算子であり、左と右のパラメータのいずれかが TRUE と評価される場合、OR 演算子は TRUE を返します。両方のパラメータが FALSE の場合、OR 演算子は FALSE を返します。
+OR: 2 項演算子。左右のパラメータのいずれかが TRUE として計算される場合に TRUE を返します。両方のパラメータが FALSE の場合、OR 演算子は FALSE を返します。
 
-NOT: 単項演算子であり、式を反転した結果です。パラメータが TRUE の場合、演算子は FALSE を返します。パラメータが FALSE の場合、演算子は TRUE を返します。
+NOT: 単項演算子。式を反転した結果を返します。パラメータが TRUE の場合、演算子は FALSE を返します。パラメータが FALSE の場合、演算子は TRUE を返します。
 
-例:
+例：
 
 ```plain text
 mysql> select true and true;
@@ -1098,17 +1112,17 @@ mysql> select not true;
 1 row in set (0.01 sec)
 ```
 
-#### 正規表現演算子
+### 正規表現 Operator
 
-正規表現が一致するかどうかを判断します。POSIX 標準の正規表現を使用し、'^' は文字列の先頭に一致し、'$' は文字列の末尾に一致します。
+正規表現が一致するかどうかを判断します。POSIX 標準の正規表現を使用し、'^' は文字列の先頭部分に一致し、'$' は文字列の末尾に一致します。
 
-"." は任意の 1 文字に一致し、"*" は 0 個以上のオプションに一致し、"+" は 1 個以上のオプションに一致し、"?" は貪欲な表現を意味します。正規表現は部分文字列ではなく、完全な値に一致する必要があります。
+"." は任意の 1 文字に一致し、"*" は 0 個以上のオプションに一致し、"+" は 1 個以上のオプションに一致し、"?" は貪欲な表現を意味します。正規表現は、文字列の一部だけでなく、完全な値に一致する必要があります。
 
-中間部分に一致させたい場合、正規表現の前の部分は '^.' または '.' として記述できます。通常、'^' および '$' は省略されます。RLIKE 演算子と REGEXP 演算子は同義です。
+中間部分に一致させたい場合は、正規表現の前半部分を '^. ' または '.' と記述できます。'^' と '$' は通常省略されます。RLIKE operator と REGEXP operator は同義語です。
 
-'|' 演算子はオプションの演算子です。'|' の両側の正規表現は、どちらか一方の条件を満たすだけで済みます。'|' 演算子とその両側の正規表現は通常 () で囲む必要があります。
+'|' operator はオプションの operator です。'|' の両側の正規表現は、片側の条件を満たすだけで済みます。'|' operator と両側の正規表現は、通常 () で囲む必要があります。
 
-例:
+例：
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column regexp '(mi|MI).*';
@@ -1134,17 +1148,17 @@ mysql> select varchar_column from small_table where varchar_column regexp 'm.*';
 1 row in set (0.01 sec)
 ```
 
-### エイリアス
+## エイリアス
 
-クエリ内でテーブル、列、または列を含む式の名前を記述する際に、それらにエイリアスを割り当てることができます。エイリアスは通常、元の名前よりも短く、覚えやすいです。
+クエリ内でテーブル、カラム、またはカラムを含む式の名前を記述する際に、エイリアスを割り当てることができます。エイリアスは通常、元の名前よりも短く、覚えやすいものです。
 
-エイリアスが必要な場合は、select リストまたは from リスト内のテーブル、列、および式の名前の後に単に AS 句を追加するだけです。AS キーワードはオプションです。AS を使用せずに、元の名前の直後にエイリアスを指定することもできます。
+エイリアスが必要な場合は、SELECTリストまたはFROMリスト内のテーブル、カラム、および式の名前の後にAS句を追加するだけです。ASキーワードはオプションです。ASを使用せずに、元の名前の直後にエイリアスを指定することもできます。
 
-エイリアスまたは他の識別子が内部の [StarRocks キーワード](../keywords.md) と同じ名前を持つ場合、名前をバッククォートで囲む必要があります。たとえば、`rank` です。
+エイリアスまたはその他の識別子が、内部の [StarRocks keyword](../keywords.md) と同じ名前を持つ場合、名前をバッククォートのペアで囲む必要があります。例：`rank`。
 
-エイリアスは大文字と小文字を区別しますが、列エイリアスと式エイリアスは大文字と小文字を区別しません。
+エイリアスは大文字と小文字を区別しますが、カラムエイリアスと式のエイリアスは大文字と小文字を区別しません。
 
-例:
+例：
 
 ```sql
 select tiny_column as name, int_column as sex from big_table;
@@ -1154,15 +1168,15 @@ select sum(tiny_column) as total_count from big_table;
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
 
-### PIVOT
+## PIVOT
 
 この機能は v3.3 以降でサポートされています。
 
-PIVOT 操作は、SQL の高度な機能であり、テーブル内の行を列に変換することができます。特にピボットテーブルを作成する際に便利です。データベースのレポートや分析を扱う際に、データを要約または分類して提示する必要がある場合に特に役立ちます。
+PIVOT 操作は SQL の高度な機能であり、テーブル内の行を列に変換できます。これは、ピボットテーブルの作成に特に役立ちます。これは、データベースレポートや分析を扱う場合、特にプレゼンテーション用にデータを要約または分類する必要がある場合に役立ちます。
 
-実際には、PIVOT は構文糖であり、`sum(case when ... then ... end)` のようなクエリ文の記述を簡素化できます。
+実際、PIVOT はシンタックスシュガーであり、`sum(case when ... then ... end)` のようなクエリステートメントの記述を簡素化できます。
 
-#### 構文
+**構文**
 
 ```sql
 pivot:
@@ -1183,21 +1197,21 @@ pivot_value:
 | (<literal>, <literal> ...) [, (<literal>, <literal> ...)]
 ```
 
-#### パラメータ
+**パラメータ**
 
 PIVOT 操作では、いくつかの重要なコンポーネントを指定する必要があります。
 
-- aggregate_function(): SUM、AVG、COUNT などの集計関数で、データを要約するために使用されます。
-- alias: 集計結果のエイリアスで、結果をより理解しやすくします。
-- FOR pivot_column: 行から列への変換が行われる列名を指定します。
-- IN (pivot_value): 列に変換される pivot_column の特定の値を指定します。
+- aggregate_function(): データの集計に使用される SUM、AVG、COUNT などの集計関数。
+- alias: 集計結果のエイリアス。結果をより理解しやすくします。
+- FOR pivot_column: 行から列への変換を実行する列名を指定します。
+- IN (pivot_value): 列に変換される pivot_column の特定の値​​を指定します。
 
-#### 例
+**例**
 
 ```sql
 create table t1 (c0 int, c1 int, c2 int, c3 int);
 SELECT * FROM t1 PIVOT (SUM(c1) AS sum_c1, AVG(c2) AS avg_c2 FOR c3 IN (1, 2, 3, 4, 5));
--- 結果は次のクエリと同等です。
+-- The result is equivalent to the following query:
 SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
        AVG(CASE WHEN c3 = 1 THEN c2 ELSE NULL END) AS avg_c2_1,
        SUM(CASE WHEN c3 = 2 THEN c1 ELSE NULL END) AS sum_c1_2,
@@ -1212,55 +1226,248 @@ FROM t1
 GROUP BY c0;
 ```
 
-### EXCLUDE
+## EXCLUDE
 
-この機能は v4.0 からサポートされています。
+この機能はバージョン 4.0 以降でサポートされています。
 
-EXCLUDE キーワードは、クエリ結果から指定した列を除外するために使用され、特定の列を無視できる場合に SQL ステートメントを簡素化します。特に、多くの列を含むテーブルを扱う際に便利で、保持するすべての列を明示的に列挙する必要がなくなります。
+EXCLUDE キーワードは、クエリ結果から指定されたカラムを除外するために使用され、特定カラムを無視できる場合に SQL ステートメントを簡素化します。これは、多数のカラムを含むテーブルを操作する際に特に便利で、保持するすべてのカラムを明示的にリストする必要がなくなります。
 
-#### 構文
+**構文**
 
-```sql
-SELECT 
-  * EXCLUDE (<column_name> [, <column_name> ...]) 
-  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])
-FROM ...
+```sql  
+SELECT  
+  * EXCLUDE (<column_name> [, <column_name> ...])  
+  | <table_alias>.* EXCLUDE (<column_name> [, <column_name> ...])  
+FROM ...  
 ```
 
-#### パラメータ
+**パラメータ**
 
 - **`* EXCLUDE`**  
-  ワイルドカード `*` は全ての列を選択し、`EXCLUDE` の後に除外する列名のリストを指定します。
+  ワイルドカード `*` を使用してすべてのカラムを選択し、その後に `EXCLUDE` と除外するカラム名のリストを指定します。
 - **`<table_alias>.* EXCLUDE`**  
-  テーブルエイリアスが存在する場合、特定のテーブルの列を除外するように指定できます（エイリアスと組み合わせて使用する必要があります）。
+  テーブルエイリアスが存在する場合、この構文を使用すると、そのテーブルから特定カラムを除外できます（エイリアスとともに使用する必要があります）。
 - **`<column_name>`**  
-  除外する列名。複数の列名はカンマで区切ります。列がテーブルに存在しない場合はエラーが発生します。
+  除外するカラム名。複数のカラムはカンマで区切ります。カラムはテーブルに存在する必要があります。存在しない場合、エラーが返されます。
 
-#### 使用例
+**例**
 
-##### 基本使用法
+- 基本的な使用例：
+
+```sql  
+-- Create test_table.
+CREATE TABLE test_table (  
+  id INT,  
+  name VARCHAR(50),  
+  age INT,  
+  email VARCHAR(100)  
+) DUPLICATE KEY(id);  
+
+-- Exclude a single column (age).
+SELECT * EXCLUDE (age) FROM test_table;  
+-- Above is equivalent to:  
+SELECT id, name, email FROM test_table;  
+
+-- Exclude multiple columns (name, email).
+SELECT * EXCLUDE (name, email) FROM test_table;  
+-- Above is equivalent to:  
+SELECT id, age FROM test_table;  
+
+-- Exclude columns using a table alias.
+SELECT test_table.* EXCLUDE (email) FROM test_table;  
+-- Above is equivalent to:  
+SELECT id, name, age FROM test_table;  
+```
+
+## RECURSIVE
+
+v4.1 以降、StarRocks は再帰的 Common Table Expression (CTE) をサポートし、反復的な実行アプローチを使用して、さまざまな階層型およびツリー構造化データを効率的に処理します。
+
+再帰的 CTE は、それ自体を参照できる特殊なタイプの CTE であり、再帰クエリを可能にします。再帰的 CTE は、組織図、ファイルシステム、グラフ走査などの階層型データ構造の処理に特に役立ちます。
+
+再帰的 CTE は、次のコンポーネントで構成されます。
+
+- **アンカーメンバー**: 再帰的ではない初期クエリで、再帰の開始データセットを提供します。
+- **再帰メンバー**: CTE 自体を参照する再帰クエリ。
+- **終了条件**: 無限再帰を防ぐための条件。通常は WHERE 句を使用して実装されます。
+
+再帰的 CTE の実行プロセスは次のとおりです。
+
+1. アンカーメンバーを実行して、初期結果セット（レベル 0）を取得します。
+2. レベル 0 の結果を入力として使用し、再帰メンバーを実行してレベル 1 の結果を取得します。
+3. レベル 1 の結果を入力として使用し、再帰メンバーを再度実行してレベル 2 の結果を取得します。
+4. 再帰メンバーが行を返さなくなるか、最大再帰深度に達するまで、このプロセスを繰り返します。
+5. UNION ALL (または UNION) を使用して、すべてのレベルの結果をマージします。
+
+:::tip
+この機能を使用する前に、システム変数 `enable_recursive_cte` を `true` に設定して、この機能を有効にする必要があります。
+:::
+
+**構文**
 
 ```sql
--- test_table の作成。
-CREATE TABLE test_table (
-  id INT,
-  name VARCHAR(50),
-  age INT,
-  email VARCHAR(100)
-) DUPLICATE KEY(id);
+WITH RECURSIVE cte_name [(column_list)] AS (
+    -- Anchor member (non-recursive part)
+    anchor_query
+    UNION [ALL | DISTINCT]
+    -- Recursive member (recursive part)
+    recursive_query
+)
+SELECT ... FROM cte_name ...;
+```
 
--- 単一列を除外 (age)。
-SELECT * EXCLUDE (age) FROM test_table;
--- 以下のクエリと同等：
-SELECT id, name, email FROM test_table;
+**パラメータ**
 
--- 複数列を除外 (name, email)。
-SELECT * EXCLUDE (name, email) FROM test_table;
--- 以下のクエリと同等：
-SELECT id, age FROM test_table;
+- `cte_name`: CTE の名前。
+- `column_list` (オプション): CTE の結果セットの列名のリスト。
+- `anchor_query`: 非再帰的で、CTE 自体を参照できない初期クエリ。
+- `UNION`: Union operator。
+  - `UNION ALL`: すべての行 (重複を含む) を保持します。パフォーマンス向上のため推奨されます。
+  - `UNION` または `UNION DISTINCT`: 重複行を削除します。
+- `recursive_query`: CTE 自体を参照する再帰クエリ。
 
--- テーブルエイリアスを使用して列を除外。
-SELECT test_table.* EXCLUDE (email) FROM test_table;
--- 以下のクエリと同等：
-SELECT id, name, age FROM test_table;
+**制限事項**
+
+StarRocks の再帰 CTE には、次の制限があります。
+
+- **フィーチャーフラグが必要**
+
+  システム変数 `enable_recursive_cte` を `true` に設定して、再帰 CTE を手動で有効にする必要があります。
+
+- **構造要件**
+  - UNION または UNION ALL を使用して、アンカーメンバーと再帰メンバーを接続する必要があります。
+  - アンカーメンバーは CTE 自体を参照できません。
+  - 再帰メンバーが CTE 自体を参照しない場合、通常の CTE として実行されます。
+
+- **再帰深度の制限**
+  - デフォルトでは、再帰の最大深度は 5 (レベル) です。
+  - 無限再帰を防ぐために、システム変数 `recursive_cte_max_depth` を使用して最大深度を調整できます。
+
+- **実行制約**
+  - 現在、複数レベルのネストされた再帰 CTE はサポートされていません。
+  - 複雑な再帰 CTE は、パフォーマンスの低下につながる可能性があります。
+  - `anchor_query` の定数は、`recursive_query` の出力タイプと一致するタイプである必要があります。
+
+**構成**
+
+再帰 CTE を使用するには、次のシステム変数が必要です。
+
+| 変数名                      | タイプ   | デフォルト | 説明                                                         |
+| -------------------------- | ------- | -------- | ------------------------------------------------------------ |
+| `enable_recursive_cte`     | BOOLEAN | false    | 再帰 CTE を有効にするかどうか。                                  |
+| `recursive_cte_max_depth`  | INT     | 5        | 無限再帰を防ぐための再帰の最大深度。                              |
+
+**例**
+
+**例 1: 組織階層のクエリ**
+
+組織階層のクエリは、再帰 CTE の最も一般的なユースケースの 1 つです。次の例では、従業員の組織階層の関係をクエリします。
+
+1. データの準備:
+
+    ```sql
+    CREATE TABLE employees (
+      employee_id INT,
+      name VARCHAR(100),
+      manager_id INT,
+      title VARCHAR(50)
+    ) DUPLICATE KEY(employee_id)
+    DISTRIBUTED BY RANDOM;
+
+    INSERT INTO employees VALUES
+    (1, 'Alicia', NULL, 'CEO'),
+    (2, 'Bob', 1, 'CTO'),
+    (3, 'Carol', 1, 'CFO'),
+    (4, 'David', 2, 'VP of Engineering'),
+    (5, 'Eve', 2, 'VP of Research'),
+    (6, 'Frank', 3, 'VP of Finance'),
+    (7, 'Grace', 4, 'Engineering Manager'),
+    (8, 'Heidi', 4, 'Tech Lead'),
+    (9, 'Ivan', 5, 'Research Manager'),
+    (10, 'Judy', 7, 'Senior Engineer');
+    ```
+
+2. 組織階層のクエリ：
+
+    ```sql
+    WITH RECURSIVE org_hierarchy AS (
+        -- Anchor member: Start from CEO (employee with no manager)
+        SELECT 
+            employee_id, 
+            name, 
+            manager_id, 
+            title, 
+            CAST(1 AS BIGINT) AS level,
+            name AS path
+        FROM employees
+        WHERE manager_id IS NULL
+        
+        UNION ALL
+        
+        -- Recursive member: Find subordinates at next level
+        SELECT 
+            e.employee_id,
+            e.name,
+            e.manager_id,
+            e.title,
+            oh.level + 1,
+            CONCAT(oh.path, ' -> ', e.name) AS path
+        FROM employees e
+        INNER JOIN org_hierarchy oh ON e.manager_id = oh.employee_id
+    )
+    SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+        employee_id,
+        name,
+        title,
+        level,
+        path
+    FROM org_hierarchy
+    ORDER BY employee_id;
+    ```
+
+結果：
+
+```Plain
++-------------+---------+----------------------+-------+-----------------------------------------+
+| employee_id | name    | title                | level | path                                    |
++-------------+---------+----------------------+-------+-----------------------------------------+
+|           1 | Alicia  | CEO                  |     1 | Alicia                                  |
+|           2 | Bob     | CTO                  |     2 | Alicia -> Bob                           |
+|           3 | Carol   | CFO                  |     2 | Alicia -> Carol                         |
+|           4 | David   | VP of Engineering    |     3 | Alicia -> Bob -> David                  |
+|           5 | Eve     | VP of Research       |     3 | Alicia -> Bob -> Eve                    |
+|           6 | Frank   | VP of Finance        |     3 | Alicia -> Carol -> Frank                |
+|           7 | Grace   | Engineering Manager  |     4 | Alicia -> Bob -> David -> Grace         |
+|           8 | Heidi   | Tech Lead            |     4 | Alicia -> Bob -> David -> Heidi         |
+|           9 | Ivan    | Research Manager     |     4 | Alicia -> Bob -> Eve -> Ivan            |
+|          10 | Judy    | Senior Engineer      |     5 | Alicia -> Bob -> David -> Grace -> Judy |
++-------------+---------+----------------------+-------+-----------------------------------------+
+```
+
+**例 2: 複数の再帰的 CTE**
+
+1 つのクエリで複数の再帰的 CTE を定義できます。
+
+```sql
+WITH RECURSIVE
+cte1 AS (
+    SELECT CAST(1 AS BIGINT) AS n
+    UNION ALL
+    SELECT n + 1 FROM cte1 WHERE n < 5
+),
+cte2 AS (
+    SELECT CAST(10 AS BIGINT) AS n
+    UNION ALL
+    SELECT n + 1 FROM cte2 WHERE n < 15
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+    'cte1' AS source,
+    n
+FROM cte1
+UNION ALL
+SELECT 
+    'cte2' AS source,
+    n
+FROM cte2
+ORDER BY source, n;
 ```

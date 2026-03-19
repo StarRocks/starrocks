@@ -20,7 +20,7 @@
 #include <opentelemetry/trace/propagation/detail/hex.h>
 #include <opentelemetry/trace/provider.h>
 
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "gutil/strings/split.h"
 
 namespace starrocks {

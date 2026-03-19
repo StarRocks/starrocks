@@ -14,10 +14,15 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
@@ -38,7 +43,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
 #include "util/stack_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -99,10 +103,11 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         *end_idx = _upserts[start_idx]->end_idx;
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
 
     // 2. build schema.
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());
         DCHECK(false) << err_msg;
@@ -134,7 +139,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(), pk_encoding_type);
                 }
             }
         }
@@ -171,6 +176,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
                                                -1 /*unused*/, params.tablet_schema);
     }
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(params.tablet_schema->num_key_columns());
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -280,7 +286,7 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
                                            fileinfo, rssid - rowset_id /* segment id inside rowset */,
                                            &footer_size_hint, lake_io_opts, true, params.tablet_schema));
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(fileinfo.path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(fileinfo.path));
     seg_options.stats = &stats;
     seg_options.is_primary_keys = true;
     seg_options.tablet_id = params.tablet->id();
@@ -499,9 +505,9 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
         if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            std::vector<int> temp(rowset.segments_size());
-            std::iota(temp.begin(), temp.end(), rowset.id());
-            input_segments.insert(input_segments.end(), temp.begin(), temp.end());
+            for (int i = 0; i < rowset.segments_size(); ++i) {
+                input_segments.push_back(get_rssid(rowset, i));
+            }
         }
     }
     // 2. find out if these segments have been updated

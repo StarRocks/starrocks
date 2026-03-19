@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.util.CompressionUtils;
@@ -62,6 +63,7 @@ public class JobSpec {
 
     private ExecPlan execPlan = null;
     private List<PlanFragment> fragments;
+    private List<PlanFragment> preExecutedFragments = Lists.newArrayList();
     private List<ScanNode> scanNodes;
     /**
      * copied from TQueryExecRequest; constant across all fragments
@@ -157,6 +159,7 @@ public class JobSpec {
             return new Builder()
                     .queryId(context.getExecutionId())
                     .fragments(fragments)
+                    .preExecutedFragments(execPlan.getPreExecutedFragments())
                     .scanNodes(scanNodes)
                     .execPlan(execPlan)
                     .descTable(descTable)
@@ -402,6 +405,10 @@ public class JobSpec {
         return fragments;
     }
 
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
+    }
+
     public List<ScanNode> getScanNodes() {
         return scanNodes;
     }
@@ -565,6 +572,13 @@ public class JobSpec {
             return this;
         }
 
+        public Builder preExecutedFragments(List<PlanFragment> preExecutedFragments) {
+            if (preExecutedFragments != null) {
+                instance.preExecutedFragments = preExecutedFragments;
+            }
+            return this;
+        }
+
         public Builder scanNodes(List<ScanNode> scanNodes) {
             instance.scanNodes = scanNodes;
             return this;
@@ -630,6 +644,9 @@ public class JobSpec {
 
         private Builder execPlan(ExecPlan execPlan) {
             instance.execPlan = execPlan;
+            if (instance.execPlan != null) {
+                preExecutedFragments(execPlan.getPreExecutedFragments());
+            }
             return this;
         }
 

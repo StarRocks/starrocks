@@ -18,13 +18,13 @@
 
 #include <mutex>
 
+#include "base/container/lru_cache.h"
 #include "base/utility/defer_op.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment.h"
-#include "util/lru_cache.h"
 
 namespace starrocks::lake {
 

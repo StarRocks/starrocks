@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -26,7 +27,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 class MetadataCacheTest : public ::testing::Test {

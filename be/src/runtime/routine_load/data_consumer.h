@@ -39,10 +39,10 @@
 #include <unordered_map>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "librdkafka/rdkafkacpp.h"
 #include "pulsar/Client.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

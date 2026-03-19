@@ -19,6 +19,7 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "exprs/column_ref.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "fs/fs.h"

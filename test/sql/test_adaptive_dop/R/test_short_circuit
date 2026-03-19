@@ -281,3 +281,6 @@ E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
 ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
 -- result:
 -- !result
+CLEANUP {
+    ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+} END CLEANUP

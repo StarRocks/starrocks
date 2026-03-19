@@ -40,6 +40,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -51,7 +52,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_schema.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -385,7 +385,7 @@ inline size_t TabletMeta::version_count() const {
 
 inline size_t TabletMeta::segment_count() const {
     size_t num_segments = 0;
-    for (auto rowset_meta : _rs_metas) {
+    for (const auto& rowset_meta : _rs_metas) {
         num_segments += rowset_meta->num_segments();
     }
     return num_segments;

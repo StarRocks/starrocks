@@ -28,6 +28,7 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
 
@@ -346,7 +347,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
             if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
-                const auto data = data_column->get_proxy_data();
+                const auto data = data_column->immutable_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
                     if (nullable_column->is_null(i)) {
                         ARROW_RETURN_NOT_OK(builder->AppendNull());
@@ -377,13 +378,12 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             }
         } else {
             const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
+            const auto data = data_column->immutable_data();
             if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
-                const auto data = data_column->get_proxy_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
                     ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                 }
             } else {
-                const auto data = data_column->immutable_data();
                 [[maybe_unused]] int precision = -1;
                 [[maybe_unused]] int scale = -1;
                 if constexpr (lt_is_decimal<LT>) {
@@ -450,7 +450,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const auto* data_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& element_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
@@ -464,7 +464,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
             }
         } else {
             const auto* data_column = down_cast<const ArrayColumn*>(column.get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& child_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
@@ -628,7 +628,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
             const MapColumn* data_column = down_cast<const MapColumn*>(nullable_column->data_column().get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
             ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
@@ -645,7 +645,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
             }
         } else {
             const MapColumn* data_column = down_cast<const MapColumn*>(column.get());
-            auto& offsets = data_column->offsets().immutable_data();
+            const auto& offsets = data_column->offsets().immutable_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
             ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
@@ -775,8 +775,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& out
         const Expr* expr = output_expr_ctxs[i]->root();
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), std::move(column),
-                                                                num_rows);
+            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), column, num_rows);
         }
 
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), result_columns[i]);
@@ -823,8 +822,8 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(),
-                                                                std::move(column), num_rows);
+            column =
+                    ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, *slot_types[i], schema->field(i)->type(), array);

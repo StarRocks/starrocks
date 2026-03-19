@@ -58,11 +58,25 @@ public class PruneSubfieldRule extends TransformationRule {
             .add(FunctionSet.JSON_LENGTH)
             .build();
 
+    public static final List<String> SUPPORT_VARIANT_FUNCTIONS = ImmutableList
+            .<String>builder()
+            // arguments: Variant, path
+            .add(FunctionSet.VARIANT_QUERY)
+            .add(FunctionSet.GET_VARIANT_BOOL)
+            .add(FunctionSet.GET_VARIANT_INT)
+            .add(FunctionSet.GET_VARIANT_DOUBLE)
+            .add(FunctionSet.GET_VARIANT_STRING)
+            .add(FunctionSet.GET_VARIANT_DATE)
+            .add(FunctionSet.GET_VARIANT_DATETIME)
+            .add(FunctionSet.GET_VARIANT_TIME)
+            .build();
+
     public static final List<String> PRUNE_FUNCTIONS = ImmutableList.<String>builder()
             .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
             .addAll(SUPPORT_JSON_FUNCTIONS)
+            .addAll(SUPPORT_VARIANT_FUNCTIONS)
             .build();
 
     public static final List<String> PUSHDOWN_FUNCTIONS = ImmutableList.<String>builder()

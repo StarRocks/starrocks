@@ -47,6 +47,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_STRUCT_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.supportLowCardinality;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeUtil.getDictifiedType;
 
 /*
@@ -174,16 +175,16 @@ class DecodeContext {
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = createNewDictColumn(stringRef);
             stringRefToDictRefMap.put(stringRef, dictRef);
-            stringExprToDictExprMap.put(stringRef, exprRewriter.decode(dictRef, stringRef, stringRef));
         }
 
-        // rewrite string column define expression
+        // rewrite dict column define and decode expressions
         for (Integer stringId : stringRefToDefineExprMap.keySet()) {
             ScalarOperator stringDefineExpr = stringRefToDefineExprMap.get(stringId);
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = stringRefToDictRefMap.get(stringRef);
             ColumnRefOperator useStringRef = stringRef.getType().isStructType() ? stringRef
                     : getUseStringRef(stringDefineExpr);
+            stringExprToDictExprMap.put(stringRef, exprRewriter.decode(dictRef, stringRef, stringRef));
             // return type is dict
             ScalarOperator dictExpr = exprRewriter.define(dictRef.getType(), useStringRef, stringDefineExpr);
             dictRefToDefineExprMap.put(dictRef, dictExpr);
@@ -353,9 +354,9 @@ class DecodeContext {
             if (result.isColumnRef() && anchorOp == null) {
                 // decode array-column-ref
                 return new DictMappingOperator(useDictRef, result, expression.getType());
-            } else if (result instanceof CallOperator &&
-                    (FunctionSet.ARRAY_LENGTH.equalsIgnoreCase(((CallOperator) result).getFnName()) ||
-                            FunctionSet.CARDINALITY.equalsIgnoreCase(((CallOperator) result).getFnName()))) {
+            } else if (result instanceof CallOperator
+                    && LOW_CARD_ARRAY_FUNCTIONS.contains(((CallOperator) result).getFnName())
+                    && !supportLowCardinality(expression.getType())) {
                 Preconditions.checkState(anchorOp == null);
                 return result;
             } else if (result instanceof SubfieldOperator) {
@@ -414,8 +415,7 @@ class DecodeContext {
             Function fn = buildFunction(call.getFnName(), newChildren);
             ScalarOperator result = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn);
 
-            if (FunctionSet.ARRAY_MAX.equalsIgnoreCase(call.getFnName()) ||
-                    FunctionSet.ARRAY_MIN.equalsIgnoreCase(call.getFnName())) {
+            if (call.getType().isStringType()) {
                 return processAnchor(result);
             }
             return result;
@@ -518,12 +518,18 @@ class DecodeContext {
                 returnType = intermediateType = newChildren.get(0).getType();
                 argTypes = List.of(newChildren.get(0).getType());
             } else {
-                argTypes = List.of(getDictifiedType(fn.getArgs()[0]));
+                argTypes = Lists.newArrayListWithCapacity(fn.getNumArgs());
+                for (int i = 0; i < fn.getNumArgs(); ++i) {
+                    argTypes.add(getDictifiedType(fn.getArgs()[i]));
+                }
                 returnType = getDictifiedType(fn.getReturnType());
                 intermediateType = getDictifiedType(fn.getIntermediateType());
             }
             AggregateFunction newFn = (AggregateFunction) fn.copy();
-            newFn.setArgsType(argTypes.subList(0, fn.getNumArgs()).toArray(Type[]::new));
+            Preconditions.checkState(argTypes.size() == fn.getNumArgs(),
+                    "argTypes size %s doesn't match numArgs %s for function %s",
+                    argTypes.size(), fn.getNumArgs(), fn.functionName());
+            newFn.setArgsType(argTypes.toArray(Type[]::new));
             newFn.setIntermediateType(intermediateType);
             newFn.setRetType(returnType);
             return newFn;

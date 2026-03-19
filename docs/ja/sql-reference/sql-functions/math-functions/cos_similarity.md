@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# cos_similarity
+# cosine_similarity
 
 2 つのベクトル間の角度の余弦を計算することで、ベクトルの類似性を測定します。この角度はベクトルの方向によって形成され、ベクトルの大きさの違いは無視されます。
 

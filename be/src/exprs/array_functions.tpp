@@ -276,7 +276,7 @@ class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
-    using DataArray = typename RunTimeTypeTraits<LT>::ProxyContainerType;
+    using DataArray = typename RunTimeTypeTraits<LT>::ImmContainerType;
     using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
     using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
 
@@ -493,7 +493,8 @@ private:
         return overlap;
     }
 
-    static bool _check_overlap(const HashSet& hash_set, const DataArray& data, uint32_t start, uint32_t end,
+    template <typename DataArrayType>
+    static bool _check_overlap(const HashSet& hash_set, const DataArrayType& data, uint32_t start, uint32_t end,
                                size_t index) {
         for (auto i = start; i < end; i++) {
             if (hash_set.contains(data[i])) {
@@ -503,7 +504,8 @@ private:
         return false;
     }
 
-    static bool _check_overlap_nullable(const HashSet& hash_set, const DataArray& data,
+    template <typename DataArrayType>
+    static bool _check_overlap_nullable(const HashSet& hash_set, const DataArrayType& data,
                                         const ImmutableNullData& null_data, uint32_t start, uint32_t end, bool has_null,
                                         size_t index) {
         for (auto i = start; i < end; i++) {
@@ -877,7 +879,6 @@ private:
         for (size_t i = 0; i < chunk_size; i++) {
             std::reverse(pool.begin() + array_offsets[i], pool.begin() + array_offsets[i + 1]);
         }
-        json_column->reset_cache();
     }
 
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
@@ -2200,7 +2201,7 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
-            result_column = NullableColumn::create(std::move(result_column), array_null_column->clone());
+            result_column = NullableColumn::create(result_column, array_null_column->clone());
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {

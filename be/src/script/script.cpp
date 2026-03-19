@@ -249,6 +249,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
         REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
         REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, builtin_inverted_index_mem_tracker);
         REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
         REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
     }

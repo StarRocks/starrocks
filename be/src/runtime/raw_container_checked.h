@@ -25,7 +25,10 @@ template <VecContainer Container>
 inline Status stl_vector_resize_uninitialized_checked(Container* vec, size_t new_size) {
     TRY_CATCH_ALLOC_SCOPE_START()
     using T = typename Container::value_type;
-    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    reinterpret_cast<DstType*>(vec)->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
     return Status::OK();
     TRY_CATCH_ALLOC_SCOPE_END()
 }
@@ -34,8 +37,11 @@ template <VecContainer Container>
 inline Status stl_vector_resize_uninitialized_checked(Container* vec, size_t reserve_size, size_t new_size) {
     TRY_CATCH_ALLOC_SCOPE_START()
     using T = typename Container::value_type;
-    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(reserve_size);
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    reinterpret_cast<DstType*>(vec)->resize(reserve_size);
     vec->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
     return Status::OK();
     TRY_CATCH_ALLOC_SCOPE_END()
 }

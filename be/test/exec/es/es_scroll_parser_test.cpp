@@ -17,7 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 #ifndef __clang__

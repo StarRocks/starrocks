@@ -26,6 +26,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "common/config_exec_fwd.h"
 #include "common/statusor.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
@@ -33,6 +34,7 @@
 #include "fs/fs_memory.h"
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {
 

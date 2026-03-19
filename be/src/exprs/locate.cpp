@@ -15,12 +15,12 @@
 #include <algorithm>
 
 #include "base/string/utf8.h"
+#include "base/string/volnitsky.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
-#include "runtime/Volnitsky.h"
 
 namespace starrocks {
 

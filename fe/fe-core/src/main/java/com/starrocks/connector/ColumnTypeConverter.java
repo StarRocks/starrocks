@@ -83,6 +83,7 @@ import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.IntegerType.SMALLINT;
 import static com.starrocks.type.IntegerType.TINYINT;
+import static com.starrocks.type.TypeFactory.CATALOG_MAX_VARCHAR_LENGTH;
 import static com.starrocks.type.UnknownType.UNKNOWN_TYPE;
 import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static java.util.Objects.requireNonNull;
@@ -996,7 +997,16 @@ public class ColumnTypeConverter {
     public static int getVarcharLength(String typeStr) {
         Matcher matcher = Pattern.compile(VARCHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return Integer.parseInt(matcher.group(1));
+            // Notes:
+            // 1. In Hive, varchar(n) limits the number of characters.
+            // 2. In StarRocks, varchar(n) limits the number of bytes.
+            // 3. To be compatible with Hive character length, we assume that a single
+            //    character may occupy up to 4 bytes (maximum for UTF-8 encoding).
+            // 4. The final returned value is:
+            //        min(parsed character length * 4, CATALOG_MAX_VARCHAR_LENGTH)
+            //    i.e., it is capped at StarRocks' maximum varchar length.
+            int length = Integer.parseInt(matcher.group(1));
+            return length == -1 ? length : Math.min(length * 4, CATALOG_MAX_VARCHAR_LENGTH);
         }
         throw new StarRocksConnectorException("Failed to get varchar length at " + typeStr);
     }

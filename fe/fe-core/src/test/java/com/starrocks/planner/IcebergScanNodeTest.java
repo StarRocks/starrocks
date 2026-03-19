@@ -688,7 +688,7 @@ public class IcebergScanNodeTest {
             result = Optional.of(connectorMetadata);
             minTimes = 0;
 
-            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra);
+            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra, null);
         }};
 
         metadataMgr.finishSink("testCatalog", "db", "tbl", sinkCommitInfos, "branch", extra);
@@ -712,7 +712,7 @@ public class IcebergScanNodeTest {
             result = Optional.of(connectorMetadata);
             minTimes = 0;
 
-            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra);
+            connectorMetadata.finishSink("db", "tbl", sinkCommitInfos, "branch", extra, null);
             result = new StarRocksConnectorException("fail!");
             minTimes = 0;
         }};

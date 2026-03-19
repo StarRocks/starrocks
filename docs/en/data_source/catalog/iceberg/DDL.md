@@ -84,12 +84,59 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 #### `column_definition`
 
 ```SQL
-col_name col_type [COMMENT 'comment']
+col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 ```
 
 :::note
 All non-partition columns must use `NULL` as the default value. Partition columns must be defined after non-partition columns and cannot use `NULL` as the default value.
 :::
+
+##### Default values
+
+From v4.1 onwards, StarRocks supports setting default values for columns in Iceberg tables. This feature requires Iceberg format version 3 (`"format-version" = "3"`).
+
+**Usage:**
+
+- **Write-time filling**: When executing an INSERT statement, if a value is not specified for a column, the system automatically uses the column's default value.
+- **Schema Evolution filling**: When a new column is added to an existing table, reading old data files (that do not contain the new column) will use the new column's default value.
+
+**Syntax:**
+
+```SQL
+col_name col_type DEFAULT default_value
+```
+
+**Requirements:**
+
+- The table must use Iceberg format version 3 (`"format-version" = "3"`).
+- Default values for numeric types (INT, BIGINT, FLOAT, DOUBLE), BOOLEAN, STRING, and DATE/TIMESTAMP types must be wrapped in quotes. For example: `DEFAULT "18"`, `DEFAULT "100.0"`, `DEFAULT "true"`.
+
+**Examples:**
+
+- **Create a table with default values:**
+
+```SQL
+CREATE TABLE user_info (
+    id INT,
+    name STRING,
+    age INT DEFAULT "18",
+    score DOUBLE DEFAULT "100.0",
+    status STRING DEFAULT 'active',
+    is_active BOOLEAN DEFAULT "true"
+) PROPERTIES ("format-version" = "3");
+```
+
+- **Add a column with a default value:**
+
+```SQL
+ALTER TABLE user_info ADD COLUMN bonus DOUBLE DEFAULT "50.5";
+```
+
+- **Modify a column's default value:**
+
+```SQL
+ALTER TABLE user_info MODIFY COLUMN status STRING DEFAULT "inactive";
+```
 
 #### `partition_desc`
 

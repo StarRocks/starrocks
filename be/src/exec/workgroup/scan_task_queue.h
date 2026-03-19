@@ -25,11 +25,11 @@
 
 #include "base/concurrency/race_detect.h"
 #include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "util/blocking_priority_queue.hpp"
-#include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
 

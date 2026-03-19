@@ -28,7 +28,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"

@@ -16,7 +16,7 @@
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
 #include "fmt/format.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks::spill {
 

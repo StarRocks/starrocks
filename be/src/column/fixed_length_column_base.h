@@ -239,7 +239,6 @@ public:
 
     const ImmContainer get_data() const { return immutable_data(); }
 
-    // TODO: remove this function
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {
             return _resource.span<T>();

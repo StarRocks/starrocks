@@ -1381,6 +1381,45 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Truncate a date/datetime string value to the partition boundary defined by granularity.
+     * Returns the formatted canonical string for the partition start time.
+     * This is the single source of truth for date-to-partition-boundary mapping,
+     * used by both partition clause creation and dedup key generation.
+     */
+    public static String truncateToPartitionBoundary(String dateValue, String granularity) throws AnalysisException {
+        try {
+            if ("NULL".equalsIgnoreCase(dateValue)) {
+                dateValue = "0000-01-01";
+            }
+            DateTimeFormatter fmt = DateUtils.probeFormat(dateValue);
+            LocalDateTime dt = DateUtils.parseStringWithDefaultHSM(dateValue, fmt);
+            switch (granularity.toLowerCase()) {
+                case "minute":
+                    dt = dt.withSecond(0).withNano(0);
+                    return dt.format(DateUtils.MINUTE_FORMATTER_UNIX);
+                case "hour":
+                    dt = dt.withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.HOUR_FORMATTER_UNIX);
+                case "day":
+                    dt = dt.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.DATEKEY_FORMATTER_UNIX);
+                case "month":
+                    dt = dt.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.MONTH_FORMATTER_UNIX);
+                case "year":
+                    dt = dt.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    return dt.format(DateUtils.YEAR_FORMATTER_UNIX);
+                default:
+                    throw new AnalysisException("unsupported automatic partition granularity: " + granularity);
+            }
+        } catch (AnalysisException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AnalysisException("failed to parse partition value: " + dateValue);
+        }
+    }
+
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
@@ -1468,9 +1507,20 @@ public class AnalyzerUtils {
 
             // table partitions for check
             PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
-            Set<String> partitionColNameSet = Sets.newHashSet();
+            Set<PListCell> partitionValueSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
+                List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                PListCell cell = new PListCell(partitionItems);
+
+                // Deduplicate by partition value, not by partition name.
+                // Different values may produce the same partition name via getFormatPartitionValue()
+                // (e.g., "a-b" and "ab" both format to "ab"), so name-based dedup would incorrectly
+                // skip the second value. Value-based dedup ensures every distinct value gets a partition.
+                if (partitionValueSet.contains(cell)) {
+                    continue;
+                }
+
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
                     String formatValue = getFormatPartitionValue(value);
@@ -1488,22 +1538,20 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionColNameSet.contains(partitionName)) {
-                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
-                    PListCell cell = new PListCell(partitionItems);
-                    partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
-                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, partitionItems, partitionProperties);
-                    multiItemListPartitionDesc.setSystem(true);
-                    partitionDescs.add(multiItemListPartitionDesc);
-                    partitionColNameSet.add(partitionName);
+                partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
+                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                        partitionName, partitionItems, partitionProperties);
+                multiItemListPartitionDesc.setSystem(true);
+                partitionDescs.add(multiItemListPartitionDesc);
+                partitionValueSet.add(cell);
 
-                    // update table partition
-                    tablePartitions.add(partitionName, cell);
-                }
+                // update table partition
+                tablePartitions.add(partitionName, cell);
             }
-            List<String> partitionColNames = Lists.newArrayList(partitionColNameSet);
-            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            List<String> partitionNames = partitionDescs.stream()
+                    .map(PartitionDesc::getPartitionName).collect(Collectors.toList());
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(Lists.newArrayList(), partitionDescs);
+            listPartitionDesc.setPartitionNames(partitionNames);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
                     partitionProperties, isTemp);
@@ -1573,7 +1621,7 @@ public class AnalyzerUtils {
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
-        List<String> partitionColNames = Lists.newArrayList();
+        List<String> partitionNames = Lists.newArrayList();
         for (List<String> partitionValue : partitionValues) {
             if (partitionValue.size() != 1) {
                 throw new AnalysisException("automatic partition only support single column for range partition.");
@@ -1587,34 +1635,30 @@ public class AnalyzerUtils {
                 if ("NULL".equalsIgnoreCase(partitionItem)) {
                     partitionItem = "0000-01-01";
                 }
+                String truncated = truncateToPartitionBoundary(partitionItem, granularity);
+                partitionName = DEFAULT_PARTITION_NAME_PREFIX + truncated;
+
                 beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
-                // The start date here is passed by BE through function calculation,
-                // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
                     case "minute":
                         beginTime = beginTime.withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
                         endTime = beginTime.plusMinutes(interval);
                         break;
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
                         endTime = beginTime.plusHours(interval);
                         break;
                     case "day":
                         beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
                         beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
                         beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
@@ -1630,19 +1674,20 @@ public class AnalyzerUtils {
                     partitionName = partitionPrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
 
-                if (!partitionColNames.contains(partitionName)) {
+                if (!partitionNames.contains(partitionName)) {
                     SingleRangePartitionDesc singleRangePartitionDesc =
                             new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
                     singleRangePartitionDesc.setSystem(true);
                     partitionDescs.add(singleRangePartitionDesc);
-                    partitionColNames.add(partitionName);
+                    partitionNames.add(partitionName);
                 }
             } catch (AnalysisException e) {
                 LOG.warn("failed to analyse partition value", e);
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
-        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
+        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(Lists.newArrayList(), partitionDescs);
+        rangePartitionDesc.setPartitionNames(partitionNames);
         rangePartitionDesc.setSystem(true);
         return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
     }

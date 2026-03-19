@@ -20,27 +20,34 @@ public class JDBCScanContext {
     private String user;
     private String password;
     private String sql;
+    private String queryTimeZone;
 
     private int statementFetchSize;
     private int connectionPoolSize;
     private int minimumIdleConnections;
     private int connectionIdleTimeoutMs;
     private int connectionTimeoutMs;
+    private long connectionMaxLifetimeMs;
+    private long connectionKeepaliveTimeMs;
 
     public JDBCScanContext() {}
     public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
-                           String sql, int statementFetchSize, int connectionPoolSize,
-                           int minimumIdleConnections, int connectionIdleTimeoutMs, int connectionTimeoutMs) {
+                           String sql, String queryTimeZone, int statementFetchSize, int connectionPoolSize,
+                           int minimumIdleConnections, int connectionIdleTimeoutMs, int connectionTimeoutMs,
+                           long connectionMaxLifetimeMs, long connectionKeepaliveTimeMs) {
         this.driverClassName = driverClassName;
         this.jdbcURL = jdbcURL;
         this.user = user;
         this.password = password;
         this.sql = sql;
+        this.queryTimeZone = queryTimeZone;
         this.statementFetchSize = statementFetchSize;
         this.connectionPoolSize = connectionPoolSize;
         this.minimumIdleConnections = minimumIdleConnections;
         this.connectionIdleTimeoutMs = connectionIdleTimeoutMs;
         this.connectionTimeoutMs = connectionTimeoutMs;
+        this.connectionMaxLifetimeMs = connectionMaxLifetimeMs;
+        this.connectionKeepaliveTimeMs = connectionKeepaliveTimeMs;
     }
 
     public void setDriverClassName(String driverClassName) {
@@ -61,6 +68,10 @@ public class JDBCScanContext {
 
     public void setSql(String sql) {
         this.sql = sql;
+    }
+
+    public void setQueryTimeZone(String queryTimeZone) {
+        this.queryTimeZone = queryTimeZone;
     }
 
     public void setStatementFetchSize(int statementFetchSize) {
@@ -87,6 +98,10 @@ public class JDBCScanContext {
         return sql;
     }
 
+    public String getQueryTimeZone() {
+        return queryTimeZone;
+    }
+
     public int getStatementFetchSize() {
         return statementFetchSize;
     }
@@ -105,6 +120,14 @@ public class JDBCScanContext {
 
     public int getConnectionTimeoutMs() {
         return connectionTimeoutMs;
+    }
+
+    public long getConnectionMaxLifetimeMs() {
+        return connectionMaxLifetimeMs;
+    }
+
+    public long getConnectionKeepaliveTimeMs() {
+        return connectionKeepaliveTimeMs;
     }
 
 }

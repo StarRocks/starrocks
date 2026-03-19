@@ -17,10 +17,23 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
 
-set(EXEC_FILES
-    fd_cache.cpp
+set(CORE_FILES
     fs.cpp
     encrypt_file.cpp
+    bundle_file.cpp
+    fs_options.cpp
+    )
+
+ADD_BE_LIB(FSCore
+    ${CORE_FILES}
+)
+
+target_link_libraries(FSCore PUBLIC IOCore)
+
+set(EXEC_FILES
+    fd_cache.cpp
+    fs_factory.cpp
+    fs_options_helper.cpp
     key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
@@ -36,7 +49,6 @@ set(EXEC_FILES
     s3/poco_http_client.cpp
     s3/poco_common.cpp
     fs_util.cpp
-    bundle_file.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)
@@ -46,3 +58,5 @@ endif()
 ADD_BE_LIB(FileSystem
     ${EXEC_FILES}
 )
+
+target_link_libraries(FileSystem PUBLIC FSCore)

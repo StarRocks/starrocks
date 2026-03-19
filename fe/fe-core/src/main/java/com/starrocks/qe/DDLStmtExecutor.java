@@ -444,10 +444,11 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
+            } catch (StarRocksException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
@@ -872,7 +873,7 @@ public class DDLStmtExecutor {
             });
 
             if (isDryRun) {
-                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+                return new ShowResultSet(new ShowResultMetaFactory().getMetadata(stmt), result);
             } else {
                 return null;
             }
@@ -1169,10 +1170,10 @@ public class DDLStmtExecutor {
             Task task = taskManager.getTask(taskName);
             switch (alterTaskStmt.getAction()) {
                 case RESUME:
-                    taskManager.resumeTask(task);
+                    taskManager.resumeTask(task, false);
                     break;
                 case SUSPEND:
-                    taskManager.suspendTask(task);
+                    taskManager.suspendTask(task, false);
                     break;
                 case SET:
                     taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());

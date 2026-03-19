@@ -10,8 +10,6 @@ displayed_sidebar: docs
 
 ADMIN CANCEL REPAIR は、共有なしクラスタ内のネイティブテーブルにのみ適用されます。
 
-詳細な手順については、[レプリカの管理](../../../../administration/management/resource_management/Replica.md) を参照してください。
-
 :::tip
 
 この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。

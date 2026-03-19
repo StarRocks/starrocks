@@ -39,7 +39,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     std::string state = symbol + "$State";
     auto func_cache = UserFunctionCache::instance();
     RETURN_IF_ERROR(func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath));
-    auto* udaf_ctx = context->udaf_ctxs();
+    auto udaf_ctx = std::make_unique<JavaUDAFContext>();
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();
     RETURN_IF_ERROR(udf_classloader->init());
@@ -93,7 +93,8 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     ASSIGN_OR_RETURN(auto clear_func, analyzer->get_method_object(state_clazz.clazz(), "clear"));
     udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), get_func, batch_get_func, add_func,
                                                        remove_func, clear_func);
-    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
+    udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx.get());
+    attach_java_udaf_context(context, std::move(udaf_ctx));
 
     return Status::OK();
 }

@@ -134,6 +134,9 @@ public:
         nested_function->reset(ctx, args, this->data(state).mutable_nest_state());
     }
 
+    // only nullable aggregate can support nullable immediate input.
+    bool support_nullable_immediate_input() const override { return true; }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.

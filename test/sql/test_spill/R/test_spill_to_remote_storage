@@ -186,3 +186,6 @@ select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group
 admin disable failpoint 'force_allocate_remote_block';
 -- result:
 -- !result
+CLEANUP {
+    admin disable failpoint 'force_allocate_remote_block';
+} END CLEANUP

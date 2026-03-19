@@ -18,12 +18,12 @@
 
 #include <utility>
 
-#include "common/config.h"
+#include "base/hash/hash_std.hpp"
+#include "common/config_network_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
-#include "service/backend_options.h"
-#include "util/hash_util.hpp"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks::io {
@@ -38,7 +38,7 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
-          _offset(0),
+
           _size(size) {
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();

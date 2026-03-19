@@ -21,6 +21,7 @@
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
+#include "fs/fs_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/exec_env.h"
 
@@ -48,7 +49,8 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     // init remote block manager
     std::vector<std::shared_ptr<Dir>> remote_dirs;
     for (const auto& path : remote_storage_paths) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(path, FSOptions(remote_storage_conf.get())));
+        ASSIGN_OR_RETURN(auto fs,
+                         FileSystemFactory::CreateUniqueFromString(path, FSOptions(remote_storage_conf.get())));
         RETURN_IF_ERROR(fs->create_dir_if_missing(path));
         auto dir = std::make_shared<RemoteDir>(path, std::move(fs), remote_storage_conf, INT64_MAX);
         remote_dirs.emplace_back(dir);

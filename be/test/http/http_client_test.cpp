@@ -21,7 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "boost/algorithm/string.hpp"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"

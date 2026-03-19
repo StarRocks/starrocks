@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
@@ -172,6 +174,11 @@ public class PublishVersionDaemonTest {
      * Helper method to create a mock TransactionState for shared_nothing_publish_use_thread_pool tests
      */
     private TransactionState createMockTransactionState(long txnId, long dbId, boolean allTasksFinished) {
+        return createMockTransactionState(txnId, dbId, TransactionStatus.COMMITTED, allTasksFinished);
+    }
+
+    private TransactionState createMockTransactionState(long txnId, long dbId, TransactionStatus status,
+                                                        boolean allTasksFinished) {
         TransactionState txnState = new TransactionState(
                 dbId,
                 Lists.newArrayList(1L),
@@ -183,10 +190,11 @@ public class PublishVersionDaemonTest {
                 -1,
                 Config.stream_load_default_timeout_second
         );
-        txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+        txnState.setTransactionStatus(status);
 
         PublishVersionTask task1 = new PublishVersionTask(1L, txnId, 0L, dbId, System.currentTimeMillis(),
                 null, null, null, System.currentTimeMillis(), null, false, TransactionType.TXN_NORMAL);
+        task1.setErrorTablets(Lists.newArrayList());
         task1.setIsFinished(allTasksFinished);
         txnState.addPublishVersionTask(1L, task1);
 
@@ -261,14 +269,16 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState1, txnState2);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = true;
                 minTimes = 0;
 
                 globalTransactionMgr.finishTransaction(anyLong, anyLong, (Set<Long>) any, anyLong);
-                result = new mockit.Delegate<Void>() {
-                    void finishTransaction(long db, long txn, Set<Long> err, long timeout) {
+                result = new mockit.Delegate<TransactionState>() {
+                    TransactionState finishTransaction(long db, long txn, Set<Long> err, long timeout) {
                         finishedTxnIds.add(txn);
+                        return txn == txnId1 ? txnState1 : txnState2;
                     }
                 };
             }
@@ -307,14 +317,16 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState1);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = true;
                 minTimes = 0;
 
                 globalTransactionMgr.finishTransaction(anyLong, anyLong, (Set<Long>) any, anyLong);
-                result = new mockit.Delegate<Void>() {
-                    void finishTransaction(long db, long txn, Set<Long> err, long timeout) {
+                result = new mockit.Delegate<TransactionState>() {
+                    TransactionState finishTransaction(long db, long txn, Set<Long> err, long timeout) {
                         finishedTxnIds.add(txn);
+                        return txnState1;
                     }
                 };
                 minTimes = 0;
@@ -350,18 +362,20 @@ public class PublishVersionDaemonTest {
                 globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
                 result = Lists.newArrayList(txnState3);
 
-                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any);
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
                 result = new mockit.Delegate<Boolean>() {
-                    boolean canTxnFinished(TransactionState state, Set<Long> err, Set<Long> unfinished) {
+                    boolean canTxnFinished(TransactionState state, Set<Long> err, Set<Long> unfinished, long timeout) {
                         canTxnFinishedCallCount.incrementAndGet();
                         return false;
                     }
                 };
 
                 globalTransactionMgr.finishTransaction(anyLong, anyLong, (Set<Long>) any, anyLong);
-                result = new mockit.Delegate<Void>() {
-                    void finishTransaction(long db, long txn, Set<Long> err, long timeout) {
+                result = new mockit.Delegate<TransactionState>() {
+                    TransactionState finishTransaction(long db, long txn, Set<Long> err, long timeout) {
                         finishedTxnIds.add(txn);
+                        return txnState3;
                     }
                 };
                 minTimes = 0;
@@ -417,5 +431,153 @@ public class PublishVersionDaemonTest {
 
         // Even if submission fails, publishingTransactionIds should be cleaned up
         Assertions.assertFalse(daemon3.publishingTransactionIds.contains(txnId1));
+
+        // Test 5: canTxnFinished throws LockTimeoutException - should return early, finishTransaction never called
+        finishedTxnIds.clear();
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public ThreadPoolExecutor getTaskExecutor() {
+                return new SynchronousExecutor();
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                nodeMgr.getClusterInfo();
+                result = systemInfoService;
+                minTimes = 0;
+                systemInfoService.getBackendIds(false);
+                result = Lists.newArrayList(1L, 2L, 3L);
+                minTimes = 0;
+
+                globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
+                result = Lists.newArrayList(txnState3);
+
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
+                result = new LockTimeoutException("lock timeout");
+
+                globalTransactionMgr.finishTransaction(anyLong, anyLong, (Set<Long>) any, anyLong);
+                result = new mockit.Delegate<TransactionState>() {
+                    TransactionState finishTransaction(long db, long txn, Set<Long> err, long timeout) {
+                        finishedTxnIds.add(txn);
+                        return txnState3;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        PublishVersionDaemon daemon4 = new PublishVersionDaemon();
+        // ERR_LOCK_ERROR is swallowed with an info log and retried next cycle — must not throw
+        Assertions.assertDoesNotThrow(daemon4::runAfterCatalogReady);
+        // finishTransaction must NOT have been invoked because tryFinishTransaction returned early
+        Assertions.assertEquals(0, finishedTxnIds.size());
+
+        // Test 6: canTxnFinished throws a non-lock StarRocksException - should propagate out of tryFinishTransaction
+        finishedTxnIds.clear();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+                nodeMgr.getClusterInfo();
+                result = systemInfoService;
+                minTimes = 0;
+                systemInfoService.getBackendIds(false);
+                result = Lists.newArrayList(1L, 2L, 3L);
+                minTimes = 0;
+
+                globalTransactionMgr.getReadyToPublishTransactions(anyBoolean);
+                result = Lists.newArrayList(txnState3);
+
+                globalTransactionMgr.canTxnFinished((TransactionState) any, (Set<Long>) any, (Set<Long>) any,
+                        anyLong);
+                result = new StarRocksException("internal non-lock error");
+            }
+        };
+
+        // The non-lock exception propagates from tryFinishTransaction, is caught as Throwable
+        // by the executor's catch block (LOG.error), so runAfterCatalogReady itself does not throw
+        PublishVersionDaemon daemon5 = new PublishVersionDaemon();
+        Assertions.assertDoesNotThrow(daemon5::runAfterCatalogReady);
+        // finishTransaction was never reached because exception was thrown before it
+        Assertions.assertEquals(0, finishedTxnIds.size());
+    }
+
+    @Test
+    public void testTryFinishTransactionUsesReturnedTxnStateForCleanup(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws Exception {
+        long txnId = 2001L;
+        long dbId = 200L;
+        TransactionState originalState = createMockTransactionState(txnId, dbId, TransactionStatus.COMMITTED, true);
+        TransactionState latestState = createMockTransactionState(txnId, dbId, TransactionStatus.VISIBLE, true);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.finishTransaction(dbId, txnId, (Set<Long>) any, anyLong);
+                result = latestState;
+            }
+        };
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        MethodUtils.invokeMethod(daemon, true, "tryFinishTransaction", originalState);
+
+        Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
+        Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
+    }
+
+    @Test
+    public void testPublishVersionNewUsesReturnedTxnStateForCleanup(@Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws Exception {
+        long txnId = 2002L;
+        long dbId = 201L;
+        TransactionState originalState = createMockTransactionState(txnId, dbId, TransactionStatus.COMMITTED, true);
+        TransactionState latestState = createMockTransactionState(txnId, dbId, TransactionStatus.VISIBLE, true);
+
+        new MockUp<TransactionState>() {
+            @Mock
+            public boolean allPublishTasksFinishedOrQuorumWaitTimeout(Set<Long> publishErrorReplicas) {
+                return true;
+            }
+
+            @Mock
+            public boolean checkCanFinish() {
+                return true;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalTransactionMgr.finishTransactionNew(originalState, (Set<Long>) any);
+                result = latestState;
+            }
+        };
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        MethodUtils.invokeMethod(daemon, true, "publishVersionNew", globalTransactionMgr,
+                Lists.newArrayList(originalState));
+
+        Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
+        Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
     }
 }

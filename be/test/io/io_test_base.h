@@ -15,7 +15,7 @@
 #pragma once
 
 #include "base/random/random.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 
 namespace starrocks::io {
 

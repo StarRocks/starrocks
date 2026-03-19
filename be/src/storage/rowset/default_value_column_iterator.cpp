@@ -42,13 +42,13 @@
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_builder.h"
+#include "column/json_converter.h"
 #include "storage/range.h"
 #include "storage/types.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/type_info.h"
-#include "util/json_converter.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -82,7 +82,7 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
                 _project_default_datum_by_path_if_needed(&child_datum, element_type_info.get(), value_path);
                 projected.emplace_back(std::move(child_datum));
             }
-            datum->set_array(std::move(projected));
+            datum->set_array(projected);
             return;
         }
 
@@ -106,7 +106,7 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
                 _project_default_datum_by_path_if_needed(&v, value_type_info.get(), value_path);
                 projected.emplace(it.first, std::move(v));
             }
-            datum->set<DatumMap>(std::move(projected));
+            datum->set<DatumMap>(projected);
             return;
         }
 

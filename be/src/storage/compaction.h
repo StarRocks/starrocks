@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "base/concurrency/semaphore.hpp"
+#include "common/runtime_profile.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -26,7 +27,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -74,14 +74,14 @@ protected:
     std::vector<std::vector<uint32_t>> _column_groups;
 
     std::vector<RowsetSharedPtr> _input_rowsets;
-    int64_t _input_rowsets_size;
-    int64_t _input_row_num;
+    int64_t _input_rowsets_size{0};
+    int64_t _input_row_num{0};
 
     RowsetSharedPtr _output_rowset;
     std::unique_ptr<RowsetWriter> _output_rs_writer;
 
     enum CompactionState { INITED = 0, SUCCESS = 1 };
-    CompactionState _state;
+    CompactionState _state{CompactionState::INITED};
 
     Version _output_version;
 

@@ -26,13 +26,13 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/util/thrift_util.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "runtime/mem_pool.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
 #include "types/time_types.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

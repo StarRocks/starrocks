@@ -21,12 +21,13 @@
 #include <string_view>
 
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/brpc_helper.h"
+#include "common/config_exec_flow_fwd.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -74,6 +75,15 @@ SinkBuffer::~SinkBuffer() {
     DCHECK(is_finished());
 
     _sink_ctxs.clear();
+}
+
+DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
+    return DeferOp<std::function<void()>>([this]() {
+        _observable.notify_sink_observers();
+        if (bthread_self()) {
+            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        }
+    });
 }
 
 void SinkBuffer::incr_sinker(RuntimeState* state) {
@@ -454,7 +464,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        SET_IGNORE_OVERCROWDED(closure->cntl, query);
+        set_ignore_overcrowded_for_query(closure->cntl);
 
         return _send_rpc(closure, request);
     }

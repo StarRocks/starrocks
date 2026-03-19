@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -38,7 +40,7 @@ struct AggStateCombineState {};
 class AggStateCombine final : public AggStateCombinator<AggStateCombineState, AggStateCombine> {
 public:
     AggStateCombine(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : AggStateCombinator(agg_state_desc, function) {
+            : AggStateCombinator(std::move(agg_state_desc), function) {
         DCHECK(_function != nullptr);
     }
 

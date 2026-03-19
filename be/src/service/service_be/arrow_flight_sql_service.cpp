@@ -17,14 +17,15 @@
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
+#include <base/utility/arrow_utils.h>
 #include <exec/pipeline/query_context.h>
-#include <util/arrow/utils.h>
 
+#include "base/uid_util.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
-#include "service/backend_options.h"
-#include "util/uid_util.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 

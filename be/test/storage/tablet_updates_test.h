@@ -26,9 +26,9 @@
 #include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
@@ -855,6 +855,7 @@ public:
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
     void test_recover_rowset_sorter();
+    void test_get_column_values_with_invalid_rssid(bool enable_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;

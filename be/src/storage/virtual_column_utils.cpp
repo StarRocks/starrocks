@@ -17,10 +17,14 @@
 #include <memory>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "column/column.h"
+#include "gen_cpp/PlanNodes_constants.h"
 #include "runtime/descriptors.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/rowset/rowid_column_iterator.h"
 #include "storage/types.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 struct VirtualColumnDefinition;
@@ -44,21 +48,77 @@ struct VirtualColumnDefinition {
     ColumnAppender appender;
 };
 
-ColumnIterator* create_tablet_iterator(const VirtualColumnFactory::Options& options,
-                                       const VirtualColumnDefinition& def) {
-    std::string tablet_id = std::to_string(options.tablet_id);
+struct TabletExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.tablet_id; }
+};
+
+struct RowsetExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.rowset_id; }
+};
+
+struct SegmentExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.segment_id; }
+};
+
+struct RSSIdExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.rss_id; }
+};
+
+struct DynamicRSSIdExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.dynamic_rss_id; }
+};
+
+struct SourceIdExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return (int32_t)get_backend_id().value_or(0); }
+};
+
+struct RowIdExtractor {
+    auto extract(const VirtualColumnFactory::Options& options) { return options.num_rows; }
+};
+
+template <class Extractor>
+ColumnIterator* create_iterator(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def) {
+    auto value = Extractor().extract(options);
+    std::string default_value_str;
+    if constexpr (std::is_same_v<decltype(value), Slice>) {
+        default_value_str = value.to_string();
+    } else {
+        default_value_str = std::to_string(value);
+    }
+
+    size_t schema_length = sizeof(value);
     TypeInfoPtr type_info = get_type_info(def.type);
-    return new DefaultValueColumnIterator(true, tablet_id, def.nullable, type_info, sizeof(int32_t), options.num_rows);
+    return new DefaultValueColumnIterator(true, default_value_str, def.nullable, type_info, schema_length,
+                                          options.num_rows);
 }
 
-Status append_tablet_column(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def,
-                            Column* column) {
-    column->append_datum(Datum(options.tablet_id));
+ColumnIterator* create_virtual_row_id_iterator(const VirtualColumnFactory::Options& options,
+                                               const VirtualColumnDefinition& def) {
+    return new TRowIdColumnIterator<int64_t>();
+}
+
+template <class Extractor>
+Status append_datum(const VirtualColumnFactory::Options& options, const VirtualColumnDefinition& def, Column* column) {
+    column->append_datum(Datum(Extractor().extract(options)));
     return Status::OK();
 }
 
 struct VirtualColumnDefinition VIRTUAL_COLUMNS[] = {
-        VirtualColumnDefinition("_tablet_id_", TYPE_INT, false, create_tablet_iterator, append_tablet_column)};
+        VirtualColumnDefinition(PlanNodesConstants().TABLET_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_iterator<TabletExtractor>, append_datum<TabletExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().ROWSET_ID_COLUMN_NAME, TYPE_VARCHAR, false,
+                                create_iterator<RowsetExtractor>, append_datum<RowsetExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().SEGMENT_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_iterator<SegmentExtractor>, append_datum<SegmentExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().ROW_ID_COLUMN_NAME, TYPE_BIGINT, false,
+                                create_virtual_row_id_iterator, append_datum<RowIdExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().RSS_ID_COLUMN_NAME, TYPE_INT, false,
+                                create_iterator<RSSIdExtractor>, append_datum<RSSIdExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().DYNAMIC_RSS_ID_COLUMN_NAME, TYPE_INT, false,
+                                create_iterator<DynamicRSSIdExtractor>, append_datum<DynamicRSSIdExtractor>),
+        VirtualColumnDefinition(PlanNodesConstants().SOURCE_ID_COLUMN_NAME, TYPE_INT, false,
+                                create_iterator<SourceIdExtractor>, append_datum<SourceIdExtractor>),
+};
 
 class SlotDescriptor;
 bool is_virtual_column(const std::string_view col_name) {
@@ -78,7 +138,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
     if (!has_virtual_column) {
         return schema;
     }
-    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema);
+    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema, schema->columns());
     for (const auto& slot : slots) {
         const std::string& col_name = slot->col_name();
         if (slot->is_virtual()) {

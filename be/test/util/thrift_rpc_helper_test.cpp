@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/network/network_util.h"
 #include "base/testutil/assert.h"
 #include "runtime/client_cache.h"
-#include "util/network_util.h"
 
 namespace starrocks {
 

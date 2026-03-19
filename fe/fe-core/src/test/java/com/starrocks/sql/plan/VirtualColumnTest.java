@@ -71,4 +71,14 @@ public class VirtualColumnTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "_tablet_id_");
     }
+
+    @Test
+    public void testRowIdWithAggregation() throws Exception {
+        // Test that _row_id_ can be used with aggregation
+        String sql = "select _row_id_, _segment_id_, _tablet_id_ from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "_row_id_");
+        assertContains(plan, "_segment_id_");
+        assertContains(plan, "_tablet_id_");
+    }
 }

@@ -147,11 +147,8 @@ public class TaskBuilder {
         taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
         // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
         // will cause task run's meta-data too large.
-        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
-        // it only keeps session started properties
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getWarehouse(materializedView.getWarehouseId());
-        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // NOTE: Don't persist warehouse property in task since it may be changed at runtime via
+        // "ALTER MATERIALIZED VIEW SET WAREHOUSE". The warehouse will be fetched from MV in refreshTaskProperties.
         task.setProperties(taskProperties);
 
         task.setDefinition(materializedView.getTaskDefinition());

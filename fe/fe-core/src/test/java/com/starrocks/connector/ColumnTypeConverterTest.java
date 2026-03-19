@@ -187,7 +187,7 @@ public class ColumnTypeConverterTest {
         resType = fromHiveTypeToMapType(typeStr);
         Assertions.assertEquals(mapType, resType);
 
-        keyType = TypeFactory.createVarcharType(10);
+        keyType = TypeFactory.createVarcharType(40);
         valueType = TypeFactory.createCharType(5);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<varchar(10),char(5)>";
@@ -195,7 +195,7 @@ public class ColumnTypeConverterTest {
         Assertions.assertEquals(mapType, resType);
 
         keyType = BooleanType.BOOLEAN;
-        valueType = TypeFactory.createVarcharType(10);
+        valueType = TypeFactory.createVarcharType(40);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<boolean,varchar(10)>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -299,7 +299,7 @@ public class ColumnTypeConverterTest {
 
     @Test
     public void testVarcharString() {
-        Type varcharType = TypeFactory.createVarcharType(100);
+        Type varcharType = TypeFactory.createVarcharType(400);
         String typeStr = "varchar(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assertions.assertEquals(resType, varcharType);

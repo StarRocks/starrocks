@@ -301,19 +301,9 @@ ShortKeyFilterRows	0
 __MAX_OF_SegmentZoneMapFilterRows	3365
 __MIN_OF_SegmentZoneMapFilterRows	3302
 -- !result
-function: update_be_config("tablet_internal_parallel_min_splitted_scan_rows", "16384")
--- result:
-None
--- !result
-function: update_be_config("tablet_internal_parallel_max_splitted_scan_rows", "1048576")
--- result:
-None
--- !result
-function: update_be_config("tablet_internal_parallel_max_splitted_scan_bytes", "536870912")
--- result:
-None
--- !result
-function: update_be_config("tablet_internal_parallel_min_scan_dop", "4")
--- result:
-None
--- !result
+CLEANUP {
+    function: update_be_config("tablet_internal_parallel_min_splitted_scan_rows", "16384")
+    function: update_be_config("tablet_internal_parallel_max_splitted_scan_rows", "1048576")
+    function: update_be_config("tablet_internal_parallel_max_splitted_scan_bytes", "536870912")
+    function: update_be_config("tablet_internal_parallel_min_scan_dop", "4")
+} END CLEANUP

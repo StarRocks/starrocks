@@ -143,7 +143,7 @@ ChunkIteratorPtrOr MemStateTable::prefix_scan(const Columns& keys, size_t row_id
             DatumRow row;
             // add extra key cols + value cols
             for (int32_t s = key_row.size(); s < m_k.size(); s++) {
-                row.push_back(Datum(m_k[s]));
+                row.emplace_back(m_k[s]);
             }
             for (auto& datum : iter->second) {
                 row.push_back(datum);

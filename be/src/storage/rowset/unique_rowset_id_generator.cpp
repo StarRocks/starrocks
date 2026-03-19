@@ -35,8 +35,9 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 
 #include "base/concurrency/spinlock.h"
-#include "util/starrocks_metrics.h"
-#include "util/uid_util.h"
+#include "base/uid_util.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

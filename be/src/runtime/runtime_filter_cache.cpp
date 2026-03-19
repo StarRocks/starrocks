@@ -16,8 +16,9 @@
 
 #include <chrono>
 
+#include "base/uid_util.h"
+#include "common/thread/thread.h"
 #include "gutil/strings/substitute.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

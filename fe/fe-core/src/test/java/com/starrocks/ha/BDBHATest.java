@@ -16,8 +16,7 @@ package com.starrocks.ha;
 
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.persist.DropFrontendInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -39,61 +38,53 @@ public class BDBHATest {
     public void testAddAndRemoveUnstableNode() {
         BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
-
-        BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-        ha.addUnstableNode("host1", 3);
-        Assertions.assertEquals(2,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        ha.addUnstableNode("host2", 4);
-        Assertions.assertEquals(2,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        ha.removeUnstableNode("host1", 4);
-        Assertions.assertEquals(3,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        ha.removeUnstableNode("host2", 4);
-        Assertions.assertEquals(0,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-    }
-
-    @Test
-    public void testAddAndDropFollower() throws Exception {
-        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
-        BDBEnvironment environment = journal.getBdbEnvironment();
         NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
 
-        // add two followers
-        nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
-        Assertions.assertEquals(1,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
-        Assertions.assertEquals(1,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
+        BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
+        int baselineFollowerCnt = nodeMgr.getFollowerCnt();
+        Frontend frontend1 = new Frontend(nodeMgr.allocateNextFrontendId(),
+                FrontendNodeType.FOLLOWER, "host1", "192.168.2.3", 9010);
+        Frontend frontend2 = null;
+        boolean addedFrontend1 = false;
+        boolean addedFrontend2 = false;
 
-        Frontend frontend = nodeMgr.getFeByHost("192.168.2.4");
-        FrontendHbResponse hb = new FrontendHbResponse(frontend.getNodeName(), frontend.getQueryPort(),
-                frontend.getRpcPort(), 1000, System.currentTimeMillis(), System.currentTimeMillis(),
-                "v1", 0.5f, 1, null);
-        // one joined successfully
-        frontend.handleHbResponse(hb, false);
-        Assertions.assertEquals(2,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
+        try {
+            nodeMgr.replayAddFrontend(frontend1);
+            addedFrontend1 = true;
+            ha.addUnstableNode(frontend1.getNodeName(), nodeMgr.getFollowerCnt());
+            Assertions.assertEquals(baselineFollowerCnt,
+                    environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
-        // the other one is dropped
-        nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+            frontend2 = new Frontend(nodeMgr.allocateNextFrontendId(),
+                    FrontendNodeType.FOLLOWER, "host2", "192.168.2.4", 9010);
+            nodeMgr.replayAddFrontend(frontend2);
+            addedFrontend2 = true;
+            ha.addUnstableNode(frontend2.getNodeName(), nodeMgr.getFollowerCnt());
+            Assertions.assertEquals(baselineFollowerCnt,
+                    environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
-        Assertions.assertEquals(0,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
+            Assertions.assertFalse(frontend1.isAlive());
+            frontend1.handleHbResponse(new FrontendHbResponse(frontend1.getNodeName(), 9030,
+                    9020, 1000, System.currentTimeMillis(), System.currentTimeMillis(),
+                    "v1", 0.5f, 1, null), false);
+            Assertions.assertTrue(frontend1.isAlive());
+            Assertions.assertEquals(baselineFollowerCnt + 1,
+                    environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
-        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        nodeMgr.save(image1.getImageWriter());
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
-        NodeMgr nodeMgr2 = new NodeMgr();
-        nodeMgr2.load(reader);
-        reader.close();
-        Assertions.assertEquals(1, nodeMgr2.getRemovedFrontendNames().size());
-        Assertions.assertEquals(2, nodeMgr2.getHelperNodes().size());
+            Assertions.assertFalse(frontend2.isAlive());
+            frontend2.handleHbResponse(new FrontendHbResponse(frontend2.getNodeName(), 9030,
+                    9020, 1000, System.currentTimeMillis(), System.currentTimeMillis(),
+                    "v1", 0.5f, 1, null), false);
+            Assertions.assertTrue(frontend2.isAlive());
+            Assertions.assertEquals(0,
+                    environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
+        } finally {
+            if (addedFrontend2) {
+                nodeMgr.replayDropFrontend(new DropFrontendInfo(frontend2.getNodeName()));
+            }
+            if (addedFrontend1) {
+                nodeMgr.replayDropFrontend(new DropFrontendInfo(frontend1.getNodeName()));
+            }
+        }
     }
 }

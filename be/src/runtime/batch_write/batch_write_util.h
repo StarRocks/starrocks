@@ -18,11 +18,11 @@
 #include <optional>
 #include <string>
 
-#include "common/config.h"
-
 namespace starrocks {
 
-#define TRACE_BATCH_WRITE LOG_IF(INFO, config::merge_commit_trace_log_enable)
+bool batch_write_trace_log_enabled();
+
+#define TRACE_BATCH_WRITE LOG_IF(INFO, ::starrocks::batch_write_trace_log_enabled())
 
 using BatchWriteLoadParams = std::map<std::string, std::string>;
 

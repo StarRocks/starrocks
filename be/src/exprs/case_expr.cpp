@@ -30,6 +30,7 @@
 #include "types/percentile_value.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -54,7 +55,13 @@ namespace starrocks {
  */
 
 template <LogicalType WhenType, LogicalType ResultType>
-class VectorizedCaseExpr final : public Expr {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedCaseExpr final : public Expr,
+                                 public JITCodegenNode
+#else
+class VectorizedCaseExpr final : public Expr
+#endif
+{
 public:
     explicit VectorizedCaseExpr(const TExprNode& node)
             : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
@@ -109,13 +116,13 @@ public:
             }
             VLOG_QUERY << i << "-th score: " << tmp.score << " / " << tmp.num << " = "
                        << tmp.score / (tmp.num ? tmp.num : 1) << " "
-                       << " valid = " << valid << "  " << _children[i]->jit_func_name(state);
+                       << " valid = " << valid << "  " << ExprJITCodegen::func_name(_children[i], state);
         }
         int expr_num = _children.size() / 2;
         VLOG_QUERY << "JIT score case: when_score =  " << when_valid << " / " << expr_num << " = "
                    << when_valid * 1.0 / expr_num << ", then_score = " << then_valid << " / " << expr_num << " = "
                    << then_valid * 1.0 / expr_num;
-        if (when_valid > expr_num * IRHelper::jit_score_ratio || then_valid > expr_num * IRHelper::jit_score_ratio) {
+        if (when_valid > expr_num * kExprJitScoreRatio || then_valid > expr_num * kExprJitScoreRatio) {
             return {expr_num, expr_num};
         }
         return {0, expr_num};
@@ -141,7 +148,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
                     if (i == 0) { // if caseExpr is null, go to else
                         datum_0 = datum_i;
                         llvm::Value* is_null = nullptr;
@@ -168,7 +175,8 @@ public:
                             b.CreateCondBr(cmp_eq, then, next);
                         }
                         b.SetInsertPoint(then);
-                        ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
+                        ASSIGN_OR_RETURN(auto datum_i_1,
+                                         ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
                         b.CreateStore(datum_i_1.value, res);
                         b.CreateStore(datum_i_1.null_flag, res_null);
                         b.CreateBr(join);
@@ -181,7 +189,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
                     auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
                     if (_children[i]->is_nullable()) {
                         auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
@@ -191,7 +199,7 @@ public:
                     }
                     b.SetInsertPoint(then);
 
-                    ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i_1, ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
                     b.CreateStore(datum_i_1.value, res);
                     b.CreateStore(datum_i_1.null_flag, res_null);
                     b.CreateBr(join);
@@ -202,7 +210,7 @@ public:
             b.SetInsertPoint(else_block);
             LLVMDatum else_val;
             if (_has_else_expr) {
-                ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir(context, jit_ctx))
+                ASSIGN_OR_RETURN(else_val, ExprJITCodegen::generate_ir(context, _children.back(), jit_ctx))
             } else {
                 ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
                 else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
@@ -239,7 +247,7 @@ public:
                     out << "T";
                 }
             }
-            out << "<" << _children[i]->jit_func_name(state) << ">";
+            out << "<" << ExprJITCodegen::func_name(_children[i], state) << ">";
         }
         out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
         return out.str();

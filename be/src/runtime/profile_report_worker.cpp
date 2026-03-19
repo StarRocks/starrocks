@@ -14,9 +14,11 @@
 
 #include "runtime/profile_report_worker.h"
 
+#include "common/config_exec_flow_fwd.h"
+#include "common/util/misc.h"
 #include "exec/pipeline/query_context.h"
+#include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "util/misc.h"
 
 namespace starrocks {
 

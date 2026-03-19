@@ -23,7 +23,7 @@
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/types.h"
 
 namespace starrocks::parquet {

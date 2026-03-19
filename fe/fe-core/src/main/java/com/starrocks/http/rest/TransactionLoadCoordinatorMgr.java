@@ -118,6 +118,8 @@ public class TransactionLoadCoordinatorMgr {
     /**
      * Allocates a coordinator node for a given transaction label and warehouse name.
      * The selected node is cached for future retrievals.
+     * If the label already exists in cache, returns the cached node to ensure
+     * subsequent operations (like rollback) are routed to the correct BE.
      *
      * @param label         the transaction label
      * @param warehouseName the name of the warehouse
@@ -125,6 +127,14 @@ public class TransactionLoadCoordinatorMgr {
      * @throws StarRocksException if allocation fails or no suitable node is found
      */
     public @NonNull ComputeNode allocate(String label, String warehouseName) throws StarRocksException {
+        // Check if the label already exists in cache to avoid overwriting
+        // This ensures that repeated BEGIN requests for the same label
+        // are routed to the same BE where the transaction context exists
+        Long existingNodeId = cache.getIfPresent(label);
+        if (existingNodeId != null) {
+            return getNodeFromId(existingNodeId);
+        }
+
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);

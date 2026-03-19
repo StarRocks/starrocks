@@ -28,6 +28,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.VacuumFullRequest;
 import com.starrocks.proto.VacuumFullResponse;
@@ -46,7 +47,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -270,8 +270,6 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     @VisibleForTesting
     public static long computeMinActiveTxnId(Database db, Table table) {
-        long a = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
-        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
+        return LakeTableHelper.computeMinActiveTxnId(db.getId(), table.getId());
     }
 }

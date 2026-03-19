@@ -26,10 +26,6 @@ Returns a DOUBLE value. The formula is as follows, where `n` represents the row 
 
 ![corr formula](../../../_assets/corr_formula.png)
 
-<!--$$
-\frac{\sum_{i=1}^{n}((x_i - \bar{x})(y_i - \bar{y}))}{\sqrt{\sum_{i=1}^{n}((x_i - \bar{x})^2) \cdot \sum_{i=1}^{n}((y_i - \bar{y})^2)}}
-$$-->
-
 ## Usage notes
 
 - A data row is counted only when the two columns in this row are non-null values. Otherwise, this data row is eliminated from the result.

@@ -21,11 +21,13 @@
 
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "primary_key_encoder.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -41,6 +43,7 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
@@ -206,6 +209,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
+    pk_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
     }
@@ -245,8 +249,10 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);
@@ -393,6 +399,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
+        }
+
+        auto rowset_id = rowset->rowset_meta()->rowset_id();
+        if (params.rowset_id_to_drssid != nullptr && params.rowset_id_to_drssid->contains(rowset_id)) {
+            rs_opts.dynamic_rss_id_base = params.rowset_id_to_drssid->at(rowset_id);
         }
 
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
@@ -628,6 +639,13 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
+    const TypeInfoAllocator* allocator = nullptr;
+    TypeInfoAllocator type_info_allocator;
+    if (mempool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mempool);
+        allocator = &type_info_allocator;
+    }
+
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -651,10 +669,10 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(
-                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i),
+                                              allocator));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), allocator));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));

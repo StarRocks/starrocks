@@ -26,7 +26,7 @@
 
 namespace starrocks {
 struct JavaUDAFState {
-    JavaUDAFState(int handle_) : handle(std::move(handle_)) {}
+    JavaUDAFState(int handle_) : handle(handle_) {}
     ~JavaUDAFState() = default;
     // UDAF State
     int handle;

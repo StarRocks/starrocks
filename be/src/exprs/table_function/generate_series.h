@@ -17,8 +17,8 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
-#include "common/config.h"
 #include "exprs/table_function/table_function.h"
+#include "runtime/runtime_state.h"
 #include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 

@@ -21,13 +21,19 @@
 #include <filesystem>
 #include <memory>
 
+#include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "fs/fs_factory.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -39,6 +45,7 @@
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
@@ -70,8 +77,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -1973,6 +1978,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
 
             std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
             std::vector<uint32_t> rowids;
+            rowids.reserve(upserts[upsert_idx]->size());
             for (int j = 0; j < upserts[upsert_idx]->size(); ++j) {
                 rowids.push_back(j);
             }
@@ -4076,6 +4082,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         // new added dcgs info for every segment in rowset.
         DeltaColumnGroupList dcgs;
         std::vector<int> last_dcg_counts;
+        last_dcg_counts.reserve(new_rowset_info.num_segments);
         for (uint32_t j = 0; j < new_rowset_info.num_segments; j++) {
             // check the lastest historical_dcgs version if it is equal to schema change version
             // of the rowset. If it is, we should merge the dcg info.
@@ -5354,6 +5361,14 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
+        if (iter == rssid_to_rowsets.begin()) {
+            std::string msg = strings::Substitute(
+                    "rssid $0 is smaller than the minimum rowset seg id $1 in tablet $2, "
+                    "which may be caused by stale primary index entries after compaction",
+                    rssid, rssid_to_rowsets.begin()->first, _tablet.tablet_id());
+            LOG(ERROR) << msg;
+            return Status::InternalError(msg);
+        }
         --iter;
         const auto& rowset = iter->second.get();
         if (!(rowset->rowset_meta()->get_rowset_seg_id() <= rssid &&
@@ -5366,7 +5381,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
         // REQUIRE: all rowsets in this tablet have the same path prefix, i.e, can share the same fs
         if (fs == nullptr) {
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
         }
         auto seg_id = rssid - iter->first;
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), seg_id);
@@ -5433,7 +5448,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
 
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
         FileInfo seg_info{.path = seg_path};
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(seg_path));
         auto segment = Segment::open(fs, seg_info, segment_id, auto_increment_state->schema);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
@@ -5651,6 +5666,7 @@ void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& ro
 std::vector<std::string> TabletUpdates::get_version_list() const {
     std::lock_guard wl(_lock);
     std::vector<std::string> version_list;
+    version_list.reserve(_edit_version_infos.size());
     for (auto& edit_version_info : _edit_version_infos) {
         version_list.emplace_back(edit_version_info->version.to_string());
     }

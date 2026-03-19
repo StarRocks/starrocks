@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "base/bit/bit_util.h"
+#include "common/config_exec_fwd.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 

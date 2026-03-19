@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 namespace starrocks {
 
@@ -114,7 +115,7 @@ TEST_F(BundleFileTest, test_write_read) {
 
     // 4. test partial read
     {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(bundle_file_path));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(bundle_file_path));
         RandomAccessFileOptions opts;
 
         // read first segment
@@ -224,7 +225,7 @@ TEST_F(BundleFileTest, test_concurrent_write) {
 
     // verify the content of the shared file
     {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(bundle_file_path));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(bundle_file_path));
         // 1. create num_writers readers
         std::vector<std::unique_ptr<RandomAccessFile>> readers;
         RandomAccessFileOptions opts;
@@ -273,7 +274,7 @@ TEST_F(BundleFileTest, test_touch_cache_and_statistics) {
     // touch cache
     RandomAccessFileOptions ropts;
     FileInfo file_info2{.path = bundle_file_path, .size = test_data1.size(), .bundle_file_offset = 0};
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(bundle_file_path));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(bundle_file_path));
     ASSIGN_OR_ABORT(auto reader, fs->new_random_access_file_with_bundling(ropts, file_info2));
     ASSERT_OK(reader->touch_cache(0, sizeof(test_data1))); // touch the first 30 bytes
 

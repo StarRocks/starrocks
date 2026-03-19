@@ -7,19 +7,22 @@ displayed_sidebar: docs
 SELECT queries data from one or more tables, views, or materialized views. The SELECT statement generally consists of the following clauses:
 
 - [WITH](#with)
-- [WHERE and operators](#where-and-operators)
+- [Joins](#join)
+- [ORDER BY](#order-by)
 - [GROUP BY](#group-by)
 - [HAVING](#having)
+- [LIMIT](#limit)
+- [OFFSET](#offset)
 - [UNION](#union)
 - [INTERSECT](#intersect)
 - [EXCEPT/MINUS](#exceptminus)
-- [ORDER BY](#order-by)
-- [LIMIT](#limit)
-- [OFFSET](#offset)
-- [Joins](#join)
-- [Subqueries](#subquery)
 - [DISTINCT](#distinct)
+- [Subquery](#subquery)
+- [WHERE and operators](#where-and-operators)
 - [Alias](#alias)
+- [PIVOT](#pivot)
+- [EXCLUDE](#exclude)
+- [RECURSIVE](#recursive)
 
 SELECT can work as an independent statement or a clause nested in other statements. The output of the SELECT clause can be used as the input of other statements.
 
@@ -29,7 +32,7 @@ StarRocks' query statement basically conforms to the SQL92 standard. Here is a b
 >
 > To query data from tables, views, or materialized views in a StarRocks internal table, you must have the SELECT privilege on these objects. To query data from tables, views, or materialized views in an external data source, you must have the USAGE privilege on the corresponding external catalog.
 
-### WITH
+## WITH
 
 A clause that can be added before a SELECT statement to define an alias for a complex expression that is referenced multiple times inside SELECT.
 
@@ -39,23 +42,31 @@ The benefits of using a WITH clause are:
 
 Convenient and easy to maintain, reducing duplication within queries.
 
- It is easier to read and understand SQL code by abstracting the most complex parts of a query into separate blocks.
+It is easier to read and understand SQL code by abstracting the most complex parts of a query into separate blocks.
 
 Examples:
 
 ```sql
--- Define one subquery at the outer level, and another at the inner level as part of the
--- initial stage of the UNION ALL query.
+-- Define one subquery at the outer level, and another at the inner level as part of the initial stage of the UNION ALL query.
 
 with t1 as (select 1),t2 as (select 2)
 select * from t1 union all select * from t2;
 ```
 
-### Join
+## Join
 
 Join operations combine data from two or more tables and then return a result set of some columns from some of them.
 
-StarRocks supports self joins, cross joins, inner joins, outer joins, semi joins, and anti joins. Outer joins include left joins, right joins, and full joins.
+StarRocks supports the following joins:
+- [Self Join](#self-join)
+- [Cross Join](#cross-join)
+- [Inner Join](#inner-join)
+- [Outer Join](#outer-join) (including Left Join, Right Join, and Full Join)
+- [Semi Join](#semi-join)
+- [Anti Join](#anti-join)
+- [Equi-join and Non-equi-join](#equi-join-and-non-equi-join)
+- [Join with the USING clause](#join-with-the-using-clause)
+- [ASOF Join](#asof-join)
 
 Syntax:
 
@@ -86,9 +97,9 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 [ WHERE where_clauses ]
 ```
 
-#### Self Join
+### Self Join
 
-StarRocks supports self-joins, which are self-joins and self-joins. For example, different columns of the same table are joined.
+StarRocks supports self-joins. For example, different columns of the same table are joined.
 
 There is actually no special syntax to identify self-join. The conditions on both sides of a join in a self-join come from the same table.
 
@@ -100,7 +111,7 @@ Examples:
 SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHERE lhs.id = rhs.parent;
 ```
 
-#### Cross Join
+### Cross Join
 
 Cross join can produce a lot of results, so cross join should be used with caution.
 
@@ -112,7 +123,7 @@ SELECT * FROM t1, t2;
 SELECT * FROM t1 CROSS JOIN t2;
 ```
 
-#### Inner Join
+### Inner Join
 
 Inner join is the most well-known and commonly used join. Returns results from columns requested by two similar tables, joined if the columns of both tables contain the same value.
 
@@ -130,7 +141,7 @@ SELECT t1.id, c1, c2 FROM t1 JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Outer Join
+### Outer Join
 
 Outer join returns the left or right table or all rows of both. If there is no matching data in another table, set it to NULL. Example:
 
@@ -142,13 +153,13 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Equivalent and unequal join
+### Equal and unequal join
 
-Usually, users use the most equal join, which requires the operator of the join condition to be an equal sign.
+Usually, equal joins are the most commonly used joins. It requires the operator of the join condition to be an equal sign.
 
-Unequal join can be used on join conditions!=, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
+Unequal join can be used on join conditions `!=`. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
 
-Use with caution. Unequal join only supports inner join. Example:
+Use with caution. Unequal join only supports Inner Join. Example:
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -156,7 +167,7 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
 ```
 
-#### Semi Join
+### Semi Join
 
 Left semi join returns only the rows in the left table that match the data in the right table, regardless of how many rows match the data in the right table.
 
@@ -168,7 +179,7 @@ Examples:
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Anti Join
+### Anti Join
 
 Left anti join only returns rows from the left table that do not match the right table.
 
@@ -178,13 +189,14 @@ Right anti join reverses this comparison, returning only rows from the right tab
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Equi-join and Non-equi-join
+### Equi-join and Non-equi-join
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
 
-| **Equi-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
-| -------------------------- | ------------------------------------------------------------ |
-| **Non-equi-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+| **Join Type**  | **Variants**                                                                  |
+| -------------- | ----------------------------------------------------------------------------- |
+| Equi-joins     | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| Non-equi-joins | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
 
 - Equi-joins
   
@@ -206,7 +218,7 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
-#### Join with the USING clause
+### Join with the USING clause
 
 From v4.0.2 onwards, StarRocks supports specifying join conditions via the `USING` clause in addition to `ON`. It helps to simplify equi-joins with columns of the same name. For example: `SELECT * FROM t1 JOIN t2 USING (id)`.
 
@@ -241,7 +253,7 @@ From v4.0.2 onwards, StarRocks supports specifying join conditions via the `USIN
 
 These changes align StarRocks' behavior with SQL-standard compliant databases.
 
-## ASOF Join
+### ASOF Join
 
 An ASOF Join is a type of temporal or range-based join commonly used in time-series analytics. It allows joining two tables based on equality of certain keys and a non-equality condition on time or sequence fields, for example, `t1.time >= t2.time`. The ASOF Join selects the most recent matching row from the right-side table for each row on the left-side table. Supported from v4.0 onwards.
 
@@ -303,7 +315,7 @@ Limitations:
 - Only DATE and DATETIME types are supported in `asof_condition`.
 - Only one `asof_condition` is supported.
 
-### ORDER BY
+## ORDER BY
 
 The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.
 
@@ -311,7 +323,7 @@ ORDER BY is a time- and resource-consuming operation because all the results mus
 
 Therefore, if you only need the first `N` results from the sorted result set, you can use the LIMIT clause, which reduces memory usage and network overhead. If the LIMIT clause is not specified, the first 65535 results are returned by default.
 
-Syntax:
+**Syntax**
 
 ```sql
 ORDER BY <column_name> 
@@ -319,43 +331,43 @@ ORDER BY <column_name>
     [NULLS FIRST | NULLS LAST]
 ```
 
-`ASC` specifies that the results should be returned in ascending order. `DESC` specifies that the results should be returned in descending order. If the order is not specified, ASC (ascending) is the default. Example:
+**Parameters**
+
+- `ASC` specifies that the results should be returned in ascending order.
+- `DESC` specifies that the results should be returned in descending order. If the order is not specified, ASC (ascending) is the default.
+- `NULLS FIRST` indicates that NULL values should be returned before non-NULL values.
+- `NULLS LAST` indicates that NULL values should be returned after non-NULL values.
+
+**Examples**
 
 ```sql
 select * from big_table order by tiny_column, short_column desc;
-```
-
-Sort order for NULL values: `NULLS FIRST` indicates that NULL values should be returned before non-NULL values. `NULLS LAST` indicates that NULL values should be returned after non-NULL values.
-
-Examples:
-
-```sql
 select  *  from  sales_record  order by  employee_id  nulls first;
 ```
 
-### GROUP BY
+## GROUP BY
 
 The GROUP BY clause is often used with aggregate functions. Columns specified in the GROUP BY clause will not participate in the aggregation operation.
 
-#### Syntax
+**Syntax**
 
-  ```sql
-  SELECT
-  ...
-  aggregate_function() [ FILTER ( where boolean_expression ) ]
-  ...
-  FROM ...
-  [ ... ]
-  GROUP BY [
-      , ... |
-      GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
-      ROLLUP(expr  [ , expr [ , ... ] ]) |
-      CUBE(expr  [ , expr [ , ... ] ])
-      ]
-  [ ... ]
-  ```
+```sql
+SELECT
+...
+aggregate_function() [ FILTER ( where boolean_expression ) ]
+...
+FROM ...
+[ ... ]
+GROUP BY [
+    , ... |
+    GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
+    ROLLUP(expr  [ , expr [ , ... ] ]) |
+    CUBE(expr  [ , expr [ , ... ] ])
+    ]
+[ ... ]
+```
 
-#### Parameters
+**Parameters**
 
 - `FILTER` can be used together with aggregate functions. Only filtered rows will participate in the calculation of the aggregate function.
 
@@ -367,7 +379,7 @@ The GROUP BY clause is often used with aggregate functions. Columns specified in
 
 - `GROUPING SETS`, `CUBE`, and `ROLLUP` are extensions of the GROUP BY clause. In a GROUP BY clause, they can be used to achieve grouped aggregations of multiple sets. The results are equivalent to that of the UNION of multiple GROUP BY clauses.
 
-#### Examples
+**Examples**
 
 Example 1: `FILTER`
 
@@ -470,13 +482,13 @@ Example 2: `GROUPING SETS`, `CUBE`, and `ROLLUP`
     9 rows in set (0.02 sec)
     ```
 
-### HAVING
+## HAVING
 
 The HAVING clause does not filter row data in a table, but filters the results of aggregate functions.
 
 Generally speaking, HAVING is used with aggregate functions (such as COUNT(), SUM(), AVG(), MIN(), MAX()) and GROUP BY clauses.
 
-Examples:
+**Examples**
 
 ```sql
 select tiny_column, sum(short_column) 
@@ -512,7 +524,7 @@ having tiny_column > 1;
 1 row in set (0.07 sec)
 ```
 
-### LIMIT
+## LIMIT
 
 LIMIT clauses are used to limit the maximum number of rows returned. Setting the maximum number of rows returned can help StarRocks optimize memory usage.
 
@@ -526,7 +538,7 @@ The size of the query result set needs to be limited because of the large amount
 
 Instructions for use: The value of the LIMIT clause must be a numeric literal constant.
 
-Examples:
+**Examples**
 
 ```plain text
 mysql> select tiny_column from small_table limit 1;
@@ -553,7 +565,7 @@ mysql> select tiny_column from small_table limit 10000;
 2 rows in set (0.01 sec)
 ```
 
-### OFFSET
+## OFFSET
 
 The OFFSET clause causes the result set to skip the first few rows and return the following results directly.
 
@@ -619,24 +631,26 @@ In this case, only the limit value is taken, and the offset value is ignored. So
 
 Offset exceeds the maximum number of rows in the result set and is still a result. It is recommended that users use offset with order by.
 
-### UNION
+## UNION
 
 Combines the result of multiple queries.
 
-**Syntax:**
+**Syntax**
 
 ```sql
 query_1 UNION [DISTINCT | ALL] query_2
 ```
 
-- DISTINCT (default) returns only unique rows. UNION is equivalent to UNION DISTINCT.
-- ALL combines all rows, including duplicates. Since de-duplication is memory intensive, queries using UNION ALL are faster and less memory-consuming. For better performance, use UNION ALL.
+**Parameters**
+
+- `DISTINCT` (default): returns only unique rows. UNION is equivalent to UNION DISTINCT.
+- `ALL`: combines all rows, including duplicates. Since de-duplication is memory intensive, queries using UNION ALL are faster and less memory-consuming. For better performance, use UNION ALL.
 
 > **NOTE**
 >
 > Each query statement must return the same number of columns and the columns must have compatible data types.
 
-**Examples:**
+**Examples**
 
 Create tables `select1` and `select2`.
 
@@ -745,11 +759,11 @@ limit 3;
 3 rows in set (0.01 sec)
 ```
 
-### INTERSECT
+## INTERSECT
 
 Calculates the intersection of the results of multiple queries, that is, the results that appear in all the result sets. This clause returns only unique rows among the result sets. The ALL keyword is not supported.
 
-**Syntax:**
+**Syntax**
 
 ```SQL
 query_1 INTERSECT [DISTINCT] query_2
@@ -760,7 +774,7 @@ query_1 INTERSECT [DISTINCT] query_2
 > - INTERSECT is equivalent to INTERSECT DISTINCT.
 > - Each query statement must return the same number of columns and the columns must have compatible data types.
 
-**Examples:**
+**Examples**
 
 The two tables in UNION  are used.
 
@@ -788,11 +802,11 @@ order by id;
 +------+-------+
 ```
 
-### EXCEPT/MINUS
+## EXCEPT/MINUS
 
 Returns distinct results of the left-hand query that do not exist in the right-hand query. EXCEPT is equivalent to MINUS.
 
-**Syntax:**
+**Syntax**
 
 ```SQL
 query_1 {EXCEPT | MINUS} [DISTINCT] query_2
@@ -803,7 +817,7 @@ query_1 {EXCEPT | MINUS} [DISTINCT] query_2
 > - EXCEPT is equivalent to EXCEPT DISTINCT. The ALL keyword is not supported.
 > - Each query statement must return the same number of columns and the columns must have compatible data types.
 
-**Examples:**
+**Examples**
 
 The two tables in UNION  are used.
 
@@ -827,7 +841,7 @@ order by id;
 +------+-------+
 ```
 
-### DISTINCT
+## DISTINCT
 
 The DISTINCT keyword deduplicates the result set. Example:
 
@@ -867,18 +881,18 @@ StarRocks supports multiple aggregate functions using distinct at the same time.
 select count(distinct tiny_column, int_column), count(distinct varchar_column) from big_table;
 ```
 
-### Subquery
+## Subquery
 
 Subqueries are categorized into two types in terms of relevance:
 
 - A noncorrelated subquery obtains its results independently of its outer query.
 - A correlated subquery requires values from its outer query.
 
-#### Noncorrelated subquery
+#### Non-correlated subquery
 
-Noncorrelated subqueries support [NOT] IN and EXISTS.
+Non-correlated subqueries support [NOT] IN and EXISTS.
 
-Example:
+**Examples**
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
@@ -894,7 +908,7 @@ From v3.0 onwards, you can specify multiple fields in the WHERE clause of `SELEC
 
 Related subqueries support [NOT] IN and [NOT] EXISTS.
 
-Example:
+**Examples**
 
 ```sql
 SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
@@ -904,7 +918,7 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 
 Subqueries also support scalar quantum queries. It can be divided into irrelevant scalar quantum query, related scalar quantum query and scalar quantum query as parameters of the general function.
 
-Examples:
+**Examples**
 
 1. Uncorrelated scalar quantum query with predicate = sign. For example, output information about the person with the highest wage.
 
@@ -930,11 +944,11 @@ Examples:
     SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
     ```
 
-### Where and Operators
+## Where and Operators
 
 SQL operators are a series of functions used for comparison and are widely used in where clauses of select statements.
 
-#### Arithmetic operator
+### Arithmetic operator
 
 Arithmetic operators usually appear in expressions that contain left, right, and most often left operands
 
@@ -948,7 +962,7 @@ Because--is interpreted as a comment in the following statement (when a user can
 
 When + or - is a binary operator, such as 2+2, 3+1.5, or col1+col2, it means that the left value is added or subtracted from the right value. Both left and right values must be numeric types.
 
-**and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
+**\*and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
 
 Smaller operands may be promoted if needed (e.g., SMALLINT to INT or BIGINT), and the result of the expression will be promoted to the next larger type.
 
@@ -966,9 +980,9 @@ Multiple arithmetic operators can appear in an expression, and the user can encl
 
 For example, we don't have the MOD() function to represent the% operator. Conversely, mathematical functions do not have corresponding arithmetic operators. For example, the power function POW() does not have a corresponding ** exponentiation operator.
 
- Users can find out which arithmetic functions we support through the Mathematical Functions section.
+Users can find out which arithmetic functions we support through the Mathematical Functions section.
 
-#### Between Operator
+### Between Operator
 
 In a where clause, expressions may be compared with both upper and lower bounds. If the expression is greater than or equal to the lower bound and less than or equal to the upper bound, the result of the comparison is true.
 
@@ -990,13 +1004,13 @@ Example:
 select c1 from t1 where month between 1 and 6;
 ```
 
-#### Comparison operators
+### Comparison operators
 
 Comparison operators are used to compare two values. `=`, `!=`, `>=` apply to all data types.
 
 The `<>` and `!=` operators are equivalent, which indicate that two values are not equal.
 
-#### In Operator
+### In Operator
 
 The In operator compares to the VALUE collection and returns TRUE if it can match any of the elements in the collection.
 
@@ -1008,7 +1022,7 @@ Examples:
 select * from small_table where tiny_column in (1,2);
 ```
 
-#### Like Operator
+### Like Operator
 
 This operator is used to compare to a string. '_' (underscore) matches a single character, '%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
 
@@ -1038,7 +1052,7 @@ mysql> select varchar_column from small_table where varchar_column like 'm____';
 1 row in set (0.01 sec)
 ```
 
-#### Logical Operator
+### Logical Operator
 
 Logical operators return a BOOL value, including unit and multiple operators, each of which handles parameters that are expressions that return BOOL values. Supported operators are:
 
@@ -1098,7 +1112,7 @@ mysql> select not true;
 1 row in set (0.01 sec)
 ```
 
-#### Regular Expression Operator
+### Regular Expression Operator
 
 Determines whether the regular expression is matched. Using POSIX standard regular expressions,'^'matches the first part of the string,'$' matches the end of the string.
 
@@ -1134,7 +1148,7 @@ mysql> select varchar_column from small_table where varchar_column regexp 'm.*';
 1 row in set (0.01 sec)
 ```
 
-### Alias
+## Alias
 
 When you write the names of tables, columns, or expressions that contain columns in a query, you can assign them an alias. Aliases are usually shorter and better to remember than original names.
 
@@ -1154,7 +1168,7 @@ select sum(tiny_column) as total_count from big_table;
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
 
-### PIVOT
+## PIVOT
 
 This feature is supported from v3.3 onwards.
 
@@ -1162,7 +1176,7 @@ The PIVOT operation is an advanced feature in SQL that allows you to transform r
 
 Actually, the PIVOT is a syntax sugar, which can simplify the writing of the query statement like `sum(case when ... then ... end)`.
 
-#### Syntax
+**Syntax**
 
 ```sql
 pivot:
@@ -1183,7 +1197,7 @@ pivot_value:
 | (<literal>, <literal> ...) [, (<literal>, <literal> ...)]
 ```
 
-#### Parameters
+**Parameters**
 
 In a PIVOT operation, you need to specify several key components:
 
@@ -1192,7 +1206,7 @@ In a PIVOT operation, you need to specify several key components:
 - FOR pivot_column: Specifies the column name on which the row-to-column transformation will be performed.
 - IN (pivot_value): Specifies the specific values of the pivot_column that will be transformed into columns.
 
-#### Examples
+**Examples**
 
 ```sql
 create table t1 (c0 int, c1 int, c2 int, c3 int);
@@ -1211,13 +1225,14 @@ SELECT SUM(CASE WHEN c3 = 1 THEN c1 ELSE NULL END) AS sum_c1_1,
 FROM t1
 GROUP BY c0;
 ```
-### EXCLUDE  
+
+## EXCLUDE
 
 This feature is supported starting from version 4.0.  
 
 The EXCLUDE keyword is used to exclude specified columns from query results, simplifying SQL statements when certain columns can be ignored. It is particularly convenient when working with tables containing a large number of columns, avoiding the need to explicitly list all columns to be retained.
 
-#### Syntax
+**Syntax**
 
 ```sql  
 SELECT  
@@ -1226,7 +1241,7 @@ SELECT
 FROM ...  
 ```  
 
-#### Parameters
+**Parameters**
 
 - **`* EXCLUDE`**  
   Selects all columns with the wildcard `*`, followed by `EXCLUDE` and a list of column names to exclude.  
@@ -1235,9 +1250,9 @@ FROM ...
 - **`<column_name>`**  
   The column name(s) to exclude. Multiple columns are separated by commas. Columns must exist in the table; otherwise, an error will be returned.  
 
-#### Examples
+**Examples**
 
-##### Basic Usage
+- Basic Usage:
 
 ```sql  
 -- Create test_table.
@@ -1262,4 +1277,197 @@ SELECT id, age FROM test_table;
 SELECT test_table.* EXCLUDE (email) FROM test_table;  
 -- Above is equivalent to:  
 SELECT id, name, age FROM test_table;  
+```
+
+## RECURSIVE
+
+From v4.1 onwards, StarRocks supports Recursive Common Table Expression (CTE), using an iterative execution approach to efficiently handle various hierarchical and tree-structured data.
+
+A Recursive CTE is a special type of CTE that can reference itself, enabling recursive queries. Recursive CTEs are particularly useful for processing hierarchical data structures such as organizational charts, file systems, graph traversals, and more.
+
+A Recursive CTE consists of the following components:
+
+- **Anchor Member**: A non-recursive initial query that provides the starting dataset for recursion.
+- **Recursive Member**: A recursive query that references the CTE itself.
+- **Termination Condition**: A condition to prevent infinite recursion, typically implemented through a WHERE clause.
+
+The execution process of a Recursive CTE is as follows:
+
+1. Execute the anchor member to obtain the initial result set (level 0).
+2. Use level 0 results as input, execute the recursive member to get level 1 results.
+3. Use level 1 results as input, execute the recursive member again to get level 2 results.
+4. Repeat this process until the recursive member returns no rows or reaches the maximum recursion depth.
+5. Merge all levels of results using UNION ALL (or UNION).
+
+:::tip
+You must enable this feature by setting the system variable `enable_recursive_cte` to `true` before using it.
+:::
+
+**Syntax**
+
+```sql
+WITH RECURSIVE cte_name [(column_list)] AS (
+    -- Anchor member (non-recursive part)
+    anchor_query
+    UNION [ALL | DISTINCT]
+    -- Recursive member (recursive part)
+    recursive_query
+)
+SELECT ... FROM cte_name ...;
+```
+
+**Parameters**
+
+- `cte_name`: Name of the CTE.
+- `column_list` (optional): List of column names for the CTE result set.
+- `anchor_query`: Initial query that must be non-recursive and cannot reference the CTE itself.
+- `UNION`: Union operator.
+  - `UNION ALL`: Retains all rows (including duplicates), recommended for better performance.
+  - `UNION` or `UNION DISTINCT`: Removes duplicate rows.
+- `recursive_query`: Recursive query that references the CTE itself.
+
+**Limitations**
+
+Recursive CTEs in StarRocks have the following limitations:
+
+- **Feature flag required**
+
+  You must manually enable Recursive CTE by setting the system variable `enable_recursive_cte` to `true`.
+
+- **Structural requirements**
+  - UNION or UNION ALL must be used to connect anchor and recursive members.
+  - The anchor member cannot reference the CTE itself.
+  - If the recursive member does not reference the CTE itself, it is executed as a regular CTE.
+
+- **Recursion depth limit**
+  - By default, the maximum recursion depth is 5 (levels).
+  - The maximum depth can be adjusted via the system variable `recursive_cte_max_depth` to prevent infinite recursion.
+
+- **Execution Constraints**
+  - Currently, multi-level nested recursive CTEs are not supported.
+  - Complex recursive CTEs may lead to degraded performance.
+  - Constants in `anchor_query` should have types consistent with `recursive_query` output types.
+
+**Configurations**
+
+The following system variables are required for using Recursive CTE:
+
+| Variable Name             | Type    | Default | Description                                            |
+| ------------------------- | ------- | ------- | ------------------------------------------------------ |
+| `enable_recursive_cte`    | BOOLEAN | false   | Whether to enable Recursive CTE.                       |
+| `recursive_cte_max_depth` | INT     | 5       | Maximum recursion depth to prevent infinite recursion. |
+
+**Examples**
+
+**Example 1: Querying Organizational Hierarchy**
+
+Querying organizational hierarchy is one of the most common use cases for Recursive CTE. The following example queries employee organizational hierarchy relationships.
+
+1. Prepare data:
+
+    ```sql
+    CREATE TABLE employees (
+      employee_id INT,
+      name VARCHAR(100),
+      manager_id INT,
+      title VARCHAR(50)
+    ) DUPLICATE KEY(employee_id)
+    DISTRIBUTED BY RANDOM;
+
+    INSERT INTO employees VALUES
+    (1, 'Alicia', NULL, 'CEO'),
+    (2, 'Bob', 1, 'CTO'),
+    (3, 'Carol', 1, 'CFO'),
+    (4, 'David', 2, 'VP of Engineering'),
+    (5, 'Eve', 2, 'VP of Research'),
+    (6, 'Frank', 3, 'VP of Finance'),
+    (7, 'Grace', 4, 'Engineering Manager'),
+    (8, 'Heidi', 4, 'Tech Lead'),
+    (9, 'Ivan', 5, 'Research Manager'),
+    (10, 'Judy', 7, 'Senior Engineer');
+    ```
+
+2. Query Organizational Hierarchy:
+
+    ```sql
+    WITH RECURSIVE org_hierarchy AS (
+        -- Anchor member: Start from CEO (employee with no manager)
+        SELECT 
+            employee_id, 
+            name, 
+            manager_id, 
+            title, 
+            CAST(1 AS BIGINT) AS level,
+            name AS path
+        FROM employees
+        WHERE manager_id IS NULL
+        
+        UNION ALL
+        
+        -- Recursive member: Find subordinates at next level
+        SELECT 
+            e.employee_id,
+            e.name,
+            e.manager_id,
+            e.title,
+            oh.level + 1,
+            CONCAT(oh.path, ' -> ', e.name) AS path
+        FROM employees e
+        INNER JOIN org_hierarchy oh ON e.manager_id = oh.employee_id
+    )
+    SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+        employee_id,
+        name,
+        title,
+        level,
+        path
+    FROM org_hierarchy
+    ORDER BY employee_id;
+    ```
+
+Result:
+
+```Plain
++-------------+---------+----------------------+-------+-----------------------------------------+
+| employee_id | name    | title                | level | path                                    |
++-------------+---------+----------------------+-------+-----------------------------------------+
+|           1 | Alicia  | CEO                  |     1 | Alicia                                  |
+|           2 | Bob     | CTO                  |     2 | Alicia -> Bob                           |
+|           3 | Carol   | CFO                  |     2 | Alicia -> Carol                         |
+|           4 | David   | VP of Engineering    |     3 | Alicia -> Bob -> David                  |
+|           5 | Eve     | VP of Research       |     3 | Alicia -> Bob -> Eve                    |
+|           6 | Frank   | VP of Finance        |     3 | Alicia -> Carol -> Frank                |
+|           7 | Grace   | Engineering Manager  |     4 | Alicia -> Bob -> David -> Grace         |
+|           8 | Heidi   | Tech Lead            |     4 | Alicia -> Bob -> David -> Heidi         |
+|           9 | Ivan    | Research Manager     |     4 | Alicia -> Bob -> Eve -> Ivan            |
+|          10 | Judy    | Senior Engineer      |     5 | Alicia -> Bob -> David -> Grace -> Judy |
++-------------+---------+----------------------+-------+-----------------------------------------+
+```
+
+**Example 2: Multiple Recursive CTEs**
+
+You can define multiple recursive CTEs in a single query.
+
+```sql
+WITH RECURSIVE
+cte1 AS (
+    SELECT CAST(1 AS BIGINT) AS n
+    UNION ALL
+    SELECT n + 1 FROM cte1 WHERE n < 5
+),
+cte2 AS (
+    SELECT CAST(10 AS BIGINT) AS n
+    UNION ALL
+    SELECT n + 1 FROM cte2 WHERE n < 15
+)
+SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+    'cte1' AS source,
+    n
+FROM cte1
+UNION ALL
+SELECT 
+    'cte2' AS source,
+    n
+FROM cte2
+ORDER BY source, n;
 ```

@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "common/config_exec_flow_fwd.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

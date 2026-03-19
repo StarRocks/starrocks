@@ -60,3 +60,7 @@ E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
 admin disable failpoint 'hash_join_build_bad_alloc';
 -- result:
 -- !result
+CLEANUP {
+  admin disable failpoint 'hash_join_append_bad_alloc';
+  admin disable failpoint 'hash_join_build_bad_alloc';
+} END CLEANUP

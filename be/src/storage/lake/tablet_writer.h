@@ -159,8 +159,8 @@ public:
 
     bool auto_flush() const { return _auto_flush; }
 
-    void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
-    void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {
+    void set_fs(std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
+    void set_location_provider(std::shared_ptr<LocationProvider> location_provider) {
         _location_provider = std::move(location_provider);
     }
 

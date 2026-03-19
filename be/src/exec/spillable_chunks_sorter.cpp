@@ -17,6 +17,7 @@
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(chunk_sorter_spill_on_set_finishing);
@@ -25,7 +26,7 @@ template <DerivedFromChunksSorter TChunksSorter>
 void SpillableChunksSorter<TChunksSorter>::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
                                                          MemTracker* parent_mem_tracker) {
     TChunksSorter::setup_runtime(state, profile, parent_mem_tracker);
-    _spiller->set_metrics(spill::SpillProcessMetrics(profile, state->mutable_total_spill_bytes()));
+    _spiller->set_metrics(spill::SpillProcessMetrics(profile, RuntimeStateHelper::mutable_total_spill_bytes(state)));
 }
 
 template <DerivedFromChunksSorter TChunksSorter>

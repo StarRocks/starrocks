@@ -18,14 +18,13 @@
 
 #include <sstream>
 
-#include "common/config.h"
 #include "gen_cpp/AgentService_types.h"
 
 namespace starrocks {
 class FlatJsonConfig {
 public:
     // Constructor
-    FlatJsonConfig() = default;
+    FlatJsonConfig();
 
     // Constructor with parameters
     FlatJsonConfig(bool enable, double nullFactor, double sparsityFactor, int maxColumnMax)
@@ -102,8 +101,8 @@ public:
 
 private:
     bool _flat_json_enable = false;
-    double _flat_json_null_factor = config::json_flat_null_factor;
-    double _flat_json_sparsity_factor = config::json_flat_sparsity_factor;
-    int _flat_json_max_column_max = config::json_flat_column_max;
+    double _flat_json_null_factor = 0;
+    double _flat_json_sparsity_factor = 0;
+    int _flat_json_max_column_max = 0;
 };
 } // namespace starrocks

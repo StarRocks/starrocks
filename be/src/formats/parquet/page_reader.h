@@ -23,7 +23,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "storage/rowset/page_handle.h"
 
 namespace starrocks {

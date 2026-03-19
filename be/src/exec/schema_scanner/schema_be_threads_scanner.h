@@ -16,20 +16,11 @@
 
 #include <cstdint>
 
+#include "common/thread/thread_info.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
-
-struct BeThreadInfo {
-    std::string group;
-    std::string name;
-    int64_t pthread_id{0};
-    int64_t tid{0};
-    bool idle{false};
-    int64_t finished_tasks{0};
-    int64_t num_bound_cpu_cores{0};
-};
 
 class SchemaBeThreadsScanner : public SchemaScanner {
 public:

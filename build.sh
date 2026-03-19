@@ -33,6 +33,11 @@
 # compiled and installed correctly.
 ##############################################################
 startTime=$(date +%s)
+ROOT=`dirname "$0"`
+ROOT=`cd "$ROOT"; pwd`
+export STARROCKS_HOME=${ROOT}
+
+. "${STARROCKS_HOME}/build-support/build_helpers.sh"
 
 format_time() {
     local epoch="$1"
@@ -42,11 +47,11 @@ format_time() {
         date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
     fi
 }
-ROOT=`dirname "$0"`
-ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
-export STARROCKS_HOME=${ROOT}
+is_aarch64_host() {
+    [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]
+}
 
 if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
@@ -74,17 +79,22 @@ if [ -z $STARROCKS_COMMIT_HASH ] ; then
 fi
 
 set -eo pipefail
-. ${STARROCKS_HOME}/env.sh
+if starrocks_is_darwin; then
+    starrocks_setup_darwin_build_env
+else
+    . ${STARROCKS_HOME}/env.sh
+fi
 
-if [[ $OSTYPE == darwin* ]] ; then
-    PARALLEL=$(sysctl -n hw.ncpu)
-    # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
+if starrocks_is_darwin ; then
+    PARALLEL=$(starrocks_detect_parallelism)
+    # Darwin thirdparty is prepared separately and validated before BE configure.
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
-    PARALLEL=$[$(nproc)/4+1]
+    host_parallelism=$(starrocks_detect_parallelism)
+    PARALLEL=$[$host_parallelism/4+1]
 fi
 
 # Check args
@@ -107,6 +117,7 @@ Usage: $0 <options>
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
+     --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
@@ -115,6 +126,8 @@ Usage: $0 <options>
                         Turning this option on automatically disables ccache.
      --without-tenann
                         build without vector index tenann library
+     --configure-only   run CMake configure only for Backend/Format Lib and skip compilation
+                        (used by ci-tool changed-file clang-tidy mode)
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
@@ -141,22 +154,7 @@ Usage: $0 <options>
   exit 1
 }
 
-GETOPT_BIN="getopt"
-if [[ "$OSTYPE" == darwin* ]]; then
-    # Try to detect gnu-getopt path dynamically
-    if command -v brew &> /dev/null; then
-        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
-        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
-            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
-        else
-            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
-            exit 1
-        fi
-    else
-        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
-        exit 1
-    fi
-fi
+GETOPT_BIN="$(starrocks_resolve_getopt_bin)" || exit 1
 
 OPTS=$(${GETOPT_BIN} \
   -n $0 \
@@ -174,12 +172,14 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
+  -l 'without-pch' \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
   -l 'without-tenann' \
+  -l 'configure-only' \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
@@ -205,11 +205,22 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
-WITH_STARCACHE=ON
+THIN_ACHIEVE=OFF
+if starrocks_is_darwin; then
+    WITH_STARCACHE=OFF
+else
+    WITH_STARCACHE=ON
+fi
+WITH_PCH=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=ON
+if starrocks_is_darwin; then
+    WITH_TENANN=OFF
+else
+    WITH_TENANN=ON
+fi
+CONFIGURE_ONLY=OFF
 WITH_RELATIVE_SRC_PATH=ON
 ENABLE_MULTI_DYNAMIC_LIBS=OFF
 BUILD_BE_MODULE=all
@@ -242,7 +253,11 @@ if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
-    ENABLE_JIT=ON
+    if starrocks_is_darwin; then
+        ENABLE_JIT=OFF
+    else
+        ENABLE_JIT=ON
+    fi
 fi
 if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
     DISABLE_JAVA_CHECK_STYLE=OFF
@@ -250,7 +265,7 @@ fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros"
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros,include_file_ctime"
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -318,9 +333,12 @@ else
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --with-thin-archive) THIN_ACHIEVE=ON; shift ;;
+            --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
+            --configure-only) CONFIGURE_ONLY=ON; shift ;;
             --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
@@ -359,6 +377,10 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     BUILD_JAVA_EXT=OFF
 fi
 
+if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
+    starrocks_validate_darwin_thirdparty
+fi
+
 echo "Get params:
     BUILD_BE                    -- $BUILD_BE
     BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
@@ -372,7 +394,9 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    THIN_ACHIEVE                -- $THIN_ACHIEVE
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
@@ -414,20 +438,27 @@ done
 
 # Clean and build generated code
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
-    echo "Build generated code"
+    echo "Build script-generated code"
     cd ${STARROCKS_HOME}/gensrc
     if [ ${CLEAN} -eq 1 ]; then
        make clean
     fi
-    # DO NOT using parallel make(-j) for gensrc
-    make
+    make script
 fi
 cd ${STARROCKS_HOME}
 
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+JAVA_LIBRARY_PATH=""
+if starrocks_is_darwin; then
+    if [[ -d "${JAVA_HOME}/lib/server" ]]; then
+        JAVA_LIBRARY_PATH="${JAVA_HOME}/lib/server:${JAVA_HOME}/lib"
+    fi
+elif is_aarch64_host; then
+    JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
 else
-    export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+    JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+fi
+if [[ -n "${JAVA_LIBRARY_PATH}" ]]; then
+    export LIBRARY_PATH="${JAVA_LIBRARY_PATH}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 fi
 
 addon_mvn_opts=""
@@ -491,9 +522,15 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         # this option cannot work with clang-14
         WITH_COMPRESS=OFF
     fi
+    if [ "${CONFIGURE_ONLY}" == "ON" ]; then
+        # Configure-only mode does not build targets, so no .pch artifacts are generated.
+        # Disable PCH to avoid compile_commands.json referencing missing cmake_pch.hxx.pch files.
+        WITH_PCH=OFF
+    fi
 
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
+                  -DSTARROCKS_PRECONFIG_MODE=OFF                       \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
@@ -507,7 +544,9 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+                  -DTHIN_ARCHIVE=${THIN_ACHIEVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DBUILD_BE=${BUILD_BE}                                \
@@ -517,6 +556,11 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   ${STARROCKS_HOME}/be
+
+    if [ "${CONFIGURE_ONLY}" == "ON" ]; then
+        echo "Configure only mode: skip Backend build."
+        exit 0
+    fi
 
     if [ "${BUILD_BE_MODULE}" != "all" ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"
@@ -628,7 +672,7 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] ; then
+    if [ "${ibuildtype}" == "release" ] && ! starrocks_is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
         FORMAT_LIB=libstarrocks_format.so
         FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
@@ -667,13 +711,46 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
-    mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    shopt -s nullglob
+    be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
+    if starrocks_is_darwin; then
+        be_shared_libs+=(${STARROCKS_HOME}/be/output/lib/*.dylib ${STARROCKS_HOME}/be/output/lib/*.dylib.*)
+    fi
+    if (( ${#be_shared_libs[@]} > 0 )); then
+        cp -r -p "${be_shared_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/
+    fi
+    if starrocks_is_darwin; then
+        if [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib && ! -e ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib ]]; then
+            cp -p ${STARROCKS_OUTPUT}/be/lib/libmockjvm.dylib ${STARROCKS_OUTPUT}/be/lib/libjvm.dylib
+        fi
+    elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
+        mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    fi
+    if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    fi
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
-    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+    if starrocks_is_darwin; then
+        jemalloc_release_libs=(${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc*.dylib.*)
+        if (( ${#jemalloc_release_libs[@]} > 0 )); then
+            cp -r -p "${jemalloc_release_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/jemalloc/
+        fi
+        jemalloc_debug_libs=(${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc*.dylib ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc*.dylib.*)
+        if (( ${#jemalloc_debug_libs[@]} > 0 )); then
+            mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+            cp -r -p "${jemalloc_debug_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/
+        fi
+    else
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+    fi
+    if starrocks_is_darwin; then
+        starrocks_write_output_be_host_dylib_manifest "${STARROCKS_OUTPUT}/be"
+        echo "Warning: macOS output/be depends on host dylibs not bundled in output/be."
+        echo "See ${STARROCKS_OUTPUT}/be/HOST_DYLIB_DEPENDENCIES.txt for the required host library paths."
+    fi
+    shopt -u nullglob
 
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
@@ -683,7 +760,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] ; then
+    if [ "${ibuildtype}" == "release" ] && ! starrocks_is_darwin ; then
         pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
         BE_BIN=starrocks_be
         BE_BIN_DEBUGINFO=starrocks_be.debuginfo

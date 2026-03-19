@@ -22,6 +22,8 @@
 #include "exec/spill/common.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"
+#include "exprs/expr_executor.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -132,7 +134,8 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     spill::SpilledOptions opts;
     opts.wg = state->fragment_ctx()->workgroup();
     _spiller = _spill_factory->create(opts);
-    _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+    _spiller->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     _cross_join_context->incr_prober();
     return Status::OK();
 }
@@ -256,17 +259,17 @@ Status SpillableNLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _cross_join_context->ref();
 
     _init_row_desc();
-    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void SpillableNLJoinProbeOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_join_conjuncts, state);
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_join_conjuncts, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
 
     OperatorWithDependencyFactory::close(state);
 }

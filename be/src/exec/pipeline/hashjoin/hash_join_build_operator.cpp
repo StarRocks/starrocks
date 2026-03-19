@@ -22,8 +22,9 @@
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
-#include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_filter_worker.h"
 
 namespace starrocks::pipeline {

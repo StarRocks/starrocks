@@ -16,10 +16,13 @@
 
 #include "fmt/format.h"
 #include "gutil/casts.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
+// Legacy parquet variant layout: group(metadata, value).
 static constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
+// Shredded parquet variant layout: group(metadata, value, typed_value).
 static constexpr int VARIANT_SHREDDING_COUNT = 3;
 
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
@@ -187,10 +190,6 @@ static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, T
     if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
         return Status::InvalidArgument("Not a variant type");
     }
-    if (field_count == VARIANT_SHREDDING_COUNT) {
-        return Status::NotSupported("shredded variant type is not supported yet");
-    }
-
     *type_desc = TypeDescriptor::create_variant_type();
     return Status::OK();
 }

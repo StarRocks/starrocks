@@ -95,3 +95,7 @@ select count(*) from (select * from t2 where c0 not in (select c0 from t3 where 
 
 
 admin disable failpoint 'always_use_partition_join';
+
+CLEANUP {
+  admin disable failpoint 'always_use_partition_join';
+} END CLEANUP

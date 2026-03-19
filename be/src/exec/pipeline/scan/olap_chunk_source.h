@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/runtime_profile.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/olap_utils.h"
@@ -24,12 +25,11 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -63,6 +63,7 @@ private:
     TCounterMinMaxType::type _get_counter_min_max_type(const std::string& metric_name);
     void _init_counter(RuntimeState* state);
     Status _init_global_dicts(TabletReaderParams* params);
+    Status _init_glm(TabletReaderParams* params);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
@@ -70,8 +71,6 @@ private:
     Status _init_column_access_paths(Schema* schema);
     Status _prune_schema_by_access_paths(Schema* schema);
     Status _extend_schema_by_access_paths();
-    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
-                                          const ColumnAccessPath* path);
 
 private:
     TabletReaderParams _params{};

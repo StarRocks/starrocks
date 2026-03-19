@@ -34,8 +34,7 @@
 
 #pragma once
 
-#include "common/config.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/page_handle.h"
@@ -49,9 +48,10 @@ static const uint32_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
 
 class PageBuilderOptions {
 public:
-    uint32_t data_page_size = DEFAULT_PAGE_SIZE;
+    PageBuilderOptions();
 
-    uint32_t dict_page_size = config::dictionary_page_size;
+    uint32_t data_page_size = DEFAULT_PAGE_SIZE;
+    uint32_t dict_page_size;
 };
 
 class IndexReadOptions {

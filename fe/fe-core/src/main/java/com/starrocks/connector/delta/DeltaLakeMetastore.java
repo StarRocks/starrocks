@@ -57,6 +57,10 @@ import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
+    private static final int CHECKPOINT_ESTIMATOR_SAMPLE_SIZE = 3;
+    private static final int CHECKPOINT_ESTIMATOR_MAX_DEPTH = 8;
+    private static final int JSON_ESTIMATOR_SAMPLE_SIZE = 5;
+    private static final int JSON_ESTIMATOR_MAX_DEPTH = 10;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
@@ -78,14 +82,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) -> {
-                    // Structure-based estimation
-                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateCheckpointByStructure(
-                            (Pair<DeltaLakeFileStatus, StructType>) key, (List<ColumnarBatch>) value);
-
-                    // Return structure-based estimate for cache size limiting
-                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
-                })
+                .weigher((key, value) -> weighCheckpointEntry((Pair<DeltaLakeFileStatus, StructType>) key,
+                        (List<ColumnarBatch>) value))
                 .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -97,14 +95,7 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) -> {
-                    // Structure-based estimation
-                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateJsonByStructure(
-                            (DeltaLakeFileStatus) key, (List<JsonNode>) value);
-
-                    // Return structure-based estimate for cache size limiting
-                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
-                })
+                .weigher((key, value) -> weighJsonEntry((DeltaLakeFileStatus) key, (List<JsonNode>) value))
                 .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -215,6 +206,39 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     @Override
     public boolean tableExists(String dbName, String tableName) {
         return delegate.tableExists(dbName, tableName);
+    }
+
+    private int weighCheckpointEntry(Pair<DeltaLakeFileStatus, StructType> key, List<ColumnarBatch> value) {
+        long estimatorEstimated = estimateByEstimator(
+                key, value, CHECKPOINT_ESTIMATOR_SAMPLE_SIZE, CHECKPOINT_ESTIMATOR_MAX_DEPTH);
+        long effectiveEstimated = estimatorEstimated > 0 ? estimatorEstimated :
+                DeltaLakeCacheSizeEstimator.estimateCheckpointByStructure(key, value);
+        return clampToInt(effectiveEstimated);
+    }
+
+    private int weighJsonEntry(DeltaLakeFileStatus key, List<JsonNode> value) {
+        long estimatorEstimated = estimateByEstimator(key, value, JSON_ESTIMATOR_SAMPLE_SIZE, JSON_ESTIMATOR_MAX_DEPTH);
+        long effectiveEstimated = estimatorEstimated > 0 ? estimatorEstimated :
+                DeltaLakeCacheSizeEstimator.estimateJsonByStructure(key, value);
+        return clampToInt(effectiveEstimated);
+    }
+
+    private long estimateByEstimator(Object key, Object value, int sampleSize, int maxDepth) {
+        try {
+            long keyEstimate = Estimator.estimate(key);
+            long valueEstimate = Estimator.estimate(value, sampleSize, maxDepth);
+            return keyEstimate + valueEstimate;
+        } catch (Exception e) {
+            LOG.warn("Failed to estimate cache entry using Estimator for key={}", key, e);
+            return -1;
+        }
+    }
+
+    private int clampToInt(long size) {
+        if (size <= 0) {
+            return 0;
+        }
+        return (int) Math.min(size, Integer.MAX_VALUE);
     }
 
     public void invalidateAll() {

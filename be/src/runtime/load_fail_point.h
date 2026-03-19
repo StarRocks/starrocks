@@ -17,9 +17,9 @@
 #include "base/failpoint/fail_point.h"
 
 #ifdef FIU_ENABLE
+#include "base/brpc/ref_count_closure.h"
+#include "base/brpc/reusable_closure.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
 #endif
 
 namespace starrocks::load::failpoint {

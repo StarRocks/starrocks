@@ -19,7 +19,7 @@ Supported statements include:
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
-You can drop an asynchronous task using [DROP TASK](DROP_TASK.md).
+You can modify an asynchronous task using [ALTER TASK](ALTER_TASK.md), or drop an asynchronous task using [DROP TASK](DROP_TASK.md).
 
 ## Syntax
 

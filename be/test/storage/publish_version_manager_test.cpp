@@ -22,7 +22,7 @@
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"

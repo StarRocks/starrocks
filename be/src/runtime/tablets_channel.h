@@ -21,13 +21,13 @@
 #include <sstream>
 #include <string>
 
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -63,7 +63,7 @@ public:
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
 
-    virtual void cancel() = 0;
+    virtual void cancel(const std::string& reason) = 0;
 
     virtual void abort() = 0;
 

@@ -18,6 +18,8 @@ displayed_sidebar: docs
 
 - 用户可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 查看拥有的角色，可以通过[SELECT CURRENT_ROLE](../../sql-functions/utility-functions/current_role.md) 查看当前激活的角色。
 
+- 激活的角色会影响所有权限检查,包括对 `information_schema` 系统视图的查询。例如,执行 `SET ROLE role1` 后,查询 `SELECT * FROM information_schema.tables` 将只返回通过 `role1` 可访问的表。这确保了基于角色的访问控制在所有系统目录和元数据查询中得到一致应用。
+
 ## 语法
 
 ```SQL

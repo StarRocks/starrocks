@@ -14,8 +14,8 @@
 
 #include "storage/rowset/metadata_cache.h"
 
+#include "base/container/lru_cache.h"
 #include "storage/rowset/rowset.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 

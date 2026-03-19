@@ -274,6 +274,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
+    // The time when canTxnFinish() first returns true. -1 means unset.
+    private volatile long readyToFinishTime = -1;
 
     // The time of first commit attempt, i.e, the end time when ingestion write is completed.
     // Measured in milliseconds since epoch.
@@ -367,7 +369,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
 
-    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+    private final ReentrantReadWriteLock txnLock;
 
     public void writeLock() {
         txnLock.writeLock().lock();
@@ -408,6 +410,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
 
         this.callbackIdList = Lists.newArrayList();
+        this.txnLock = new ReentrantReadWriteLock(true);
     }
 
     public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
@@ -439,6 +442,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+        this.txnLock = new ReentrantReadWriteLock(true);
     }
 
     public TransactionState(long transactionId,
@@ -472,6 +476,71 @@ public class TransactionState implements Writable, GsonPreProcessable {
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+        this.txnLock = new ReentrantReadWriteLock(true);
+    }
+
+    public TransactionState(TransactionState txnState) {
+        this.dbId = txnState.dbId;
+        this.tableIdList = txnState.tableIdList;
+        this.transactionId = txnState.transactionId;
+        this.label = txnState.label;
+        this.requestId = txnState.requestId;
+        this.idToTableCommitInfos = deepCopyIdToTableCommitInfos(txnState.idToTableCommitInfos);
+        this.txnCoordinator = txnState.txnCoordinator;
+        this.transactionStatus = txnState.transactionStatus;
+        this.sourceType = txnState.sourceType;
+        this.prepareTime = txnState.prepareTime;
+        this.preparedTime = txnState.preparedTime;
+        this.commitTime = txnState.commitTime;
+        this.finishTime = txnState.finishTime;
+        this.reason = txnState.reason;
+        this.globalTransactionId = txnState.globalTransactionId;
+        this.newFinish = txnState.newFinish;
+        this.finishState = txnState.finishState;
+        this.errorReplicas = txnState.errorReplicas;
+        this.tabletCommitInfos = txnState.tabletCommitInfos;
+        this.unknownReplicas = txnState.unknownReplicas;
+        this.useCombinedTxnLog = txnState.useCombinedTxnLog;
+        this.loadIds = txnState.loadIds;
+        this.latch = txnState.latch;
+        this.publishVersionTasks = txnState.publishVersionTasks;
+        this.hasSendTask = txnState.hasSendTask;
+        this.publishVersionTime = txnState.publishVersionTime;
+        this.publishVersionFinishTime = txnState.publishVersionFinishTime;
+        this.writeEndTimeMs = txnState.writeEndTimeMs;
+        this.writeDurationMs = txnState.writeDurationMs;
+        this.allowCommitTimeMs = txnState.allowCommitTimeMs;
+        this.callbackId = txnState.callbackId;
+        this.callbackIdList = txnState.callbackIdList;
+        this.timeoutMs = txnState.timeoutMs;
+        this.preparedTimeoutMs = txnState.preparedTimeoutMs;
+        this.txnCommitAttachment = txnState.txnCommitAttachment;
+        this.warehouseId = txnState.warehouseId;
+        this.computeResource = txnState.computeResource;
+        this.loadedTblPartitionIndexes = txnState.loadedTblPartitionIndexes;
+        this.errMsg = txnState.errMsg;
+        this.lastErrTimeMs = txnState.lastErrTimeMs;
+        this.finishChecker = txnState.finishChecker;
+        this.txnSpan = txnState.txnSpan;
+        this.traceParent = txnState.traceParent;
+        this.tableToPartitionNameToTPartition = txnState.tableToPartitionNameToTPartition;
+        this.tabletIdToTTabletLocation = txnState.tabletIdToTTabletLocation;
+        this.tableToCreatedPartitionNames = txnState.tableToCreatedPartitionNames;
+        this.isCreatePartitionFailed = txnState.isCreatePartitionFailed;
+        this.txnLock = txnState.txnLock;
+    }
+
+    private Map<Long, TableCommitInfo> deepCopyIdToTableCommitInfos(Map<Long, TableCommitInfo> tableCommitInfos) {
+        Map<Long, TableCommitInfo> copiedTableCommitInfos = Maps.newHashMap();
+        if (tableCommitInfos == null) {
+            return copiedTableCommitInfos;
+        }
+
+        for (Map.Entry<Long, TableCommitInfo> tableCommitInfoEntry : tableCommitInfos.entrySet()) {
+            copiedTableCommitInfos.put(tableCommitInfoEntry.getKey(),
+                    tableCommitInfoEntry.getValue() == null ? null : new TableCommitInfo(tableCommitInfoEntry.getValue()));
+        }
+        return copiedTableCommitInfos;
     }
 
     public void addCallbackId(long callbackId) {
@@ -582,6 +651,26 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public long getPublishVersionFinishTime() {
         return this.publishVersionFinishTime;
+    }
+
+    public long getReadyToFinishTime() {
+        return this.readyToFinishTime;
+    }
+
+    public void setReadyToFinishTimeIfUnset() {
+        setReadyToFinishTimeIfUnset(System.currentTimeMillis());
+    }
+
+    /**
+     * Sets readyToFinishTime to the given {@code timestamp} if it has not been set yet.
+     * Use this overload when the logical "ready" moment already has a known timestamp
+     * (e.g. {@code publishVersionFinishTime}) to avoid capturing the current daemon-loop
+     * iteration time, which would inflate publishCanFinishLatencyMs.
+     */
+    public void setReadyToFinishTimeIfUnset(long timestamp) {
+        if (this.readyToFinishTime == -1) {
+            this.readyToFinishTime = timestamp;
+        }
     }
 
     public boolean hasSendTask() {
@@ -736,16 +825,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
             if (callback != null) {
                 switch (transactionStatus) {
                     case ABORTED:
-                        callback.afterAborted(this, txnOperated, txnStatusChangeReason);
+                        callback.afterAborted(this, txnStatusChangeReason);
                         break;
                     case COMMITTED:
-                        callback.afterCommitted(this, txnOperated);
+                        callback.afterCommitted(this);
                         break;
                     case PREPARED:
-                        callback.afterPrepared(this, txnOperated);
+                        callback.afterPrepared(this);
                         break;
                     case VISIBLE:
-                        callback.afterVisible(this, txnOperated);
+                        callback.afterVisible(this);
                         break;
                     default:
                         break;
@@ -974,7 +1063,12 @@ public class TransactionState implements Writable, GsonPreProcessable {
             if (publishVersionFinishTime > publishVersionTime) {
                 sb.append(", publish rpc cost: ").append(publishVersionFinishTime - publishVersionTime).append("ms");
             }
-            if (finishTime > publishVersionFinishTime) {
+            if (readyToFinishTime != -1 && readyToFinishTime > publishVersionFinishTime) {
+                sb.append(", publish can finish cost: ").append(readyToFinishTime - publishVersionFinishTime).append("ms");
+            }
+            if (readyToFinishTime != -1 && finishTime > readyToFinishTime) {
+                sb.append(", publish ack cost: ").append(finishTime - readyToFinishTime).append("ms");
+            } else if (finishTime > publishVersionFinishTime) {
                 sb.append(", finish txn cost: ").append(finishTime - publishVersionFinishTime).append("ms");
             }
         }
@@ -1160,6 +1254,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         boolean ret = finishChecker.finished(finishState);
         if (ret) {
             txnSpan.addEvent("check_ok");
+            setReadyToFinishTimeIfUnset();
         }
         return ret;
     }

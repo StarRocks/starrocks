@@ -14,14 +14,15 @@
 
 #include "util/brpc_stub_cache.h"
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
 #endif
 #include "base/failpoint/fail_point.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -103,7 +104,7 @@ void BrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
     _stub_map.erase(endpoint);
 }
 
-BrpcStubCache::StubPool::StubPool() : _idx(-1) {
+BrpcStubCache::StubPool::StubPool() {
     _stubs.reserve(config::brpc_max_connections_per_server);
 }
 

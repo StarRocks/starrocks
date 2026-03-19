@@ -22,13 +22,9 @@
 #include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
-#include "exec/query_cache/owner_info.h"
-#include "storage/variant_tuple.h"
-#include "types/type_descriptor.h"
+#include "common/query_cache_owner_info.h"
 
 namespace starrocks {
-class ChunkPB;
-
 class DatumTuple;
 class ChunkExtraData;
 using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
@@ -242,8 +238,6 @@ public:
     // Return the data of n-th row.
     // This method is relatively slow and mainly used for unit tests now.
     DatumTuple get(size_t n) const;
-
-    VariantTuple get(size_t n, const std::vector<uint32_t>& column_indexes) const;
 
     void set_delete_state(DelCondSatisfied state) { _delete_state = state; }
 

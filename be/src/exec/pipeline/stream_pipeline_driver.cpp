@@ -99,7 +99,7 @@ StatusOr<DriverState> StreamPipelineDriver::process(RuntimeState* runtime_state,
                 }
 
                 if (return_status.ok() && maybe_chunk.value()) {
-                    auto chunk_value = maybe_chunk.value();
+                    const auto& chunk_value = maybe_chunk.value();
                     if (chunk_value->num_rows() > 0) {
                         size_t row_num = chunk_value->num_rows();
                         total_rows_moved += row_num;
@@ -238,7 +238,7 @@ StatusOr<DriverState> StreamPipelineDriver::_handle_finish_operators(RuntimeStat
             }
 
             if (return_status.ok() && maybe_chunk.value()) {
-                auto chunk_value = maybe_chunk.value();
+                const auto& chunk_value = maybe_chunk.value();
                 if (chunk_value->num_rows() > 0) {
                     size_t row_num = chunk_value->num_rows();
                     total_rows_moved += row_num;

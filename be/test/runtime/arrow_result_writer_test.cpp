@@ -20,12 +20,12 @@
 
 #include <string>
 
+#include "common/runtime_profile.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

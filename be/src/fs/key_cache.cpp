@@ -23,7 +23,8 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -131,9 +132,11 @@ KeyCache& KeyCache::instance() {
 }
 
 KeyCache::KeyCache() {
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_unwrapped",
+                                                                  &encryption_keys_unwrapped);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_in_cache",
+                                                                  &encryption_keys_in_cache);
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,
@@ -334,6 +337,7 @@ std::string KeyCache::to_string() const {
     std::stringstream ss;
     std::lock_guard lg(_lock);
     std::vector<EncryptionKey*> ordered;
+    ordered.reserve(_identifier_to_keys.size());
     for (const auto& e : _identifier_to_keys) {
         ordered.push_back(e.second.get());
     }

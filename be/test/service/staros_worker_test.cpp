@@ -23,7 +23,6 @@
 #include <condition_variable>
 #include <functional>
 
-#include "common/config.h"
 #include "common/shutdown_hook.h"
 
 namespace starrocks {

@@ -36,3 +36,6 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_async_write_parquet_file/${uuid
 0
 
 -- !result
+CLEANUP {
+    admin disable failpoint 'async_flush_output_stream_sleep';
+} END CLEANUP

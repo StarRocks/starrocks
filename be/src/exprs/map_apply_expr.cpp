@@ -73,7 +73,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
             // empty null map with non-empty elements
-            auto data_mut = std::move(*data_column).mutate();
+            auto data_mut = data_column->clone();
             data_mut->empty_null_in_complex_column(
                     nullable->null_column()->immutable_data(),
                     down_cast<MapColumn*>(data_mut.get())->offsets_column()->immutable_data());
@@ -82,7 +82,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
             } else {
-                input_null_map = ColumnHelper::as_column<NullColumn>(std::move(*nullable->null_column()).mutate());
+                input_null_map = ColumnHelper::as_column<NullColumn>(nullable->null_column()->clone());
             }
         }
         DCHECK(data_column->is_map());
@@ -155,9 +155,9 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  map_col->keys_column()->size()));
     }
 
-    auto res_map = MapColumn::create(
-            std::move(*map_col->keys_column()).mutate(), std::move(*map_col->values_column()).mutate(),
-            ColumnHelper::as_column<UInt32Column>(std::move(*input_map->offsets_column()).mutate()));
+    auto res_map = MapColumn::create(std::move(*map_col->keys_column()).mutate(),
+                                     std::move(*map_col->values_column()).mutate(),
+                                     ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
         down_cast<MapColumn*>(res_map->as_mutable_raw_ptr())->remove_duplicated_keys();

@@ -320,7 +320,7 @@ public:
         this->init_state_if_needed(ctx, columns, state);
 
         const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
-        const auto& column_data = column.get_proxy_data();
+        const auto column_data = column.immutable_data();
         // use mem_pool to hold the slice's data, otherwise after chunk is processed, the memory of slice used is gone
         size_t element_size = column_data[row_num].get_size();
         uint8_t* pos = ctx->mem_pool()->allocate(element_size);
@@ -408,7 +408,7 @@ public:
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
         const auto& src_column = *down_cast<const BinaryColumn*>(src[0].get());
-        const auto& src_data = src_column.get_proxy_data();
+        const auto src_data = src_column.immutable_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             // [rate, 1, element ith size, element ith data]

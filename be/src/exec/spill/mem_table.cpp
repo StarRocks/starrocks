@@ -20,13 +20,13 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 
@@ -117,7 +117,7 @@ StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(b
     if (shared) {
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
-        return SpillInputStream::as_stream(std::move(_chunks), _spiller);
+        return SpillInputStream::as_stream(_chunks, _spiller);
     }
 }
 

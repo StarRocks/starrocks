@@ -24,11 +24,11 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/dispatch.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
 #include "types/type_descriptor.h"
-#include "util/dispatch.h"
 
 namespace starrocks {
 
@@ -125,7 +125,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
@@ -199,7 +199,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
@@ -350,7 +350,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
         MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
@@ -456,7 +456,7 @@ private:
         int size = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
         }
         int col_size = columns.size();
         auto res = ColumnHelper::create_column(this->type(), true);

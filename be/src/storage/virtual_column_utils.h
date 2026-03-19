@@ -17,6 +17,7 @@
 #include <string_view>
 
 #include "common/status.h"
+#include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -29,9 +30,12 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
 class VirtualColumnFactory {
 public:
     struct Options {
-        int32_t tablet_id;
-        int32_t segment_id;
-        int32_t num_rows;
+        int64_t tablet_id;
+        Slice rowset_id;
+        int64_t segment_id;
+        int32_t rss_id;
+        int32_t dynamic_rss_id;
+        int64_t num_rows;
     };
     static StatusOr<ColumnIterator*> create_virtual_column_iterator(const Options& options,
                                                                     const std::string_view col_name);

@@ -18,15 +18,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -474,6 +477,71 @@ public class LakeCompactionMaxParallelTest extends StarRocksTestBase {
                 "PROPERTIES('lake_compaction_max_parallel' = '9')", DB_NAME, tableName);
         LakeTable table = createTable(createSql);
         Assertions.assertEquals(9, table.getLakeCompactionMaxParallel());
+    }
+
+    // ===========================================
+    // Tests for SHOW CREATE TABLE - lake_compaction_max_parallel visibility
+    // Only show when value differs from Config.lake_compaction_max_parallel_default
+    // ===========================================
+
+    @Test
+    public void testShowCreateTableWithNonDefaultLakeCompactionMaxParallel() throws Exception {
+        int nonDefaultValue = Config.lake_compaction_max_parallel_default + 1;
+        String tableName = "t_show_create_non_default";
+        String createSql = String.format(
+                "CREATE TABLE %s.%s (c0 INT) " +
+                "PRIMARY KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                "PROPERTIES('lake_compaction_max_parallel' = '%d')", DB_NAME, tableName, nonDefaultValue);
+        createTable(createSql);
+
+        ShowCreateTableStmt showStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW CREATE TABLE " + tableName, connectContext);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showStmt, connectContext);
+        String createTableSql = resultSet.getResultRows().get(0).get(1);
+
+        Assertions.assertTrue(createTableSql.contains("\"lake_compaction_max_parallel\" = \"" + nonDefaultValue + "\""),
+                "SHOW CREATE TABLE should show lake_compaction_max_parallel when it is not default: " + createTableSql);
+    }
+
+    @Test
+    public void testShowCreateTableWithDefaultLakeCompactionMaxParallel() throws Exception {
+        int defaultValue = Config.lake_compaction_max_parallel_default;
+        String tableName = "t_show_create_default";
+        String createSql = String.format(
+                "CREATE TABLE %s.%s (c0 INT) " +
+                "PRIMARY KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                "PROPERTIES('lake_compaction_max_parallel' = '%d')", DB_NAME, tableName, defaultValue);
+        createTable(createSql);
+
+        ShowCreateTableStmt showStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW CREATE TABLE " + tableName, connectContext);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showStmt, connectContext);
+        String createTableSql = resultSet.getResultRows().get(0).get(1);
+
+        Assertions.assertFalse(createTableSql.contains("lake_compaction_max_parallel"),
+                "SHOW CREATE TABLE should NOT show lake_compaction_max_parallel when it equals default ("
+                        + defaultValue + "): " + createTableSql);
+    }
+
+    @Test
+    public void testShowCreateTableWithZeroLakeCompactionMaxParallel() throws Exception {
+        String tableName = "t_show_create_zero";
+        String createSql = String.format(
+                "CREATE TABLE %s.%s (c0 INT) " +
+                "PRIMARY KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                "PROPERTIES('lake_compaction_max_parallel' = '0')", DB_NAME, tableName);
+        createTable(createSql);
+
+        ShowCreateTableStmt showStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW CREATE TABLE " + tableName, connectContext);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showStmt, connectContext);
+        String createTableSql = resultSet.getResultRows().get(0).get(1);
+
+        Assertions.assertTrue(createTableSql.contains("\"lake_compaction_max_parallel\" = \"0\""),
+                "SHOW CREATE TABLE should show lake_compaction_max_parallel when it is 0 (disabled): " + createTableSql);
     }
 }
 

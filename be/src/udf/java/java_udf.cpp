@@ -108,6 +108,49 @@ static JNINativeMethod java_native_methods[] = {
 };
 #pragma GCC diagnostic pop
 
+JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx) {
+    if (ctx == nullptr) {
+        return nullptr;
+    }
+    return reinterpret_cast<JavaUDAFContext*>(ctx->get_function_state(FunctionContext::THREAD_LOCAL));
+}
+
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx) {
+    DCHECK(ctx != nullptr);
+    DCHECK(udaf_ctx != nullptr);
+    auto* old_ctx = get_java_udaf_context(ctx);
+    DCHECK(old_ctx == nullptr) << "duplicate Java UDAF context attach";
+    if (old_ctx != nullptr) {
+        delete old_ctx;
+    }
+    ctx->set_function_state(FunctionContext::THREAD_LOCAL, udaf_ctx.release());
+}
+
+void clear_java_udaf_states(FunctionContext* ctx) {
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    if (udaf_ctx == nullptr || udaf_ctx->states == nullptr) {
+        return;
+    }
+
+    auto env = JVMFunctionHelper::getInstance().getEnv();
+    udaf_ctx->states->clear(ctx, env);
+}
+
+void destroy_java_udaf_context(FunctionContext* ctx) {
+    if (ctx == nullptr) {
+        return;
+    }
+
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    if (udaf_ctx == nullptr) {
+        return;
+    }
+
+    clear_java_udaf_states(ctx);
+    ctx->set_function_state(FunctionContext::THREAD_LOCAL, nullptr);
+    delete udaf_ctx;
+}
+
 StatusOr<jobject> MapMeta::newLocalInstance(jobject keys, jobject values) const {
     JNIEnv* env = getJNIEnv();
     return env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
@@ -214,10 +257,10 @@ void JVMFunctionHelper::_init() {
     // init list meta
     auto list_clazz = JNI_FIND_CLASS("java/util/List");
     DCHECK(list_clazz);
-    _list_meta.list_class = new JVMClass(std::move(list_clazz));
+    _list_meta.list_class = new JVMClass(list_clazz);
     auto array_list_clazz = JNI_FIND_CLASS("java/util/ArrayList");
     DCHECK(array_list_clazz);
-    _list_meta.array_list_class = new JVMClass(std::move(array_list_clazz));
+    _list_meta.array_list_class = new JVMClass(array_list_clazz);
 
     SET_METHOD_ID(_list_meta.list_get, list_clazz, "get", "(I)Ljava/lang/Object;");
     SET_METHOD_ID(_list_meta.list_size, list_clazz, "size", "()I");
@@ -226,7 +269,7 @@ void JVMFunctionHelper::_init() {
     // init immutable map meta
     auto immutable_map_clazz = JNI_FIND_CLASS("com/starrocks/udf/ImmutableMap");
     DCHECK(immutable_map_clazz != nullptr);
-    _map_meta.immutable_map_class = new JVMClass(std::move(immutable_map_clazz));
+    _map_meta.immutable_map_class = new JVMClass(immutable_map_clazz);
     auto map_clazz = JNI_FIND_CLASS("java/util/Map");
     DCHECK(map_clazz);
     _map_meta.map_class = new JVMClass(map_clazz);
@@ -235,7 +278,7 @@ void JVMFunctionHelper::_init() {
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
-    _function_states_clazz = new JVMClass(std::move(loaded_clazz));
+    _function_states_clazz = new JVMClass(loaded_clazz);
 }
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {
@@ -375,10 +418,13 @@ void JVMFunctionHelper::batch_update_single(AggBatchCallStub* stub, int state, j
 
 void JVMFunctionHelper::batch_update(FunctionContext* ctx, jobject udaf, jobject update, jobject states, jobject* input,
                                      int cols) {
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    DCHECK(udaf_ctx != nullptr);
+    DCHECK(udaf_ctx->states != nullptr);
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
-    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, ctx->udaf_ctxs()->states->handle(),
-                               states, input_arr);
+    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update, udaf, update, udaf_ctx->states->handle(), states,
+                               input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
@@ -392,10 +438,13 @@ void JVMFunctionHelper::batch_update_state(FunctionContext* ctx, jobject udaf, j
 
 void JVMFunctionHelper::batch_update_if_not_null(FunctionContext* ctx, jobject udaf, jobject update, jobject states,
                                                  jobject* input, int cols) {
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    DCHECK(udaf_ctx != nullptr);
+    DCHECK(udaf_ctx->states != nullptr);
     jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
     LOCAL_REF_GUARD(input_arr);
-    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_if_not_null, udaf, update,
-                               ctx->udaf_ctxs()->states->handle(), states, input_arr);
+    _env->CallStaticVoidMethod(_udf_helper_class, _batch_update_if_not_null, udaf, update, udaf_ctx->states->handle(),
+                               states, input_arr);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
@@ -442,12 +491,18 @@ Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, job
 
 // convert UDAF ctx to jobject
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
-    auto* states = ctx->udaf_ctxs()->states.get();
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    DCHECK(udaf_ctx != nullptr);
+    DCHECK(udaf_ctx->states != nullptr);
+    auto* states = udaf_ctx->states.get();
     return states->get_state(ctx, _env, state);
 }
 
 jobject JVMFunctionHelper::convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids) {
-    auto* states = ctx->udaf_ctxs()->states.get();
+    auto* udaf_ctx = get_java_udaf_context(ctx);
+    DCHECK(udaf_ctx != nullptr);
+    DCHECK(udaf_ctx->states != nullptr);
+    auto* states = udaf_ctx->states.get();
     return states->get_state(ctx, _env, state_ids);
 }
 
@@ -735,6 +790,22 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
     return Status::OK();
 }
 
+void ClassAnalyzer::strip_jni_generic_types(std::string* sign) {
+    std::string cleaned;
+    cleaned.reserve(sign->size());
+    int depth = 0;
+    for (char c : *sign) {
+        if (c == '<') {
+            depth++;
+        } else if (c == '>') {
+            depth--;
+        } else if (depth == 0) {
+            cleaned += c;
+        }
+    }
+    *sign = std::move(cleaned);
+}
+
 Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std::string* sign) {
     DCHECK(clazz != nullptr);
     DCHECK(sign != nullptr);
@@ -765,6 +836,14 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     *sign = helper.to_string(result_sign);
+    // Strip generic type parameters from signature to produce standard JNI method descriptor.
+    // Java's getGenericParameterTypes() may produce signatures with generic info that:
+    // 1. JNI GetMethodID cannot match against the erased method descriptor, returning NULL.
+    // 2. get_udaf_method_desc() uses exact string matching (e.g. type == "java/util/List")
+    //    to populate method_desc. Generic signatures like "java/util/List<java/lang/String>"
+    //    would fail to match, causing missing MethodTypeDescriptor entries and subsequent
+    //    out-of-bounds access in process()/update()/merge() when indexing method_desc[j+1].
+    strip_jni_generic_types(sign);
     return Status::OK();
 }
 
@@ -821,16 +900,42 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         if (sign[i] == '(' || sign[i] == ')') {
             continue;
         }
+        // Handle array types
         if (sign[i] == '[') {
-            while (sign[i] != ';') {
-                i++;
+            // Consume all leading '[' (for multi-dimensional arrays)
+            while (i < sign.size() && sign[i] == '[') {
+                ++i;
             }
+
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid array descriptor '{}': missing element type", sign));
+            }
+
+            // Handle element type: object array 'L...;' or primitive type (single char)
+            if (sign[i] == 'L') {
+                // Object array: [L<classname>;
+                ++i; // Skip 'L'
+                while (i < sign.size() && sign[i] != ';') {
+                    ++i;
+                }
+                if (i >= sign.size()) {
+                    return Status::InternalError(
+                            fmt::format("Invalid object array descriptor '{}': missing ';'", sign));
+                }
+                // i now points to ';', loop will increment it
+            }
+            // For primitive arrays ([I, [J, etc.), the single char is already at the right position
+
             desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
+            continue;
         }
         if (sign[i] == 'L') {
             int st = i + 1;
-            while (sign[i] != ';') {
+            while (i < sign.size() && sign[i] != ';') {
                 i++;
+            }
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid object type descriptor '{}': missing ';'", sign));
             }
             std::string type = sign.substr(st, i - st);
             if (false) {

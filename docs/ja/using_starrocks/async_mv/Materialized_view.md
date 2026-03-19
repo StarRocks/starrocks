@@ -90,8 +90,14 @@ StarRocksの非同期マテリアライズドビューは、以下のベース�
 
 - StarRocksの内部テーブル（すべてのStarRocksテーブルタイプがサポートされています）
 - [外部カタログ](./feature-support-asynchronous-materialized-views.md#materialized-views-on-external-catalogs)のテーブル
-- 既存の非同期マテリアライズドビュー（v2.5以降）
-- 既存のビュー（v3.1以降）
+  - Hive Catalog
+  - Hudi Catalog
+  - Iceberg Catalog
+  - JDBC Catalog
+  - Paimon Catalog
+  - DeltaLake Catalog
+- 既存の非同期マテリアライズドビュー
+- 既存のビュー
 
 ### 始める前に
 

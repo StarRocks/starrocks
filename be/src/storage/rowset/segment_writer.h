@@ -44,7 +44,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"

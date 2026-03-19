@@ -1,0 +1,96 @@
+-- name: test_auto_partition_varchar_hyphen_collision
+CREATE DATABASE test_auto_part_collision_${uuid0};
+-- result:
+-- !result
+USE test_auto_part_collision_${uuid0};
+-- result:
+-- !result
+CREATE TABLE position_v6 (
+  `group_id` varchar(100) NOT NULL,
+  `position_id` bigint(20) NOT NULL,
+  `location_country` varchar(100) NULL,
+  `job_function` varchar(100) NULL,
+  `business_unit` varchar(100) NULL,
+  `position_type` varchar(50) NULL
+) ENGINE=OLAP
+PRIMARY KEY(`group_id`, `position_id`)
+PARTITION BY (`group_id`)
+DISTRIBUTED BY HASH(`position_id`) BUCKETS 2
+ORDER BY(`location_country`, `job_function`, `business_unit`)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO position_v6 (group_id, position_id, position_type, location_country, job_function, business_unit) VALUES
+  ('eightfolddemo-hiring-test.com', 1001, 'role', 'US', 'eng', 'hr'),
+  ('eightfolddemo-hiringtest.com', 1002, 'role', 'US', 'eng', 'hr'),
+  ('eightfolddemo-hiringtest.com', 1003, 'role', 'US', 'eng', 'hr'),
+  ('eightfolddemo-hiring-test.com', 1004, 'role', 'US', 'eng', 'hr');
+-- result:
+-- !result
+SELECT count(*) FROM position_v6;
+-- result:
+4
+-- !result
+SELECT group_id, position_id FROM position_v6 ORDER BY position_id;
+-- result:
+eightfolddemo-hiring-test.com	1001
+eightfolddemo-hiringtest.com	1002
+eightfolddemo-hiringtest.com	1003
+eightfolddemo-hiring-test.com	1004
+-- !result
+SELECT count(distinct group_id) FROM position_v6;
+-- result:
+2
+-- !result
+DROP DATABASE test_auto_part_collision_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_auto_partition_colon_space_collision
+CREATE DATABASE test_auto_part_collision_${uuid0};
+-- result:
+-- !result
+USE test_auto_part_collision_${uuid0};
+-- result:
+-- !result
+CREATE TABLE collision_tbl (
+  `key_col` varchar(100) NOT NULL,
+  `val` int NOT NULL
+) ENGINE=OLAP
+PRIMARY KEY(`key_col`)
+PARTITION BY (`key_col`)
+DISTRIBUTED BY HASH(`key_col`) BUCKETS 2
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO collision_tbl VALUES
+  ('ab', 1),
+  ('a-b', 2),
+  ('a:b', 3),
+  ('a b', 4);
+-- result:
+-- !result
+SELECT count(*) FROM collision_tbl;
+-- result:
+4
+-- !result
+SELECT * FROM collision_tbl ORDER BY val;
+-- result:
+ab	1
+a-b	2
+a:b	3
+a b	4
+-- !result
+INSERT INTO collision_tbl VALUES ('a-b', 5);
+-- result:
+-- !result
+SELECT * FROM collision_tbl WHERE key_col = 'a-b' ORDER BY val;
+-- result:
+a-b	5
+-- !result
+DROP DATABASE test_auto_part_collision_${uuid0} FORCE;
+-- result:
+-- !result

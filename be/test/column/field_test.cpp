@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "common/storage_aggregate_type.h"
 #include "runtime/agg_state_desc.h"
-#include "storage/aggregate_type.h"
 
 namespace starrocks {
 

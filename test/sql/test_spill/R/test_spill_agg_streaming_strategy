@@ -112,3 +112,7 @@ select count(distinct c0), c1 from t2 group by c1 order by c1 desc limit 10;
 admin disable failpoint 'spill_always_selection_streaming';
 -- result:
 -- !result
+CLEANUP {
+    admin disable failpoint 'spill_always_streaming';
+    admin disable failpoint 'spill_always_selection_streaming';
+} END CLEANUP

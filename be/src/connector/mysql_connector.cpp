@@ -17,6 +17,8 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
+#include "runtime/descriptors_ext.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {

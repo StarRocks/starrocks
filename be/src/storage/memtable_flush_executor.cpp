@@ -36,6 +36,9 @@
 
 #include <memory>
 
+#include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"

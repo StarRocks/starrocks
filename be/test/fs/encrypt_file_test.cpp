@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "io/core/array_input_stream.h"
+
 namespace starrocks {
 
 class EncryptionTest : public testing::Test {
@@ -47,6 +49,17 @@ TEST_F(EncryptionTest, WrapKeyAES128) {
     auto ret = unwrap_key(AES_128, _plain_kek, encrypted_key);
     ASSERT_TRUE(ret.ok());
     ASSERT_EQ(_plain_key, ret.value());
+}
+
+TEST_F(EncryptionTest, EncryptSeekableInputStreamIsEncrypted) {
+    std::string content = "0123456789";
+    auto stream = std::make_unique<io::ArrayInputStream>(content.data(), content.size());
+    ASSERT_FALSE(stream->is_encrypted());
+
+    std::unique_ptr<io::SeekableInputStream> seekable_stream = std::move(stream);
+    EncryptSeekableInputStream encrypted(std::move(seekable_stream),
+                                         {EncryptionAlgorithmPB::AES_128, "0000000000000000"});
+    ASSERT_TRUE(encrypted.is_encrypted());
 }
 
 } // namespace starrocks

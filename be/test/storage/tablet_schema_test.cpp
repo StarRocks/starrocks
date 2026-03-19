@@ -183,8 +183,8 @@ TEST(TabletSchemaTest, test_primary_key_encoding_type_fallback) {
     c1->set_is_key(true);
 
     TabletSchema tablet_schema(schema_pb);
-    ASSERT_TRUE(tablet_schema.has_primary_key_encoding_type());
-    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1);
+    ASSERT_TRUE(tablet_schema.has_valid_primary_key_encoding_type());
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 }
 
 TEST(TabletSchemaTest, test_primary_key_encoding_type_round_trip) {
@@ -201,7 +201,7 @@ TEST(TabletSchemaTest, test_primary_key_encoding_type_round_trip) {
     c1->set_is_key(true);
 
     TabletSchema tablet_schema(schema_pb);
-    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
 
     TabletSchemaPB persisted_schema_pb;
     tablet_schema.to_schema_pb(&persisted_schema_pb);
@@ -209,7 +209,133 @@ TEST(TabletSchemaTest, test_primary_key_encoding_type_round_trip) {
     ASSERT_EQ(persisted_schema_pb.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     TabletSchema reloaded_schema(persisted_schema_pb);
-    ASSERT_EQ(reloaded_schema.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    ASSERT_EQ(reloaded_schema.primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+}
+
+TEST(TabletSchemaTest, test_primary_key_encoding_type_persist_none_for_non_pk_table) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_schema_version(1);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    TabletSchema tablet_schema(schema_pb);
+    ASSERT_FALSE(tablet_schema.has_valid_primary_key_encoding_type());
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE);
+
+    TabletSchemaPB persisted_schema_pb;
+    tablet_schema.to_schema_pb(&persisted_schema_pb);
+    ASSERT_TRUE(persisted_schema_pb.has_primary_key_encoding_type());
+    ASSERT_EQ(persisted_schema_pb.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE);
+}
+
+TEST(TabletSchemaTest, test_primary_key_encoding_type_or_error_for_non_pk_table) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_schema_version(1);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    TabletSchema tablet_schema(schema_pb);
+    auto encoding_type = tablet_schema.primary_key_encoding_type_or_error();
+    ASSERT_FALSE(encoding_type.ok());
+    ASSERT_TRUE(encoding_type.status().is_internal_error());
+}
+
+TEST(TabletSchemaTest, test_primary_key_encoding_type_invalid_enum_for_pk_table) {
+    // Build a valid TabletSchemaPB with a known encoding type first.
+    TabletSchemaPB valid_pb;
+    valid_pb.set_keys_type(PRIMARY_KEYS);
+    valid_pb.set_num_short_key_columns(1);
+    valid_pb.set_schema_version(1);
+    valid_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1);
+
+    auto c1 = valid_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    // Serialize, then tamper the encoding_type field to an unknown enum value.
+    // In proto2, the deserializer moves unknown enum values to unknown fields,
+    // so has_primary_key_encoding_type() returns false after parsing.
+    std::string serialized;
+    ASSERT_TRUE(valid_pb.SerializeToString(&serialized));
+
+    // Locate the primary_key_encoding_type field (field 16, varint) and replace
+    // its value with 9999. Field 16 tag = (16 << 3) | 0 = 0x80 0x01.
+    // We rebuild the message with the tampered field to avoid byte-offset fragility.
+    TabletSchemaPB tmp_pb;
+    tmp_pb.set_keys_type(PRIMARY_KEYS);
+    tmp_pb.set_num_short_key_columns(1);
+    tmp_pb.set_schema_version(1);
+    auto c2 = tmp_pb.add_column();
+    c2->set_unique_id(1);
+    c2->set_name("k1");
+    c2->set_type("BIGINT");
+    c2->set_is_key(true);
+    // Do NOT set primary_key_encoding_type — serialize without it, then manually
+    // append the field with an invalid varint value.
+    std::string base;
+    ASSERT_TRUE(tmp_pb.SerializeToString(&base));
+    // Append field 16, wire type 0 (varint), value 9999 (0x270F).
+    // Tag: (16 << 3) | 0 = 128 → varint 0x80 0x01
+    // Value 9999: varint 0x8F 0x4E
+    base.push_back(static_cast<char>(0x80));
+    base.push_back(static_cast<char>(0x01));
+    base.push_back(static_cast<char>(0x8F));
+    base.push_back(static_cast<char>(0x4E));
+
+    TabletSchemaPB schema_pb;
+    ASSERT_TRUE(schema_pb.ParseFromString(base));
+    // In proto2, the unknown enum value is not stored in the field.
+    ASSERT_FALSE(schema_pb.has_primary_key_encoding_type());
+
+    // For a PRIMARY_KEYS table without a recognized encoding type, TabletSchema
+    // falls back to V1 (compatibility with older schemas that predate the field).
+    TabletSchema tablet_schema(schema_pb);
+    ASSERT_EQ(tablet_schema.primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+}
+
+TEST(TabletSchemaTest, test_partial_schema_create_keeps_pk_encoding_type) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_schema_version(1);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("BIGINT");
+    c1->set_is_key(true);
+
+    auto c2 = schema_pb.add_column();
+    c2->set_unique_id(2);
+    c2->set_name("v1");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+
+    auto src_schema = TabletSchema::create(schema_pb);
+    ASSERT_NE(src_schema, nullptr);
+    auto partial_schema = TabletSchema::create(src_schema, {0, 1});
+    ASSERT_NE(partial_schema, nullptr);
+    ASSERT_EQ(partial_schema->primary_key_encoding_type(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+
+    TabletSchemaPB partial_pb;
+    partial_schema->to_schema_pb(&partial_pb);
+    ASSERT_TRUE(partial_pb.has_primary_key_encoding_type());
+    ASSERT_EQ(partial_pb.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 }
 
 } // namespace starrocks

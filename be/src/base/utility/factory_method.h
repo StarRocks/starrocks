@@ -20,6 +20,9 @@ namespace starrocks {
 template <typename Base, typename Derived>
 class FactoryMethod : public Base {
 public:
+    using Self = FactoryMethod<Base, Derived>;
+    Self& operator=(const Self&) = delete;
+
     template <typename... Args>
     FactoryMethod(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
@@ -28,9 +31,5 @@ public:
     static DerivedPtr create(Args&&... args) {
         return std::make_shared<Derived>(std::forward<Args>(args)...);
     }
-
-private:
-    using Self = FactoryMethod<Base, Derived>;
-    Self& operator=(const Self&) = delete;
 };
 } // namespace starrocks

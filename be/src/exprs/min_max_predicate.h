@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/expr.h"
-#include "exprs/runtime_filter.h"
+#include "runtime/runtime_filter.h"
 
 namespace starrocks {
 template <LogicalType Type>
@@ -75,7 +75,8 @@ public:
         // but they can not be compiled into SIMD instructions.
 
         // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
-        using ImmutableContainer = typename RunTimeColumnType<Type>::ImmContainer;
+        using ImmutableContainer = std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer,
+                                                      typename RunTimeColumnType<Type>::ImmContainer>;
         auto check_range = [](uint8_t* __restrict__ local_res, ImmutableContainer local_values, const size_t local_size,
                               const CppType min_value, const CppType max_value) {
             for (int i = 0; i < local_size; i++) {

@@ -19,15 +19,15 @@
 
 #include "column/chunk.h"
 #include "common/global_types.h"
-#include "exec/exec_node.h"
 #include "exec/olap_common.h"
+#include "exec/pipeline_node.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
-class DictDecodeNode final : public ExecNode {
+class DictDecodeNode final : public PipelineNode {
 public:
     DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
@@ -38,11 +38,6 @@ public:
     }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
-    Status prepare(RuntimeState* state) override;
-
-    Status open(RuntimeState* state) override;
-
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     void close(RuntimeState* state) override;
 

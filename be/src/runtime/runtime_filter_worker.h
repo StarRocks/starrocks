@@ -24,14 +24,15 @@
 #include <thread>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/ref_count_closure.h"
-#include "util/uid_util.h"
+#include "runtime/runtime_filter_serde.h"
 namespace starrocks {
 struct TypeDescriptor;
 
@@ -73,11 +74,7 @@ private:
     RuntimeState* _state;
 };
 
-struct SkewBroadcastRfMaterial {
-    LogicalType build_type;
-    bool eq_null;
-    ColumnPtr key_column;
-};
+using SkewBroadcastRfMaterial = RuntimeFilterSkewMaterial;
 
 class RuntimeFilterMergerStatus {
 public:

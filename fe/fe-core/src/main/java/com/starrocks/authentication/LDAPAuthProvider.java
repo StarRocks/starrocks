@@ -177,8 +177,11 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             baseDN = trim(baseDN, "'");
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
+            // Normalize username for case-insensitive LDAP search
+            // LDAP treats usernames as case-insensitive by default, aligning with Microsoft Active Directory
+            String normalizedUser = normalizeUsername(user);
             // Escapes special characters in user input to prevent LDAP injection
-            String safeUser = escapeLdapValue(user);
+            String safeUser = escapeLdapValue(normalizedUser);
             String searchFilter = "(" + ldapSearchFilter + "=" + safeUser + ")";
             ctx = new InitialDirContext(env);
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
@@ -240,5 +243,20 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         value = value.replace("|", "\\7c");
         value = value.replace("\\u0000", "\\00");
         return value;
+    }
+
+    /**
+     * Normalize username for case-insensitive matching with LDAP/Active Directory.
+     * LDAP treats usernames as case-insensitive by default, so we normalize to lowercase
+     * to ensure consistent identity mapping regardless of input casing.
+     *
+     * @param username the original username
+     * @return normalized username in lowercase
+     */
+    public static String normalizeUsername(String username) {
+        if (username == null) {
+            return null;
+        }
+        return username.toLowerCase();
     }
 }

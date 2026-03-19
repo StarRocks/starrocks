@@ -49,7 +49,7 @@ using SPWDistinctSinkOperatorFactoryPtr = std::shared_ptr<SpillablePartitionWise
 class SpillablePartitionWiseDistinctSourceOperator final : public SourceOperator {
 public:
     SpillablePartitionWiseDistinctSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                                 int32_t driver_sequence, const DistinctSourceOperatorPtr non_pw_agg,
+                                                 int32_t driver_sequence, DistinctSourceOperatorPtr non_pw_agg,
                                                  ConjugateOperatorPtr pw_agg)
             : SourceOperator(factory, id, "spillable_partitionwise_distinct_source", plan_node_id, false,
                              driver_sequence),

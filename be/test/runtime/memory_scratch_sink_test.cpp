@@ -53,7 +53,9 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exprs/expr.h"

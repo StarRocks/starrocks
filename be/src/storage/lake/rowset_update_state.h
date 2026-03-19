@@ -21,6 +21,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -53,12 +54,12 @@ struct AutoIncrementPartialUpdateState {
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
-    bool skip_rewrite;
+    bool skip_rewrite{false};
 
-    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
         this->schema = std::move(modified_schema);
@@ -86,7 +87,8 @@ class SegmentPKIterator {
 public:
     SegmentPKIterator() = default;
     ~SegmentPKIterator() { close(); }
-    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
+    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
+                PrimaryKeyEncodingType encoding_type);
     void next();
     bool done();
     Status status();
@@ -128,6 +130,8 @@ private:
     ChunkUniquePtr _pk_column_chunk;
     // For no lazy load, we can load whole pk column and encode at once.
     MutableColumnPtr _standalone_pk_column;
+    // The encoding type of primary key.
+    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;
@@ -190,6 +194,8 @@ public:
     const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
+
+    const OlapReaderStatistics& stats() const { return _stats; }
 
 private:
     // Load segment state

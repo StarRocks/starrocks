@@ -14,15 +14,17 @@
 
 #pragma once
 
+#include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/spiller_factory.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
+class Chunk;
 class ChunkIterator;
 class LoadChunkSpiller;
 class LoadSpillPipelineMergeTask;

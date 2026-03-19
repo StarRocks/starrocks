@@ -234,7 +234,7 @@ private:
     const BlockCompressionCodec* _compress_codec = nullptr;
 
     std::unique_ptr<WritableFile> _file;
-    WriterState _writer_state;
+    WriterState _writer_state{WAITING_INIT};
     // file meta for committed data
     std::unique_ptr<BinlogFileMetaPB> _file_meta;
     // rowsets used by committed data

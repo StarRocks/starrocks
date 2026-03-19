@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,4 +187,30 @@ public class AggTableTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "output: multi_distinct_count(NULL), multi_distinct_count(2: v2), sum(3: v3)");
     }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        final SessionVariable sv = ConnectContext.get().getSessionVariable();
+        sv.setEnableSplitTopNAgg(true);
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS invalid_plan (\n" +
+                "    `time` DATETIME NOT NULL,\n" +
+                "    `country` STRING NOT NULL,\n" +
+                "    `spend` DOUBLE SUM DEFAULT \"0\",\n" +
+                "    `revenue` DOUBLE SUM DEFAULT \"0\"\n" +
+                ")\n" +
+                "ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`time`, `country`)\n" +
+                "PARTITION BY date_trunc('day', `time`)\n" +
+                "DISTRIBUTED BY HASH(`country`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\" \n" +
+                ");");
+        String sql = "SELECT sum(spend) AS spend, sum(revenue) AS revenue FROM invalid_plan WHERE " +
+                "time >= '2000-01-01' ORDER BY spend DESC LIMIT 200;";
+        // Should not throw "Invalid plan" due to prunedPartitionPredicates col refs mismatch
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "invalid_plan");
+    }
+
+
 }

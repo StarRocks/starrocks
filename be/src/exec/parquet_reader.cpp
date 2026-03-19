@@ -21,15 +21,15 @@
 #include <memory>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
 #include "util/byte_buffer.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -42,11 +42,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
                                      int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size)
 
         : _num_of_columns_from_file(num_of_columns_from_file),
-          _total_groups(0),
-          _current_group(0),
-          _rows_of_group(0),
-          _current_line_of_group(0),
-          _current_line_of_batch(0),
+
           _read_offset(read_offset),
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
@@ -329,8 +325,7 @@ ParquetChunkReader::ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parq
                                        const std::vector<SlotDescriptor*>& src_slot_desc, std::string time_zone)
         : _parquet_reader(std::move(parquet_reader)),
           _src_slot_descs(src_slot_desc),
-          _time_zone(std::move(time_zone)),
-          _state(State::UNINITIALIZED) {}
+          _time_zone(std::move(time_zone)) {}
 
 ParquetChunkReader::~ParquetChunkReader() {
     _parquet_reader->close();

@@ -8,8 +8,6 @@ Cancels the prioritized schedule of repairing operations on specified tables or 
 
 ADMIN CANCEL REPAIR applies only to native tables in shared-nothing clusters.
 
-For detailed instructions, see [Manage Replica](../../../../administration/management/resource_management/Replica.md).
-
 :::tip
 
 This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.

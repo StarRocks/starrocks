@@ -22,7 +22,9 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
 #include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -32,13 +34,13 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
 class StreamEpochManager;
+class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
@@ -48,7 +50,6 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
-class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -322,7 +323,7 @@ private:
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
-    size_t _total_fragments;
+    size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
     int64_t _delivery_deadline = 0;

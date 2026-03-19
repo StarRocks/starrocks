@@ -32,6 +32,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -362,7 +363,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -492,7 +493,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -584,7 +585,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -714,7 +715,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -753,7 +754,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         try {
             if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be prepared because task state is: " + state
+                    resp.setErrorMsg("txn could not be prepared because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -837,7 +838,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         try {
             if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be committed because task state is: " + state
+                    resp.setErrorMsg("txn could not be committed because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -887,7 +888,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         readLock();
         try {
             if (isCommitting) {
-                resp.setOKMsg("txn can not be cancelled because task state is committing");
+                resp.setErrorMsg("txn can not be cancelled because task state is committing");
                 return;
             }
         } finally {
@@ -896,8 +897,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
         String errorMsg = cancelTask("manual abort");
         if (errorMsg != null) {
-            resp.setOKMsg("stream load " + label + " abort fail");
-            resp.addResultEntry("Abort fail reason", errorMsg);
+            // Set error status when abort fails, not OK status
+            resp.setErrorMsg("stream load " + label + " abort fail: " + errorMsg);
         } else {
             resp.setOKMsg("stream load " + label + " abort");
             resp.addResultEntry("Cancelled time", endTimeMs - startTimeMs);
@@ -1135,10 +1136,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1180,11 +1178,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
@@ -1223,7 +1217,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
         summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, getStringByType());
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isAborted ? "Aborted" : "Finished");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
@@ -1298,12 +1292,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(true);
         }
@@ -1352,10 +1342,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1404,6 +1391,33 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         }
         endTimeMs = System.currentTimeMillis();
         state = State.CANCELLED;
+    }
+
+    /**
+     * Cancel the coordinator and set task state to CANCELLED without aborting the transaction.
+     * This is used for sub-tasks in multi-statement transactions where the parent task
+     * manages the transaction lifecycle.
+     */
+    public void cancelCoordinatorOnly(String reason) {
+        writeLock();
+        try {
+            if (isUnreversibleState()) {
+                return;
+            }
+            if (coord != null && !isSyncStreamLoad) {
+                coord.cancel(reason);
+                QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, State.CANCELLED);
+            }
+            endTimeMs = System.currentTimeMillis();
+            state = State.CANCELLED;
+            errorMsg = reason;
+            gcObject();
+        } finally {
+            writeUnlock();
+        }
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
@@ -1479,6 +1493,16 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public long getDBId() {
         return dbId;
+    }
+
+    @Override
+    public Long getLoadStartTimeMs() {
+        return startLoadingTimeMs;
+    }
+
+    @Override
+    public String getUser() {
+        return user;
     }
 
     public String getTableName() {
@@ -1627,6 +1651,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 
     @Override

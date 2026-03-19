@@ -263,7 +263,10 @@
                                 "data_source/catalog/iceberg/iceberg_timetravel",
                                 "data_source/catalog/iceberg/iceberg_meta_table",
                                 "data_source/catalog/iceberg/iceberg_rest_s3",
-                                "data_source/catalog/iceberg/iceberg_rest_security"
+                                "data_source/catalog/iceberg/iceberg_rest_security",
+                                "data_source/catalog/iceberg/DDL",
+                                "data_source/catalog/iceberg/DML",
+                                "data_source/catalog/iceberg/procedures"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -510,6 +513,7 @@
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
                         "administration/management/graceful_exit",
+                        "administration/management/extensions",
                         {
                             "type": "category",
                             "label": "Resource management",

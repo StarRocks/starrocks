@@ -19,8 +19,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/runtime_filter.h"
+#include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+#include "runtime/runtime_filter.h"
 
 namespace starrocks {
 

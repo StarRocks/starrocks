@@ -17,7 +17,7 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
 

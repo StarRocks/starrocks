@@ -17,8 +17,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
 #include "gen_cpp/Partitions_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks::pipeline {
 class Shuffler {

@@ -17,8 +17,8 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
-#include "common/config.h"
 #include "exprs/table_function/table_function.h"
+#include "runtime/runtime_state.h"
 #include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 
@@ -46,7 +46,7 @@ public:
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); }
 
     Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        SAFE_DELETE(state);
+        delete state;
         return Status::OK();
     }
 

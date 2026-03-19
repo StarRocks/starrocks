@@ -35,6 +35,17 @@ class UpdateManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
+// Segment index stored in SegmentMetadataPB.
+// Initially contiguous, but may become non-contiguous after partial compaction or batch merge.
+// Backward compatibility: old metadata may not have segment_idx, fallback to positional index.
+uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta);
+
+// Number of rssid slots occupied by one rowset.
+// Rowset without segments still occupies one rssid for delete-file operation.
+uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
+uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
+uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -73,8 +84,8 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
-    // Number of segments already assigned (accumulated) in current pending batch rowset build.
-    uint32_t assigned_segment_id() const { return _pending_rowset_data.assigned_segment_id; }
+    // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
@@ -114,7 +125,7 @@ private:
         std::vector<FileMetaPB> orphan_files;
         std::vector<std::string> dels;
         std::vector<std::string> del_encryption_metas;
-        uint32_t assigned_segment_id = 0;
+        uint32_t assigned_segment_idx = 0;
     };
 
     Tablet _tablet;

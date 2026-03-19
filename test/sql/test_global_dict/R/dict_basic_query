@@ -20,6 +20,20 @@ create table t2 like t1;
 create table t3 like t1;
 -- result:
 -- !result
+CREATE TABLE `t4` (
+  `v1` varchar(20) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
 insert into t1 SELECT generate_series%100, generate_series%255 FROM TABLE(generate_series(1, 65535));
 -- result:
 -- !result
@@ -27,6 +41,12 @@ insert into t2 SELECT generate_series%100, generate_series%255 FROM TABLE(genera
 -- result:
 -- !result
 insert into t3 SELECT generate_series%100 + 1000, generate_series%255 + 1000 FROM TABLE(generate_series(1, 65535));
+-- result:
+-- !result
+insert into t4 values ('a');
+-- result:
+-- !result
+insert into t4 values (NULL);
 -- result:
 -- !result
 [UC]analyze full table t1;
@@ -38,6 +58,9 @@ insert into t3 SELECT generate_series%100 + 1000, generate_series%255 + 1000 FRO
 [UC]analyze full table t3;
 -- result:
 -- !result
+[UC]analyze full table t4;
+-- result:
+-- !result
 function: wait_global_dict_ready('v1', 't1')
 -- result:
 
@@ -47,6 +70,10 @@ function: wait_global_dict_ready('v1', 't2')
 
 -- !result
 function: wait_global_dict_ready('v1', 't3')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('v1', 't4')
 -- result:
 
 -- !result
@@ -105,4 +132,9 @@ select lower(l.v1) as r1, if(l.v1 = 1, 1, null) as r2, upper(r.v2) as r3 from t1
 -- result:
 None	None	1000
 None	None	1000
+-- !result
+select v1, if(v1='a', null, 'b') from t4 order by 1;
+-- result:
+None	b
+a	None
 -- !result

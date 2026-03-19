@@ -22,11 +22,14 @@
 #include <utility>
 
 #include "base/concurrency/countdown_latch.h"
+#include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -39,8 +42,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::lake {
 
@@ -369,16 +371,18 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
 Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
                                                                        const TabletMetadataPtr& metadata,
                                                                        std::vector<std::string>* sample_keys) {
-    if (sstable_pb.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
-        // use start key as boundary key only for small sstables
-        sample_keys->push_back(sstable_pb.range().start_key());
-    } else {
+    // Always include start_key first, because sample_keys() samples from the
+    // index block where entries correspond to the last key of each data block
+    // (via FindShortestSeparator), not the first key. Without the start_key,
+    // the first segment's seek_key may skip keys at the beginning of the SST.
+    sample_keys->push_back(sstable_pb.range().start_key());
+    if (sstable_pb.filesize() > config::pk_index_sstable_sample_interval_bytes) {
         // get sample keys from large sstables
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
-                                 block_cache ? block_cache->cache() : nullptr, false));
+                                 block_cache ? block_cache->cache() : nullptr, false, nullptr, metadata, _tablet_mgr));
         RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
     }
     return Status::OK();

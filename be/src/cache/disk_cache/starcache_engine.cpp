@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "base/path/filesystem_util.h"
 #include "cache/cache_metrics.h"
 #include "cache/disk_space_monitor.h"
 #include "cache/status.h"
@@ -23,7 +24,6 @@
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 

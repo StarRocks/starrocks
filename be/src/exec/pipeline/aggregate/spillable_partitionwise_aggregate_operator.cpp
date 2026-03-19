@@ -15,6 +15,8 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "runtime/runtime_state_helper.h"
+
 namespace starrocks::pipeline {
 
 bool SpillablePartitionWiseAggregateSinkOperator::need_input() const {
@@ -91,7 +93,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
 
     DCHECK(!_agg_op->aggregator()->is_none_group_by_exprs());
     _agg_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
@@ -505,7 +507,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseAggregateSourceOperator::_pull_spilled_
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_agg->need_input() && !_pw_agg->is_finished());
-                RETURN_IF_ERROR(_pw_agg->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_agg->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_agg->set_finishing(state));

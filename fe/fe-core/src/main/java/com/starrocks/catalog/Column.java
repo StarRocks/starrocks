@@ -167,6 +167,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Virtual columns are not persisted and only exist during query analysis and planning.
     private transient boolean isVirtual = false;
 
+    // Indicates whether this column supports meta scan.
+    private transient boolean isSupportMetaScan = true;
+
+    // The timestamp when this column is created, the unit should be the same as
+    // PhysicalPartition#visibleVersionTime, which is milliseconds by default.
+    @SerializedName(value = "createdTime")
+    private long createdTime = -1;
+
     // Only for persist
     public Column() {
         this.name = "";
@@ -273,6 +281,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
         this.physicalName = physicalName;
+        this.createdTime = System.currentTimeMillis();
     }
 
     public Column(Column column) {
@@ -294,6 +303,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
         this.isHidden = column.isHidden;
+        this.createdTime = column.createdTime;
     }
 
     public Column deepCopy() {
@@ -462,8 +472,20 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         isVirtual = virtual;
     }
 
+    public boolean isSupportMetaScan() {
+        return isSupportMetaScan;
+    }
+
+    public void setIsSupportMetaScan(boolean supportMetaScan) {
+        isSupportMetaScan = supportMetaScan;
+    }
+
     public boolean isShadowColumn() {
         return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
+    }
+
+    public long getCreatedTime() {
+        return createdTime;
     }
 
     public int getOlapColumnIndexSize() {

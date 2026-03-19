@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "fmt/format.h"
 #include "http/action/profile_utils.h"

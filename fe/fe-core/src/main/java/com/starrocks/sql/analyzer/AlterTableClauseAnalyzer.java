@@ -132,7 +132,9 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -141,7 +143,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
-    private final Table table;
+    protected final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
         this.table = table;
@@ -485,6 +487,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
+                                " must be bool type(false/true)");
             }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
@@ -1097,6 +1106,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     // 2. storage_medium && storage_cooldown_time
     // 3. in_memory
     // 4. tablet type
+    // 5. datacache.enable
     private void checkProperties(Map<String, String> properties) throws AnalysisException {
         // 1. data property
         DataProperty newDataProperty = null;
@@ -1114,6 +1124,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         // 4. tablet type
         PropertyAnalyzer.analyzeTabletType(properties);
+
+        // 5. datacache.enable (validate bool value if present)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE
+                        + " must be bool type(false/true)");
+            }
+        }
     }
 
     @Override
@@ -1448,7 +1467,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             properties.putAll(clauseProperties);
         }
 
-        for (PartitionDesc partitionDesc : partitionDescs) {
+        List<String> rangePartitionNames = null;
+        if (addPartitionClause.getPartitionDesc() instanceof RangePartitionDesc) {
+            rangePartitionNames =
+                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+        }
+
+        Iterator<PartitionDesc> iterator = partitionDescs.iterator();
+        while (iterator.hasNext()) {
+            PartitionDesc partitionDesc = iterator.next();
             Map<String, String> cloneProperties = Maps.newHashMap(properties);
             Map<String, String> sourceProperties = partitionDesc.getProperties();
             if (sourceProperties != null && !sourceProperties.isEmpty()) {
@@ -1467,6 +1494,23 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
                         rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
+                    if (singleRangePartitionDesc.isSystem()) {
+                        long enclosingId = rangePartitionInfo.getEnclosingPartitionId(
+                                table.getIdToColumn(), singleRangePartitionDesc,
+                                addPartitionClause.isTempPartition());
+                        if (enclosingId >= 0) {
+                            Partition enclosingPartition = olapTable.getPartition(enclosingId);
+                            if (enclosingPartition != null && rangePartitionNames != null) {
+                                int idx = rangePartitionNames.indexOf(
+                                        singleRangePartitionDesc.getPartitionName());
+                                if (idx >= 0) {
+                                    rangePartitionNames.set(idx, enclosingPartition.getName());
+                                }
+                            }
+                            iterator.remove();
+                            continue;
+                        }
+                    }
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
@@ -1494,6 +1538,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
+        }
+
+        if (rangePartitionNames != null) {
+            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionNames);
+            rangePartitionNames.clear();
+            rangePartitionNames.addAll(deduped);
         }
     }
 

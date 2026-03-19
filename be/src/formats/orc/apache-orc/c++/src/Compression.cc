@@ -46,7 +46,7 @@
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "lz4.h"
 #include "orc/Exceptions.hh"
 #include "wrap/snappy-wrapper.h"

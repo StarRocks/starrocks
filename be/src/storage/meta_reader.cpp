@@ -23,7 +23,9 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
@@ -57,7 +59,9 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
     return Status::InvalidArgument("cannot find column: " + item);
 }
 
-MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
+MetaReaderParams::MetaReaderParams() : chunk_size(config::vector_chunk_size) {}
+
+MetaReader::MetaReader() = default;
 
 Status MetaReader::open() {
     return Status::OK();
@@ -181,6 +185,7 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, cons
     }
     _params = params;
     _tablet_id = options.tablet_id;
+    _rss_id = options.rss_id;
     if (options.dcg_loader != nullptr) {
         if (options.is_primary_keys) {
             TabletSegmentId tsid;
@@ -240,7 +245,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_segment->file_name()));
     RandomAccessFileOptions ropts;
     if (_segment->encryption_info()) {
         ropts.encryption_info = *_segment->encryption_info();
@@ -264,7 +269,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                     _column_iterators[cid] = std::move(col_iter);
                     RandomAccessFileOptions opts;
                     opts.encryption_info = dcg_encryption_info;
-                    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dcg_filename));
+                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dcg_filename));
                     ASSIGN_OR_RETURN(auto dcg_file, fs->new_random_access_file(opts, dcg_filename));
                     iter_opts.read_file = dcg_file.get();
                     _column_files[cid] = std::move(dcg_file);
@@ -325,11 +330,14 @@ Status SegmentMetaCollecter::_collect_virtual(const std::string& name, const std
                                               LogicalType type) {
     VirtualColumnFactory::Options options;
     options.tablet_id = _tablet_id;
+    options.rss_id = _rss_id;
     options.segment_id = _segment->id();
-    options.num_rows = _segment->num_rows();
     if (name == META_MAX) {
+        size_t num_rows = _segment->num_rows();
+        options.num_rows = num_rows > 0 ? num_rows - 1 : 0;
         return VirtualColumnFactory::append_to_column(options, col_name, column);
     } else if (name == META_MIN) {
+        options.num_rows = 0;
         return VirtualColumnFactory::append_to_column(options, col_name, column);
     } else if (name == META_COUNT_ROWS) {
         return _collect_rows(column, type);

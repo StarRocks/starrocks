@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "exec/partition/chunks_partitioner.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

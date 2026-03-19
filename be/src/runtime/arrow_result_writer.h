@@ -17,7 +17,6 @@
 #include "common/statusor.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/result_writer.h"
-#include "runtime/runtime_state.h"
 
 namespace arrow {
 class Schema;
@@ -28,6 +27,7 @@ namespace starrocks {
 class ExprContext;
 class BufferControlBlock;
 class RuntimeProfile;
+class RowDescriptor;
 using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
 using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 

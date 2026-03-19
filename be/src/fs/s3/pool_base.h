@@ -20,6 +20,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 namespace starrocks::poco {
@@ -31,7 +32,7 @@ public:
 
 private:
     struct PooledObject {
-        PooledObject(ObjectPtr object, PoolBase& pool) : object(object), pool(pool) {}
+        PooledObject(ObjectPtr object, PoolBase& pool) : object(std::move(object)), pool(pool) {}
 
         ObjectPtr object;
         bool in_use = false;

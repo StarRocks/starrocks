@@ -15,6 +15,7 @@
 #pragma once
 
 #include <numeric>
+#include <sstream>
 #include <string_view>
 #include <utility>
 

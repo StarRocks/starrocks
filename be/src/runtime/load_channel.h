@@ -41,6 +41,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -52,7 +53,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;

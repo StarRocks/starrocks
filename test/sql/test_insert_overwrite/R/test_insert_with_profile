@@ -57,3 +57,6 @@ select count(*) from t2;
 admin disable failpoint 'report_exec_state_failed_status';
 -- result:
 -- !result
+CLEANUP {
+	admin disable failpoint 'report_exec_state_failed_status';
+} END CLEANUP

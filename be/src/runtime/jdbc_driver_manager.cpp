@@ -21,12 +21,12 @@
 
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
+#include "base/utility/dynamic_util.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "util/download_util.h"
-#include "util/dynamic_util.h"
 
 namespace starrocks {
 

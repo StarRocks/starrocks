@@ -20,8 +20,8 @@
 #include <thread>
 #include <vector>
 
+#include "base/container/lru_cache.h"
 #include "exprs/ai_functions.h"
-#include "util/lru_cache.h"
 
 using namespace starrocks;
 using namespace std;

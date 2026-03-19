@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"

@@ -20,6 +20,8 @@ namespace starrocks {
 
 class MemTrackerTest : public testing::Test {
 protected:
+    static void SetUpTestSuite() { MemTracker::init_type_label_map(); }
+
     void SetUp() override {
         using MemTrackerType::PROCESS;
         using MemTrackerType::QUERY_POOL;
@@ -47,6 +49,10 @@ TEST_F(MemTrackerTest, label_type_convert) {
     }
     ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::QUERY), "");
     ASSERT_EQ(MemTracker::label_to_type("not_exist_label"), MemTrackerType::NO_SET);
+
+    // Verify builtin_inverted_index is registered
+    ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::BUILTIN_INVERTED_INDEX), "builtin_inverted_index");
+    ASSERT_EQ(MemTracker::label_to_type("builtin_inverted_index"), MemTrackerType::BUILTIN_INVERTED_INDEX);
 }
 
 TEST_F(MemTrackerTest, get_snapshot) {
@@ -186,6 +192,11 @@ TEST_F(MemTrackerTest, has_enough_reserved_memory) {
 
     ASSERT_TRUE(_query_1->has_enough_reserved_memory(200));
     ASSERT_FALSE(_query_1->has_enough_reserved_memory(1000));
+}
+
+TEST_F(MemTrackerTest, err_msg_with_fragment_instance_id) {
+    std::string err_msg = _query_1->err_msg("mock msg", "abc-fragment-id");
+    ASSERT_NE(err_msg.find("fragment: abc-fragment-id"), std::string::npos);
 }
 
 } // namespace starrocks

@@ -119,4 +119,33 @@ public class PropertyAnalyzerTest {
         int result2 = PropertyAnalyzer.analyzeTableQueryTimeout(properties6);
         Assertions.assertEquals(600, result2);
     }
+
+    @Test
+    public void testAnalyzeDataCacheEnable() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+
+        try {
+            Assertions.assertTrue(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assertions.fail("Should not throw exception");
+        }
+
+        Assertions.assertEquals(0, properties.size());
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "false");
+        try {
+            Assertions.assertFalse(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assertions.fail("Should not throw exception");
+        }
+
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "abcd");
+        // If the string passed in is not "true" (ignoring case),
+        // analyzeDataCacheEnable will return false instead of throwing an exception
+        try {
+            Assertions.assertFalse(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assertions.fail("Should not throw exception");
+        }
+    }
 }

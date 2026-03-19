@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <ostream>
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
@@ -115,7 +117,7 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+    static TypeDescriptor create_struct_type(const std::vector<std::string>& field_names,
                                              const std::vector<TypeDescriptor>& filed_types) {
         TypeDescriptor res;
         res.type = TYPE_STRUCT;
@@ -371,6 +373,7 @@ static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(Ty
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
         TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+static const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
 
 static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 

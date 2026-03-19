@@ -25,6 +25,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
@@ -257,7 +258,7 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
 class SequenceInputStream : public SpillInputStream {
 public:
     SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
-            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(std::move(options)) {}
+            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(options) {}
     ~SequenceInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;

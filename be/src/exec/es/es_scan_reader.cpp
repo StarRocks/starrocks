@@ -38,7 +38,7 @@
 #include <sstream>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_scroll_parser.h"

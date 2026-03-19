@@ -35,7 +35,6 @@
 #pragma once
 
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <string>
 
@@ -102,17 +101,7 @@ struct decimal12_t {
         return -1;
     }
 
-    std::string to_string() const {
-        char buf[128] = {'\0'};
-
-        if (integer < 0 || fraction < 0) {
-            snprintf(buf, sizeof(buf), "-%lu.%09u", std::abs(integer), std::abs(fraction));
-        } else {
-            snprintf(buf, sizeof(buf), "%lu.%09u", std::abs(integer), std::abs(fraction));
-        }
-
-        return std::string(buf);
-    }
+    std::string to_string() const;
 
     Status from_string(const std::string& str);
 

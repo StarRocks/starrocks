@@ -20,6 +20,7 @@
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
@@ -30,7 +31,6 @@
 #include "exec/spill/spiller.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -17,7 +17,7 @@
 #include <aws/s3/S3Client.h>
 
 #include "common/http/content_type.h"
-#include "io/output_stream.h"
+#include "io/core/output_stream.h"
 
 namespace starrocks::io {
 

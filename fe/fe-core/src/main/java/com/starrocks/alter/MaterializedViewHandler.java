@@ -688,27 +688,25 @@ public class MaterializedViewHandler extends AlterHandler {
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         // check drop rollup index operation
-        for (AlterClause alterClause : dropRollupClauses) {
-            DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
-        }
-
-        // drop data in memory
         Set<Long> indexMetaIdSet = new HashSet<>();
         Set<String> rollupNameSet = new HashSet<>();
         for (AlterClause alterClause : dropRollupClauses) {
             DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            String rollupIndexName = dropRollupClause.getRollupName();
-            long rollupIndexMetaId = dropMaterializedView(rollupIndexName, olapTable);
-            indexMetaIdSet.add(rollupIndexMetaId);
-            rollupNameSet.add(rollupIndexName);
+            long indexMetaId = checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
+            indexMetaIdSet.add(indexMetaId);
+            rollupNameSet.add(dropRollupClause.getRollupName());
         }
 
         // batch log drop rollup operation
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         long dbId = db.getId();
         long tableId = olapTable.getId();
-        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet));
+        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet), wal -> {
+            // drop data in memory
+            for (String rollupName : rollupNameSet) {
+                dropMaterializedView(rollupName, olapTable);
+            }
+        });
         LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                 olapTable.getName());
     }
@@ -719,13 +717,20 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
-            // Step1: check drop mv index operation
-            checkDropMaterializedView(mvName, olapTable);
-            // Step2; drop data in memory
-            long mvIndexMetaId = dropMaterializedView(mvName, olapTable);
-            // Step3: log drop mv operation
+            final long mvIndexMetaId;
+            if (dropMaterializedViewStmt.isForceDrop()) {
+                mvIndexMetaId = getMvIndexMetaIdForForceDrop(mvName, olapTable);
+            } else {
+                mvIndexMetaId = checkDropMaterializedView(mvName, olapTable);
+            }
+            boolean forceDrop = dropMaterializedViewStmt.isForceDrop();
+            // log drop mv operation
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, false));
+            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, forceDrop),
+                    wal -> {
+                        // drop mv data in memory
+                        dropMaterializedView(mvName, olapTable);
+                    });
             LOG.info("finished drop materialized view [{}] in table [{}]", mvName, olapTable.getName());
         } catch (MetaNotFoundException e) {
             if (dropMaterializedViewStmt.isSetIfExists()) {
@@ -737,13 +742,31 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     /**
+     * When force dropping, skip table state and partition checks. Only validate mv name and existence.
+     * Caller must hold db write lock.
+     */
+    private long getMvIndexMetaIdForForceDrop(String mvName, OlapTable olapTable)
+            throws DdlException, MetaNotFoundException {
+        if (mvName.equals(olapTable.getName())) {
+            throw new DdlException("Cannot drop base index by using DROP ROLLUP or DROP MATERIALIZED VIEW.");
+        }
+        if (!olapTable.hasMaterializedIndex(mvName)) {
+            throw new MetaNotFoundException(
+                    "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
+        }
+        Long indexMetaId = olapTable.getIndexMetaIdByName(mvName);
+        Preconditions.checkState(indexMetaId != null, "index meta id for mv " + mvName);
+        return indexMetaId;
+    }
+
+    /**
      * Make sure we got db write lock before using this method.
      * Up to here, table's state can only be NORMAL.
      *
      * @param mvName
      * @param olapTable
      */
-    private void checkDropMaterializedView(String mvName, OlapTable olapTable)
+    private long checkDropMaterializedView(String mvName, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
         if (mvName.equals(olapTable.getName())) {
@@ -763,6 +786,8 @@ public class MaterializedViewHandler extends AlterHandler {
             MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
+
+        return mvIndexMetaId;
     }
 
     /**
@@ -1110,6 +1135,35 @@ public class MaterializedViewHandler extends AlterHandler {
                 onJobDone(materializedViewJob);
             }
         }
+    }
+
+    /**
+     * Cancel unfinished rollup jobs for a specific MV name on one table.
+     * Returns true if at least one matching unfinished job is found.
+     */
+    public boolean cancelRollupJobsForForceDrop(long tableId, String mvName, String reason) {
+        boolean foundMatchingJob = false;
+        List<AlterJobV2> rollupJobs = getUnfinishedAlterJobV2ByTableId(tableId);
+        for (AlterJobV2 alterJob : rollupJobs) {
+            if (alterJob instanceof RollupJobV2) {
+                if (!((RollupJobV2) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRollupJob) {
+                if (!((LakeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            foundMatchingJob = true;
+            alterJob.cancel(reason);
+            if (alterJob.isDone()) {
+                onJobDone(alterJob);
+            }
+        }
+        return foundMatchingJob;
     }
 
     // just for ut

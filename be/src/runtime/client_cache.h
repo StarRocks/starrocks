@@ -41,10 +41,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
 #include "base/metrics.h"
+#include "base/uid_util.h"
 #include "common/status.h"
-#include "util/hash_util.hpp"
-#include "util/thrift_client.h"
+#include "common/util/thrift_client.h"
 
 namespace starrocks {
 
@@ -167,7 +168,7 @@ public:
         }
     }
 
-    ClientConnection(ClientCache<T>* client_cache, TNetworkAddress address, int timeout_ms, Status* status)
+    ClientConnection(ClientCache<T>* client_cache, const TNetworkAddress& address, int timeout_ms, Status* status)
             : _client_cache(client_cache), _client(nullptr) {
         *status = _client_cache->get_client(address, &_client, timeout_ms);
 

@@ -108,13 +108,13 @@ private:
     };
 
     PageBuilderOptions _options;
-    bool _finished;
+    bool _finished{false};
 
     std::unique_ptr<PageBuilder> _data_page_builder;
 
     std::unique_ptr<BinaryPlainPageBuilder> _dict_builder;
 
-    EncodingTypePB _encoding_type;
+    EncodingTypePB _encoding_type{DICT_ENCODING};
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
     faststring _first_value;
@@ -141,7 +141,7 @@ public:
                           Column* column) override;
 
     Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
-                                     Column* dst);
+                                     Column* dst) override;
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -162,8 +162,8 @@ private:
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
-    bool _parsed;
-    EncodingTypePB _encoding_type;
+    bool _parsed{false};
+    EncodingTypePB _encoding_type{UNKNOWN_ENCODING};
     MutableColumnPtr _vec_code_buf;
 
     uint32_t _max_value_length = 0;

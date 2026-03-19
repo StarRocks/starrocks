@@ -38,6 +38,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -1067,7 +1068,7 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     std::string error_msg =
             strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
                                 (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
-    state->append_error_msg_to_file(error_msg, reason);
+    RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 }
 
 } // namespace starrocks

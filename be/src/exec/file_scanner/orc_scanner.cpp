@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "fs/fs.h"
@@ -68,10 +69,7 @@ ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile
                        const TBrokerScanRange& scan_range, starrocks::ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
-          _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
-          _next_range(0),
-          _error_counter(0),
-          _status_eof(false) {
+          _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096) {
     _file_format_str = "orc";
 }
 

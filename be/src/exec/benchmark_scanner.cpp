@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "base/utility/arrow_utils.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
 #include "column/chunk.h"
@@ -24,7 +25,6 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_state.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 
@@ -105,7 +105,7 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         SlotDescriptor* slot_desc = _slot_descs[i];
         ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, raw_chunk.get()));
-        column = ColumnHelper::unfold_const_column(slot_desc->type(), raw_chunk->num_rows(), std::move(column));
+        column = ColumnHelper::unfold_const_column(slot_desc->type(), raw_chunk->num_rows(), column);
         cast_chunk->append_column(column, slot_desc->id());
     }
 

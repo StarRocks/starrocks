@@ -14,6 +14,7 @@
 
 #include "formats/orc/orc_input_stream.h"
 
+#include "common/config_scan_io_fwd.h"
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
 #include "fs/fs.h"
@@ -23,6 +24,22 @@ namespace starrocks {
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream)
         : _file(file), _length(length), _sb_stream(sb_stream) {}
+
+uint64_t ORCHdfsFileStream::getNaturalReadSize() const {
+    return config::orc_natural_read_size;
+}
+
+uint64_t ORCHdfsFileStream::getNaturalReadSizeAfterSeek() const {
+    return config::orc_natural_read_size / 4;
+}
+
+bool ORCHdfsFileStream::isIOCoalesceEnabled() const {
+    return config::orc_coalesce_read_enable;
+}
+
+bool ORCHdfsFileStream::isIOAdaptiveCoalesceEnabled() const {
+    return config::io_coalesce_adaptive_lazy_active;
+}
 
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
     if (buf == nullptr) {

@@ -427,27 +427,33 @@ struct TRemoteSnapshotRequest {
      15: optional Types.TVersion data_version
  }
 
- struct TReplicateSnapshotRequest {
-     1: optional Types.TTransactionId transaction_id
-     2: optional Types.TTableId table_id
-     3: optional Types.TPartitionId partition_id
-     4: optional Types.TTabletId tablet_id
-     5: optional TTabletType tablet_type
-     6: optional Types.TSchemaHash schema_hash
-     7: optional Types.TVersion visible_version
-     8: optional string src_token
-     9: optional Types.TTabletId src_tablet_id
-     10: optional TTabletType src_tablet_type
-     11: optional Types.TSchemaHash src_schema_hash
-     12: optional Types.TVersion src_visible_version
-     13: optional list<Types.TSnapshotInfo> src_snapshot_infos
-     14: optional binary encryption_meta
-     15: optional Types.TVersion data_version
-     16: optional Types.TTabletId virtual_tablet_id
-     17: optional Types.TDatabaseId src_db_id
-     18: optional Types.TTableId src_table_id
-     19: optional Types.TPartitionId src_partition_id
- }
+struct TReplicateSnapshotRequest {
+    1: optional Types.TTransactionId transaction_id
+    2: optional Types.TTableId table_id
+    3: optional Types.TPartitionId partition_id
+    4: optional Types.TTabletId tablet_id
+    5: optional TTabletType tablet_type
+    6: optional Types.TSchemaHash schema_hash
+    7: optional Types.TVersion visible_version
+    8: optional string src_token
+    9: optional Types.TTabletId src_tablet_id
+    10: optional TTabletType src_tablet_type
+    11: optional Types.TSchemaHash src_schema_hash
+    12: optional Types.TVersion src_visible_version
+    13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+    14: optional binary encryption_meta
+    15: optional Types.TVersion data_version
+    16: optional Types.TTabletId virtual_tablet_id
+    17: optional Types.TDatabaseId src_db_id
+    18: optional Types.TTableId src_table_id
+    19: optional Types.TPartitionId src_partition_id
+    // Full path of source partition for S3 storage type
+    // Format: "s3://bucket/[computed-prefix/]service_id/db{db_id}/{table_id}/{partition_id}"
+    // Note: [computed-prefix/] is dynamically computed by StarClient based on partition ID hash,
+    //       only present when partitioned prefix is enabled on the storage volume.
+    // When set, BE should use this path directly instead of constructing path via RemoteStarletLocationProvider
+    20: optional string src_partition_full_path
+}
 
 struct TExternalClusterSnapshotRequest {
     1: optional i64 job_id // ExternalClusterSnapshot job id

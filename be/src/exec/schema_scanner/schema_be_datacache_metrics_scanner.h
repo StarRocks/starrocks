@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/schema_scanner.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 

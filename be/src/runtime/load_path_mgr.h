@@ -84,9 +84,9 @@ private:
     std::vector<std::string> _path_vec;
     std::promise<bool> _stop;
     std::future<bool> _stop_future;
-    int _idx;
+    int _idx{0};
     pthread_t _cleaner_id = 0;
-    uint32_t _next_shard;
+    uint32_t _next_shard{0};
 };
 
 } // namespace starrocks

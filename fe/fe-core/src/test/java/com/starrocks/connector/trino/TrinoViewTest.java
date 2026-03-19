@@ -137,7 +137,7 @@ public class TrinoViewTest {
         Assertions.assertEquals(hiveView.getFullSchema().get(5).getName(), "double_col");
         Assertions.assertEquals(hiveView.getFullSchema().get(5).getType(), FloatType.DOUBLE);
         Assertions.assertEquals(hiveView.getFullSchema().get(9).getName(), "varchar_col");
-        Assertions.assertEquals(hiveView.getFullSchema().get(9).getType(), TypeFactory.createVarcharType(20));
+        Assertions.assertEquals(hiveView.getFullSchema().get(9).getType(), TypeFactory.createVarcharType(80));
         Assertions.assertEquals(hiveView.getFullSchema().get(10).getName(), "binary_col");
         Assertions.assertEquals(hiveView.getFullSchema().get(10).getType(), VarbinaryType.VARBINARY);
         Assertions.assertEquals(hiveView.getFullSchema().get(13).getName(), "timestamp_col");
@@ -184,7 +184,7 @@ public class TrinoViewTest {
         Assertions.assertEquals(columnList.get(4).getType(), FloatType.FLOAT);
         Assertions.assertEquals(columnList.get(5).getType(), FloatType.DOUBLE);
         Assertions.assertEquals(columnList.get(6).getType(), TypeFactory.createDecimalV3NarrowestType(10, 2));
-        Assertions.assertEquals(columnList.get(7).getType(), TypeFactory.createVarcharType(20));
+        Assertions.assertEquals(columnList.get(7).getType(), TypeFactory.createVarcharType(80));
         Assertions.assertEquals(columnList.get(8).getType(), TypeFactory.createCharType(10));
         Assertions.assertEquals(columnList.get(9).getType(), TypeFactory.createDefaultCatalogString());
         Assertions.assertEquals(columnList.get(10).getType(), BooleanType.BOOLEAN);

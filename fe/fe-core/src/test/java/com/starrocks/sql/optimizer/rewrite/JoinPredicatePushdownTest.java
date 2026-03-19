@@ -248,4 +248,20 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: v4 > 2");
     }
+    @Test
+    public void testJoinORToUnionWithCTEAndMultiDistinct() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        try {
+            String sql = "with shared as (\n" +
+                    "    select v1, v2, v3 from t0\n" +
+                    ")\n" +
+                    "select count(distinct a.v2), count(distinct b.v3)\n" +
+                    "from shared a\n" +
+                    "join shared b on a.v1 = b.v2 or a.v1 = b.v3;";
+
+            getFragmentPlan(sql);
+        } finally {
+            connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(false);
+        }
+    }
 }

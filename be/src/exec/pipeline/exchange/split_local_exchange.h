@@ -24,11 +24,7 @@ class SplitLocalExchangeSinkOperator;
 // ===== exchanger =====
 class SplitLocalExchanger final : public MultiCastLocalExchanger {
 public:
-    SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs, size_t chunk_size)
-            : _split_expr_ctxs(std::move(split_expr_ctxs)),
-              _buffer(num_consumers),
-              _opened_source_opcount(num_consumers, 0),
-              _chunk_size(chunk_size) {}
+    SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs, size_t chunk_size);
 
     bool support_event_scheduler() const override { return true; }
 
@@ -58,7 +54,7 @@ private:
     // every source can have dop operators
     std::vector<int32_t> _opened_source_opcount;
 
-    size_t kBufferedRowSizeScaleFactor = config::split_exchanger_buffer_chunk_num;
+    size_t kBufferedRowSizeScaleFactor = 0;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_row_size_counter = nullptr;

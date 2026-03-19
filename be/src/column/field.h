@@ -15,6 +15,8 @@
 #pragma once
 
 #include <memory>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,15 +25,13 @@
 #include "base/string/c_string.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
-#include "storage/aggregate_type.h"
-#include "storage/olap_common.h"
-#include "storage/types.h"
+#include "common/column_id.h"
+#include "common/storage_aggregate_type.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
-class Datum;
 class AggStateDesc;
-class SlotDescriptor;
 
 class Field {
 public:
@@ -172,12 +172,6 @@ public:
     uint8_t short_key_length() const { return _short_key_length; }
     void set_short_key_length(uint8_t n) { _short_key_length = n; }
 
-    // Encode the first |short_key_length| bytes.
-    void encode_ascending(const Datum& value, std::string* buf) const;
-
-    // Encode the full field.
-    void full_encode_ascending(const Datum& value, std::string* buf) const;
-
     // Status decode_ascending(Slice* encoded_key, uint8_t* cell_ptr, MemPool* pool) const;
 
     void set_aggregate_method(StorageAggregateType agg_method) { _agg_method = agg_method; }
@@ -206,12 +200,7 @@ public:
 
     static FieldPtr convert_to_dict_field(const Field& field);
 
-    static FieldPtr convert_from_slot_desc(const SlotDescriptor& slot);
-
 private:
-    static FieldPtr _build_field_from_type_desc(const TypeDescriptor& type_desc, const std::string& name, int32_t id,
-                                                bool nullable);
-
     constexpr static int kIsKeyShift = 0;
     constexpr static int kNullableShift = 1;
 
@@ -282,7 +271,7 @@ inline FieldPtr Field::with_nullable(bool nullable) {
 inline std::ostream& operator<<(std::ostream& os, const Field& field) {
     os << field.id() << ":" << field.name() << " " << field.type()->type() << " "
        << (field.is_nullable() ? "NULL" : "NOT NULL") << (field.is_key() ? " KEY" : "") << " "
-       << field.aggregate_method() << " uid:" << field.uid();
+       << static_cast<int>(field.aggregate_method()) << " uid:" << field.uid();
     return os;
 }
 

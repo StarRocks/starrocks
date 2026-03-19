@@ -23,10 +23,10 @@
 #include <map>
 #include <string>
 
+#include "base/string/string_util.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
 #include "http/http_method.h"
-#include "util/string_util.h"
 
 struct evhttp_request;
 

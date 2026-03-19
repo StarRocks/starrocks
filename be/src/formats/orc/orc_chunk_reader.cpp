@@ -29,13 +29,14 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
-#include "exprs/runtime_filter.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 #include "util/stack_util.h"
 
@@ -45,14 +46,8 @@ OrcChunkReader::OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_
         : _src_slot_descriptors(std::move(src_slot_descriptors)),
           _read_chunk_size(chunk_size),
           _tzinfo(cctz::utc_time_zone()),
-          _tzoffset_in_seconds(0),
-          _drop_nanoseconds_in_datetime(false),
-          _broker_load_mode(true),
-          _strict_mode(true),
-          _broker_load_filter(nullptr),
-          _num_rows_filtered(0),
-          _error_message_counter(0),
-          _lazy_load_ctx(nullptr) {
+
+          _broker_load_filter(nullptr) {
     if (_read_chunk_size == 0) {
         _read_chunk_size = 4096;
     }
@@ -94,8 +89,8 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     name_set->clear();
     if (hive_column_names != nullptr && hive_column_names->size() > 0 && !use_orc_column_names) {
         // build hive column names index.
-        int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
-        for (int i = 0; i < size; i++) {
+        size_t size = std::min(hive_column_names->size(), static_cast<size_t>(root_type.getSubtypeCount()));
+        for (size_t i = 0; i < size; i++) {
             std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
             name_set->insert(col_name);
         }
@@ -570,7 +565,7 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         }
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, std::move(col));
+        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
 
         // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
         if (slot->is_nullable()) {
@@ -634,7 +629,7 @@ Status OrcChunkReader::lazy_read_next(size_t numValues) {
     return Status::OK();
 }
 
-Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+Status OrcChunkReader::lazy_seek_to(uint64_t rowInStripe) {
     try {
         // It may throw orc::ParseError exception
         _row_reader->lazyLoadSeekTo(rowInStripe);
@@ -1308,7 +1303,7 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     if (_state == nullptr) return;
     if (_error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     _error_message_counter += 1;
-    _state->append_error_msg_to_file("", error_msg);
+    RuntimeStateHelper::append_error_msg_to_file(_state, "", error_msg);
 }
 
 const orc::Type* OrcChunkReader::get_orc_type_by_slot_id(const SlotId& slot_id) const {

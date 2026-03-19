@@ -21,7 +21,8 @@
 #include <fstream>
 
 #include "base/time/timezone_utils.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
+#include "common/configbase.h"
 #include "common/system/mem_info.h"
 #include "fs/fs_s3.h"
 #include "runtime/exec_env.h"

@@ -54,7 +54,7 @@ private:
     bool _is_closed = false;
 };
 
-struct ORCWriterOptions : public FileWriterOptions {};
+struct ORCWriterOptions : FileWriterOptions {};
 
 class ORCFileWriter final : public FileWriter {
 public:
@@ -76,7 +76,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
     static StatusOr<orc::CompressionKind> _convert_compression_type(TCompressionType::type type);

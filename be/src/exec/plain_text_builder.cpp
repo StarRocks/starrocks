@@ -1,17 +1,18 @@
 #include "plain_text_builder.h"
 
+#include "base/time/date_func.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/mysql_row_buffer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_escape.h"
 #include "gutil/strings/substitute.h"
 #include "io/formatted_output_stream.h"
 #include "io/formatted_output_stream_file.h"
-#include "util/date_func.h"
 
 namespace starrocks {
 
@@ -22,8 +23,7 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
         : _options(std::move(options)),
           _output_expr_ctxs(output_expr_ctxs),
           _output_stream(std::make_unique<io::FormattedOutputStreamFile>(std::move(writable_file),
-                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)),
-          _init(false) {}
+                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)) {}
 
 PlainTextBuilder::~PlainTextBuilder() = default;
 
@@ -91,7 +91,7 @@ Status PlainTextBuilder::add_chunk(Chunk* chunk) {
         if (col == nullptr) {
             return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
         }
-        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, std::move(col));
+        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
         columns.emplace_back(col);
     }
 

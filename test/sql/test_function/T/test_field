@@ -36,3 +36,20 @@ create view dvv as select cast('2022-02-02' as datetime) c1;
 select field(dv.c1, dvv.c1) from dv, dvv;
 select field(dv.c1, dv.c1) from dv, dvv;
 select field(dv.c1, vv.c1, dvv.c1) from dv, dvv, vv;
+
+-- Test concurrency bug of constant values
+create table t2 (c1 int, c2 string) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) BUCKETS 16 PROPERTIES (
+    "replication_num" = "1"
+);
+insert into t2 values (1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e"), (6, "f"), (7, "g"), (8, "h"), (9, "i"),
+                      (10, "j"), (11, "k"), (12, "l"), (13, "m"), (14, "n"), (15, "o"), (16, "p");
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;
+select * from t2 order by field('a', 'bb', 'cc', 'a'), c1 asc;

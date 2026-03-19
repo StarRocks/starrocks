@@ -37,6 +37,7 @@
 #include <memory>
 #include <sstream>
 
+#include "base/uid_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/metadata_util.h"
@@ -47,7 +48,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

@@ -14,9 +14,13 @@
 
 #include "iceberg_table_sink.h"
 
+#include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -34,7 +38,7 @@ Status IcebergTableSink::init(const TDataSink& thrift_sink, RuntimeState* state)
 
 Status IcebergTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -42,7 +46,7 @@ Status IcebergTableSink::prepare(RuntimeState* state) {
 }
 
 Status IcebergTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -50,8 +54,8 @@ Status IcebergTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status IcebergTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+Status IcebergTableSink::close(RuntimeState* state, const Status& exec_status) {
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 
@@ -89,12 +93,12 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
 
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
+                                                       runtime_state));
 
         // Validate partition expressions were created successfully
         for (int i = 0; i < partition_expr_ctxs.size(); i++) {
@@ -110,7 +114,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop, transform_exprs);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

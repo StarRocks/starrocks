@@ -47,3 +47,7 @@ E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
 admin disable failpoint 'aggregate_build_hash_map_bad_alloc';
 -- result:
 -- !result
+CLEANUP {
+  admin disable failpoint 'agg_hash_set_bad_alloc';
+  admin disable failpoint 'aggregate_build_hash_map_bad_alloc';
+} END CLEANUP

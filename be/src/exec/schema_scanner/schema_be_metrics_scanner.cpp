@@ -18,8 +18,9 @@
 #include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -71,7 +72,7 @@ Status SchemaBeMetricsScanner::start(RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
     SchemaCoreMetricsVisitor visitor(_infos);
-    StarRocksMetrics::instance()->metrics()->collect(&visitor);
+    GlobalMetricsRegistry::instance()->metrics()->collect(&visitor);
     _cur_idx = 0;
     return Status::OK();
 }

@@ -34,11 +34,11 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "types/logical_type.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 

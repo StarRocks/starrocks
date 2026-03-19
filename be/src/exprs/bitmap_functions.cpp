@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/base64.h"
 #include "exprs/binary_function.h"
 #include "exprs/function_context.h"

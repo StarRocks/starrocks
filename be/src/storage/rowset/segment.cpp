@@ -41,16 +41,19 @@
 #include <memory>
 
 #include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -63,7 +66,6 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "util/crc32c.h"
 #include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -251,6 +253,9 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
     }
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    if (res.status().is_not_found()) {
+        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
@@ -360,8 +365,7 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts),
-                                                                           index_opt);
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
         }
     }
     return Status::OK();

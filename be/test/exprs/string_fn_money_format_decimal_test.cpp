@@ -48,7 +48,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 
     for (int i = 0; i < rows_num; ++i) {
-        auto actual = v->get_data()[i].to_string();
+        auto actual = v->get_slice(i).to_string();
         auto expect = std::get<1>(test_cases[i]);
         std::cout << "decimal=" << std::get<0>(test_cases[i]) << ", actual=" << actual << ", expect=" << expect
                   << std::endl;

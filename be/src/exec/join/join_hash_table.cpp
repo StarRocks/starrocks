@@ -18,8 +18,10 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
 #include "exec/hash_join_node.h"
@@ -28,7 +30,6 @@
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
@@ -723,7 +724,7 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && column->is_nullable()) {
             // upgrade to nullable column
             size_t col_size = columns[i]->size();
-            columns[i] = NullableColumn::create(std::move(columns[i]), NullColumn::create(col_size, 0));
+            columns[i] = NullableColumn::create(columns[i], NullColumn::create(col_size, 0));
         }
         columns[i]->as_mutable_raw_ptr()->append(*column);
         FAIL_POINT_TRIGGER_EXECUTE(hash_join_append_bad_alloc, {

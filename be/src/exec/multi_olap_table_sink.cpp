@@ -114,7 +114,7 @@ bool MultiOlapTableSink::is_close_done() {
     return true;
 }
 
-Status MultiOlapTableSink::close(RuntimeState* state, Status close_status) {
+Status MultiOlapTableSink::close(RuntimeState* state, const Status& close_status) {
     for (auto& sink : _sinks) {
         RETURN_IF_ERROR(sink->close(state, close_status));
     }

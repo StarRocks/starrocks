@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -490,9 +491,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
-                    newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
                     newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
-                    newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
 
                     OptExpression.Builder builder = OptExpression.builder()
                             .setOp(newOlapScan)
@@ -775,11 +774,36 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
+            newHashAggregator.setTopNLocalAgg(aggOperator.isTopNLocalAgg());
+            newHashAggregator.setTopNSortInfo(rewriteTopNSortInfo(aggOperator.getTopNSortInfo(),
+                    context.stringColumnIdToDictColumnIds, context));
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
             newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
+            newHashAggregator.setDistinctColumnDataSkew(aggOperator.getDistinctColumnDataSkew());
+            newHashAggregator.setForcePreAggregation(aggOperator.isForcePreAggregation());
             newHashAggregator.setLocalLimit(aggOperator.getLocalLimit());
+            newHashAggregator.setGroupByMinMaxStatistic(aggOperator.getGroupByMinMaxStatistic());
             return newHashAggregator;
+        }
+
+        private LogicalTopNOperator.TopNSortInfo rewriteTopNSortInfo(LogicalTopNOperator.TopNSortInfo sortInfo,
+                                                                     Map<Integer, Integer> stringToDictIds,
+                                                                     DecodeContext context) {
+            if (sortInfo == null || stringToDictIds.isEmpty()) {
+                return sortInfo;
+            }
+            List<Ordering> newOrderByElements = sortInfo.orderByElements().stream().map(ordering -> {
+                ColumnRefOperator columnRef = ordering.getColumnRef();
+                Integer dictId = stringToDictIds.get(columnRef.getId());
+                if (dictId != null) {
+                    ColumnRefOperator dictRef = context.columnRefFactory.getColumnRef(dictId);
+                    return new Ordering(dictRef, ordering.isAscending(), ordering.isNullsFirst());
+                }
+                return ordering;
+            }).collect(Collectors.toList());
+            return new LogicalTopNOperator.TopNSortInfo(newOrderByElements, sortInfo.sortPhase(),
+                    sortInfo.topNType(), sortInfo.limit(), sortInfo.offset());
         }
 
         @Override

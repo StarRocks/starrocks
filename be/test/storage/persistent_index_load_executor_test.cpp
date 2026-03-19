@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "common/thread/threadpool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -31,7 +32,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "types/datum.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

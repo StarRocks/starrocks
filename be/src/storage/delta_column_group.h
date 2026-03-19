@@ -34,8 +34,8 @@ using DeltaColumnGroupList = std::vector<DeltaColumnGroupPtr>;
 
 class DeltaColumnGroup {
 public:
-    DeltaColumnGroup() {}
-    ~DeltaColumnGroup() {}
+    DeltaColumnGroup() = default;
+    ~DeltaColumnGroup() = default;
     void init(int64_t version, const std::vector<std::vector<ColumnUID>>& column_ids,
               const std::vector<std::string>& column_files, const std::vector<std::string>& encryption_metas = {},
               int64_t file_size = 0);

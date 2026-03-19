@@ -102,4 +102,11 @@ public class MaterializedViewExceptions {
     public static String inactiveReasonForConsecutiveFailures(String mvName) {
         return INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES + mvName;
     }
+
+    public static String unSupportedReasonForMVFSE(String reason) {
+        return String.format("fast schema evolution failed: %s. Please use 1) 'CREATE a new MV " +
+                "and use `SWAP MV` to replace the current', or 2) `ALTER MATERIALIZED VIEW <NAME> SET " +
+                "('query_rewrite_consistency'='force_mv')` to force query rewrite. or 3) `ALTER MATERIALIZED VIEW " +
+                "<NAME> set ('enable_query_rewrite'='false')` to disable query rewrite.", reason);
+    }
 }
