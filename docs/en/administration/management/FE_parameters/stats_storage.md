@@ -59,7 +59,7 @@ displayed_sidebar: docs
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
+- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the RECOVER command.
 - Introduced in: -
 
 ### `catalog_recycle_bin_erase_min_latency_ms`
@@ -175,7 +175,7 @@ displayed_sidebar: docs
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#fast-schema-evolution) at table creation.
+> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property `fast_schema_evolution` at table creation.
 
 ### `enable_online_optimize_table`
 
@@ -246,7 +246,7 @@ displayed_sidebar: docs
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../../sql-reference/sql-statements/backup_restore/RECOVER.md).
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing RECOVER.
 - Introduced in: v3.5.9
 
 ### `recover_with_empty_tablet`
