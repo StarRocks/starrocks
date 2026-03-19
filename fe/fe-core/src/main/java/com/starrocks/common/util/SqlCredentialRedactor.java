@@ -134,9 +134,9 @@ public class SqlCredentialRedactor {
     );
 
     private static final Pattern SET_PASSWORD_PATTERN = Pattern.compile(
-            "(SET\\s+PASSWORD(?:\\s+FOR\\s+.+?)?\\s*=\\s*PASSWORD\\s*\\()" +
+            "(SET\\s+PASSWORD(?:\\s+FOR\\s+.+?)?\\s*=\\s*(?:PASSWORD\\s*\\()?)" +
                     "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\")" +
-                    "(\\s*\\))",
+                    "(\\s*\\))?",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
@@ -247,7 +247,7 @@ public class SqlCredentialRedactor {
             } else {
                 result.append(REDACTED_VALUE);
             }
-            if (suffixGroup > 0) {
+            if (suffixGroup > 0 && matcher.group(suffixGroup) != null) {
                 result.append(matcher.group(suffixGroup));
             }
             lastEnd = matcher.end();

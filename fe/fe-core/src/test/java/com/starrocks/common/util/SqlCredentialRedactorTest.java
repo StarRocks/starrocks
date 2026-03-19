@@ -297,6 +297,13 @@ public class SqlCredentialRedactorTest {
 
     @Test
     public void testRedactSetPasswordClause() {
+        String plainSql = "SET PASSWORD = 'secret'";
+        Assertions.assertEquals("SET PASSWORD = '***'", SqlCredentialRedactor.redact(plainSql));
+
+        String plainForUserSql = "SET PASSWORD FOR 'test'@'%' = 'secret'";
+        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = '***'",
+                SqlCredentialRedactor.redact(plainForUserSql));
+
         String sql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('secret')";
         String redacted = SqlCredentialRedactor.redact(sql);
         Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = PASSWORD('***')", redacted);
