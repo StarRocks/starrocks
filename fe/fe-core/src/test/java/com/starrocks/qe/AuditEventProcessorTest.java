@@ -45,17 +45,12 @@ import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-=======
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
->>>>>>> 46e144a221 ([BugFix] Fix AuditEventProcessor thread exit caused by OutOfMemoryException (#70206))
 
 import java.io.IOException;
 import java.util.Collections;
