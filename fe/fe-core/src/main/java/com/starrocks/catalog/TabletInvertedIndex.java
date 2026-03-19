@@ -239,23 +239,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
         writeLock();
         try {
-<<<<<<< HEAD
-            Map<Long, Replica> replicas = replicaMetaTable.remove(tabletId);
-            if (replicas != null) {
-                for (Replica replica : replicas.values()) {
-                    replicaToTabletMap.remove(replica.getId());
-                }
-
-                for (long backendId : replicas.keySet()) {
-                    removeReplica(backingReplicaMetaTable, backendId, tabletId);
-                }
-            }
-            tabletMetaMap.remove(tabletId);
-
-            LOG.debug("delete tablet: {}", tabletId);
-=======
             deleteTabletUnlocked(tabletId);
->>>>>>> 82cb35bacb ([Enhancement] Batch tablet deletion to reduce write lock contention (#70052))
         } finally {
             writeUnlock();
         }
@@ -269,24 +253,25 @@ public class TabletInvertedIndex implements MemoryTrackable {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
-        mutationLock.lock();
+        writeLock();
         try {
             for (long tabletId : tabletIds) {
                 deleteTabletUnlocked(tabletId);
             }
         } finally {
-            mutationLock.unlock();
+            writeUnlock();
         }
     }
 
     private void deleteTabletUnlocked(long tabletId) {
-        CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
+        Map<Long, Replica> replicas = replicaMetaTable.remove(tabletId);
         if (replicas != null) {
-            for (Replica replica : replicas) {
-                Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
-                if (tabletIds != null) {
-                    tabletIds.remove(tabletId);
-                }
+            for (Replica replica : replicas.values()) {
+                replicaToTabletMap.remove(replica.getId());
+            }
+
+            for (long backendId : replicas.keySet()) {
+                removeReplica(backingReplicaMetaTable, backendId, tabletId);
             }
         }
         tabletMetaMap.remove(tabletId);
