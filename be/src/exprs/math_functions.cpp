@@ -338,23 +338,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     ColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
     res->resize_uninitialized(size);
 
-<<<<<<< HEAD
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-        }
-=======
     // result column is mutable, use non-const raw pointer
     RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
     for (auto i = 0; i < size; i++) {
         raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
     }
 #define ABS(x) ((x) < 0 ? -(x) : (x))
     for (int i = 0; i < size; i++) {
@@ -387,25 +374,9 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     const int size = c0->size();
     int64_t width = c1->get(0).get_int32();
 
-    const auto& raw_null_flags = null_flags->immutable_data();
+    const auto& raw_null_flags = null_flags->get_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
-<<<<<<< HEAD
-    RunTimeCppType<Type>* raw_c0 = int_col->get_data().data();
-    ColumnPtr res = RunTimeColumnType<Type>::create();
-    res->resize_uninitialized(size);
-
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-        }
-=======
-    const auto& raw_c0 = int_col->immutable_data();
+    const auto& raw_c0 = int_col->get_data();
     MutableColumnPtr res = RunTimeColumnType<Type>::create();
     res->resize_uninitialized(size);
 
@@ -413,7 +384,6 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     auto& raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data();
     for (auto i = 0; i < size; i++) {
         raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
     }
 #define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
     for (int i = 0; i < size; i++) {
@@ -444,36 +414,15 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
-<<<<<<< HEAD
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
-    res->resize_uninitialized(size);
-    RunTimeCppType<Type>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-
-    if (c0_is_const) {
-        int64_t val = raw_c0[0];
-        murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[0]);
-        raw_res[0] = (raw_res[0] & INT_MAX) % width;
-        res->resize(1);
-        res = ConstColumn::create(std::move(res), size);
-    } else {
-        for (auto i = 0; i < size; i++) {
-            int64_t val = raw_c0[i];
-            murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
-            raw_res[i] = (raw_res[i] & INT_MAX) % width;
-        }
-=======
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
+    const auto& raw_c0 = col->get_data();
     // result column is mutable, use non-const raw pointer
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
     for (auto i = 0; i < size; i++) {
         int64_t val = raw_c0[i];
         murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
         raw_res[i] = (raw_res[i] & INT_MAX) % width;
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
     }
 
     if (has_null) {
@@ -495,18 +444,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-<<<<<<< HEAD
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
-    res->resize_uninitialized(size);
-    auto raw_c0 = col->get_proxy_data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-=======
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    auto raw_c0 = col->immutable_data();
+    const auto& raw_c0 = col->get_proxy_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
 
     for (auto i = 0; i < size; i++) {
         murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, &raw_res[i]);
@@ -529,19 +470,11 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-<<<<<<< HEAD
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
-    res->resize_uninitialized(size);
-    RunTimeCppType<TYPE_DATE>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-=======
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
+    const auto& raw_c0 = col->get_data();
     // result column is mutable, use non-const raw pointer
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
 
     for (auto i = 0; i < size; i++) {
         int64_t val = raw_c0[i].julian() - date::UNIX_EPOCH_JULIAN;
@@ -565,18 +498,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-<<<<<<< HEAD
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
-    res->resize_uninitialized(size);
-    RunTimeCppType<TYPE_DATETIME>* raw_c0 = col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-=======
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
+    const auto& raw_c0 = col->get_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
 
     for (auto i = 0; i < size; i++) {
         int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
@@ -627,22 +552,12 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
-<<<<<<< HEAD
-    ColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
-    res->resize_uninitialized(size);
-    RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res = ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res)->get_data().data();
-    // If c2 is not const, than we need to keep the originl scale
-    if (c0_is_const) {
-        auto result = raw_c0[0];
-=======
     MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
-    const auto& raw_c0 = decimalv3_col->immutable_data();
+    const auto& raw_c0 = decimalv3_col->get_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
     for (auto i = 0; i < size; i++) {
         auto result = raw_c0[i];
->>>>>>> 307b641d1d ([BugFix] Fix the columnt type mismatch of __iceberg_transform_bucket (#70443))
         auto byte_array = int_to_byte_array(result);
         murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[i]);
         raw_res[i] = (raw_res[i] & INT_MAX) % width;
