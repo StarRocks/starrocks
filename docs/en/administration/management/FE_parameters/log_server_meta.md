@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # FE Configuration - Logging, Server, and Metadata
 
+import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
+
 ## Logging
 
 ### `audit_log_delete_age`
