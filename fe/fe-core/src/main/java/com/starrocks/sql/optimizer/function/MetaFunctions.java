@@ -32,9 +32,12 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -167,6 +170,10 @@ public class MetaFunctions {
     }
 
     static class MVRefreshInfoMeta {
+        @SerializedName(value = "mvName")
+        private final String mvName;
+        @SerializedName(value = "mvToRefreshPartitions")
+        private final Set<String> mvToRefreshPartitions;
         // base table to refresh info
         @SerializedName(value = "tableToUpdatePartitions")
         private final Map<String, Set<String>> tableToUpdatePartitions;
@@ -180,10 +187,14 @@ public class MetaFunctions {
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableInfoVisibleVersionMap;
 
         public MVRefreshInfoMeta(
+                String mvName,
+                Set<String> mvToRefreshPartitions,
                 Map<String, Set<String>> tableToUpdatePartitions,
                 Map<String, String> tablePartitionInfos,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap) {
+            this.mvName = mvName;
+            this.mvToRefreshPartitions = mvToRefreshPartitions;
             this.tableToUpdatePartitions = tableToUpdatePartitions;
             this.tablePartitionInfos = tablePartitionInfos;
             this.baseOlapTableVisibleVersionMap = baseTableVisibleVersionMap;
@@ -215,6 +226,9 @@ public class MetaFunctions {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         try {
+            MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
+                    mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
+            Set<String> mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
             Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
             Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
             Map<String, String> tablePartitionInfos = Maps.newHashMap();
@@ -247,7 +261,9 @@ public class MetaFunctions {
                             .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
                             .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
 
-            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(tableToUpdatePartitions,
+            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
+                    mvToRefreshPartitions,
+                    tableToUpdatePartitions,
                     tablePartitionInfos,
                     baseOlapTableVisibleVersionMap,
                     baseExternalTableVisibleVersionMap);

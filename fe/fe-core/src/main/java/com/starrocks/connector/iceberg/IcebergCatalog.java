@@ -57,6 +57,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -77,6 +78,15 @@ public interface IcebergCatalog extends MemoryTrackable {
     int SPEC_ID_COLUMN_INDEX = 1;
     int PARTITION_LAST_UPDATED_AT_COLUMN_INDEX = 9;
     int PARTITION_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX = 10;
+    // Stats columns used as partition-level fingerprint fallback when snapshot is expired.
+    // Partitioned table column offsets (schema: partition, spec_id, record_count, file_count, total_data_file_size, ...)
+    int PARTITION_RECORD_COUNT_COLUMN_INDEX = 2;
+    int PARTITION_FILE_COUNT_COLUMN_INDEX = 3;
+    int PARTITION_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX = 4;
+    // Unpartitioned table column offsets (schema: record_count, file_count, total_data_file_size, ...)
+    int UNPARTITIONED_RECORD_COUNT_COLUMN_INDEX = 0;
+    int UNPARTITIONED_FILE_COUNT_COLUMN_INDEX = 1;
+    int UNPARTITIONED_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX = 2;
 
     default Logger getLogger() {
         return DEFAULT_LOGGER;
@@ -325,9 +335,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row,
                                     UNPARTITIONED_LAST_UPDATED_AT_COLUMN_INDEX,
                                     EMPTY_PARTITION_NAME, snapshotId);
-                            long version = getPartitionVersion(icebergTable, row,
-                                    UNPARTITIONED_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX,
-                                    EMPTY_PARTITION_NAME, snapshotId);
+                            long version = computePartitionStatsFingerprint(row,
+                                    UNPARTITIONED_RECORD_COUNT_COLUMN_INDEX,
+                                    UNPARTITIONED_FILE_COUNT_COLUMN_INDEX,
+                                    UNPARTITIONED_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX,
+                                    EMPTY_PARTITION_NAME);
                             partition = new Partition(lastUpdated, version);
                             break;
                         }
@@ -377,8 +389,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             long lastUpdated =
                                     getPartitionLastUpdatedTime(icebergTable, row, PARTITION_LAST_UPDATED_AT_COLUMN_INDEX,
                                             partitionName, snapshotId);
-                            long version = getPartitionVersion(icebergTable, row,
-                                    PARTITION_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX, partitionName, snapshotId);
+                            long version = computePartitionStatsFingerprint(row,
+                                    PARTITION_RECORD_COUNT_COLUMN_INDEX,
+                                    PARTITION_FILE_COUNT_COLUMN_INDEX,
+                                    PARTITION_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX,
+                                    partitionName);
                             Partition partition = new Partition(lastUpdated, version, specId);
                             partitionMap.put(partitionName, partition);
                         }
@@ -415,38 +430,37 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
         if (lastUpdated == -1) {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
+            // This keeps the modifiedTime-based comparison path (Branch 1 in DefaultTraits) working for
+            // historical MVs whose basePartitionVersion was stored as a timestamp rather than a sequence number.
             lastUpdated = getTableLatestSnapshotTime(icebergTable, logger);
             logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
-                    "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
+                    "using current snapshot timestamp: {}, partition: {}", nativeTable.name(), snapshotId,
+                    lastUpdated, partitionName);
         }
         return lastUpdated;
     }
 
-    private long getPartitionVersion(IcebergTable icebergTable, StructLike row,
-                                     int columnIndex, String partitionName,
-                                     long snapshotId) {
-        Table nativeTable = icebergTable.getNativeTable();
+    private long computePartitionStatsFingerprint(StructLike row,
+                                                  int recordCountIndex,
+                                                  int fileCountIndex,
+                                                  int totalSizeIndex,
+                                                  String partitionName) {
         Logger logger = getLogger();
-        Long lastUpdatedSnapshotId = null;
-        if (row != null) {
-            try {
-                lastUpdatedSnapshotId = row.get(columnIndex, Long.class);
-            } catch (Exception e) {
-                logger.error("Failed to get last_updated_snapshot_id for partition [{}] of table [{}] " +
-                                "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
-            }
+        try {
+            long rc = getStatsColumnAsLong(row, recordCountIndex);
+            long fc = getStatsColumnAsLong(row, fileCountIndex);
+            long ts = getStatsColumnAsLong(row, totalSizeIndex);
+            // Produce a non-negative 31-bit hash to satisfy the >= 0 sentinel check in DefaultTraits.
+            return (long) Objects.hash(rc, fc, ts) & 0x7FFFFFFFL;
+        } catch (Exception e) {
+            logger.error("Failed to compute stats fingerprint for partition [{}]", partitionName, e);
+            return -1L;
         }
-        if (lastUpdatedSnapshotId != null) {
-            Snapshot updateSnapshot = nativeTable.snapshot(lastUpdatedSnapshotId);
-            if (updateSnapshot != null) {
-                return updateSnapshot.sequenceNumber();
-            }
-            // The snapshot may already be expired from table metadata. Keep using the snapshot id as an opaque
-            // version token so refresh detection still observes snapshot changes even if the wall-clock timestamp
-            // is null or non-monotonic.
-            return lastUpdatedSnapshotId;
-        }
-        return getTableLatestSnapshotVersion(icebergTable, logger);
+    }
+
+    private long getStatsColumnAsLong(StructLike row, int columnIndex) {
+        Number value = row.get(columnIndex, Number.class);
+        return value != null ? value.longValue() : 0L;
     }
 
     private long getTableLatestSnapshotTime(IcebergTable icebergTable,

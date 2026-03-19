@@ -223,6 +223,7 @@ public class MetaFunctionsTest extends MVTestBase {
                 "as select k1, sum(v1) from test.tbl1 group by k1");
         ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv1"));
         Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("mvToRefreshPartitions"));
         Assertions.assertTrue(result.getVarchar().contains("tableToUpdatePartitions"));
         starRocksAssert.dropMaterializedView("mv1");
     }
@@ -260,6 +261,7 @@ public class MetaFunctionsTest extends MVTestBase {
                 "   as select k1 from test.tbl1 group by k1");
         ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_empty"));
         Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("mvToRefreshPartitions"));
         Assertions.assertTrue(result.getVarchar().contains("{}")); // Ensure empty base tables are handled
         starRocksAssert.dropMaterializedView("mv_empty");
     }
