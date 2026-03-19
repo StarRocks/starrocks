@@ -1,8 +1,14 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Authentication, Query, and Loading"
 ---
 
 # FE Configuration - Authentication, Query, and Loading
+
+This topic introduces the following types of FE configurations:
+- [User, role, and privilege](#user-role-and-privilege)
+- [Query](#query-engine)
+- [Loading and unloading](#loading-and-unloading)
 
 ## User, role, and privilege
 

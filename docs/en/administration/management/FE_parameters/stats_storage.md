@@ -1,8 +1,13 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Statistics and Storage"
 ---
 
 # FE Configuration - Statistics and Storage
+
+This topic introduces the following types of FE configurations:
+- [Statistic report](#statistic-report)
+- [Storage](#storage)
 
 ## Statistic report
 

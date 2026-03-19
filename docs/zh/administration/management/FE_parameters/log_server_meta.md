@@ -1,10 +1,16 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "日志、服务器和元数据"
 ---
 
 # FE 配置 - 日志、服务器和元数据
 
 import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
+
+当前主题包含以下类型的 FE 配置：
+- [日志](#日志)
+- [服务器](#服务器)
+- [元数据和集群管理](#元数据和集群管理)
 
 ## 日志
 

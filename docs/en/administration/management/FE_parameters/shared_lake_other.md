@@ -1,8 +1,14 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Shared-data, Data Lake, and Others"
 ---
 
 # FE Configuration - Shared-data, Data Lake, and Others
+
+This topic introduces the following types of FE configurations:
+- [Shared-data](#shared-data)
+- [Data Lake](#data-lake)
+- [Other](#other)
 
 ## Shared-data
 

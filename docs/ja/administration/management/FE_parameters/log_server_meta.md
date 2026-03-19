@@ -1,10 +1,16 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 
 # FE 設定 - ログ、サーバー、およびメタデータ
 
 import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
+
+このトピックでは、以下の種類のFE構成について紹介します：
+- [ログ](#ログ)
+- [サーバー](#サーバー)
+- [メタデータとクラスター管理](#メタデータとクラスター管理)
 
 ## ログ
 

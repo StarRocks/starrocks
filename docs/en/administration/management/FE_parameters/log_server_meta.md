@@ -1,10 +1,16 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Logging, Server, and Metadata"
 ---
 
 # FE Configuration - Logging, Server, and Metadata
 
 import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
+
+This topic introduces the following types of FE configurations:
+- [Logging](#logging)
+- [Server](#server)
+- [Metadata and Cluster Management](#metadata-and-cluster-management)
 
 ## Logging
 
