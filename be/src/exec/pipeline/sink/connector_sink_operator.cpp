@@ -20,6 +20,7 @@
 #include "connector/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
@@ -61,16 +62,23 @@ bool ConnectorSinkOperator::need_input() const {
         return false;
     }
 
-    auto [status, _] = _io_poller->poll();
-    if (status.ok()) {
-        status = _connector_chunk_sink->status();
+    auto* runtime_state = _fragment_context->runtime_state();
+    Status status;
+    bool can_accept_more_input;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+        std::tie(status, std::ignore) = _io_poller->poll();
+        if (status.ok()) {
+            status = _connector_chunk_sink->status();
+        }
+        can_accept_more_input = _sink_mem_mgr->can_accept_more_input(_op_mem_mgr);
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
 
-    return _sink_mem_mgr->can_accept_more_input(_op_mem_mgr);
+    return can_accept_more_input;
 }
 
 bool ConnectorSinkOperator::is_finished() const {
@@ -78,15 +86,22 @@ bool ConnectorSinkOperator::is_finished() const {
         return false;
     }
 
-    auto [status, finished] = _io_poller->poll();
-    if (status.ok()) {
-        status = _connector_chunk_sink->status();
+    auto* runtime_state = _fragment_context->runtime_state();
+    Status status;
+    bool finished;
+    bool ret;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+        std::tie(status, finished) = _io_poller->poll();
+        if (status.ok()) {
+            status = _connector_chunk_sink->status();
+        }
+        ret = finished && _connector_chunk_sink->is_finished();
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
-    bool ret = finished && _connector_chunk_sink->is_finished();
     return ret;
 }
 
