@@ -25,11 +25,10 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/memory/memory_allocator.h"
-#include "util/stack_util.h"
 
 namespace starrocks::util {
 
@@ -174,6 +173,10 @@ private:
 
     void destroy(iterator first, iterator last);
 
+    void check_not_intersects([[maybe_unused]] const_iterator iter) const;
+    void check_range_not_intersects([[maybe_unused]] const_iterator range_first,
+                                    [[maybe_unused]] const_iterator range_last) const;
+
     ALWAYS_INLINE size_t required_bytes(size_t element_num) const {
         if constexpr (padding > 0) {
             return element_bytes_with_padding(element_num, kElementSize, kPadding);
@@ -207,9 +210,9 @@ RawBuffer<T, padding>& RawBuffer<T, padding>::operator=(RawBuffer&& rhs) noexcep
 
 template <class T, size_t padding>
 RawBuffer<T, padding>::~RawBuffer() {
-    DCHECK(_start == null) << "_start must be null, " << get_stack_trace();
-    DCHECK(_end == null) << "_end must be null, " << get_stack_trace();
-    DCHECK(_end_of_storage == null) << "_end_of_storage must be null, " << get_stack_trace();
+    DCHECK(_start == null) << "RawBuffer must be released before destruction";
+    DCHECK(_end == null) << "RawBuffer must be released before destruction";
+    DCHECK(_end_of_storage == null) << "RawBuffer must be released before destruction";
 }
 
 template <class T, size_t padding>
@@ -304,6 +307,32 @@ void RawBuffer<T, padding>::destroy(iterator first, iterator last) {
 }
 
 template <class T, size_t padding>
+void RawBuffer<T, padding>::check_not_intersects([[maybe_unused]] const_iterator iter) const {
+#ifndef NDEBUG
+    if (iter == nullptr) {
+        return;
+    }
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(iter);
+    DCHECK(p < _start || p >= _end)
+            << "value must not reference an element inside this buffer";
+#endif
+}
+
+template <class T, size_t padding>
+void RawBuffer<T, padding>::check_range_not_intersects([[maybe_unused]] const_iterator range_first,
+                                                      [[maybe_unused]] const_iterator range_last) const {
+#ifndef NDEBUG
+    if (range_first >= range_last) {
+        return;
+    }
+    const uint8_t* r_start = reinterpret_cast<const uint8_t*>(range_first);
+    const uint8_t* r_end = reinterpret_cast<const uint8_t*>(range_last);
+    DCHECK(r_end <= _start || r_start >= _end)
+            << "append range [first, last) must not overlap this buffer's storage";
+#endif
+}
+
+template <class T, size_t padding>
 void RawBuffer<T, padding>::reserve(memory::Allocator* allocator, size_t new_cap) {
     if (capacity() >= new_cap) {
         return;
@@ -328,8 +357,13 @@ void RawBuffer<T, padding>::shrink_to_fit(memory::Allocator* allocator) {
         return;
     }
 
-    size_t new_allocated_bytes = required_bytes(size());
+    if (size() == 0) {
+        // Empty buffer: release allocation and reset to sentinel so release()/destructor behave correctly.
+        release(allocator);
+        return;
+    }
 
+    size_t new_allocated_bytes = required_bytes(size());
     relocate(allocator, new_allocated_bytes);
 }
 
@@ -354,6 +388,7 @@ void RawBuffer<T, padding>::resize(memory::Allocator* allocator, size_t new_size
 
 template <class T, size_t padding>
 void RawBuffer<T, padding>::resize(memory::Allocator* allocator, size_t new_size, const T& value) {
+    check_not_intersects(&value);
     if (new_size > capacity()) {
         size_t new_capacity = std::max(new_size, capacity() * 2);
         reserve(allocator, new_capacity);
@@ -375,6 +410,7 @@ void RawBuffer<T, padding>::resize(memory::Allocator* allocator, size_t new_size
 
 template <class T, size_t padding>
 void RawBuffer<T, padding>::assign(memory::Allocator* allocator, size_t count, const T& value) {
+    check_not_intersects(&value);
     if (count > capacity()) {
         reserve(allocator, count);
     }
@@ -394,6 +430,7 @@ template <class InputIt, std::enable_if_t<std::is_base_of_v<std::forward_iterato
                                           bool>>
 void RawBuffer<T, padding>::assign(memory::Allocator* allocator, InputIt first, InputIt last) {
     if constexpr (std::is_pointer_v<InputIt> && std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, T>) {
+        check_range_not_intersects(first, last);
         size_t count = static_cast<size_t>(last - first);
         if (count == 0) {
             clear();
@@ -435,6 +472,7 @@ void RawBuffer<T, padding>::assign(memory::Allocator* allocator, std::initialize
 
 template <class T, size_t padding>
 void RawBuffer<T, padding>::push_back(memory::Allocator* allocator, const T& value) {
+    check_not_intersects(&value);
     if (UNLIKELY(_end == _end_of_storage)) {
         grow(allocator);
     }
@@ -448,6 +486,7 @@ void RawBuffer<T, padding>::push_back(memory::Allocator* allocator, const T& val
 
 template <class T, size_t padding>
 void RawBuffer<T, padding>::push_back(memory::Allocator* allocator, T&& value) {
+    check_not_intersects(&value);
     if (UNLIKELY(_end == _end_of_storage)) {
         grow(allocator);
     }
@@ -487,6 +526,7 @@ template <class InputIt, std::enable_if_t<std::is_base_of_v<std::forward_iterato
 typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::Allocator* allocator, InputIt first,
                                                                        InputIt last) {
     if constexpr (std::is_pointer_v<InputIt> && std::is_same_v<std::remove_cv_t<std::remove_pointer_t<InputIt>>, T>) {
+        check_range_not_intersects(first, last);
         size_t count = static_cast<size_t>(last - first);
         if (UNLIKELY(count == 0)) {
             return end();
