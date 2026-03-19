@@ -40,7 +40,7 @@ public:
 
     virtual Status delete_file(std::string path) {
         _batch.emplace_back(std::move(path));
-        if (_batch.size() < _batch_size) {
+        if (_batch.size() < static_cast<size_t>(_batch_size)) {
             return Status::OK();
         }
         return submit(&_batch);
@@ -53,24 +53,24 @@ public:
         return wait();
     }
 
+    // Total files submitted for deletion.
     int64_t delete_count() const { return _delete_count; }
 
 private:
-    // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
-        if (_prev_task_status.valid()) {
-            try {
-                return _prev_task_status.get();
-            } catch (const std::exception& e) {
-                return Status::InternalError(e.what());
-            }
-        } else {
+        if (!_prev_task_status.valid()) {
             return Status::OK();
         }
+        Status st;
+        try {
+            st = _prev_task_status.get();
+        } catch (const std::exception& e) {
+            st = Status::InternalError(e.what());
+        }
+        return st;
     }
 
     Status submit(std::vector<std::string>* files_to_delete) {
-        // Await previous task completion before submitting a new deletion.
         RETURN_IF_ERROR(wait());
         _delete_count += files_to_delete->size();
         if (_cb) {

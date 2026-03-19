@@ -95,6 +95,8 @@ CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
 
+CONF_mBool(lake_vacuum_enable_version_chain_mode, "false");
+
 // If the local pk index file is older than this threshold
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
