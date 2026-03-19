@@ -202,12 +202,9 @@ public class Config extends ConfigBase {
     public static String internal_log_delete_age = "7d";
 
     /**
-     * dump_log_dir:
-     * This specifies FE dump log dir.
-     * Dump log fe.dump.log contains all dump information which query has Exception
-     * <p>
      * dump_log_roll_num:
-     * Maximal FE log files to be kept within a dump_log_roll_interval.
+     * Maximal FE dump log files to be kept within a dump_log_roll_interval.
+     * fe.dump.log is written to sys_log_dir (same directory as fe.log).
      * <p>
      * dump_log_modules:
      * Dump information for an abnormal query.
@@ -225,8 +222,11 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
+<<<<<<< HEAD
     public static String dump_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
+=======
+>>>>>>> 238b51f4d6 ([Enhancement] support dump plan when query exception (#70387))
     public static int dump_log_roll_num = 10;
     @ConfField
     public static String[] dump_log_modules = {"query"};
@@ -234,6 +234,30 @@ public class Config extends ConfigBase {
     public static String dump_log_roll_interval = "DAY";
     @ConfField
     public static String dump_log_delete_age = "7d";
+
+    /**
+     * plan_log_roll_num:
+     * Maximal FE plan log files to be kept within a plan_log_roll_interval.
+     * fe.plan.log is written to sys_log_dir (same directory as fe.log).
+     * <p>
+     * plan_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * plan_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 mins
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static int plan_log_roll_num = 10;
+    @ConfField
+    public static String plan_log_roll_interval = "DAY";
+    @ConfField
+    public static String plan_log_delete_age = "7d";
 
     /**
      * big_query_log_dir:
@@ -308,12 +332,58 @@ public class Config extends ConfigBase {
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
     /**
-     * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
-     * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
-     * in the query detail when enable_collect_query_detail_info is true.
+     * @deprecated Use {@code log_plan_on_query_failure} instead.
+     * Previously controlled whether the COSTS plan was written inline to fe.log on RpcException/BE crash.
+     * Plan logging is now unified under log_plan_on_query_failure and written to fe.plan.log.
      */
     @ConfField(mutable = true)
+    @Deprecated
     public static boolean log_plan_cancelled_by_crash_be = true;
+
+    /**
+     * When enabled, the COSTS plan of failed queries will be written to fe.plan.log.
+     * Which failure types are logged is controlled by {@code plan_log_failure_types}.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_plan_on_query_failure = false;
+
+    /**
+     * When enabled, a full query dump (JSON with table metadata, statistics, plan, etc.)
+     * of failed queries will be written to fe.dump.log for offline replay and diagnosis.
+     * Which failure types trigger the dump is controlled by {@code plan_log_failure_types}.
+     * Note: enabling this causes DumpInfo to be collected for every query, which adds overhead.
+     * Default is false. Enable only when diagnosing persistent query failures.
+     */
+    @ConfField(mutable = true)
+    public static boolean dump_query_on_failure = false;
+
+    /**
+     * Comma-separated list of query failure types that trigger plan logging to fe.plan.log.
+     * Only effective when {@code log_plan_on_query_failure} is true.
+     * Valid values (from QueryState.ErrType):
+     *   ANALYSIS_ERR  - SQL analysis / semantic errors (usually user mistakes, low diagnostic value)
+     *   BLACKLISTED   - query rejected by SQL blacklist
+     *   IGNORE_ERR    - silently ignored errors (e.g. KILL statement)
+     *   INTERNAL_ERR  - internal errors, BE crashes, RPC failures
+     *   IO_ERR        - client connection lost
+     *   EXEC_TIME_OUT - query execution timeout
+     *   UNKNOWN       - unclassified errors
+     * Default logs only execution-side failures that are worth investigating.
+     */
+    @ConfField(mutable = true)
+    public static String[] plan_log_failure_types = {"INTERNAL_ERR", "UNKNOWN"};
+
+    /**
+     * Error message keywords that trigger plan/dump logging regardless of {@code plan_log_failure_types}.
+     * When the error message of a failed query contains any of the listed substrings (case-insensitive),
+     * the query plan is written to fe.plan.log and (if enabled) a dump is written to fe.dump.log.
+     * This is useful for catching specific known-bad patterns (e.g. "OOM", "deadlock", "tablet not found")
+     * without broadening the failure-type filter.
+     * Empty by default (keyword matching disabled).
+     * Example: plan_log_error_keywords = OOM, tablet not found, deadlock
+     */
+    @ConfField(mutable = true)
+    public static String[] plan_log_error_keywords = {};
 
     /**
      * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
