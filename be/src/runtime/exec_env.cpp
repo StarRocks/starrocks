@@ -44,6 +44,7 @@
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
@@ -669,6 +670,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_pk_index_memtable_flush_thread_pool));
 #endif
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_metadata_fetch_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
 
@@ -757,6 +765,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_metadata_fetch_thread_pool) {
+        start = MonotonicMillis();
+        _lake_metadata_fetch_thread_pool->shutdown();
+        component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
     if (_parallel_compact_mgr) {
@@ -968,6 +982,7 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
+    _lake_metadata_fetch_thread_pool.reset();
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();

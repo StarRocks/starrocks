@@ -1345,6 +1345,8 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

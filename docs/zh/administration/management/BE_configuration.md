@@ -2827,6 +2827,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Tablet 统计采集慢日志阈值（毫秒）。单次 tablet 统计任务耗时超过该阈值时，会输出告警日志，附带 `tablet_id`、版本、rowset 数、是否精确模式和耗时等诊断信息。
 - 引入版本：-
 
+##### lake_metadata_fetch_thread_count
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
+- 引入版本：-
+
 ##### tablet_writer_open_rpc_timeout_sec
 
 - 默认值：300
