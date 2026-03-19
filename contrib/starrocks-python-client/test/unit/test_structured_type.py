@@ -253,8 +253,8 @@ class TestStructResultProcessor:
 
     def test_struct_with_array_field(self):
         t = datatype.STRUCT(tags=datatype.ARRAY(datatype.VARCHAR(20)), score=datatype.INTEGER)
-        result = _process(t, '{"tags":["go","python"],"score":9}')
-        assert result == {"tags": ["go", "python"], "score": 9}
+        result = _process(t, '{"tags":["c++","python"],"score":9}')
+        assert result == {"tags": ["c++", "python"], "score": 9}
         assert isinstance(result["tags"], list)
 
     def test_struct_applies_field_processor_for_dates(self):
