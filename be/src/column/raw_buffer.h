@@ -313,22 +313,20 @@ void RawBuffer<T, padding>::check_not_intersects([[maybe_unused]] const_iterator
         return;
     }
     const uint8_t* p = reinterpret_cast<const uint8_t*>(iter);
-    DCHECK(p < _start || p >= _end)
-            << "value must not reference an element inside this buffer";
+    DCHECK(p < _start || p >= _end) << "value must not reference an element inside this buffer";
 #endif
 }
 
 template <class T, size_t padding>
 void RawBuffer<T, padding>::check_range_not_intersects([[maybe_unused]] const_iterator range_first,
-                                                      [[maybe_unused]] const_iterator range_last) const {
+                                                       [[maybe_unused]] const_iterator range_last) const {
 #ifndef NDEBUG
     if (range_first >= range_last) {
         return;
     }
     const uint8_t* r_start = reinterpret_cast<const uint8_t*>(range_first);
     const uint8_t* r_end = reinterpret_cast<const uint8_t*>(range_last);
-    DCHECK(r_end <= _start || r_start >= _end)
-            << "append range [first, last) must not overlap this buffer's storage";
+    DCHECK(r_end <= _start || r_start >= _end) << "append range [first, last) must not overlap this buffer's storage";
 #endif
 }
 
