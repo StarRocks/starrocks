@@ -50,7 +50,6 @@ public class LogCleanerTest {
         Config.sys_log_dir = testLogDir.getAbsolutePath();
         Config.audit_log_dir = testLogDir.getAbsolutePath();
         Config.internal_log_dir = testLogDir.getAbsolutePath();
-        Config.dump_log_dir = testLogDir.getAbsolutePath();
         Config.big_query_log_dir = testLogDir.getAbsolutePath();
         Config.profile_log_dir = testLogDir.getAbsolutePath();
         Config.feature_log_dir = testLogDir.getAbsolutePath();
