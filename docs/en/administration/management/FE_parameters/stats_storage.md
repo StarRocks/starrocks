@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [`ADMIN SHOW CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [`ADMIN SHOW CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md).
 
 :::note
 You must have administrator privileges to run cluster administration-related commands.
@@ -32,7 +32,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [`ADMIN SET FRONTEND CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [`ADMIN SET FRONTEND CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -99,7 +99,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
+- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
 ### `catalog_recycle_bin_erase_min_latency_ms`
@@ -200,7 +200,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md) feature.
+- Description: Whether to enable the [hybrid row-column storage](../../../table_design/hybrid_table.md) feature.
 - Introduced in: v3.2.3
 
 ### `enable_fast_schema_evolution`
@@ -215,7 +215,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#fast-schema-evolution) at table creation.
 
 ### `enable_online_optimize_table`
 
@@ -286,7 +286,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../../sql-reference/sql-statements/backup_restore/RECOVER.md).
 - Introduced in: v3.5.9
 
 ### `recover_with_empty_tablet`

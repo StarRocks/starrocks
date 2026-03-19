@@ -56,5 +56,5 @@ The parameters are grouped in these categories:
 - [Loading and unloading](./FE_parameters/user_query_loading.md)
 - [Statistic report](./FE_parameters/stats_storage.md)
 - [Storage](./FE_parameters/stats_storage.md)
-- [Shared-data](./FE_parameters/shared_lake.md)
-- [Data Lake](./FE_parameters/shared_lake.md)
+- [Shared-data](./FE_parameters/shared_lake_other.md)
+- [Data Lake](./FE_parameters/shared_lake_other.md)
