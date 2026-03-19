@@ -1113,7 +1113,7 @@ public class ExpressionStatisticCalculator {
             }
 
             if (lastChild instanceof LambdaFunctionOperator) {
-                return stats.get(stats.size() - 1);
+                return stats.get(0);
             }
 
             return ColumnStatistic.unknown();
@@ -1133,8 +1133,11 @@ public class ExpressionStatisticCalculator {
                 final var lambdaStats = getArrayMapLambdaStats(arrayMap, lambda, stats);
                 if (!lambdaStats.isUnknown()) {
                     if (lambda.isIndependentOfArguments()) {
-                        // If the lambda is independent of the array elements, we can use the NDV of the lambda to approximate.
-                        return lambdaStats.getDistinctValuesCount();
+                        if (arrayStats.isUnknown()) {
+                            return lambdaStats.getDistinctValuesCount();
+                        } else {
+                            return Math.max(lambdaStats.getDistinctValuesCount(), arrayStats.getDistinctValuesCount());
+                        }
                     }
                     // TODO(o.layer): Could use NDV of unnest stats (https://github.com/StarRocks/starrocks/pull/69272) to
                     // better estimate the NDV of array_map when lambda depends on the array elements.

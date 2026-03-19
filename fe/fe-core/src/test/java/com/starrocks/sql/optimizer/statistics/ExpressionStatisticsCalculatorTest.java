@@ -1064,7 +1064,9 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(Double.NEGATIVE_INFINITY, exprStats.getMinValue(), 0.001);
         Assertions.assertEquals(Double.POSITIVE_INFINITY, exprStats.getMaxValue(), 0.001);
         Assertions.assertEquals(0.1, exprStats.getNullsFraction(), 0.001);
-        Assertions.assertEquals(2, exprStats.getDistinctValuesCount(), 0.001);
+        // Even though the lambda body has NDV=2, array_map produces arrays, and different input
+        // array structures (lengths/NULLs) yield distinct output arrays, so NDV ≥ input array NDV.
+        Assertions.assertEquals(50, exprStats.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(16, exprStats.getAverageRowSize(), 0.001);
     }
 
