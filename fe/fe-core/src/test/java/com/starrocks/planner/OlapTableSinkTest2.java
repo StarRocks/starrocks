@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,7 +31,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -122,7 +122,7 @@ public class OlapTableSinkTest2 {
         try {
             // Change p2's distribution columns to k2 (different from p1's k1)
             HashDistributionInfo differentDistInfo = new HashDistributionInfo(
-                    3, Lists.newArrayList(new Column("k2", IntegerType.INT)));
+                    3, Lists.newArrayList(new Column("k2", ScalarType.INT)));
             p2.setDistributionInfo(differentDistInfo);
 
             List<Long> partitionIds = olapTable.getPartitions().stream()
@@ -130,7 +130,7 @@ public class OlapTableSinkTest2 {
 
             StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
                 OlapTableSink.createPartition(db.getId(), olapTable, null,
-                        false, 0, partitionIds, null);
+                        false, 0L, partitionIds);
             });
             Assertions.assertTrue(exception.getMessage().contains("different distribute columns"));
         } finally {
@@ -153,7 +153,7 @@ public class OlapTableSinkTest2 {
 
         try {
             HashDistributionInfo differentDistInfo = new HashDistributionInfo(
-                    3, Lists.newArrayList(new Column("k2", IntegerType.INT)));
+                    3, Lists.newArrayList(new Column("k2", ScalarType.INT)));
             p2.setDistributionInfo(differentDistInfo);
 
             List<Long> partitionIds = olapTable.getPartitions().stream()
@@ -161,7 +161,7 @@ public class OlapTableSinkTest2 {
 
             StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
                 OlapTableSink.createPartition(db.getId(), olapTable, null,
-                        false, 0, partitionIds, null);
+                        false, 0L, partitionIds);
             });
             Assertions.assertTrue(exception.getMessage().contains("different distribute columns"));
         } finally {
