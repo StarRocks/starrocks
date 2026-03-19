@@ -257,3 +257,55 @@ class TestResultProcessorWithDateTypes:
         assert isinstance(arr, list)
         assert arr[0] == datetime(2024, 1, 15, 10, 30, 0)
         assert arr[1] == datetime(2024, 6, 30, 23, 59, 59)
+
+
+class TestArrayJsonResultProcessor:
+    """ARRAY<JSON> is returned as a raw string.
+
+    StarRocks serializes ARRAY<JSON> wire values using single-quoted element
+    strings (e.g. ['{"a":1}','{"b":2}']), which is not valid JSON.  Rather
+    than add a special-case parser, we leave the raw string value intact.
+    """
+
+    @pytest.fixture(scope="class")
+    def table_name(self, sr_root_engine: Engine):
+        name = f"test_rp_array_json_{_SUFFIX}"
+        with sr_root_engine.connect() as conn:
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+            conn.exec_driver_sql(f"""
+                CREATE TABLE {name} (
+                    id       INT NOT NULL,
+                    obj_arr  ARRAY<JSON>,
+                    null_arr ARRAY<JSON>
+                )
+                DUPLICATE KEY(id)
+                DISTRIBUTED BY HASH(id) BUCKETS 1
+                PROPERTIES ("replication_num" = "1")
+            """)
+            conn.exec_driver_sql(
+                f"INSERT INTO {name} VALUES"
+                r"  (1, ['{\"a\":1}', '{\"b\":2}'], NULL),"
+                r"  (2, ['{\"x\":[1,2]}'], NULL)"
+            )
+            conn.commit()
+
+        yield name
+
+        with sr_root_engine.connect() as conn:
+            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {name}")
+            conn.commit()
+
+    def _rows(self, sr_root_engine: Engine, table_name: str):
+        meta = MetaData()
+        with sr_root_engine.connect() as conn:
+            t = Table(table_name, meta, autoload_with=conn)
+            return {row.id: row for row in conn.execute(t.select().order_by(t.c.id))}
+
+    def test_array_of_json_is_raw_string(self, sr_root_engine: Engine, table_name: str):
+        # StarRocks sends ARRAY<JSON> in a non-standard format; we return the raw string.
+        rows = self._rows(sr_root_engine, table_name)
+        assert isinstance(rows[1].obj_arr, str)
+
+    def test_null_array_of_json_is_none(self, sr_root_engine: Engine, table_name: str):
+        rows = self._rows(sr_root_engine, table_name)
+        assert rows[1].null_arr is None

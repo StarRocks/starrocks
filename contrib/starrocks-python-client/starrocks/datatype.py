@@ -207,14 +207,16 @@ class ARRAY(StructuredType):
         def process(value):
             if value is None:
                 return None
-            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value, parse_float=Decimal)
+                except json.JSONDecodeError:
+                    return value
+            else:
+                parsed = value
             if item_processor is None:
                 return parsed
-            return [
-                (item if isinstance(item, (dict, list)) else item_processor(item))
-                if item is not None else None
-                for item in parsed
-            ]
+            return [item_processor(item) if item is not None else None for item in parsed]
 
         return process
 
@@ -272,11 +274,16 @@ class MAP(StructuredType):
         def process(value):
             if value is None:
                 return None
-            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value, parse_float=Decimal)
+                except json.JSONDecodeError:
+                    return value
+            else:
+                parsed = value
             return {
                 (key_processor(k) if key_processor is not None else k): (
-                    (v if isinstance(v, (dict, list)) else value_processor(v))
-                    if value_processor is not None and v is not None else v
+                    value_processor(v) if value_processor is not None and v is not None else v
                 )
                 for k, v in parsed.items()
             }
@@ -343,7 +350,7 @@ class STRUCT(StructuredType):
             parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
             return {
                 k: (
-                    (v if isinstance(v, (dict, list)) else proc(v))
+                    proc(v)
                     if (proc := processors.get(k)) is not None and v is not None
                     else v
                 )

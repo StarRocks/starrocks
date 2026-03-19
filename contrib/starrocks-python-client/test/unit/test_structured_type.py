@@ -205,6 +205,17 @@ class TestArrayResultProcessor:
         result = _process(datatype.ARRAY(datatype.DATETIME()), '["2024-01-15 10:30:00"]')
         assert result == [datetime(2024, 1, 15, 10, 30, 0)]
 
+    def test_array_of_decimal_preserves_precision(self):
+        result = _process(datatype.ARRAY(datatype.DECIMAL(18, 18)), '[0.123456789012345678]')
+        assert isinstance(result[0], Decimal)
+        assert result[0] == Decimal('0.123456789012345678')
+
+    def test_array_of_json_returns_raw_string(self):
+        # StarRocks sends ARRAY<JSON> using single-quoted elements (not valid JSON).
+        # We fall back to returning the raw string rather than crashing.
+        raw = """['{"a":1}','{"b":2}']"""
+        assert _process(datatype.ARRAY(datatype.JSON()), raw) == raw
+
     @pytest.mark.parametrize("json_str,expected", [
         ("[1]", [1]),
         ("[]", []),
@@ -236,6 +247,14 @@ class TestMapResultProcessor:
     def test_nested_map(self):
         t = datatype.MAP(datatype.VARCHAR(10), datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER))
         assert _process(t, '{"outer":{"inner":42}}') == {"outer": {"inner": 42}}
+
+    def test_map_decimal_value_preserves_precision(self):
+        result = _process(
+            datatype.MAP(datatype.VARCHAR(10), datatype.DECIMAL(18, 18)),
+            '{"k":0.123456789012345678}'
+        )
+        assert isinstance(result["k"], Decimal)
+        assert result["k"] == Decimal('0.123456789012345678')
 
 
 class TestStructResultProcessor:
@@ -272,44 +291,6 @@ class TestStructResultProcessor:
         result = _process(t, '{"name":"Bob","extra":"ignored"}')
         assert result["name"] == "Bob"
         assert result["extra"] == "ignored"
-
-
-# ---------------------------------------------------------------------------
-# Codex review fixes
-# ---------------------------------------------------------------------------
-
-class TestArrayJsonSubtype:
-    """ARRAY<JSON> must not crash — elements are already dicts after outer json.loads."""
-
-    def test_array_of_json_objects(self):
-        result = _process(datatype.ARRAY(datatype.JSON()), '[{"a":1},{"b":2}]')
-        assert result == [{"a": 1}, {"b": 2}]
-        assert isinstance(result[0], dict)
-
-    def test_array_of_json_arrays(self):
-        result = _process(datatype.ARRAY(datatype.JSON()), '[[1,2],[3]]')
-        assert result == [[1, 2], [3]]
-
-    def test_nested_array_of_json(self):
-        result = _process(datatype.ARRAY(datatype.ARRAY(datatype.JSON())), '[[{"x":1}],[{"y":2}]]')
-        assert result == [[{"x": 1}], [{"y": 2}]]
-
-
-class TestDecimalPrecision:
-    """Floating-point numbers in complex types must be parsed as Decimal, not float."""
-
-    def test_array_of_decimal_preserves_precision(self):
-        result = _process(datatype.ARRAY(datatype.DECIMAL(18, 18)), '[0.123456789012345678]')
-        assert isinstance(result[0], Decimal)
-        assert result[0] == Decimal('0.123456789012345678')
-
-    def test_map_decimal_value_preserves_precision(self):
-        result = _process(
-            datatype.MAP(datatype.VARCHAR(10), datatype.DECIMAL(18, 18)),
-            '{"k":0.123456789012345678}'
-        )
-        assert isinstance(result["k"], Decimal)
-        assert result["k"] == Decimal('0.123456789012345678')
 
     def test_struct_decimal_field_preserves_precision(self):
         result = _process(
