@@ -205,6 +205,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
+THIN_ACHIEVE=OFF
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -264,7 +265,7 @@ fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros"
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros,include_file_ctime"
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -332,6 +333,7 @@ else
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --with-thin-archive) THIN_ACHIEVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
@@ -392,6 +394,7 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    THIN_ACHIEVE                -- $THIN_ACHIEVE
     WITH_STARCACHE              -- $WITH_STARCACHE
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
@@ -541,6 +544,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+                  -DTHIN_ARCHIVE=${THIN_ACHIEVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
