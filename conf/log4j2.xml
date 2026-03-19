@@ -1,109 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <Configuration status="info" packages="com.starrocks.common" monitorInterval="30">
+  <Properties>
+    <Property name="logDir">/opt/starrocks/fe/log</Property>
+  </Properties>
   <Appenders>
     <Console name="ConsoleErr" target="SYSTEM_ERR" follow="true">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
     </Console>
-    <RollingFile name="Sys" fileName="/opt/starrocks/fe/log/fe.log" filePattern="/opt/starrocks/fe/log/fe.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="Sys" fileName="${logDir}/fe.log" filePattern="${logDir}/fe.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="10" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.log.*" />
           <IfLastModified age="7d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="SysWF" fileName="/opt/starrocks/fe/log/fe.warn.log" filePattern="/opt/starrocks/fe/log/fe.warn.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="SysWF" fileName="${logDir}/fe.warn.log" filePattern="${logDir}/fe.warn.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="10" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.warn.log.*" />
           <IfLastModified age="7d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="Auditfile" fileName="/opt/starrocks/fe/log/fe.audit.log" filePattern="/opt/starrocks/fe/log/fe.audit.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="Auditfile" fileName="${logDir}/fe.audit.log" filePattern="${logDir}/fe.audit.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="90" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.audit.log.*" />
           <IfLastModified age="30d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="dumpFile" fileName="/opt/starrocks/fe/log/fe.dump.log" filePattern="/opt/starrocks/fe/log/fe.dump.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="dumpFile" fileName="${logDir}/fe.dump.log" filePattern="${logDir}/fe.dump.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="10" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.dump.log.*" />
           <IfLastModified age="7d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="BigQueryFile" fileName="/opt/starrocks/fe/log/fe.big_query.log" filePattern="/opt/starrocks/fe/log/fe.big_query.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="BigQueryFile" fileName="${logDir}/fe.big_query.log" filePattern="${logDir}/fe.big_query.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="10" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.big_query.log.*" />
           <IfLastModified age="7d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="ProfileFile" fileName="/opt/starrocks/fe/log/fe.profile.log" filePattern="/opt/starrocks/fe/log/fe.profile.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="ProfileFile" fileName="${logDir}/fe.profile.log" filePattern="${logDir}/fe.profile.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="5" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.profile.log.*" />
           <IfLastModified age="1d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="FeaturesFile" fileName="/opt/starrocks/fe/log/fe.features.log"        filePattern="/opt/starrocks/fe/log/fe.features.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="FeaturesFile" fileName="${logDir}/fe.features.log"    filePattern="${logDir}/fe.features.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="5" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.features.log.*" />
           <IfLastModified age="3d" />
         </Delete>
       </DefaultRolloverStrategy>
     </RollingFile>
-    <RollingFile name="InternalFile" fileName="/opt/starrocks/fe/log/fe.internal.log" filePattern="/opt/starrocks/fe/log/fe.internal.log.%d{yyyyMMdd}-%i">
+    <RollingFile name="InternalFile" fileName="${logDir}/fe.internal.log" filePattern="${logDir}/fe.internal.log.%d{yyyyMMdd}-%i">
       <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy/>
         <SizeBasedTriggeringPolicy size="1024MB"/>
       </Policies>
       <DefaultRolloverStrategy max="90" fileIndex="min">
-        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+        <Delete basePath="${logDir}/" maxDepth="1" followLinks="true">
           <IfFileName glob="fe.internal.log.*" />
           <IfLastModified age="7d" />
         </Delete>
@@ -130,10 +133,10 @@
     <Logger name="features" level="INFO" additivity="false">
       <AppenderRef ref="FeaturesFile"/>
     </Logger>
-    <Logger name='internal.base' level="INFO" additivity="false"> 
+    <Logger name='internal.base' level="INFO" additivity="false">
       <AppenderRef ref="InternalFile"/>
     </Logger>
-    <Logger name='internal.statistic' level="INFO" additivity="false"> 
+    <Logger name='internal.statistic' level="INFO" additivity="false">
       <AppenderRef ref="InternalFile"/>
     </Logger>
     <Logger name='audit.slow_query' level='INFO'/>
