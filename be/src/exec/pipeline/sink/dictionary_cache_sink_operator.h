@@ -20,9 +20,7 @@
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 
-namespace starrocks {
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class DictionaryCacheSinkOperator final : public Operator {
 public:
@@ -85,5 +83,4 @@ private:
     FragmentContext* _fragment_ctx = nullptr;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

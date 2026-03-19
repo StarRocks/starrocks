@@ -51,7 +51,7 @@ StatusOr<ChunkPtr> SpillProcessOperator::pull_chunk(RuntimeState* state) {
 
     auto chunk_st = _channel->current_task()();
     if (chunk_st.status().ok() && !state->is_cancelled()) {
-        auto chunk = chunk_st.value();
+        const auto& chunk = chunk_st.value();
         if (chunk != nullptr && !chunk->is_empty()) {
             auto& spiller = _channel->spiller();
             RETURN_IF_ERROR(spiller->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, spiller)));

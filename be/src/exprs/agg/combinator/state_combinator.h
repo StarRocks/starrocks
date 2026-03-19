@@ -43,7 +43,7 @@ public:
         VLOG_ROW << "StateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
-    ~StateCombinator() = default;
+    virtual ~StateCombinator() = default;
 
     // prepare the state combinator
     virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) { return Status::OK(); }

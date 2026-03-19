@@ -1351,7 +1351,7 @@ StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
                                                  shard_info_or.status().message()));
     }
 
-    auto shard_info = shard_info_or.value();
+    const auto& shard_info = shard_info_or.value();
     auto id_pair = get_table_partition_id(shard_info);
     auto shard_table_id = id_pair.first;
     auto shard_partition_id = id_pair.second;

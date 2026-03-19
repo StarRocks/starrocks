@@ -30,7 +30,8 @@ namespace starrocks {
 
 struct PartitionChunks {
     explicit PartitionChunks(size_t partition_idx) : partition_idx(partition_idx) {}
-    DISALLOW_COPY_AND_ASSIGN(PartitionChunks);
+    PartitionChunks(const PartitionChunks&) = delete;
+    PartitionChunks& operator=(const PartitionChunks&) = delete;
 
     Chunks chunks;
 

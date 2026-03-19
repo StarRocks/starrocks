@@ -371,7 +371,7 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
 
 class AzBlobFileSystem : public FileSystem {
 public:
-    explicit AzBlobFileSystem(const FSOptions& options);
+    explicit AzBlobFileSystem(FSOptions options);
     ~AzBlobFileSystem() override = default;
 
     AzBlobFileSystem(const AzBlobFileSystem&) = delete;
@@ -476,7 +476,7 @@ private:
     AzBlobClientFactory* _factory;
 };
 
-AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options) : _options(options), _factory(blob_client_factory()) {}
+AzBlobFileSystem::AzBlobFileSystem(FSOptions options) : _options(std::move(options)), _factory(blob_client_factory()) {}
 
 StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(const AzBlobURI& uri) {
     // Create azure cloud credential from TCloudConfiguration.cloud_properties
@@ -539,8 +539,8 @@ StatusOr<std::unique_ptr<WritableFile>> AzBlobFileSystem::new_writable_file(cons
     return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);
 }
 
-std::unique_ptr<FileSystem> new_fs_azblob(const FSOptions& options) {
-    return std::make_unique<AzBlobFileSystem>(options);
+std::unique_ptr<FileSystem> new_fs_azblob(FSOptions options) {
+    return std::make_unique<AzBlobFileSystem>(std::move(options));
 }
 
 } // namespace starrocks

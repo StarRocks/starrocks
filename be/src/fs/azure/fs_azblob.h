@@ -18,6 +18,6 @@
 
 namespace starrocks {
 
-std::unique_ptr<FileSystem> new_fs_azblob(const FSOptions& options);
+std::unique_ptr<FileSystem> new_fs_azblob(FSOptions options);
 
 } // namespace starrocks

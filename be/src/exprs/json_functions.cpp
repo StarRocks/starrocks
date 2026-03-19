@@ -1867,7 +1867,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Colu
                 null_arg = true;
                 break;
             }
-            JsonPath json_path = res.value();
+            const JsonPath& json_path = res.value();
 
             JsonValue* new_val = val_viewers[i].value(row);
 
