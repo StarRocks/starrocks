@@ -43,7 +43,15 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+<<<<<<< HEAD
 #include "cache/block_cache/block_cache.h"
+=======
+#include "cache/datacache.h"
+#include "cache/datacache_utils.h"
+#include "cache/mem_cache/page_cache.h"
+#include "common/config.h"
+#include "common/config_lake_fwd.h"
+>>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -204,6 +212,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
             return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                                             config::transaction_publish_version_thread_pool_num_min));
+        });
+        _config_callback.emplace("lake_metadata_fetch_thread_count", [&]() -> Status {
+            if (_exec_env->lake_metadata_fetch_thread_pool() != nullptr) {
+                return _exec_env->lake_metadata_fetch_thread_pool()->update_max_threads(
+                        std::max(1, config::lake_metadata_fetch_thread_count));
+            }
+            return Status::OK();
         });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
