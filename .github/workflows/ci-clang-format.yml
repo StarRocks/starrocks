@@ -61,20 +61,29 @@ jobs:
             "build-support/clang-format-changed.sh"
             "build-support/format_changed_files.py"
           )
-          cleanup_files=()
-          trap 'rm -f "${cleanup_files[@]}"' EXIT
-
-          if [[ ! -f build-support/clang-format-changed.sh || ! -f build-support/format_changed_files.py ]]; then
-            echo "clang-format helpers missing on this branch; fetching missing files from upstream/main."
-          fi
+          backup_dir=$(mktemp -d)
+          cleanup() {
+            for path in "${fetched_files[@]}"; do
+              backup_path="${backup_dir}/${path}"
+              if [[ -f "${backup_path}" ]]; then
+                mkdir -p "$(dirname "${path}")"
+                cp "${backup_path}" "${path}"
+              else
+                rm -f "${path}"
+              fi
+            done
+            rm -rf "${backup_dir}"
+          }
+          trap cleanup EXIT
 
           for path in "${fetched_files[@]}"; do
+            backup_path="${backup_dir}/${path}"
+            mkdir -p "$(dirname "${backup_path}")"
             if [[ -f "${path}" ]]; then
-              continue
+              cp "${path}" "${backup_path}"
             fi
             mkdir -p "$(dirname "${path}")"
             git show "upstream/main:${path}" > "${path}"
-            cleanup_files+=("${path}")
           done
 
           chmod +x build-support/clang-format-changed.sh
