@@ -21,6 +21,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
@@ -45,6 +46,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -2490,6 +2492,37 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
     EXPECT_TRUE(found_delvec_file) << "Expected delvec file to be in orphan_files";
     EXPECT_TRUE(found_dcg_file1) << "Expected dcg file 1 to be in orphan_files";
     EXPECT_TRUE(found_dcg_file2) << "Expected dcg file 2 to be in orphan_files";
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_preload_update_state_slow_log) {
+    // Set slow log threshold to 0 so any preload triggers the slow log path
+    auto saved_slow_log_ms = config::lake_publish_version_slow_log_ms;
+    config::lake_publish_version_slow_log_ms = 0;
+    config::skip_pk_preload = false;
+    DeferOp defer([&] {
+        config::lake_publish_version_slow_log_ms = saved_slow_log_ms;
+        config::skip_pk_preload = true;
+    });
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    ASSERT_TRUE(read(tablet_id, 2).ok());
 }
 
 } // namespace starrocks::lake
