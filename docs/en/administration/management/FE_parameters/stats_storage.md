@@ -160,7 +160,7 @@ displayed_sidebar: docs
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../../../table_design/hybrid_table.md) feature.
+- Description: Whether to enable the hybrid row-column storage feature.
 - Introduced in: v3.2.3
 
 ### `enable_fast_schema_evolution`

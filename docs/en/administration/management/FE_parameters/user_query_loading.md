@@ -1131,7 +1131,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [`job_properties`](../../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in `job_properties`. This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ### `routine_load_task_timeout_second`
@@ -1140,7 +1140,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [`job_properties`](../../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in `job_properties`. This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ### `routine_load_unstable_threshold_second`
