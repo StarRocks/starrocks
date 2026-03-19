@@ -21,6 +21,12 @@ import java.util.concurrent.TimeUnit;
 public interface PartitionInfo {
     long getModifiedTime();
 
+    // Version is the change token used by MV refresh detection. Most connectors can reuse modifiedTime, but
+    // connectors with non-monotonic timestamps may override this with a more stable identifier.
+    default long getVersion() {
+        return getModifiedTime();
+    }
+
     default TimeUnit getModifiedTimeUnit()  {
         return TimeUnit.SECONDS;
     }
