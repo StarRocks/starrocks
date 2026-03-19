@@ -40,16 +40,8 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
-<<<<<<< HEAD
 #include "common/config.h"
 #include "common/configbase.h"
-=======
-#include "base/string/parse_util.h"
-#include "base/time/time.h"
-#include "base/utility/pretty_printer.h"
-#include "common/config_exec_env_fwd.h"
-#include "common/config_lake_fwd.h"
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "connector/connector_sink_executor.h"
