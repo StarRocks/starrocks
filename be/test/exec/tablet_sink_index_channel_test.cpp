@@ -399,5 +399,4 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_TRUE(status.message().find("[R1][E112]Not connected to [10.128.8.0:8060]") != std::string::npos);
 }
 
-
 } // namespace starrocks
