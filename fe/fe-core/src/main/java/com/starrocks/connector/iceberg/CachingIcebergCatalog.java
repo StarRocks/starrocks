@@ -359,8 +359,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+    public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, 
+                                          ExecutorService executorService, boolean force) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
+
+        // Force refresh: clear all cache and reload from delegate
+        if (force) {
+            LOG.info("Force refresh iceberg table {}.{} - clearing all cache", dbName, tableName);
+            invalidateCache(icebergTableName);
+        }
+
         Table cachedTable = tables.getIfPresent(icebergTableName);
         if (cachedTable == null) {
             partitionCache.invalidate(icebergTableName);
@@ -456,7 +464,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     continue;
                 }
 
-                refreshTable(identifier.dbName, identifier.tableName, new ConnectContext(), backgroundExecutor);
+                refreshTable(identifier.dbName, identifier.tableName, new ConnectContext(), backgroundExecutor, false);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName,
                         identifier.tableName, e);

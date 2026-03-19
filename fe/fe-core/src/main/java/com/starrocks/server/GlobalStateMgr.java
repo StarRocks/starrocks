@@ -2542,11 +2542,17 @@ public class GlobalStateMgr {
         TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
                 tableRef.getTableName(), tableRef.getPos());
         List<String> partitionNames = stmt.getPartitions();
-        refreshExternalTable(context, tableName, partitionNames);
-        refreshOthersFeTable(tableName, partitionNames, true);
+        boolean isForce = stmt.isForce();
+        refreshExternalTable(context, tableName, partitionNames, isForce);
+        refreshOthersFeTable(tableName, partitionNames, true, isForce);
     }
 
     public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync) throws DdlException {
+        refreshOthersFeTable(tableName, partitions, isSync, false);
+    }
+
+    public void refreshOthersFeTable(TableName tableName, List<String> partitions, boolean isSync,
+                                     boolean isForce) throws DdlException {
         List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         if (allFrontends.size() == 0) {
             return;
@@ -2558,7 +2564,7 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(
-                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions, isForce));
         }
 
         String errMsg = "";
@@ -2587,7 +2593,7 @@ public class GlobalStateMgr {
     }
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, TableName tableName,
-                                                List<String> partitions) {
+                                                List<String> partitions, boolean isForce) {
         int timeout;
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
@@ -2601,6 +2607,7 @@ public class GlobalStateMgr {
             request.setDb_name(tableName.getDb());
             request.setTable_name(tableName.getTbl());
             request.setPartitions(partitions);
+            request.setIs_force(isForce);
             try {
                 TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
@@ -2627,6 +2634,19 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions) {
+        refreshExternalTable(context, tableName, partitions, false);
+    }
+
+    /**
+     * Refresh external table metadata.
+     *
+     * @param context    connect context
+     * @param tableName  table name to refresh
+     * @param partitions partition names to refresh, null means refresh all partitions
+     * @param isForce    if true, will force clear all cache and reload metadata from remote catalog
+     */
+    public void refreshExternalTable(ConnectContext context, TableName tableName, List<String> partitions,
+                                     boolean isForce) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
         String tblName = tableName.getTbl();
@@ -2652,7 +2672,8 @@ public class GlobalStateMgr {
             catalogName = (table).getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
+        boolean onlyCachedPartitions = !isForce;
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions, onlyCachedPartitions);
     }
 
     public void initDefaultWarehouse() {

@@ -1195,6 +1195,7 @@ struct TRefreshTableRequest {
   2: optional string table_name
   3: optional list<string> partitions
   4: optional string catalog_name
+  5: optional bool is_force
 }
 
 struct TRefreshTableResponse {

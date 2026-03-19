@@ -160,11 +160,18 @@ public class CachingHiveMetastoreTest {
             Assertions.assertTrue(e.getMessage().contains("invalidated cache"));
         }
 
+        // onlyCachedPartitions=false: full refresh — loads ALL partitions from HMS regardless of what's in cache.
+        // This exercises the else-branch in refreshTableWithoutSync that sets presentPartitionNames = allPartitionsInHms.
         try {
-            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+            cachingHiveMetastore.refreshTable("db1", "tbl1", false);
         } catch (Exception e) {
             Assertions.fail();
         }
+        // Verify the full-refresh path populated the partition cache with all HMS partitions (not just cached ones).
+        // MockedHiveMetaClient returns ["col1"] as partition keys for tbl1.
+        HivePartitionName partitionName = HivePartitionName.of("db1", "tbl1", "col1");
+        Assertions.assertTrue(cachingHiveMetastore.isPartitionPresent(partitionName),
+                "full refresh (onlyCachedPartitions=false) should load all HMS partitions into cache");
     }
 
     @Test

@@ -79,4 +79,46 @@ public class RefreshTableStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assertions.assertEquals(((RefreshTableStmt) stmt).getPartitions().size(), 2);
     }
+
+    @Test
+    public void testRefreshTableWithForceOption(@Mocked MetadataMgr metadataMgr,
+                                                 @Mocked Table table,
+                                                 @Mocked Database database) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
+                result = metadataMgr;
+
+                metadataMgr.getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = table;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = database;
+            }
+        };
+        // Test FORCE option without partitions
+        String sql = "REFRESH EXTERNAL TABLE catalog1.db1.table1 FORCE";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
+        RefreshTableStmt refreshStmt = (RefreshTableStmt) stmt;
+        Assertions.assertTrue(refreshStmt.isForce());
+        Assertions.assertNull(refreshStmt.getPartitions());
+        Assertions.assertEquals("table1", refreshStmt.getTableName());
+
+        // Test FORCE option with partitions
+        sql = "REFRESH EXTERNAL TABLE catalog1.db1.table1 PARTITION(\"p1\", \"p2\") FORCE";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
+        refreshStmt = (RefreshTableStmt) stmt;
+        Assertions.assertTrue(refreshStmt.isForce());
+        Assertions.assertEquals(2, refreshStmt.getPartitions().size());
+        Assertions.assertEquals("table1", refreshStmt.getTableName());
+
+        // Test without FORCE option (default should be false)
+        sql = "REFRESH EXTERNAL TABLE catalog1.db1.table1";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertTrue(stmt instanceof RefreshTableStmt);
+        refreshStmt = (RefreshTableStmt) stmt;
+        Assertions.assertFalse(refreshStmt.isForce());
+    }
 }

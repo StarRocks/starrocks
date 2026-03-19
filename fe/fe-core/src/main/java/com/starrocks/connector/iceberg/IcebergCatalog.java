@@ -223,7 +223,8 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
-    default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
+    default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor, 
+                              boolean force) {
     }
 
     default void invalidateTableCache(String dbName, String tableName) {
@@ -390,7 +391,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                     lastUpdated = lastUpdatedWrapper;
                 }
             } catch (Exception e) {
-                logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
+                logger.debug("Failed to get last_updated_at for partition [{}] of table [{}] " +
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
             }
         }
@@ -398,7 +399,8 @@ public interface IcebergCatalog extends MemoryTrackable {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
             lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
             logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
-                    "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
+                    "using current snapshot timestamp: {}, partition: {}", nativeTable.name(), snapshotId, 
+                    lastUpdated, partitionName);
         }
         return lastUpdated;
     }
@@ -408,7 +410,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         Table nativeTable = icebergTable.getNativeTable();
         Snapshot snapshot = nativeTable.currentSnapshot();
         if (snapshot == null) {
-            logger.warn("The table [{}] has no current snapshot, using -1 as last updated time",
+            logger.debug("The table [{}] has no current snapshot, using -1 as last updated time",
                     nativeTable.name());
             return -1;
         }
