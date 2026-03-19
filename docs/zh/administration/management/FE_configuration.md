@@ -283,7 +283,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当此项设置为 `true` 时，内部统计/审计条目将作为紧凑的 JSON 对象写入统计审计日志记录器。JSON 包含键 "executeType" (InternalType: QUERY 或 DML)、"queryId"、"sql" 和 "time"（已用毫秒）。当设置为 `false` 时，相同的信息将记录为单个格式化文本行（"statistic execute: ... | QueryId: [...] | SQL: ..."）。启用 JSON 可改进机器解析并与日志处理器集成，但也会导致原始 SQL 文本包含在日志中，这可能会暴露敏感信息并增加日志大小。
+- 描述: 当此项设置为 `true` 时，内部统计/审计条目将作为紧凑的 JSON 对象写入统计审计日志记录器。JSON 包含键 "executeType" (Internal类型: QUERY 或 DML)、"queryId"、"sql" 和 "time"（已用毫秒）。当设置为 `false` 时，相同的信息将记录为单个格式化文本行（"statistic execute: ... | QueryId: [...] | SQL: ..."）。启用 JSON 可改进机器解析并与日志处理器集成，但也会导致原始 SQL 文本包含在日志中，这可能会暴露敏感信息并增加日志大小。
 - 引入版本: -
 
 ##### `internal_log_modules`
@@ -2989,7 +2989,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### `enable_strict_storage_medium_check`
 
-- Default: false
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
@@ -3272,6 +3272,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 从每个 BE 获取 tablet 统计信息的时间间隔。
 - 引入版本: -
+
+##### `enable_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为建表启用 Range-based Distribution 语意。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_max_parallel_tablets`
+
+- 默认值: 10240
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 可并行拆分或合并的 Tablet 最大数量。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- 默认值: 1073741824 (1 GB)
+- 类型: Int
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 执行 SPLIT 或 MERGE 操作后，Tablet 的目标大小。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
+- 引入版本: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- 默认值: 259200000 (72 hours)
+- 类型: Int
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
+- 引入版本: v4.1.0
 
 ### 共享数据
 
@@ -3855,6 +3900,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统允许 Lake 表使用组合事务日志路径进行相关事务。仅适用于共享数据集群。
 - 引入版本: v3.3.7, v3.4.0, v3.5.0
 
+##### `lake_repair_metadata_fetch_max_version_batch_size`
+
+- 默认值：160
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Tablet 修复时获取 Tablet 元数据的版本扫描最大批次大小。批次大小从 5 开始，每次翻倍增长，直到达到此最大值。较大的值允许单次批量获取更多版本，通过跨版本文件存在性缓存提高修复效率。如果设置的值小于 5，运行时会自动调整为 5。
+- 引入版本：-
+
 ##### `enable_iceberg_commit_queue`
 
 - 默认值: true
@@ -3991,6 +4045,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否为 Colocate 表启用备份和恢复。`true` 表示为 Colocate 表启用备份和恢复，`false` 表示禁用。
 - 引入版本: v3.2.10, v3.3.3
+
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制在构建 `information_schema.tables` 时，是否为外部 Catalog（如 Hive、Iceberg、JDBC）中的表加载完整元数据。当该项为 `false`（默认）时不会访问远端 metastore，因此外部表在 `information_schema.tables` 中的 `TABLE_COMMENT` 等字段可能为空，但查询开销较小且不会对外部服务产生额外请求。当该项为 `true` 时，FE 会访问对应的外部元数据服务，填充 `TABLE_COMMENT` 等字段，但代价是每张外部表都会产生额外的远端调用和一定延迟。
+- 引入版本: -
 
 ##### `enable_materialized_view_concurrent_prepare`
 

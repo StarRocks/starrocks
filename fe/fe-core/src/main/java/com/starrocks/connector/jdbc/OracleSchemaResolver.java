@@ -20,7 +20,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
@@ -40,30 +39,23 @@ import static java.lang.Math.max;
 
 public class OracleSchemaResolver extends JDBCSchemaResolver {
 
+    public OracleSchemaResolver() {
+        this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
+    }
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null,
-                new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, defaultTableTypes);
+    }
+
+    @Override
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, tblName, defaultTableTypes);
     }
 
     @Override
     public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
         return connection.getMetaData().getColumns(connection.getCatalog(), dbName, tblName, "%");
-    }
-
-    @Override
-    public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
-        List<Column> fullSchema = Lists.newArrayList();
-        while (columnSet.next()) {
-            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
-                    columnSet.getString("TYPE_NAME"),
-                    columnSet.getInt("COLUMN_SIZE"),
-                    columnSet.getInt("DECIMAL_DIGITS"));
-            String columnName = columnSet.getString("COLUMN_NAME");
-            fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
-        }
-        return fullSchema;
     }
 
     @Override

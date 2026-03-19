@@ -3273,6 +3273,51 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+##### `enable_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the Range-based Distribution semantic for table creation.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_parallel_tablets`
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that can be split or merged in parallel.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- Default: 1073741824 (1 GB)
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of new tablets that an old tablet can be split into.
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- Default: 259200000 (72 hours)
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
+- Introduced in: v4.1.0
+
 ### Shared-data
 
 ##### `aws_s3_access_key`
@@ -3846,6 +3891,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+##### `lake_repair_metadata_fetch_max_version_batch_size`
+
+- Default: 160
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum batch size for version scanning when fetching tablet metadata during lake tablet repair. The batch size starts at 5 and grows exponentially (doubling each iteration) up to this maximum. A larger value allows more versions to be fetched in a single batch, which can improve repair efficiency by leveraging file existence caching across versions. If set to a value less than 5, it will be clamped to 5 at runtime.
+- Introduced in: -
+
 ##### `lake_enable_drop_tablet_cache`
 
 - Default: true
@@ -3992,6 +4046,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
 - Introduced in: v3.2.10, v3.3.3
+
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether `information_schema.tables` is allowed to access external metadata services when resolving tables in external catalogs (such as Hive, Iceberg, JDBC). When set to `false` (default), columns like `TABLE_COMMENT` may be empty for external tables but the query is fast and avoids remote calls. When set to `true`, the FE contacts the corresponding external metadata service and can populate fields like `TABLE_COMMENT` at the cost of additional latency and remote calls per table.
+- Introduced in: -
 
 ##### `enable_materialized_view_concurrent_prepare`
 

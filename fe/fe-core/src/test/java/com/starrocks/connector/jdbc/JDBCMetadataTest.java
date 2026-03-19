@@ -372,6 +372,28 @@ public class JDBCMetadataTest {
     }
 
     @Test
+    public void testGetTableSetsCommentFromMetadata() throws SQLException {
+        // Prepare a TABLES result set with REMARKS for tbl1
+        MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
+        tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
+        tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
+
+        new Expectations() {
+            {
+                // getColumns is already mocked in setUp; here we only need to mock getTables for a single table
+                connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
+                result = tablesWithRemarks;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("jdbc table comment", table.getComment());
+    }
+
+    @Test
     public void testCreateHikariDataSource() {
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");

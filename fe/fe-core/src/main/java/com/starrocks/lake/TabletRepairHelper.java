@@ -30,6 +30,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
@@ -71,7 +72,7 @@ import javax.validation.constraints.NotNull;
 public class TabletRepairHelper {
     private static final Logger LOG = LogManager.getLogger(TabletRepairHelper.class);
 
-    private static final long BATCH_VERSION_NUM = 5L;
+    private static final long INITIAL_VERSION_BATCH_SIZE = 5L;
     private static final String SST_FILE_SUFFIX = ".sst";
 
     // the version range [minVersion, maxVersion] is used to find valid tablet metadatas, both are included
@@ -601,8 +602,12 @@ public class TabletRepairHelper {
         long partitionMinVersion = info.minVersion;
         Map<Long, TabletMetadataPB> tabletToValidMetadata = Maps.newHashMap();
 
-        for (long maxVersion = partitionMaxVersion; maxVersion >= partitionMinVersion; maxVersion -= BATCH_VERSION_NUM) {
-            long minVersion = Math.max(maxVersion - BATCH_VERSION_NUM + 1, partitionMinVersion);
+        long versionBatchSize = INITIAL_VERSION_BATCH_SIZE;
+        long maxVersionBatchSize = Math.max(Config.lake_repair_metadata_fetch_max_version_batch_size,
+                INITIAL_VERSION_BATCH_SIZE);
+        long maxVersion = partitionMaxVersion;
+        while (maxVersion >= partitionMinVersion) {
+            long minVersion = Math.max(maxVersion - versionBatchSize + 1, partitionMinVersion);
 
             // get tablet metadatas from backends
             Map<Long, Map<Long, TabletMetadataEntry>> tabletToVersionMetadataEntry =
@@ -617,6 +622,11 @@ public class TabletRepairHelper {
                 Preconditions.checkState(unverifiedTablets.isEmpty());
                 break;
             }
+
+            // Decrement maxVersion by current batch size, then double it for next iteration.
+            // Larger batches leverage the BE-side file existence cache to reduce object storage accesses.
+            maxVersion -= versionBatchSize;
+            versionBatchSize = Math.min(versionBatchSize * 2, maxVersionBatchSize);
         }
         return tabletToValidMetadata;
     }

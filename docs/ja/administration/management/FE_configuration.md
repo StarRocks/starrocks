@@ -3273,6 +3273,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE が各 BE からタブレット統計を取得する時間間隔。
 - Introduced in: -
 
+##### `enable_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: テーブル作成時に Range-based Distribution セマンティクスを有効化するかどうか。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_parallel_tablets`
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: 並行して分割または結合できるタブレット数の最大値。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_target_size`
+
+- Default: 1073741824 (1 GB)
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: SPLIT または MERGE 操作後のテーブルのターゲットサイズ。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_max_split_count`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: 古いタブレットを分割できる新しいタブレットの最大数。
+- Introduced in: v4.1.0
+
+##### `tablet_reshard_history_job_max_keep_ms`
+
+- Default: 259200000 (72 hours)
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: 過去のタブレット SPLIT/MERGE ジョブの最大保持期間。
+- Introduced in: v4.1.0
+
 ### 共有データ
 
 ##### `aws_s3_access_key`
@@ -3868,6 +3913,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: この項目が `true` に設定されている場合、システムは Lake テーブルが関連トランザクションの結合トランザクションログパスを使用することを許可します。共有データクラスターでのみ利用可能です。
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+##### `lake_repair_metadata_fetch_max_version_batch_size`
+
+- デフォルト: 160
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、タブレット修復時にタブレットメタデータを取得する際のバージョンスキャンの最大バッチサイズ。バッチサイズは 5 から開始し、この最大値に達するまで毎回倍増します。値を大きくすると、1 回のバッチでより多くのバージョンを取得でき、バージョン間のファイル存在キャッシュを活用して修復効率が向上します。5 未満の値が設定された場合、実行時に自動的に 5 に調整されます。
+- Introduced in: -
+
 ##### `enable_iceberg_commit_queue`
 
 - Default: true
@@ -4004,6 +4058,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: コロケーションテーブルのバックアップと復元を有効にするかどうか。`true` はコロケーションテーブルのバックアップと復元を有効にすることを示し、`false` は無効にすることを示します。
 - Introduced in: v3.2.10, v3.3.3
+
+##### `enable_external_catalog_information_schema_tables_access_full_metadata`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: 外部カタログ（Hive、Iceberg、JDBC など）内のテーブルを解決する際に、`information_schema.tables` が外部メタデータサービスにアクセスすることを許可するかどうかを制御します。`false`（デフォルト）に設定すると、外部テーブルの `TABLE_COMMENT` などの列は空になる場合がありますが、クエリは高速でリモート呼び出しを回避します。`true` に設定すると、FE は対応する外部メタデータサービスに問い合わせ、`TABLE_COMMENT` などのフィールドを埋めることができますが、テーブルごとに追加のレイテンシとリモート呼び出しが発生します。
+- Introduced in: -
 
 ##### `enable_materialized_view_concurrent_prepare`
 

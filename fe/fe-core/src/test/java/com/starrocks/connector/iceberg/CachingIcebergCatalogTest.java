@@ -33,14 +33,20 @@ import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.MetadataTableType;
+import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.io.CloseableIterable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
@@ -50,6 +56,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
@@ -133,6 +140,75 @@ public class CachingIcebergCatalogTest {
             requestContext.setQueryMVRewrite(true);
             List<String> res = cachingIcebergCatalog.listPartitionNames(table, requestContext, null);
             Assertions.assertEquals(res.size(), 0);
+        }
+    }
+
+    @Test
+    public void testGetPartitionsUsesCurrentSnapshotMicrosForUnpartitionedFallback() {
+        IcebergCatalog catalog = new IcebergCatalog() {
+            @Override
+            public IcebergCatalogType getIcebergCatalogType() {
+                return IcebergCatalogType.HIVE_CATALOG;
+            }
+
+            @Override
+            public List<String> listAllDatabases(ConnectContext context) {
+                return List.of();
+            }
+
+            @Override
+            public Database getDB(ConnectContext context, String dbName) {
+                return null;
+            }
+
+            @Override
+            public List<String> listTables(ConnectContext context, String dbName) {
+                return List.of();
+            }
+
+            @Override
+            public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) {
+            }
+
+            @Override
+            public Table getTable(ConnectContext context, String dbName, String tableName) {
+                throw new UnsupportedOperationException();
+            }
+        };
+
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        PartitionsTable partitionsTable = Mockito.mock(PartitionsTable.class);
+        TableScan tableScan = Mockito.mock(TableScan.class);
+
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(true);
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(nativeTable.name()).thenReturn("db.test");
+        Mockito.when(snapshot.timestampMillis()).thenReturn(1234L);
+        Mockito.when(snapshot.sequenceNumber()).thenReturn(9L);
+        Mockito.when(partitionsTable.newScan()).thenReturn(tableScan);
+        Mockito.when(tableScan.planFiles()).thenReturn(CloseableIterable.empty());
+
+        try (MockedStatic<MetadataTableUtils> metadataTableUtils = Mockito.mockStatic(MetadataTableUtils.class)) {
+            metadataTableUtils.when(() -> MetadataTableUtils.createMetadataTableInstance(
+                    nativeTable, MetadataTableType.PARTITIONS)).thenReturn(partitionsTable);
+
+            IcebergTable table = IcebergTable.builder()
+                    .setSrTableName("test")
+                    .setCatalogDBName("db")
+                    .setCatalogTableName("test")
+                    .setNativeTable(nativeTable)
+                    .build();
+
+            Map<String, Partition> partitions = catalog.getPartitions(table, -1, null);
+            Partition partition = partitions.get(IcebergCatalog.EMPTY_PARTITION_NAME);
+
+            Assertions.assertNotNull(partition);
+            Assertions.assertEquals(TimeUnit.MICROSECONDS, partition.getModifiedTimeUnit());
+            Assertions.assertEquals(TimeUnit.MILLISECONDS.toMicros(1234L), partition.getModifiedTime());
+            Assertions.assertEquals(9L, partition.getVersion());
         }
     }
 

@@ -107,11 +107,12 @@ public class IcebergTable extends Table {
     public static final String SPEC_ID = "$spec_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
+    public static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
     public static final String FILE_PATH = MetadataColumns.FILE_PATH.name();
     public static final String ROW_POSITION = MetadataColumns.ROW_POSITION.name();
 
     public static final Set<String> ICEBERG_META_COLUMNS = Set.of(
-            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, FILE_PATH, ROW_POSITION
+            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, LAST_UPDATED_SEQUENCE_NUMBER, FILE_PATH, ROW_POSITION
     );
 
     private String catalogName;
