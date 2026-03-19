@@ -45,7 +45,7 @@ jobs:
           BASE_REPO: ${{ github.repository }}
         run: |
           git remote add upstream "https://github.com/${BASE_REPO}.git"
-          git fetch upstream "${BASE_REF}"
+          git fetch upstream "${BASE_REF}" main
 
       - name: Install clang-format-10
         run: |
@@ -56,7 +56,32 @@ jobs:
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
           FORMAT_BASE_REF: upstream/${{ github.base_ref }}
-        run: bash build-support/clang-format-changed.sh
+        run: |
+          if [[ -f build-support/clang-format-changed.sh ]]; then
+            bash build-support/clang-format-changed.sh
+            exit 0
+          fi
+
+          echo "build-support/clang-format-changed.sh not found on this branch; using upstream/main helpers."
+
+          fetched_files=(
+            "build-support/clang-format-changed.sh"
+            "build-support/format_changed_files.py"
+          )
+          cleanup_files=()
+          trap 'rm -f "${cleanup_files[@]}"' EXIT
+
+          for path in "${fetched_files[@]}"; do
+            if [[ -f "${path}" ]]; then
+              continue
+            fi
+            mkdir -p "$(dirname "${path}")"
+            git show "upstream/main:${path}" > "${path}"
+            cleanup_files+=("${path}")
+          done
+
+          chmod +x build-support/clang-format-changed.sh
+          bash build-support/clang-format-changed.sh
 
       - name: Commit and push formatting fixes
         env:
