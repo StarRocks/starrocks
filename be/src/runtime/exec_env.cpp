@@ -40,16 +40,8 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
-<<<<<<< HEAD
 #include "common/config.h"
 #include "common/configbase.h"
-=======
-#include "base/string/parse_util.h"
-#include "base/time/time.h"
-#include "base/utility/pretty_printer.h"
-#include "common/config_exec_env_fwd.h"
-#include "common/config_lake_fwd.h"
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "connector/connector_sink_executor.h"
@@ -688,33 +680,12 @@ void ExecEnv::stop() {
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
     }
 
-<<<<<<< HEAD
-=======
     if (_lake_metadata_fetch_thread_pool) {
         start = MonotonicMillis();
         _lake_metadata_fetch_thread_pool->shutdown();
         component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
-    if (_parallel_compact_mgr) {
-        start = MonotonicMillis();
-        _parallel_compact_mgr->shutdown();
-        component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
-    }
-
-    if (_pk_index_execution_thread_pool) {
-        start = MonotonicMillis();
-        _pk_index_execution_thread_pool->shutdown();
-        component_times.emplace_back("pk_index_execution_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (_pk_index_memtable_flush_thread_pool) {
-        start = MonotonicMillis();
-        _pk_index_memtable_flush_thread_pool->shutdown();
-        component_times.emplace_back("pk_index_memtable_flush_thread_pool", MonotonicMillis() - start);
-    }
-
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
     if (_agent_server) {
         start = MonotonicMillis();
         _agent_server->stop();
@@ -900,13 +871,7 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
-<<<<<<< HEAD
-=======
     _lake_metadata_fetch_thread_pool.reset();
-    _parallel_compact_mgr.reset();
-    _pk_index_execution_thread_pool.reset();
-    _pk_index_memtable_flush_thread_pool.reset();
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
     _metrics = nullptr;
 }
 
