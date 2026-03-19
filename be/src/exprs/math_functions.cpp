@@ -377,7 +377,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     const auto& raw_null_flags = null_flags->get_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
     const auto& raw_c0 = int_col->get_data();
-    MutableColumnPtr res = RunTimeColumnType<Type>::create();
+    ColumnPtr res = RunTimeColumnType<Type>::create();
     res->resize_uninitialized(size);
 
     // result column is mutable, use non-const raw pointer
