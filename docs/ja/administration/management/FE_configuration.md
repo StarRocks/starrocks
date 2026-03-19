@@ -1151,6 +1151,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 下層の brpc RpcClient が短命の接続を使用するかどうかを制御します。有効な場合 (`true`)、RpcClientOptions.setShortConnection が設定され、要求完了後に接続が閉じられ、接続設定のオーバーヘッドが増加し、レイテンシーが増加する代わりに、長命のソケットの数が減少します。無効な場合 (`false`、デフォルト)、永続的な接続と接続プールが使用されます。このオプションを有効にすると、接続プール動作に影響するため、`brpc_connection_pool_size`、`brpc_idle_wait_max_time`、`brpc_min_evictable_idle_time_ms`、`brpc_reuse_addr`、および `brpc_inner_reuse_pool` と合わせて検討する必要があります。一般的な高スループットデプロイメントでは無効のままにし、ソケットのライフタイムを制限する必要がある場合や、ネットワークポリシーによって短命の接続が要求される場合にのみ有効にします。
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- Default: 10
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: bRPC 接続プール例外（例: TCP ハンドシェイク時の SYN パケットロス）が発生した場合のリトライ待機時間。`ChannelPool.getChannel()` が `NoSuchElementException`（直接、または `RuntimeException` でラップされた形で）をスローした場合、リトライロジックはこの時間だけスリープしてから再接続を試みます。
+- Introduced in: -
+
 ##### `catalog_try_lock_timeout_ms`
 
 - Default: 5000
