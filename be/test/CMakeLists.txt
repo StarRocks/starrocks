@@ -108,6 +108,7 @@ set(EXEC_FILES
         ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
+        ./exec/parquet_reader_test.cpp
         ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
@@ -219,6 +220,7 @@ set(EXEC_FILES
         ./formats/orc/orc_file_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/utils_test.cpp
+        ./formats/parquet/arrow_memory_pool_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp

@@ -20,9 +20,14 @@
 
 namespace starrocks {
 
+class MemTracker;
+
 class ArrowMemoryPool final : public arrow::MemoryPool {
 public:
     using Status = arrow::Status;
+
+    ArrowMemoryPool() = default;
+    explicit ArrowMemoryPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
 
     ~ArrowMemoryPool() override = default;
 
@@ -43,6 +48,7 @@ public:
     std::string backend_name() const override { return "starrocks"; }
 
 private:
+    MemTracker* _mem_tracker = nullptr;
     arrow::internal::MemoryPoolStats _stats;
 };
 

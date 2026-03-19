@@ -472,7 +472,8 @@ Status ParquetScanner::open_next_reader() {
         _conv_ctx.current_file = file->filename();
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
-                                                                  range_desc.start_offset, range_desc.size);
+                                                                  range_desc.start_offset, range_desc.size,
+                                                                  ExecEnv::GetInstance()->query_pool_mem_tracker());
         if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
             parquet_reader->set_invalid_as_null(true);
         }
@@ -510,7 +511,8 @@ Status ParquetScanner::get_schema(std::vector<SlotDescriptor>* schema) {
     _conv_ctx.current_file = file->filename();
     auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
     auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
-                                                              range_desc.start_offset, range_desc.size);
+                                                              range_desc.start_offset, range_desc.size,
+                                                              ExecEnv::GetInstance()->query_pool_mem_tracker());
     return parquet_reader->get_schema(schema);
 }
 

@@ -14,6 +14,9 @@
 
 #include "arrow_memory_pool.h"
 
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+
 namespace starrocks {
 
 // https://arrow.apache.org/docs/format/Columnar.html#buffer-alignment-and-padding
@@ -26,11 +29,24 @@ ArrowMemoryPool::Status ArrowMemoryPool::Allocate(int64_t size, int64_t alignmen
     if (size == 0) {
         *out = kZeroSizeArea;
     }
+#ifndef BE_TEST
+    // In production, jemalloc hooks intercept posix_memalign and attribute
+    // the allocation to the current TLS tracker.  Redirect TLS to
+    // _mem_tracker so the hook tracks to the right place.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+#endif
     // On Linux (and other systems), posix_memalign() does not modify memptr on failure.
     if (posix_memalign(reinterpret_cast<void**>(out), alignment, size)) {
         return Status::OutOfMemory("malloc of size ", size, " failed");
     }
     _stats.DidAllocateBytes(size);
+#ifdef BE_TEST
+    // In test builds (ASAN), jemalloc hooks are not active.
+    // Explicitly track the allocation.
+    if (_mem_tracker != nullptr) {
+        _mem_tracker->consume(size);
+    }
+#endif
     return Status::OK();
 }
 
@@ -63,8 +79,16 @@ void ArrowMemoryPool::Free(uint8_t* buffer, int64_t size, int64_t /*alignment*/)
         DCHECK_EQ(size, 0);
         return;
     }
+#ifndef BE_TEST
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+#endif
     std::free(buffer);
     _stats.DidFreeBytes(size);
+#ifdef BE_TEST
+    if (_mem_tracker != nullptr) {
+        _mem_tracker->release(size);
+    }
+#endif
 }
 
 } // namespace starrocks

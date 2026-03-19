@@ -32,12 +32,14 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exprs/expr.h"
+#include "formats/parquet/arrow_memory_pool.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
+class MemTracker;
 class ScannerCounter;
 using RecordBatch = ::arrow::RecordBatch;
 using RecordBatchPtr = std::shared_ptr<RecordBatch>;
@@ -54,17 +56,19 @@ public:
     arrow::Status Close() override;
     bool closed() const override;
     const std::string& filename() const;
+    void set_memory_pool(std::shared_ptr<ArrowMemoryPool> pool) { _pool = std::move(pool); }
 
 private:
     std::shared_ptr<starrocks::RandomAccessFile> _file;
     uint64_t _pos = 0;
     ScannerCounter* _counter = nullptr;
+    std::shared_ptr<ArrowMemoryPool> _pool;
 };
 
 class ParquetReaderWrap {
 public:
     ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file, int32_t num_of_columns_from_file,
-                      int64_t read_offset, int64_t read_size);
+                      int64_t read_offset, int64_t read_size, MemTracker* mem_tracker = nullptr);
     virtual ~ParquetReaderWrap();
 
     void close();
@@ -88,6 +92,15 @@ private:
     int64_t _num_rows = 0;
     ::parquet::ReaderProperties _properties;
     std::shared_ptr<arrow::io::RandomAccessFile> _parquet;
+
+    // Declared before Arrow-owned members (_rb_batch, _batch, _reader) so that
+    // _arrow_pool outlives them during destruction (C++ destroys members in
+    // reverse declaration order). Arrow objects may call pool->Free() in their
+    // destructors.
+    // shared_ptr so that buffers returned by ParquetChunkFile::Read(nbytes) can
+    // prevent the pool from being destroyed while Arrow IO threads still hold
+    // references to those buffers.
+    std::shared_ptr<ArrowMemoryPool> _arrow_pool;
 
     // parquet file reader object
     std::shared_ptr<::arrow::RecordBatchReader> _rb_batch;

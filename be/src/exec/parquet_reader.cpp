@@ -29,7 +29,6 @@
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -39,15 +38,19 @@ ParquetReaderWrap::~ParquetReaderWrap() {
 }
 
 ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile>&& parquet_file,
-                                     int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size)
+                                     int32_t num_of_columns_from_file, int64_t read_offset, int64_t read_size,
+                                     MemTracker* mem_tracker)
 
         : _num_of_columns_from_file(num_of_columns_from_file),
 
+          _arrow_pool(std::make_shared<ArrowMemoryPool>(mem_tracker)),
           _read_offset(read_offset),
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = ::parquet::ReaderProperties();
-    _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
+    auto* chunk_file = reinterpret_cast<ParquetChunkFile*>(_parquet.get());
+    _filename = chunk_file->filename();
+    chunk_file->set_memory_pool(_arrow_pool);
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
@@ -107,7 +110,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         arrow_reader_properties.set_cache_options(cache_options);
 
         // new file reader for parquet file
-        auto st = ::parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
+        auto st = ::parquet::arrow::FileReader::Make(_arrow_pool.get(),
                                                      ::parquet::ParquetFileReader::Open(_parquet, _properties),
                                                      arrow_reader_properties, &_reader);
         if (!st.ok()) {
@@ -375,7 +378,7 @@ using ArrowStatus = ::arrow::Status;
 
 ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos,
                                    ScannerCounter* counter)
-        : _file(std::move(file)), _pos(pos), _counter(counter) {}
+        : _file(std::move(file)), _pos(pos), _counter(counter), _pool(std::make_shared<ArrowMemoryPool>()) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
     [[maybe_unused]] auto st = Close();
@@ -421,22 +424,23 @@ arrow::Result<int64_t> ParquetChunkFile::Tell() const {
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
-    auto tracker = CurrentThread::mem_tracker();
-    if (tracker == nullptr) {
-        return arrow::Status::ExecutionError("current thread memory tracker Not Found when allocate arrow Buffer");
-    }
-    std::unique_ptr<arrow::Buffer> buffer_res;
-    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(nbytes, arrow::default_memory_pool()).Value(&buffer_res));
-    std::shared_ptr<arrow::Buffer> read_buf(buffer_res.release(), MemTrackerDeleter(tracker));
+    ARROW_ASSIGN_OR_RAISE(auto read_buf, arrow::AllocateBuffer(nbytes, _pool.get()));
     int64_t bytes_read_res = 0;
     ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, read_buf->mutable_data()).Value(&bytes_read_res));
-    // If bytes_read is equal with read_buf's capacity, we just assign
+    // Custom deleter captures shared_ptr<ArrowMemoryPool>, keeping pool alive
+    // until the buffer is freed (even from Arrow IO threads after
+    // ParquetReaderWrap is destroyed).
+    auto deleter = read_buf.get_deleter();
+    auto shared_buf = std::shared_ptr<arrow::Buffer>(
+            read_buf.release(), [pool = _pool, deleter = std::move(deleter)](arrow::Buffer* buf) mutable {
+                (void)pool; // prevent pool from being released before buffer is freed
+                deleter(buf);
+            });
+    // If bytes_read is equal with read_buf's capacity, we just assign.
     if (bytes_read_res == nbytes) {
-        return std::move(read_buf);
+        return shared_buf;
     } else {
-        std::shared_ptr<arrow::Buffer> slice_buf(new arrow::Buffer(read_buf, 0, bytes_read_res),
-                                                 MemTrackerDeleter(tracker));
-        return slice_buf;
+        return arrow::SliceBuffer(shared_buf, 0, bytes_read_res);
     }
 }
 
