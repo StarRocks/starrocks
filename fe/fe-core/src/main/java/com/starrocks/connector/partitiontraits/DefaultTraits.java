@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public abstract class DefaultTraits extends ConnectorPartitionTraits {
@@ -167,17 +168,58 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                     // If this partition is dropped, ignore it.
                     continue;
                 }
-                long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
+                PartitionInfo latestPartition = latestPartitionInfo.get(basePartitionName);
 
                 MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
-                // basePartitionVersion less than 0 is illegal
-                if ((basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion())
-                        && basePartitionVersion >= 0) {
+                if (basePartitionInfo == null) {
+                    // if mv does not have this partition, add it to the result
                     result.add(basePartitionName);
+                    continue;
+                }
+
+                if (table.getType() == Table.TableType.ICEBERG) {
+                    long basePartitionVersion = basePartitionInfo.getVersion();
+                    long basePartitionModifiedTime = basePartitionInfo.getLastRefreshTime();
+                    long latestPartitionVersion = latestPartition.getVersion();
+                    long latestPartitionModifiedTime = latestPartition.getModifiedTime();
+                    long normalizedBasePartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(basePartitionModifiedTime);
+                    long normalizedLatestPartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(latestPartitionModifiedTime);
+                    if (basePartitionVersion == -1 || basePartitionVersion == basePartitionModifiedTime) {
+                        // 1. for historical iceberg mv, the version is the modified time
+                        if (normalizedLatestPartitionModifiedTime >= 0
+                                && normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
+                            result.add(basePartitionName);
+                        }
+                    } else {
+                        // 2. for new iceberg mv, the version is the snapshot sequence number
+                        if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionVersion) {
+                            result.add(basePartitionName);
+                        }
+                    }
+                } else {
+                    // TODO: correct the logic here by comparing version and modified time
+                    long latestPartitionVersion = latestPartition.getModifiedTime();
+                    // basePartitionVersion less than 0 is illegal
+                    if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionInfo.getVersion()) {
+                        result.add(basePartitionName);
+                    }
                 }
             }
         }
         return result;
+    }
+
+    private long normalizeIcebergModifiedTimeToMicros(long modifiedTime) {
+        if (modifiedTime < 0) {
+            return modifiedTime;
+        }
+        // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
+        // persist epoch milliseconds. 1e14 micros is about 1973-03-03, so any present-day epoch timestamp below
+        // that threshold is almost certainly millis rather than micros. Normalize the legacy comparison branch to
+        // micros to avoid false positives.
+        return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
     }
 
     @Override

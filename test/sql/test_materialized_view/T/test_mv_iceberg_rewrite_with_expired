@@ -51,84 +51,113 @@ set catalog default_catalog;
 create database db_${uuid0};
 use db_${uuid0};
 
+set enable_materialized_view_rewrite=false;
+
 -- test partitioned mv
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
-select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
--- select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}$snapshots;
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
--- select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}$snapshots;
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 
 [UC]select inspect_mv_refresh_info("test_mv1");
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv1");
 select count(1) from test_mv1;
 
+-- 1st time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
-
-[UC]select inspect_mv_refresh_info("test_mv1");
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv1");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 select count(1) from test_mv1;
 
+-- 2nd time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
-[UC]select inspect_mv_refresh_info("test_mv1");
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv1");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+select count(1) from test_mv1;
+
+-- 3nd time expire snapshot
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-06');
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 select count(1) from test_mv1;
 
 -- test non-partitioned mv
 CREATE MATERIALIZED VIEW test_mv2 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
-REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 execute expire_snapshots(now());
+
+[UC]select inspect_mv_refresh_info("test_mv2");
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
-[UC]select inspect_mv_refresh_info("test_mv2");
-REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv2");
+-- 1th time expire snapshot
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-04');
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 select count(1) from test_mv2;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
+
+-- 2th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-05');
-
-[UC]select inspect_mv_refresh_info("test_mv2");
-REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv2");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 select count(1) from test_mv2;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
+-- 3th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-06');
-[UC]select inspect_mv_refresh_info("test_mv2");
-REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv2");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 select count(1) from test_mv2;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
 -- test partitioned mv
 CREATE MATERIALIZED VIEW test_mv3 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
-REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 
 [UC]select inspect_mv_refresh_info("test_mv3");
-REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv3");
 select count(1) from test_mv3;
 
-[UC]select inspect_mv_refresh_info("test_mv3");
+-- 1th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
-REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv3");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 select count(1) from test_mv3;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
-[UC]select inspect_mv_refresh_info("test_mv3");
+-- 2th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
-REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
-[UC]select inspect_mv_refresh_info("test_mv3");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 select count(1) from test_mv3;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+
+-- 3th time expire snapshot
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-07');
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+[UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+select count(1) from test_mv3;
+select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
 drop materialized view default_catalog.db_${uuid0}.test_mv1;
 drop materialized view default_catalog.db_${uuid0}.test_mv2;
