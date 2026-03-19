@@ -1085,7 +1085,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 if (subtask_op.has_output_rowset()) {
                     const auto& output = subtask_op.output_rowset();
                     auto* merged_output = merged_compaction->mutable_output_rowset();
-
+                    DCHECK_EQ(output.segment_metas_size(), output.segments_size());
                     // Add segments
                     for (int i = 0; i < output.segments_size(); i++) {
                         merged_output->add_segments(output.segments(i));
@@ -1099,9 +1099,14 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                         merged_output->add_segment_encryption_metas(output.segment_encryption_metas(i));
                     }
                     // Add segment_metas
+                    const int merged_segment_idx_base = merged_output->segment_metas_size();
                     for (int i = 0; i < output.segment_metas_size(); i++) {
-                        merged_output->add_segment_metas()->CopyFrom(output.segment_metas(i));
+                        auto* segment_meta = merged_output->add_segment_metas();
+                        segment_meta->CopyFrom(output.segment_metas(i));
+                        // Rebuild segment_idx in the merged rowset's local id space.
+                        segment_meta->set_segment_idx(merged_segment_idx_base + i);
                     }
+                    DCHECK_EQ(merged_output->segment_metas_size(), merged_output->segments_size());
 
                     total_num_rows += output.num_rows();
                     total_data_size += output.data_size();
