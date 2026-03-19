@@ -17,19 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-<<<<<<< HEAD
 #include "cache/block_cache/block_cache.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/scoped_updater.h"
-#include "cache/datacache.h"
-#include "cache/disk_cache/starcache_engine.h"
-#include "cache/disk_cache/test_cache_utils.h"
-#include "common/config_cache_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/system/cpu_info.h"
-#include "common/util/bthreads/executor.h"
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"

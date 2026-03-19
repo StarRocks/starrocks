@@ -381,19 +381,8 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
-<<<<<<< HEAD
-=======
-    ThreadPool* put_aggregate_metadata_thread_pool() { return _put_aggregate_metadata_thread_pool.get(); }
-
     ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
 
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
-
-    ThreadPool* pk_index_execution_thread_pool() { return _pk_index_execution_thread_pool.get(); }
-
-    ThreadPool* pk_index_memtable_flush_thread_pool() { return _pk_index_memtable_flush_thread_pool.get(); }
-
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -463,14 +452,7 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-<<<<<<< HEAD
-=======
-    std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;
     std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-    std::unique_ptr<ThreadPool> _pk_index_execution_thread_pool = nullptr;
-    std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

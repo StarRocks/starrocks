@@ -43,15 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
-<<<<<<< HEAD
 #include "cache/block_cache/block_cache.h"
-=======
-#include "cache/datacache.h"
-#include "cache/datacache_utils.h"
-#include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
-#include "common/config_lake_fwd.h"
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"

@@ -1391,9 +1391,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Tablet 统计采集慢日志阈值（毫秒）。单次 tablet 统计任务耗时超过该阈值时，会输出告警日志，附带 `tablet_id`、版本、rowset 数、是否精确模式和耗时等诊断信息。
 - 引入版本：-
 
-<<<<<<< HEAD
-##### enable_bitmap_union_disk_format_with_set
-=======
 ##### lake_metadata_fetch_thread_count
 
 - 默认值：3
@@ -1403,8 +1400,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
 - 引入版本：-
 
-##### tablet_writer_open_rpc_timeout_sec
->>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
+##### enable_bitmap_union_disk_format_with_set
 
 - 默认值：false
 - 类型：Boolean
