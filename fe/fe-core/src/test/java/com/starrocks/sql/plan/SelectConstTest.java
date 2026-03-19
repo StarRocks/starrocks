@@ -90,6 +90,22 @@ public class SelectConstTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultipleInformationFunctions() throws Exception {
+        // Before the fix, different InformationFunction instances were considered equal
+        // due to missing equalsWithoutChild()/hashCode() overrides, causing them to be
+        // deduplicated into the same output slot.
+        assertPlanContains("select current_user, current_group",
+                "<slot 2> : '\\'root\\'@\\'%\\''",
+                "<slot 3> : 'NONE'");
+        assertPlanContains("select current_user, current_role",
+                "<slot 2> : '\\'root\\'@\\'%\\''",
+                "<slot 3> : 'root'");
+        assertPlanContains("select database(), catalog()",
+                "<slot 2> : 'test'",
+                "<slot 3> : 'default_catalog'");
+    }
+
+    @Test
     public void testFromUnixtime() throws Exception {
         assertPlanContains("select from_unixtime(10)", "'1970-01-01 08:00:10'");
         assertPlanContains("select from_unixtime(1024)", "'1970-01-01 08:17:04'");
