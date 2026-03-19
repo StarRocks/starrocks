@@ -366,6 +366,11 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("merge_commit", instance);
     assert_threadpool_metrics_register("exec_state_report", instance);
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
+<<<<<<< HEAD
+=======
+    assert_threadpool_metrics_register("automatic_partition", instance);
+    assert_threadpool_metrics_register("lake_metadata_fetch", instance);
+>>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492))
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

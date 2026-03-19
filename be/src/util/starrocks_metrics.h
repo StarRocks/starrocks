@@ -376,6 +376,13 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+<<<<<<< HEAD:be/src/util/starrocks_metrics.h
+=======
+    METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
+>>>>>>> 5c438381ad ([Enhancement] Introduce dedicated thread pool for cloud native tablet metadata fetch (#70492)):be/src/runtime/starrocks_metrics.h
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);
