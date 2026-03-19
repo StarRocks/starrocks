@@ -39,6 +39,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -418,6 +420,13 @@ public class IcebergScanNode extends ScanNode {
             tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
         }
         bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
+
+        // Set catalog_type for BE catalog scan metrics
+        if (icebergTable != null) {
+            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(icebergTable.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
+        }
     }
 
     @Override

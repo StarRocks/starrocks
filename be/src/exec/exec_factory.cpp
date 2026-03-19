@@ -242,6 +242,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         if (tnode.file_scan_node.__isset.enable_pipeline_load && tnode.file_scan_node.enable_pipeline_load) {
             TPlanNode new_node = tnode;
             TConnectorScanNode connector_scan_node;
+            if (tnode.__isset.connector_scan_node) {
+                connector_scan_node = tnode.connector_scan_node;
+            }
             connector_scan_node.connector_name = connector::Connector::FILE;
             new_node.connector_scan_node = connector_scan_node;
             *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -266,6 +269,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::KUDU_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::HIVE;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -274,6 +280,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::MYSQL_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::MYSQL;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -282,6 +291,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::BENCHMARK_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::BENCHMARK;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -290,6 +302,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::ES_HTTP_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::ES;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -304,6 +319,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::JDBC_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::JDBC;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -312,6 +330,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::LAKE_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::LAKE;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -330,6 +351,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
             return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
         }
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector_name;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
@@ -354,6 +378,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
+        if (tnode.__isset.connector_scan_node) {
+            connector_scan_node = tnode.connector_scan_node;
+        }
         connector_scan_node.connector_name = connector::Connector::CACHE_STATS;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));

@@ -32,6 +32,8 @@ import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDataCacheOptions;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -201,6 +203,13 @@ public class HdfsScanNode extends ScanNode {
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
         if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
             tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
+        }
+
+        // Set catalog_type for BE catalog scan metrics
+        if (hiveTable != null) {
+            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(hiveTable.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
         }
     }
 

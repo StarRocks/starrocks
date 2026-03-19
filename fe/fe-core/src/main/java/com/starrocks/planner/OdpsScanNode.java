@@ -36,6 +36,8 @@ import com.starrocks.thrift.TCloudType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -185,5 +187,12 @@ public class OdpsScanNode extends ScanNode {
         tCloudConfiguration.setCloud_type(TCloudType.ALIYUN);
         tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        // Set catalog_type for BE catalog scan metrics
+        if (table != null) {
+            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
+        }
     }
 }

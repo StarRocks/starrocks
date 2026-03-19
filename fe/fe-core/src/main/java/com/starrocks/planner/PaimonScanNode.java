@@ -39,6 +39,8 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPaimonDeletionFile;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -419,6 +421,13 @@ public class PaimonScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+
+        // Set catalog_type for BE catalog scan metrics
+        if (paimonTable != null) {
+            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(paimonTable.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
+        }
     }
 
     @Override
