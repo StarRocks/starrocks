@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from datetime import date, datetime
+from decimal import Decimal
 from inspect import isclass
 import json
 import re
@@ -206,10 +207,14 @@ class ARRAY(StructuredType):
         def process(value):
             if value is None:
                 return None
-            parsed = json.loads(value) if isinstance(value, str) else value
+            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
             if item_processor is None:
                 return parsed
-            return [item_processor(item) if item is not None else None for item in parsed]
+            return [
+                (item if isinstance(item, (dict, list)) else item_processor(item))
+                if item is not None else None
+                for item in parsed
+            ]
 
         return process
 
@@ -255,13 +260,23 @@ class MAP(StructuredType):
         key_processor = self.key_type.result_processor(dialect, coltype)
         value_processor = self.value_type.result_processor(dialect, coltype)
 
+        # JSON always serializes keys as strings; if the key type is not str, cast back.
+        if key_processor is None:
+            try:
+                key_py_type = self.key_type.python_type
+                if key_py_type is not str:
+                    key_processor = key_py_type
+            except NotImplementedError:
+                pass
+
         def process(value):
             if value is None:
                 return None
-            parsed = json.loads(value) if isinstance(value, str) else value
+            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
             return {
                 (key_processor(k) if key_processor is not None else k): (
-                    value_processor(v) if value_processor is not None and v is not None else v
+                    (v if isinstance(v, (dict, list)) else value_processor(v))
+                    if value_processor is not None and v is not None else v
                 )
                 for k, v in parsed.items()
             }
@@ -325,9 +340,13 @@ class STRUCT(StructuredType):
         def process(value):
             if value is None:
                 return None
-            parsed = json.loads(value) if isinstance(value, str) else value
+            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
             return {
-                k: (proc(v) if (proc := processors.get(k)) is not None and v is not None else v)
+                k: (
+                    (v if isinstance(v, (dict, list)) else proc(v))
+                    if (proc := processors.get(k)) is not None and v is not None
+                    else v
+                )
                 for k, v in parsed.items()
             }
 

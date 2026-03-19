@@ -14,10 +14,14 @@
 # limitations under the License.
 
 from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
 
 from starrocks import datatype
+from starrocks.dialect import StarRocksDialect
+
+_DIALECT = StarRocksDialect()
 
 
 def _sub_type_reprs(structured_type):
@@ -167,8 +171,8 @@ class TestStructuredTypeColSpec:
 
 
 def _process(type_obj, value):
-    """Call result_processor and apply it to value. dialect=None is safe for all StarRocks types."""
-    proc = type_obj.result_processor(dialect=None, coltype=None)
+    """Call result_processor and apply it to value."""
+    proc = type_obj.result_processor(dialect=_DIALECT, coltype=None)
     if proc is None:
         return value
     return proc(value)
@@ -268,3 +272,68 @@ class TestStructResultProcessor:
         result = _process(t, '{"name":"Bob","extra":"ignored"}')
         assert result["name"] == "Bob"
         assert result["extra"] == "ignored"
+
+
+# ---------------------------------------------------------------------------
+# Codex review fixes
+# ---------------------------------------------------------------------------
+
+class TestArrayJsonSubtype:
+    """ARRAY<JSON> must not crash — elements are already dicts after outer json.loads."""
+
+    def test_array_of_json_objects(self):
+        result = _process(datatype.ARRAY(datatype.JSON()), '[{"a":1},{"b":2}]')
+        assert result == [{"a": 1}, {"b": 2}]
+        assert isinstance(result[0], dict)
+
+    def test_array_of_json_arrays(self):
+        result = _process(datatype.ARRAY(datatype.JSON()), '[[1,2],[3]]')
+        assert result == [[1, 2], [3]]
+
+    def test_nested_array_of_json(self):
+        result = _process(datatype.ARRAY(datatype.ARRAY(datatype.JSON())), '[[{"x":1}],[{"y":2}]]')
+        assert result == [[{"x": 1}], [{"y": 2}]]
+
+
+class TestDecimalPrecision:
+    """Floating-point numbers in complex types must be parsed as Decimal, not float."""
+
+    def test_array_of_decimal_preserves_precision(self):
+        result = _process(datatype.ARRAY(datatype.DECIMAL(18, 18)), '[0.123456789012345678]')
+        assert isinstance(result[0], Decimal)
+        assert result[0] == Decimal('0.123456789012345678')
+
+    def test_map_decimal_value_preserves_precision(self):
+        result = _process(
+            datatype.MAP(datatype.VARCHAR(10), datatype.DECIMAL(18, 18)),
+            '{"k":0.123456789012345678}'
+        )
+        assert isinstance(result["k"], Decimal)
+        assert result["k"] == Decimal('0.123456789012345678')
+
+    def test_struct_decimal_field_preserves_precision(self):
+        result = _process(
+            datatype.STRUCT(price=datatype.DECIMAL(18, 18)),
+            '{"price":0.123456789012345678}'
+        )
+        assert isinstance(result["price"], Decimal)
+        assert result["price"] == Decimal('0.123456789012345678')
+
+
+class TestMapNonStringKeys:
+    """MAP keys that are non-string types must be cast from JSON string keys."""
+
+    def test_integer_keys(self):
+        result = _process(datatype.MAP(datatype.INTEGER, datatype.VARCHAR(10)), '{"1":"a","2":"b"}')
+        assert list(result.keys()) == [1, 2]
+        assert all(isinstance(k, int) for k in result.keys())
+
+    def test_bigint_keys(self):
+        result = _process(datatype.MAP(datatype.BIGINT, datatype.INTEGER), '{"100":1}')
+        assert list(result.keys()) == [100]
+        assert isinstance(list(result.keys())[0], int)
+
+    def test_string_keys_unchanged(self):
+        result = _process(datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER), '{"a":1}')
+        assert list(result.keys()) == ["a"]
+        assert isinstance(list(result.keys())[0], str)
