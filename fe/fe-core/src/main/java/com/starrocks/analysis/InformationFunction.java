@@ -41,6 +41,8 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInfoFunc;
 
+import java.util.Objects;
+
 public class InformationFunction extends Expr {
     private final String funcType;
     private long intValue;
@@ -113,6 +115,22 @@ public class InformationFunction extends Expr {
     @Override
     public String toSqlImpl() {
         return funcType + "()";
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), funcType, intValue, strValue);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
+            return false;
+        }
+        InformationFunction that = (InformationFunction) o;
+        return intValue == that.intValue
+                && Objects.equals(funcType, that.funcType)
+                && Objects.equals(strValue, that.strValue);
     }
 
     /**
