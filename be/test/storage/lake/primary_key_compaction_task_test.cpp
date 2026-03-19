@@ -20,6 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -27,6 +28,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
@@ -1774,6 +1776,60 @@ TEST_P(LakePrimaryKeyCompactionTest, test_publish_compaction_with_invalid_rowset
 
     auto res = publish_single_version(tablet_id, version + 1, txn_id);
     EXPECT_TRUE(res.status().is_internal_error());
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_preload_compaction_state_slow_log) {
+    // Set slow log threshold to 0 and disable light compaction publish
+    // so that preload_compaction_state runs with trace and triggers slow log
+    auto saved_slow_log_ms = config::lake_publish_version_slow_log_ms;
+    auto saved_light_compaction = config::enable_light_pk_compaction_publish;
+    config::lake_publish_version_slow_log_ms = 0;
+    config::enable_light_pk_compaction_publish = false;
+    DeferOp defer([&] {
+        config::lake_publish_version_slow_log_ms = saved_slow_log_ms;
+        config::enable_light_pk_compaction_publish = saved_light_compaction;
+    });
+
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+
+    // Run compaction which triggers preload_compaction_state with trace and slow log
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+    ASSERT_EQ(kChunkSize, read(version));
 }
 
 INSTANTIATE_TEST_SUITE_P(

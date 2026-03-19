@@ -1094,6 +1094,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
+    TRACE_COUNTER_INCREMENT("segment_io_count_remote", stats.io_count_remote);
     return Status::OK();
 }
 
