@@ -2077,6 +2077,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             }
         }
 
+        // Warmup SST files for cloud-native PK index, executed once per tablet
+        if (_opts.lake_io_opts.sst_warmup_fn && _opts.lake_io_opts.sst_warmup_done) {
+            bool expected = false;
+            if (_opts.lake_io_opts.sst_warmup_done->compare_exchange_strong(expected, true)) {
+                RETURN_IF_ERROR(_opts.lake_io_opts.sst_warmup_fn());
+            }
+        }
+
         _opts.stats->block_load_ns += sw.elapsed_time();
 
         return Status::EndOfFile("no more data in segment");
