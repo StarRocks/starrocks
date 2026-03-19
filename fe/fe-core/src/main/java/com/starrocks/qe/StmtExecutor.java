@@ -54,6 +54,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
@@ -147,6 +148,7 @@ import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
@@ -296,6 +298,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -357,6 +360,9 @@ public class StmtExecutor {
     // Store table query timeout info for error message
     private String tableQueryTimeoutTableName = null;
     private int tableQueryTimeoutValue = -1;
+
+    // Catalog types involved in this query (e.g., "default", "hive", "iceberg")
+    private Set<String> catalogTypesInvolved = Collections.emptySet();
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -702,6 +708,68 @@ public class StmtExecutor {
         return null;
     }
 
+    public Set<String> getCatalogTypesInvolved() {
+        return catalogTypesInvolved;
+    }
+
+    public static String toCatalogType(Table.TableType tableType) {
+        switch (tableType) {
+            case OLAP:
+            case CLOUD_NATIVE:
+            case MATERIALIZED_VIEW:
+            case CLOUD_NATIVE_MATERIALIZED_VIEW:
+                return "default";
+            case HIVE:
+            case HIVE_VIEW:
+                return "hive";
+            case ICEBERG:
+            case ICEBERG_VIEW:
+                return "iceberg";
+            case HUDI:
+                return "hudi";
+            case DELTALAKE:
+                return "deltalake";
+            case JDBC:
+                return "jdbc";
+            case PAIMON:
+            case PAIMON_VIEW:
+                return "paimon";
+            case ODPS:
+                return "odps";
+            case KUDU:
+                return "kudu";
+            case ELASTICSEARCH:
+                return "elasticsearch";
+            default:
+                return "default";
+        }
+    }
+
+    private Set<String> extractCatalogTypes(ExecPlan execPlan) {
+        if (execPlan == null) {
+            return Collections.emptySet();
+        }
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+        if (scanNodes == null || scanNodes.isEmpty()) {
+            String currentCatalog = context.getCurrentCatalog();
+            if (currentCatalog == null || CatalogMgr.isInternalCatalog(currentCatalog)) {
+                return Collections.singleton("default");
+            }
+            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(currentCatalog);
+            if (catalog != null) {
+                return Collections.singleton(catalog.getType().toLowerCase());
+            }
+            return Collections.singleton("default");
+        }
+        Set<String> types = new HashSet<>();
+        for (ScanNode scanNode : scanNodes) {
+            if (scanNode.getDesc() != null && scanNode.getDesc().getTable() != null) {
+                types.add(toCatalogType(scanNode.getDesc().getTable().getType()));
+            }
+        }
+        return types.isEmpty() ? Collections.singleton("default") : types;
+    }
+
     private ExecPlan generateExecPlan() throws Exception {
         ExecPlan execPlan = null;
 
@@ -785,6 +853,7 @@ public class StmtExecutor {
             throw e;
         }
         lastExecPlan = execPlan;
+        catalogTypesInvolved = extractCatalogTypes(execPlan);
         return execPlan;
     }
 
@@ -3068,6 +3137,9 @@ public class StmtExecutor {
      * `handleDMLStmt` only executes DML statement and no write profile at the end.
      */
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        if (catalogTypesInvolved.isEmpty()) {
+            catalogTypesInvolved = extractCatalogTypes(execPlan);
+        }
         boolean isExplainAnalyze = parsedStmt.isExplain()
                 && StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel());
         boolean isSchedulerExplain = parsedStmt.isExplain()
