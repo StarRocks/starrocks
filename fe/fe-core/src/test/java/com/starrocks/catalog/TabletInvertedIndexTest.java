@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -90,9 +91,9 @@ public class TabletInvertedIndexTest {
         long tabletId2 = 2002L;
         long tabletId3 = 2003L;
 
-        TabletMeta meta1 = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
-        TabletMeta meta2 = new TabletMeta(1L, 2L, 3L, 5L, TStorageMedium.HDD);
-        TabletMeta meta3 = new TabletMeta(1L, 2L, 3L, 6L, TStorageMedium.HDD);
+        TabletMeta meta1 = new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD);
+        TabletMeta meta2 = new TabletMeta(1L, 2L, 3L, 5L, 0, TStorageMedium.HDD);
+        TabletMeta meta3 = new TabletMeta(1L, 2L, 3L, 6L, 0, TStorageMedium.HDD);
 
         tabletInvertedIndex.addTablet(tabletId1, meta1);
         tabletInvertedIndex.addTablet(tabletId2, meta2);
@@ -155,7 +156,7 @@ public class TabletInvertedIndexTest {
         TabletInvertedIndex batchIndex = new TabletInvertedIndex();
         TabletInvertedIndex singleIndex = new TabletInvertedIndex();
 
-        TabletMeta meta = new TabletMeta(1L, 2L, 3L, 4L, TStorageMedium.HDD);
+        TabletMeta meta = new TabletMeta(1L, 2L, 3L, 4L, 0, TStorageMedium.HDD);
         Replica r1 = new Replica(200L, 2000L, 1L, 123, 0L, 0L,
                 Replica.ReplicaState.NORMAL, -1L, 1L);
         Replica r2 = new Replica(201L, 2001L, 1L, 123, 0L, 0L,
