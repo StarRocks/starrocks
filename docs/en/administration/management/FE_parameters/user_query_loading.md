@@ -28,7 +28,7 @@ You must have administrator privileges to run cluster administration-related com
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [`ADMIN SET FRONTEND CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using `ADMIN SET FRONTEND CONFIG`.
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
