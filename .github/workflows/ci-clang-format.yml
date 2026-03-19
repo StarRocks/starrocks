@@ -57,19 +57,16 @@ jobs:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
           FORMAT_BASE_REF: upstream/${{ github.base_ref }}
         run: |
-          if [[ -f build-support/clang-format-changed.sh ]]; then
-            bash build-support/clang-format-changed.sh
-            exit 0
-          fi
-
-          echo "build-support/clang-format-changed.sh not found on this branch; using upstream/main helpers."
-
           fetched_files=(
             "build-support/clang-format-changed.sh"
             "build-support/format_changed_files.py"
           )
           cleanup_files=()
           trap 'rm -f "${cleanup_files[@]}"' EXIT
+
+          if [[ ! -f build-support/clang-format-changed.sh || ! -f build-support/format_changed_files.py ]]; then
+            echo "clang-format helpers missing on this branch; fetching missing files from upstream/main."
+          fi
 
           for path in "${fetched_files[@]}"; do
             if [[ -f "${path}" ]]; then
