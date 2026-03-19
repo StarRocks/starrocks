@@ -1,6 +1,10 @@
 Version history
 ===============
 
+**1.3.4**
+
+- Deserialize complex types to matching Python list, dict types (#70480 by @chris-celerdata)
+
 **1.3.3**
 
 - Add back support for SQLAlchemy 1.4 (#65976 by @rad-pat)
