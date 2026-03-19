@@ -326,7 +326,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
-        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields, paimonNativeTable.primaryKeys());
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
             comment = paimonNativeTable.comment().get();
@@ -356,7 +356,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
         List<DataField> fields = paimonNativeView.rowType().getFields();
-        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields);
+        List<Column> fullSchema = ColumnTypeConverter.fromPaimonSchemas(fields, Collections.emptyList());
         String comment = "";
         Optional<String> commentOptional = paimonNativeView.comment();
         if (commentOptional.isPresent()) {

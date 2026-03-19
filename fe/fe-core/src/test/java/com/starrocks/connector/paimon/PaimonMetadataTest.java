@@ -244,15 +244,17 @@ public class PaimonMetadataTest {
                         "  `col2` int(11) DEFAULT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
-                        "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"primary-key\" = \"col2\");",
+                        "PRIMARY KEY (`col2`)\n" +
+                        "PARTITION BY (col1);",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isKey());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
+        org.junit.jupiter.api.Assertions.assertFalse(paimonTable.getBaseSchema().get(1).isKey());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
     }
