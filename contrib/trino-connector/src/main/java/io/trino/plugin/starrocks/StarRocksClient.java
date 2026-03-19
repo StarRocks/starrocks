@@ -25,6 +25,8 @@ import io.airlift.log.Logger;
 import io.trino.plugin.base.aggregation.AggregateFunctionRewriter;
 import io.trino.plugin.base.aggregation.AggregateFunctionRule;
 import io.trino.plugin.base.expression.ConnectorExpressionRewriter;
+import io.trino.plugin.base.mapping.IdentifierMapping;
+import io.trino.plugin.base.mapping.RemoteIdentifiers;
 import io.trino.plugin.jdbc.BaseJdbcClient;
 import io.trino.plugin.jdbc.BaseJdbcConfig;
 import io.trino.plugin.jdbc.ColumnMapping;
@@ -57,7 +59,6 @@ import io.trino.plugin.jdbc.aggregation.ImplementVarianceSamp;
 import io.trino.plugin.jdbc.expression.JdbcConnectorExpressionRewriterBuilder;
 import io.trino.plugin.jdbc.expression.ParameterizedExpression;
 import io.trino.plugin.jdbc.logging.RemoteQueryModifier;
-import io.trino.plugin.jdbc.mapping.IdentifierMapping;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.AggregateFunction;
 import io.trino.spi.connector.ColumnHandle;
@@ -87,7 +88,7 @@ import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 
-import javax.inject.Inject;
+import com.google.inject.Inject;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -134,6 +135,7 @@ import static io.trino.plugin.jdbc.JdbcWriteSessionProperties.isNonTransactional
 import static io.trino.plugin.jdbc.PredicatePushdownController.DISABLE_PUSHDOWN;
 import static io.trino.plugin.jdbc.PredicatePushdownController.FULL_PUSHDOWN;
 import static io.trino.plugin.jdbc.StandardColumnMappings.bigintColumnMapping;
+import static io.trino.plugin.jdbc.StandardColumnMappings.booleanColumnMapping;
 import static io.trino.plugin.jdbc.StandardColumnMappings.bigintWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.booleanWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.charWriteFunction;
@@ -342,11 +344,11 @@ public class StarRocksClient
     }
 
     @Override
-    protected String createTableSql(RemoteTableName remoteTableName, List<String> columns, ConnectorTableMetadata tableMetadata)
+    protected List<String> createTableSqls(RemoteTableName remoteTableName, List<String> columns, ConnectorTableMetadata tableMetadata)
     {
         checkArgument(tableMetadata.getProperties().isEmpty(), "Unsupported table properties: %s", tableMetadata.getProperties());
         String columnName = columns.get(0).split(" ")[0];
-        return format("CREATE TABLE %s (%s) COMMENT %s DISTRIBUTED by hash(%s) PROPERTIES (\"replication_num\" = \"1\")", quoted(remoteTableName), join(", ", columns), starRocksVarcharLiteral(tableMetadata.getComment().orElse(NO_COMMENT)), columnName);
+        return ImmutableList.of(format("CREATE TABLE %s (%s) COMMENT %s DISTRIBUTED by hash(%s) PROPERTIES (\"replication_num\" = \"1\")", quoted(remoteTableName), join(", ", columns), starRocksVarcharLiteral(tableMetadata.getComment().orElse(NO_COMMENT)), columnName));
     }
 
     private static String starRocksVarcharLiteral(String value)
@@ -358,7 +360,7 @@ public class StarRocksClient
     @Override
     public Optional<ColumnMapping> toColumnMapping(ConnectorSession session, Connection connection, JdbcTypeHandle typeHandle)
     {
-        String jdbcTypeName = typeHandle.getJdbcTypeName()
+        String jdbcTypeName = typeHandle.jdbcTypeName()
                 .orElseThrow(() -> new TrinoException(JDBC_ERROR, "Type name is missing: " + typeHandle));
 
         Optional<ColumnMapping> mapping = getForcedMappingToVarchar(typeHandle);
@@ -367,6 +369,8 @@ public class StarRocksClient
         }
 
         switch (jdbcTypeName.toLowerCase(ENGLISH)) {
+            case "tinyint":
+                return Optional.of(tinyintColumnMapping());
             case "tinyint unsigned":
                 return Optional.of(smallintColumnMapping());
             case "smallint unsigned":
@@ -378,11 +382,25 @@ public class StarRocksClient
             case "json":
                 return Optional.of(jsonColumnMapping());
             case "enum":
-                return Optional.of(defaultVarcharColumnMapping(typeHandle.getRequiredColumnSize(), false));
+                return Optional.of(defaultVarcharColumnMapping(typeHandle.columnSize().orElse(255), false));
+            case "boolean":
+                return Optional.of(booleanColumnMapping());
+            case "largeint":
+                return Optional.of(decimalColumnMapping(createDecimalType(38, 0)));
+            case "bitmap":
+            case "hll":
+            case "percentile":
+                return Optional.of(defaultVarcharColumnMapping(Integer.MAX_VALUE, false));
         }
 
-        switch (typeHandle.getJdbcType()) {
+        switch (typeHandle.jdbcType()) {
+            case Types.BIT:
+                return Optional.of(booleanColumnMapping());
+
             case Types.TINYINT:
+                if (typeHandle.columnSize().orElse(0) == 1) {
+                    return Optional.of(booleanColumnMapping());
+                }
                 return Optional.of(tinyintColumnMapping());
 
             case Types.SMALLINT:
@@ -394,9 +412,8 @@ public class StarRocksClient
             case Types.BIGINT:
                 return Optional.of(bigintColumnMapping());
 
+            case Types.FLOAT:
             case Types.REAL:
-                // Disable pushdown because floating-point values are approximate and not stored as exact values,
-                // attempts to treat them as exact in comparisons may lead to problems
                 return Optional.of(ColumnMapping.longMapping(
                         REAL,
                         (resultSet, columnIndex) -> floatToRawIntBits(resultSet.getFloat(columnIndex)),
@@ -407,8 +424,8 @@ public class StarRocksClient
                 return Optional.of(doubleColumnMapping());
 
             case Types.DECIMAL:
-                int decimalDigits = typeHandle.getDecimalDigits().orElseThrow(() -> new IllegalStateException("decimal digits not present"));
-                int precision = typeHandle.getRequiredColumnSize();
+                int decimalDigits = typeHandle.decimalDigits().orElse(0);
+                int precision = typeHandle.columnSize().orElse(38);
                 if (getDecimalRounding(session) == ALLOW_OVERFLOW && precision > Decimals.MAX_PRECISION) {
                     int scale = min(decimalDigits, getDecimalDefaultScale(session));
                     return Optional.of(decimalColumnMapping(createDecimalType(Decimals.MAX_PRECISION, scale), getDecimalRoundingMode(session)));
@@ -420,14 +437,14 @@ public class StarRocksClient
                 return Optional.of(decimalColumnMapping(createDecimalType(precision, max(decimalDigits, 0))));
 
             case Types.CHAR:
-                return Optional.of(defaultCharColumnMapping(typeHandle.getRequiredColumnSize(), false));
+                return Optional.of(defaultCharColumnMapping(typeHandle.columnSize().orElse(255), false));
 
             // TODO not all these type constants are necessarily used by the JDBC driver
             case Types.VARCHAR:
             case Types.NVARCHAR:
             case Types.LONGVARCHAR:
             case Types.LONGNVARCHAR:
-                return Optional.of(defaultVarcharColumnMapping(typeHandle.getColumnSize().orElse(Integer.MAX_VALUE), false));
+                return Optional.of(defaultVarcharColumnMapping(typeHandle.columnSize().orElse(Integer.MAX_VALUE), false));
 
             case Types.BINARY:
             case Types.VARBINARY:
@@ -441,7 +458,7 @@ public class StarRocksClient
                         starRocksDateWriteFunctionUsingLocalDate()));
 
             case Types.TIME:
-                TimeType timeType = createTimeType(getTimePrecision(typeHandle.getRequiredColumnSize()));
+                TimeType timeType = createTimeType(getTimePrecision(typeHandle.requiredColumnSize()));
                 requireNonNull(timeType, "timeType is null");
                 checkArgument(timeType.getPrecision() <= 9, "Unsupported type precision: %s", timeType);
                 return Optional.of(ColumnMapping.longMapping(
@@ -450,7 +467,7 @@ public class StarRocksClient
                         timeWriteFunction(timeType.getPrecision())));
 
             case Types.TIMESTAMP:
-                TimestampType timestampType = createTimestampType(getTimestampPrecision(typeHandle.getRequiredColumnSize()));
+                TimestampType timestampType = createTimestampType(getTimestampPrecision(typeHandle.requiredColumnSize()));
                 checkArgument(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION, "Precision is out of range: %s", timestampType.getPrecision());
                 return Optional.of(ColumnMapping.longMapping(
                         timestampType,
@@ -529,20 +546,24 @@ public class StarRocksClient
     private static int getTimestampPrecision(int timestampColumnSize)
     {
         if (timestampColumnSize == ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE) {
-            return 0;
+            return 6;
         }
         int timestampPrecision = timestampColumnSize - ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE - 1;
-        verify(1 <= timestampPrecision && timestampPrecision <= MAX_SUPPORTED_DATE_TIME_PRECISION, "Unexpected timestamp precision %s calculated from timestamp column size %s", timestampPrecision, timestampColumnSize);
+        if (timestampPrecision < 1 || timestampPrecision > MAX_SUPPORTED_DATE_TIME_PRECISION) {
+            return 6;
+        }
         return timestampPrecision;
     }
 
     private static int getTimePrecision(int timeColumnSize)
     {
         if (timeColumnSize == ZERO_PRECISION_TIME_COLUMN_SIZE) {
-            return 0;
+            return 6;
         }
         int timePrecision = timeColumnSize - ZERO_PRECISION_TIME_COLUMN_SIZE - 1;
-        verify(1 <= timePrecision && timePrecision <= MAX_SUPPORTED_DATE_TIME_PRECISION, "Unexpected time precision %s calculated from time column size %s", timePrecision, timeColumnSize);
+        if (timePrecision < 1 || timePrecision > MAX_SUPPORTED_DATE_TIME_PRECISION) {
+            return 6;
+        }
         return timePrecision;
     }
 
@@ -649,8 +670,9 @@ public class StarRocksClient
         verify(tableHandle.getAuthorization().isEmpty(), "Unexpected authorization is required for table: %s".formatted(tableHandle));
         try (Connection connection = connectionFactory.openConnection(session)) {
             connection.setAutoCommit(true);
-            String remoteSchema = getIdentifierMapping().toRemoteSchemaName(identity, connection, schemaTableName.getSchemaName());
-            String remoteTable = getIdentifierMapping().toRemoteTableName(identity, connection, remoteSchema, schemaTableName.getTableName());
+            RemoteIdentifiers remoteIdentifiers = getRemoteIdentifiers(connection);
+            String remoteSchema = getIdentifierMapping().toRemoteSchemaName(remoteIdentifiers, identity, schemaTableName.getSchemaName());
+            String remoteTable = getIdentifierMapping().toRemoteTableName(remoteIdentifiers, identity, remoteSchema, schemaTableName.getTableName());
             String catalog = connection.getCatalog();
 
             ImmutableList.Builder<String> columnNames = ImmutableList.builder();
@@ -665,9 +687,7 @@ public class StarRocksClient
 
             if (isNonTransactionalInsert(session) || isPkTable) {
                 return new StarRocksOutputTableHandle(
-                        catalog,
-                        remoteSchema,
-                        remoteTable,
+                        new RemoteTableName(Optional.ofNullable(catalog), Optional.ofNullable(remoteSchema), remoteTable),
                         columnNames.build(),
                         columnTypes.build(),
                         Optional.of(jdbcColumnTypes.build()),
@@ -676,20 +696,19 @@ public class StarRocksClient
                         isPkTable);
             }
 
-            String remoteTemporaryTableName = getIdentifierMapping().toRemoteTableName(identity, connection, remoteSchema, generateTemporaryTableName(session));
+            String remoteTemporaryTableName = getIdentifierMapping().toRemoteTableName(remoteIdentifiers, identity, remoteSchema, generateTemporaryTableName(session));
 
             Optional<ColumnMetadata> pageSinkIdColumn = Optional.empty();
             copyTableSchema(session, connection, catalog, remoteSchema, remoteTable, remoteTemporaryTableName, columnNames.build());
 
             return new StarRocksOutputTableHandle(
-                    catalog,
-                    remoteSchema,
-                    remoteTable,
+                    new RemoteTableName(Optional.ofNullable(catalog), Optional.ofNullable(remoteSchema), remoteTable),
                     columnNames.build(),
                     columnTypes.build(),
                     Optional.of(jdbcColumnTypes.build()),
                     Optional.of(remoteTemporaryTableName),
-                    pageSinkIdColumn.map(column -> getIdentifierMapping().toRemoteColumnName(connection, column.getName())), Boolean.FALSE);
+                    pageSinkIdColumn.map(column -> getIdentifierMapping().toRemoteColumnName(remoteIdentifiers, column.getName())),
+                    Boolean.FALSE);
         }
         catch (SQLException e) {
             throw new TrinoException(JDBC_ERROR, e);
@@ -705,14 +724,12 @@ public class StarRocksClient
             return;
         }
 
+        RemoteTableName remoteTableName = handle.getRemoteTableName();
         RemoteTableName temporaryTable = new RemoteTableName(
-                Optional.ofNullable(handle.getCatalogName()),
-                Optional.ofNullable(handle.getSchemaName()),
+                remoteTableName.getCatalogName(),
+                remoteTableName.getSchemaName(),
                 handle.getTemporaryTableName().orElseThrow());
-        RemoteTableName targetTable = new RemoteTableName(
-                Optional.ofNullable(handle.getCatalogName()),
-                Optional.ofNullable(handle.getSchemaName()),
-                handle.getTableName());
+        RemoteTableName targetTable = remoteTableName;
 
         // We conditionally create more than the one table, so keep a list of the tables that need to be dropped.
         Closer closer = Closer.create();
@@ -785,7 +802,7 @@ public class StarRocksClient
     public boolean supportsTopN(ConnectorSession session, JdbcTableHandle handle, List<JdbcSortItem> sortOrder)
     {
         for (JdbcSortItem sortItem : sortOrder) {
-            Type sortItemType = sortItem.getColumn().getColumnType();
+            Type sortItemType = sortItem.column().getColumnType();
             if (sortItemType instanceof CharType || sortItemType instanceof VarcharType) {
                 // Remote database can be case insensitive.
                 return false;
@@ -800,24 +817,24 @@ public class StarRocksClient
         return Optional.of((query, sortItems, limit) -> {
             String orderBy = sortItems.stream()
                     .flatMap(sortItem -> {
-                        String ordering = sortItem.getSortOrder().isAscending() ? "ASC" : "DESC";
-                        String columnSorting = format("%s %s", quoted(sortItem.getColumn().getColumnName()), ordering);
+                        String ordering = sortItem.sortOrder().isAscending() ? "ASC" : "DESC";
+                        String columnSorting = format("%s %s", quoted(sortItem.column().getColumnName()), ordering);
 
-                        switch (sortItem.getSortOrder()) {
+                        switch (sortItem.sortOrder()) {
                             case ASC_NULLS_FIRST:
                             case DESC_NULLS_LAST:
                                 return Stream.of(columnSorting);
 
                             case ASC_NULLS_LAST:
                                 return Stream.of(
-                                        format("ISNULL(%s) ASC", quoted(sortItem.getColumn().getColumnName())),
+                                        format("ISNULL(%s) ASC", quoted(sortItem.column().getColumnName())),
                                         columnSorting);
                             case DESC_NULLS_FIRST:
                                 return Stream.of(
-                                        format("ISNULL(%s) DESC", quoted(sortItem.getColumn().getColumnName())),
+                                        format("ISNULL(%s) DESC", quoted(sortItem.column().getColumnName())),
                                         columnSorting);
                         }
-                        throw new UnsupportedOperationException("Unsupported sort order: " + sortItem.getSortOrder());
+                        throw new UnsupportedOperationException("Unsupported sort order: " + sortItem.sortOrder());
                     })
                     .collect(joining(", "));
             return format("%s ORDER BY %s LIMIT %s", query, orderBy, limit);
@@ -831,7 +848,7 @@ public class StarRocksClient
     }
 
     @Override
-    public Optional<PreparedQuery> implementJoin(
+    public Optional<PreparedQuery> legacyImplementJoin(
             ConnectorSession session,
             JoinType joinType,
             PreparedQuery leftSource,
@@ -850,13 +867,13 @@ public class StarRocksClient
                 leftSource,
                 rightSource,
                 statistics,
-                () -> super.implementJoin(session, joinType, leftSource, rightSource, joinConditions, rightAssignments, leftAssignments, statistics));
+                () -> super.legacyImplementJoin(session, joinType, leftSource, rightSource, joinConditions, rightAssignments, leftAssignments, statistics));
     }
 
     @Override
     protected boolean isSupportedJoinCondition(ConnectorSession session, JdbcJoinCondition joinCondition)
     {
-        if (joinCondition.getOperator() == JoinCondition.Operator.IS_DISTINCT_FROM) {
+        if (joinCondition.getOperator() == JoinCondition.Operator.IDENTICAL) {
             return false;
         }
 
@@ -914,7 +931,7 @@ public class StarRocksClient
                 return tableStatistics.build();
             }
 
-            for (JdbcColumnHandle column : this.getColumns(session, table)) {
+            for (JdbcColumnHandle column : this.getColumns(session, table.getRequiredNamedRelation().getSchemaTableName(), table.getRequiredNamedRelation().getRemoteTableName())) {
                 ColumnStatistics.Builder columnStatisticsBuilder = ColumnStatistics.builder();
 
                 String columnName = column.getColumnName();
@@ -1160,7 +1177,7 @@ public class StarRocksClient
     {
         String columnName = column.getName();
         verifyColumnName(connection.getMetaData(), columnName);
-        String remoteColumnName = getIdentifierMapping().toRemoteColumnName(connection, columnName);
+        String remoteColumnName = getIdentifierMapping().toRemoteColumnName(getRemoteIdentifiers(connection), columnName);
         String sql = format(
                 "ALTER TABLE %s ADD COLUMN %s",
                 quoted(table),
@@ -1169,17 +1186,10 @@ public class StarRocksClient
     }
 
     @Override
-    public List<JdbcColumnHandle> getColumns(ConnectorSession session, JdbcTableHandle tableHandle)
+    public List<JdbcColumnHandle> getColumns(ConnectorSession session, SchemaTableName schemaTableName, RemoteTableName remoteTableName)
     {
-        if (tableHandle.getColumns().isPresent()) {
-            return tableHandle.getColumns().get();
-        }
-        checkArgument(tableHandle.isNamedRelation(), "Cannot get columns for %s", tableHandle);
-        SchemaTableName schemaTableName = tableHandle.getRequiredNamedRelation().getSchemaTableName();
-        RemoteTableName remoteTableName = tableHandle.getRequiredNamedRelation().getRemoteTableName();
-
         try (Connection connection = connectionFactory.openConnection(session);
-                ResultSet resultSet = getColumns(tableHandle, connection.getMetaData())) {
+                ResultSet resultSet = getColumns(remoteTableName, connection.getMetaData())) {
             int allColumns = 0;
             List<JdbcColumnHandle> columns = new ArrayList<>();
             while (resultSet.next()) {
@@ -1189,10 +1199,22 @@ public class StarRocksClient
                 }
                 allColumns++;
                 String columnName = resultSet.getString("COLUMN_NAME");
+                // StarRocks may return null COLUMN_SIZE for certain types (STRING, JSON, etc.)
+                // Provide a safe fallback to avoid "column size not present" errors
+                Optional<Integer> columnSize = getInteger(resultSet, "COLUMN_SIZE");
+                if (columnSize.isEmpty()) {
+                    int dataType = getInteger(resultSet, "DATA_TYPE").orElse(Types.VARCHAR);
+                    columnSize = switch (dataType) {
+                        case Types.CHAR -> Optional.of(255);
+                        case Types.TIME -> Optional.of(ZERO_PRECISION_TIME_COLUMN_SIZE);
+                        case Types.TIMESTAMP -> Optional.of(ZERO_PRECISION_TIMESTAMP_COLUMN_SIZE);
+                        default -> Optional.of(Integer.MAX_VALUE);
+                    };
+                }
                 JdbcTypeHandle typeHandle = new JdbcTypeHandle(
                         getInteger(resultSet, "DATA_TYPE").orElseThrow(() -> new IllegalStateException("DATA_TYPE is null")),
                         Optional.ofNullable(resultSet.getString("TYPE_NAME")),
-                        getInteger(resultSet, "COLUMN_SIZE"),
+                        columnSize,
                         getInteger(resultSet, "DECIMAL_DIGITS"),
                         Optional.empty(),
                         Optional.empty());
