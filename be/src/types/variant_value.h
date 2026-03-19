@@ -49,6 +49,10 @@ public:
         return VariantRowRef(metadata, value);
     }
 
+    size_t serialize(uint8_t* dst) const;
+    uint32_t serialize_size() const;
+    StatusOr<std::string> to_json(cctz::time_zone timezone = cctz::local_time_zone()) const;
+    std::string to_string() const;
     VariantRowValue to_owned() const;
 
 private:

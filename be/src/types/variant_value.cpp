@@ -24,6 +24,57 @@ namespace starrocks {
 static const std::string kDefultVariantRowValueBinary =
         std::string(VariantMetadata::kEmptyMetadata) + std::string(VariantValue::kEmptyValue);
 
+size_t VariantRowRef::serialize(uint8_t* dst) const {
+    size_t offset = 0;
+
+    const auto metadata_raw = _metadata.raw();
+    const auto value_raw = _value.raw();
+    uint32_t total_size = static_cast<uint32_t>(metadata_raw.size() + value_raw.size());
+    const bool is_null_row = metadata_raw == VariantMetadata::kEmptyMetadata && value_raw == VariantValue::kEmptyValue;
+    if (is_null_row) {
+        total_size = static_cast<uint32_t>(kDefultVariantRowValueBinary.size());
+    }
+
+    memcpy(dst + offset, &total_size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    if (is_null_row) {
+        memcpy(dst + offset, kDefultVariantRowValueBinary.data(), total_size);
+    } else {
+        memcpy(dst + offset, metadata_raw.data(), metadata_raw.size());
+        memcpy(dst + offset + metadata_raw.size(), value_raw.data(), value_raw.size());
+    }
+    offset += total_size;
+    return offset;
+}
+
+uint32_t VariantRowRef::serialize_size() const {
+    const auto metadata_raw = _metadata.raw();
+    const auto value_raw = _value.raw();
+    uint32_t total_size = static_cast<uint32_t>(metadata_raw.size() + value_raw.size());
+    if (metadata_raw == VariantMetadata::kEmptyMetadata && value_raw == VariantValue::kEmptyValue) {
+        total_size = static_cast<uint32_t>(kDefultVariantRowValueBinary.size());
+    }
+    return sizeof(uint32_t) + total_size;
+}
+
+StatusOr<std::string> VariantRowRef::to_json(cctz::time_zone timezone) const {
+    std::stringstream json_str;
+    auto status = VariantUtil::variant_to_json(_metadata, _value, json_str, timezone);
+    if (!status.ok()) {
+        return status;
+    }
+    return json_str.str();
+}
+
+std::string VariantRowRef::to_string() const {
+    auto json_result = to_json();
+    if (!json_result.ok()) {
+        return "";
+    }
+    return json_result.value();
+}
+
 StatusOr<VariantRowValue> VariantRowValue::create(const Slice& slice) {
     // Validate slice first
     if (slice.get_data() == nullptr) {
