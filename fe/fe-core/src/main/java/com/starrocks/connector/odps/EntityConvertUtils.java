@@ -24,10 +24,25 @@ import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.VarcharTypeInfo;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+>>>>>>> 9278e993c7 ([BugFix] Fix struct type sub-column name missed and datetime type missing (#69302))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,10 +99,13 @@ public class EntityConvertUtils {
                 return new ArrayType(convertType(arrayTypeInfo.getElementTypeInfo()));
             case STRUCT:
                 StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;
-                List<Type> fieldTypeList =
-                        structTypeInfo.getFieldTypeInfos().stream().map(EntityConvertUtils::convertType)
-                                .collect(Collectors.toList());
-                return new StructType(fieldTypeList);
+                List<StructField> structFields = new ArrayList<>();
+                for (int i = 0; i < structTypeInfo.getFieldCount(); i++) {
+                    String name = structTypeInfo.getFieldNames().get(i);
+                    Type t = convertType(structTypeInfo.getFieldTypeInfos().get(i));
+                    structFields.add(new StructField(name, t));
+                }
+                return new StructType(structFields, true);
             default:
                 return Type.VARCHAR;
         }

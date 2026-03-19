@@ -25,11 +25,26 @@ import com.aliyun.odps.type.VarcharTypeInfo;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+>>>>>>> 9278e993c7 ([BugFix] Fix struct type sub-column name missed and datetime type missing (#69302))
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,9 +200,17 @@ public class EntityConvertUtilsTests {
                 TypeInfoFactory.getStructTypeInfo(ImmutableList.of("fieldTypeInfo1", "fieldTypeInfo2"),
                         ImmutableList.of(fieldTypeInfo1, fieldTypeInfo2));
         Type result = EntityConvertUtils.convertType(structTypeInfo);
+<<<<<<< HEAD
         Type expectedType1 = ScalarType.createDefaultCatalogString();
         Type expectedType2 = Type.INT;
         Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
+=======
+        Type expectedType1 = TypeFactory.createDefaultCatalogString();
+        Type expectedType2 = IntegerType.INT;
+        StructField field1 = new StructField("fieldTypeInfo1", expectedType1);
+        StructField field2 = new StructField("fieldTypeInfo2", expectedType2);
+        Type expectedType = new StructType(ImmutableList.of(field1, field2), true);
+>>>>>>> 9278e993c7 ([BugFix] Fix struct type sub-column name missed and datetime type missing (#69302))
         assertEquals(expectedType, result);
     }
 
