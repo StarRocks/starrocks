@@ -444,7 +444,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    ColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->get_proxy_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
