@@ -434,13 +434,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 
 #ifdef USE_STAROS
-#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
-    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
-        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
-            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
-            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
-        }                                                                                            \
-        return Status::OK();                                                                         \
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \
+    _config_callback.emplace(#BE_CONFIG, [&]() {                                                   \
+        auto val = std::to_string(config::BE_CONFIG);                                              \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, val).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");   \
+        }                                                                                          \
+        return Status::OK();                                                                       \
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
