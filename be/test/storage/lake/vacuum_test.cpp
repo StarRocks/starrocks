@@ -4226,4 +4226,120 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_txnlog_retains_shared_files_from_metadata) {
+    // Simulate a tablet split scenario:
+    // - Txn log was written BEFORE split, so the file is NOT marked as shared in the txn log.
+    // - Metadata was updated AFTER split, so the file IS marked as shared in the metadata.
+    // When deleting the old tablet, the shared file should be retained because it is still
+    // referenced by other tablets via the shared flag in metadata.
+    const std::string shared_segment = "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat";
+    const std::string shared_delvec = "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec";
+    const std::string shared_sstable = "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst";
+    const std::string shared_del_file = "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del";
+    const std::string private_segment = "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat";
+    const std::string private_del_file = "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del";
+    create_data_file(shared_segment);
+    create_data_file(shared_delvec);
+    create_data_file(shared_sstable);
+    create_data_file(shared_del_file);
+    create_data_file(private_segment);
+    create_data_file(private_del_file);
+
+    // Txn log: file is NOT marked as shared (written before split).
+    ASSERT_OK(_tablet_mgr->put_txn_log(*json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 5000,
+            "txn_id": 9900,
+            "partition_id": 111,
+            "op_write": {
+                "rowset": {
+                    "segments": [
+                        "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat",
+                        "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat"
+                    ]
+                },
+                "dels": [
+                    "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del",
+                    "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del"
+                ]
+            }
+        }
+        )DEL")));
+
+    // Metadata v2: file IS marked as shared (updated after split).
+    // Only tablet 5000 is being deleted, while the shared files are also used by other tablets.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat",
+                    "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [true, false],
+                "del_files": [
+                    {
+                        "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del",
+                        "shared": true
+                    },
+                    {
+                        "name": "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del",
+                        "shared": false
+                    }
+                ]
+            }
+        ],
+        "delvec_meta": {
+            "version_to_file": [
+                {
+                    "key": 2,
+                    "value": {
+                        "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec",
+                        "size": 32,
+                        "shared": true
+                    }
+                }
+            ]
+        },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst",
+                    "shared": true
+                }
+            ]
+        }
+        }
+        )DEL")));
+
+    {
+        // Delete tablet 5000. Shared files in metadata should be retained
+        // even though they are not marked as shared in the txn log.
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(5000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Shared files should be retained (protected by metadata's shared flag).
+        EXPECT_TRUE(file_exist(shared_segment));
+        EXPECT_TRUE(file_exist(shared_delvec));
+        EXPECT_TRUE(file_exist(shared_sstable));
+        EXPECT_TRUE(file_exist(shared_del_file));
+
+        // Private segment and del file should be deleted.
+        EXPECT_FALSE(file_exist(private_segment));
+        EXPECT_FALSE(file_exist(private_del_file));
+
+        // Txn log and metadata should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(5000, 9900)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+    }
+}
+
 } // namespace starrocks::lake
