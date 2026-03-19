@@ -38,6 +38,12 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
     _connector_type = c->connector_type();
+    if (tnode.connector_scan_node.__isset.catalog_type) {
+        _catalog_type = tnode.connector_scan_node.catalog_type;
+    } else {
+        // Fallback: derive from connector name
+        _catalog_type = tnode.connector_scan_node.connector_name;
+    }
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
