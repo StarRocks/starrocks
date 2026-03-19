@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 删除物化视图。
 
-此命令无法用于删除正在创建中的同步物化视图。如要删除创建中的同步物化视图，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除正在创建的同步物化视图)。
+除非使用 **FORCE** 选项，否则此命令无法用于删除正在创建中的同步物化视图。使用 **FORCE** 时，StarRocks 会取消卡住的同步物化视图构建任务、将基表状态恢复为 NORMAL，然后删除物化视图。不使用 FORCE 时，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除正在创建的同步物化视图)。
 
 > **注意**
 >
@@ -17,7 +17,7 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
 ```
 
 ## 参数
@@ -26,6 +26,7 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 | --------- | -------- | ------------------------------------------------------------ |
 | IF EXISTS | 否       | 如果声明该参数，删除不存在的物化视图系统不会报错。如果不声明该参数，删除不存在的物化视图系统会报错。 |
 | mv_name   | 是       | 待删除的物化视图的名称。                                     |
+| FORCE     | 否       | 当基表处于非 NORMAL 状态（例如同步物化视图构建卡住）时，使用 FORCE 会取消相关 alter 任务、将表状态设为 NORMAL 后再删除物化视图。正常删除时可省略。 |
 
 ## 示例
 

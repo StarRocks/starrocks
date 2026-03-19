@@ -42,7 +42,7 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateUnionFunction() {
+    ~StateUnionFunction() override {
         if (_nested_ctx != nullptr) {
             delete _nested_ctx;
         }

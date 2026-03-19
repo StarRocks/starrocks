@@ -66,14 +66,14 @@ class PathUtils {
 public:
     // requires: path contains "/"
     static std::string get_parent_path(const std::string& path) {
-        std::size_t i = path.find_last_of("/");
+        std::size_t i = path.find_last_of('/');
         CHECK_NE(i, std::string::npos);
         return path.substr(0, i);
     }
 
     // requires: path contains "/"
     static std::string get_filename(const std::string& path) {
-        std::size_t i = path.find_last_of("/");
+        std::size_t i = path.find_last_of('/');
         CHECK_NE(i, std::string::npos);
         return path.substr(i + 1);
     }

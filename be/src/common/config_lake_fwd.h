@@ -20,6 +20,9 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
+
 // The lake replication slow log threshold
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 

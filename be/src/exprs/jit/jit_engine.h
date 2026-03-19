@@ -54,11 +54,11 @@ public:
 
     JITCallable(const JITCallable&) = delete;
 
-    JITCallable(JITCallable&& that) : _mem_mgr(std::move(that._mem_mgr)), _func(that._func) {
+    JITCallable(JITCallable&& that) noexcept : _mem_mgr(std::move(that._mem_mgr)), _func(that._func) {
         that._func = nullptr; // Prevent double free
     }
 
-    JITCallable& operator=(JITCallable&& that) {
+    JITCallable& operator=(JITCallable&& that) noexcept {
         if (this != &that) {
             _mem_mgr = std::move(that._mem_mgr);
             _func = that._func;

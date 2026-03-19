@@ -53,7 +53,7 @@ public:
                                                  ConjugateOperatorPtr pw_agg)
             : SourceOperator(factory, id, "spillable_partitionwise_distinct_source", plan_node_id, false,
                              driver_sequence),
-              _non_pw_distinct(non_pw_agg),
+              _non_pw_distinct(std::move(non_pw_agg)),
               _pw_distinct(std::move(pw_agg)) {}
 
     ~SpillablePartitionWiseDistinctSourceOperator() override = default;

@@ -821,6 +821,7 @@
         "lake_publish_version_slow_log_ms",
         "lake_enable_accurate_pk_row_count",
         "lake_tablet_stat_slow_log_ms",
+        "lake_metadata_fetch_thread_count",
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
         "lake_enable_publish_version_trace_log",

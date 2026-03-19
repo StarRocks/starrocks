@@ -1507,9 +1507,20 @@ public class AnalyzerUtils {
 
             // table partitions for check
             PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
-            Set<String> partitionNameSet = Sets.newHashSet();
+            Set<PListCell> partitionValueSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
+                List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                PListCell cell = new PListCell(partitionItems);
+
+                // Deduplicate by partition value, not by partition name.
+                // Different values may produce the same partition name via getFormatPartitionValue()
+                // (e.g., "a-b" and "ab" both format to "ab"), so name-based dedup would incorrectly
+                // skip the second value. Value-based dedup ensures every distinct value gets a partition.
+                if (partitionValueSet.contains(cell)) {
+                    continue;
+                }
+
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
                     String formatValue = getFormatPartitionValue(value);
@@ -1527,21 +1538,18 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionNameSet.contains(partitionName)) {
-                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
-                    PListCell cell = new PListCell(partitionItems);
-                    partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
-                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, partitionItems, partitionProperties);
-                    multiItemListPartitionDesc.setSystem(true);
-                    partitionDescs.add(multiItemListPartitionDesc);
-                    partitionNameSet.add(partitionName);
+                partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
+                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                        partitionName, partitionItems, partitionProperties);
+                multiItemListPartitionDesc.setSystem(true);
+                partitionDescs.add(multiItemListPartitionDesc);
+                partitionValueSet.add(cell);
 
-                    // update table partition
-                    tablePartitions.add(partitionName, cell);
-                }
+                // update table partition
+                tablePartitions.add(partitionName, cell);
             }
-            List<String> partitionNames = Lists.newArrayList(partitionNameSet);
+            List<String> partitionNames = partitionDescs.stream()
+                    .map(PartitionDesc::getPartitionName).collect(Collectors.toList());
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(Lists.newArrayList(), partitionDescs);
             listPartitionDesc.setPartitionNames(partitionNames);
             listPartitionDesc.setSystem(true);

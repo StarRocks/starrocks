@@ -34,15 +34,18 @@ jobs:
       - name: Checkout PR head branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
           token: ${{ secrets.PAT }}
 
       - name: Set up base branch reference
         env:
           BASE_REF: ${{ github.base_ref }}
+          BASE_REPO: ${{ github.repository }}
         run: |
-          git fetch origin "${BASE_REF}"
+          git remote add upstream "https://github.com/${BASE_REPO}.git"
+          git fetch upstream "${BASE_REF}"
 
       - name: Install clang-format-10
         run: |
@@ -52,7 +55,7 @@ jobs:
       - name: Auto-fix formatting on changed C++ files
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
-          FORMAT_BASE_REF: origin/${{ github.base_ref }}
+          FORMAT_BASE_REF: upstream/${{ github.base_ref }}
         run: bash build-support/clang-format-changed.sh
 
       - name: Commit and push formatting fixes

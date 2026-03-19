@@ -368,6 +368,7 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("exec_state_report", instance);
     assert_threadpool_metrics_register("priority_exec_state_report", instance);
     assert_threadpool_metrics_register("automatic_partition", instance);
+    assert_threadpool_metrics_register("lake_metadata_fetch", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

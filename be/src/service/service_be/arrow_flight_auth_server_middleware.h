@@ -66,7 +66,7 @@ private:
 // No actual authentication.
 class NoOpBearerAuthServerMiddlewareFactory : public arrow::flight::ServerMiddlewareFactory {
 public:
-    NoOpBearerAuthServerMiddlewareFactory() {}
+    NoOpBearerAuthServerMiddlewareFactory() = default;
 
     arrow::Status StartCall(const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
                             std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) override;

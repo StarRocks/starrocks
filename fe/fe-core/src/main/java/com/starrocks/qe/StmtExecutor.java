@@ -348,7 +348,9 @@ public class StmtExecutor {
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
-    
+    // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
+    private ExecPlan lastExecPlan = null;
+
     // Store table query timeout info for error message
     private String tableQueryTimeoutTableName = null;
     private int tableQueryTimeoutValue = -1;
@@ -779,6 +781,7 @@ public class StmtExecutor {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             throw e;
         }
+        lastExecPlan = execPlan;
         return execPlan;
     }
 
@@ -990,6 +993,8 @@ public class StmtExecutor {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
+                        // sync lastExecPlan in case rebuildExecPlan produced a new plan
+                        lastExecPlan = retryContext.getExecPlan();
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
@@ -1153,6 +1158,7 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+            context.getState().setErrType(QueryState.ErrType.IO_ERR);
         } catch (LargeInPredicateException e) {
             // Re-throw LargeInPredicateException to trigger a full retry from parser stage
             // The query will be re-parsed and re-executed with enable_large_in_predicate=false
@@ -1177,9 +1183,14 @@ public class StmtExecutor {
             } else if (e instanceof NoAliveBackendException) {
                 context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             } else {
-                // TODO: some StarRocksException doesn't belong to analysis error
-                // we should set such error type to internal error
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                // If planning completed (lastExecPlan != null) the exception is from execution
+                // (e.g. BE CORRUPTION/CANCELLED), not from analysis — classify as INTERNAL_ERR.
+                // Only fall back to ANALYSIS_ERR when planning itself failed (no plan was produced).
+                if (lastExecPlan != null) {
+                    context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+                } else {
+                    context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                }
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
@@ -1188,8 +1199,11 @@ public class StmtExecutor {
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
-            if (context.getState().isError() && coord != null) {
-                coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+            if (context.getState().isError()) {
+                ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
+                if (coord != null) {
+                    coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+                }
             }
 
             if (coord != null) {

@@ -80,10 +80,6 @@ ThreadPool* vacuum_thread_pool(ExecEnv* env) {
     return get_thread_pool(env, TTaskType::RELEASE_SNAPSHOT);
 }
 
-ThreadPool* get_tablet_stats_thread_pool(ExecEnv* env) {
-    return get_thread_pool(env, TTaskType::UPDATE_TABLET_META_INFO);
-}
-
 int get_num_publish_queued_tasks(void*) {
 #ifndef BE_TEST
     auto tp = publish_version_thread_pool(ExecEnv::GetInstance());
@@ -1117,9 +1113,10 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
-        cntl->SetFailed("thread pool is null");
+        cntl->SetFailed("lake metadata fetch thread pool is null");
         return;
     }
     // The magic number "10" is just a random chosen number, feel free to change it if you have a better choice.
@@ -1768,9 +1765,10 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         Status::InvalidArgument("max_version should be >= min_version").to_protobuf(response->mutable_status());
         return;
     }
-    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    auto thread_pool = _env->lake_metadata_fetch_thread_pool();
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_metadatas:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
-        Status::ServiceUnavailable("tablet stats thread pool is null").to_protobuf(response->mutable_status());
+        Status::ServiceUnavailable("lake metadata fetch thread pool is null").to_protobuf(response->mutable_status());
         return;
     }
 

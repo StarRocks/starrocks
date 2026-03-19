@@ -216,7 +216,7 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
             }
         }
     }
-    (*pdelvec).reset(new DelVector());
+    *pdelvec = std::make_shared<DelVector>();
     int64_t latest_version = 0;
     RETURN_IF_ERROR(get_del_vec_in_meta(meta, tsid, version, pdelvec->get(), &latest_version));
     if ((*pdelvec)->version() == latest_version) {
@@ -533,7 +533,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
         return Status::OK();
     } else {
         // TODO(cbl): move get_del_vec_in_meta out of lock
-        (*pdelvec).reset(new DelVector());
+        *pdelvec = std::make_shared<DelVector>();
         int64_t latest_version = 0;
         RETURN_IF_ERROR(get_del_vec_in_meta(meta, tsid, INT64_MAX, pdelvec->get(), &latest_version));
         _del_vec_cache.emplace(tsid, *pdelvec);
