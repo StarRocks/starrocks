@@ -27,10 +27,10 @@
 #include "connector/sink_memory_manager.h"
 #include "formats/utils.h"
 #include "io/async_flush_output_stream.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 namespace {
