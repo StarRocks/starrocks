@@ -106,7 +106,6 @@ struct InitListFactory<int64_t> {
     }
 };
 
-
 template <typename T>
 struct BufferOps {
     using ValueType = T;
@@ -364,7 +363,6 @@ void run_single_grow_bench(benchmark::State& state) {
     }
 }
 
-
 #define REGISTER_OP_BENCH(op, type)                               \
     BENCHMARK_TEMPLATE(op, VectorOps<type>)->Apply(apply_counts); \
     BENCHMARK_TEMPLATE(op, BufferOps<type>)->Apply(apply_counts)
@@ -386,7 +384,6 @@ BENCHMARK_TEMPLATE(run_single_grow_bench, BufferOps<int64_t>)->Apply(apply_grow_
 REGISTER_OP_BENCH(run_append_reserve_bench, int64_t);
 REGISTER_OP_BENCH(run_append_range_reserve_bench, int64_t);
 REGISTER_INIT_LIST_BENCH(run_append_init_list_bench, int64_t);
-
 
 #undef REGISTER_OP_BENCH
 #undef REGISTER_INIT_LIST_BENCH
