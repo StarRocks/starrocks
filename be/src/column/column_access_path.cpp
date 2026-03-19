@@ -117,7 +117,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
         return path;
     }
 
-    auto all_field = field->sub_fields();
+    const auto& all_field = field->sub_fields();
 
     if (field->type()->type() == LogicalType::TYPE_ARRAY) {
         // _type must be ALL/INDEX/OFFSET

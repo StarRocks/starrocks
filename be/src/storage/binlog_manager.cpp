@@ -159,7 +159,7 @@ Status BinlogManager::_recover_version(int64_t version, BinlogLsn& min_lsn, std:
             useless_file_ids->push_back(file_id);
             continue;
         }
-        BinlogFileMetaPBPtr file_meta = status_or.value();
+        const BinlogFileMetaPBPtr& file_meta = status_or.value();
         recovered_file_metas.push_back(file_meta);
         BinlogLsn lsn(file_meta->start_version(), file_meta->start_seq_id());
         last_file_meta = file_meta;
@@ -364,7 +364,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
         if (binlog_file->reader_count() > 0) {
             break;
         }
-        auto file_meta = binlog_file->file_meta();
+        const auto& file_meta = binlog_file->file_meta();
         _total_wait_reader_binlog_file_size -= file_meta->file_size();
         for (int64_t rowset_id : file_meta->rowsets()) {
             int32_t count = --_wait_reader_rowset_count_map[rowset_id];
@@ -470,7 +470,7 @@ void BinlogManager::delete_unused_binlog() {
         LOG(ERROR) << "Failed to delete unused binlog, tablet: " << _tablet_id << ", " << status_or.status();
         return;
     }
-    std::shared_ptr<FileSystem> fs = status_or.value();
+    const std::shared_ptr<FileSystem>& fs = status_or.value();
     int64_t file_id;
     int32_t total_num = 0;
     int32_t fail_num = 0;

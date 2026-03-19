@@ -1,3 +1,4 @@
+// NOLINTBEGIN
 /*
 pdqsort.h - Pattern-defeating quicksort.
 
@@ -596,3 +597,4 @@ inline void pdqsort_branchless(Iter begin, Iter end) {
 }
 
 #undef PDQSORT_PREFER_MOVE
+// NOLINTEND

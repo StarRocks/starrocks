@@ -23,9 +23,7 @@ namespace starrocks {
 // Lightweight spinlock.
 class SpinLock {
 public:
-    SpinLock() {
-        // do nothing
-    }
+    SpinLock() = default;
 
     // Acquires the lock, spins until the lock becomes available
     void lock() {

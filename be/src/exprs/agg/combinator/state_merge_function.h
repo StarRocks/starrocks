@@ -44,7 +44,7 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateMergeFunction() {
+    ~StateMergeFunction() override {
         if (_nested_ctx != nullptr) {
             delete _nested_ctx;
         }

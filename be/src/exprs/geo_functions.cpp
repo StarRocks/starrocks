@@ -300,7 +300,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Colu
 }
 
 struct StContainsState {
-    StContainsState() {}
+    StContainsState() = default;
     ~StContainsState() {
         delete shapes[0];
         delete shapes[1];

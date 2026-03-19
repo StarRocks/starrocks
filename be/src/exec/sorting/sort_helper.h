@@ -179,7 +179,7 @@ static inline Status sort_and_tie_helper(const std::atomic<bool>& cancel, const 
             }
 
             // Find if any element equal with the nth element, take it into account of this run
-            auto nth = permutation[limit - 1];
+            const auto& nth = permutation[limit - 1];
             size_t equal_count = 0;
             for (auto iter = begin + n; iter < end; iter++) {
                 if (cmp(*iter, nth) == 0) {

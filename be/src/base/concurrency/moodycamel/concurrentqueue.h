@@ -1,4 +1,5 @@
 // clang-format off
+// NOLINTBEGIN
 // Provides a C++11 implementation of a multi-producer, multi-consumer lock-free queue.
 // An overview, including benchmark results, is provided here:
 //     http://moodycamel.com/blog/2014/a-fast-general-purpose-lock-free-queue-for-c++
@@ -3740,4 +3741,5 @@ inline void swap(typename ConcurrentQueue<T, Traits>::ImplicitProducerKVP& a, ty
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+// NOLINTEND
 // clang-format on

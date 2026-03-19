@@ -242,7 +242,7 @@ void* ThriftServer::ThriftServerEventProcessor::createContext(
     {
         std::lock_guard<std::mutex> _l(_thrift_server->_session_keys_lock);
 
-        std::shared_ptr<SessionKey> key_ptr(new std::string(ss.str()));
+        auto key_ptr = std::make_shared<std::string>(ss.str());
 
         _session_key = key_ptr.get();
         _thrift_server->_session_keys[key_ptr.get()] = key_ptr;
@@ -327,22 +327,21 @@ Status ThriftServer::start() {
     switch (_server_type) {
     case NON_BLOCKING: {
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TTransportFactory>();
         }
 
-        std::shared_ptr<apache::thrift::transport::TNonblockingServerSocket> port(
-                new apache::thrift::transport::TNonblockingServerSocket(_port));
+        auto port = std::make_shared<apache::thrift::transport::TNonblockingServerSocket>(_port);
         _server = std::make_unique<apache::thrift::server::TNonblockingServer>(
                 _processor, transport_factory, transport_factory, protocol_factory, protocol_factory, port, thread_mgr);
         break;
     }
 
     case THREAD_POOL:
-        fe_server_transport.reset(new apache::thrift::transport::TServerSocket(
-                BackendOptions::get_service_bind_address_without_bracket(), _port));
+        fe_server_transport = std::make_shared<apache::thrift::transport::TServerSocket>(
+                BackendOptions::get_service_bind_address_without_bracket(), _port);
 
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
         }
 
         _server = std::make_unique<apache::thrift::server::TThreadPoolServer>(
@@ -357,7 +356,7 @@ Status ThriftServer::start() {
         server_socket->setKeepAlive(true);
 
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
         }
 
         // Use non-detached thread mode, so the ThreadedServer can correctly wait for all client threads done and exits cleanly.
@@ -374,8 +373,7 @@ Status ThriftServer::start() {
         return Status::InternalError(error_msg.str());
     }
 
-    std::shared_ptr<ThriftServer::ThriftServerEventProcessor> event_processor(
-            new ThriftServer::ThriftServerEventProcessor(this));
+    auto event_processor = std::make_shared<ThriftServer::ThriftServerEventProcessor>(this);
     _server->setServerEventHandler(event_processor);
 
     RETURN_IF_ERROR(event_processor->start_and_wait_for_server());

@@ -101,7 +101,7 @@ class MemTracker;
 ///    delete p;
 class MemPool {
 public:
-    MemPool() {}
+    MemPool() = default;
 
     /// Frees all chunks of memory and subtracts the total allocated bytes
     /// from the registered limits.

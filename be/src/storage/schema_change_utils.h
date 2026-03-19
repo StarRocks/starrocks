@@ -60,7 +60,7 @@ struct SchemaChangeParams {
 
 class ChunkChanger {
 public:
-    ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+    ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                  std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type);
     ChunkChanger(const TabletSchemaCSPtr& new_schema);
     ~ChunkChanger();
