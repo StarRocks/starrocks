@@ -26,6 +26,7 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -37,7 +38,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
@@ -373,7 +373,7 @@ public class SplitTabletJobTest {
         ComputeResource expectedResource = WarehouseComputeResource.of(10086L);
         AtomicReference<ComputeResource> actualResource = new AtomicReference<>();
 
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeResource getBackgroundComputeResource(long tableId) {
                 Assertions.assertEquals(table.getId(), tableId);

@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.Config;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 
@@ -44,7 +43,8 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q09);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: count_if(1, 480: expr), avg_if(468: ss_ext_discount_amt, 480: expr)");
+                "  |  output: count_if(1, 544: expr), avg_if(532: ss_ext_discount_amt, 544: expr), " +
+                "avg_if(534: ss_net_paid, 544: expr)");
     }
 
     @Test
@@ -52,21 +52,21 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q28);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: avg(198: if), count(198: if), multi_distinct_count(198: if), avg(202: if), count(202: if), " +
-                "multi_distinct_count(202: if)");
+                "  |  output: count(222: if), count(226: if), multi_distinct_count(226: if), " +
+                "avg(226: if), avg(230: if), count(230: if), " +
+                "multi_distinct_count(230: if)");
     }
 
-    @Disabled
     @Test
     public void testQuery44() throws Exception {
         String plan = getFragmentPlan(Q44);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "10:AGGREGATE (merge finalize)\n" +
-                "  |  output: avg(186: avg)\n" +
-                "  |  group by: 173: ss_item_sk");
-        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
                 "  |  output: avg(210: avg)\n" +
-                "  |  group by: 207: ss_store_sk");
+                "  |  group by: 197: ss_item_sk");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: avg(234: avg)\n" +
+                "  |  group by: 231: ss_store_sk");
     }
 
     @Test
@@ -74,8 +74,8 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q65);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(226: sum)\n" +
-                "  |  group by: 195: ss_store_sk, 185: ss_item_sk");
+                "  |  output: sum(250: sum)\n" +
+                "  |  group by: 219: ss_store_sk, 209: ss_item_sk");
     }
 
     @Test
@@ -83,7 +83,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q88);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "15:AGGREGATE (update serialize)\n" +
-                "  |  output: count_if(1, 736: expr), count_if(1, 738: expr)");
+                "  |  output: count_if(1, 864: expr), count_if(1, 866: expr), count_if(1, 852: expr), count_if(1, 854: expr)");
     }
 
     @Test
@@ -91,11 +91,11 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(Q90);
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "15:AGGREGATE (update serialize)\n" +
-                "  |  output: count_if(1, 221: expr), count_if(1, 223: expr)\n" +
+                "  |  output: count_if(1, 253: expr), count_if(1, 255: expr)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  14:Project\n" +
-                "  |  <slot 221> : (196: t_hour >= 8) AND (196: t_hour <= 9)");
+                "  |  <slot 253> : (228: t_hour >= 8) AND (228: t_hour <= 9)");
     }
 
     @Test
@@ -107,7 +107,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                         "where a.c_last_name = 'abc';");
         assertNotContains(plan, "MultiCastDataSinks");
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 31: c_last_name, 23: c_customer_id, 33: c_birth_day");
+                "  |  group by: 35: c_last_name, 27: c_customer_id, 37: c_birth_day");
 
         plan = getFragmentPlan(
                 "with x as (select distinct c_last_name, c_customer_id, c_birth_day from customer)" +
@@ -118,7 +118,7 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: customer\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 73: c_customer_id = '123'");
+                "     PREDICATES: 85: c_customer_id = '123'");
     }
 
     @Test
@@ -132,10 +132,10 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                         "from customer group by c_customer_id) cc order by c_customer_id limit 2");
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(65: sum)\n" +
-                "  |  group by: 54: c_customer_id");
+                "  |  output: sum(73: sum)\n" +
+                "  |  group by: 62: c_customer_id");
         assertContains(plan, "7:SELECT\n" +
-                "  |  predicates: 22: sum > 10");
+                "  |  predicates: 26: sum > 10");
     }
 
     @Test
@@ -151,14 +151,14 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                         ") cc order by c_customer_id limit 2");
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(65: sum)\n" +
-                "  |  group by: 54: c_customer_id\n" +
-                "  |  having: (65: sum > 20) OR (65: sum > 10), 65: sum > 10\n" +
+                "  |  output: sum(73: sum)\n" +
+                "  |  group by: 62: c_customer_id\n" +
+                "  |  having: (73: sum > 20) OR (73: sum > 10), 73: sum > 10\n" +
                 "  |  ");
         assertContains(plan, "7:SELECT\n" +
-                "  |  predicates: 22: sum > 10");
+                "  |  predicates: 26: sum > 10");
         assertContains(plan, "13:SELECT\n" +
-                "  |  predicates: 44: sum > 20");
+                "  |  predicates: 52: sum > 20");
     }
 
     @Test
@@ -173,9 +173,9 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                         ") cc order by c_customer_id limit 2");
         assertContains(plan, "MultiCastDataSinks");
         assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(65: sum)\n" +
-                "  |  group by: 54: c_customer_id\n" +
-                "  |  having: 65: sum > 10, 65: sum > 10\n" +
+                "  |  output: sum(73: sum)\n" +
+                "  |  group by: 62: c_customer_id\n" +
+                "  |  having: 73: sum > 10, 73: sum > 10\n" +
                 "  |  \n" +
                 "  2:EXCHANGE");
     }
@@ -299,25 +299,25 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: bitmap_union(136: bitmap_union), bitmap_union(138: bitmap_union), bitmap_union(140: " +
-                "bitmap_union), bitmap_union(142: bitmap_union)\n" +
+                "  |  output: bitmap_union(152: bitmap_union), bitmap_union(154: bitmap_union), bitmap_union(156: " +
+                "bitmap_union), bitmap_union(158: bitmap_union)\n" +
                 "  |  group by: ");
 
         assertCContains(plan, "2:AGGREGATE (update serialize)\n" +
-                "  |  output: bitmap_union(if((113: c_birth_country = 'USA1') AND (116: c_birth_year = 2011), 143: to_bitmap, " +
-                "NULL)), bitmap_union(if((144: expr) AND (116: c_birth_year = 1995), 143: to_bitmap, NULL)), bitmap_union(if((" +
-                "(144: expr) AND (116: c_birth_year >= 1990)) AND (116: c_birth_year <= 2000), 143: to_bitmap, NULL)), " +
-                "bitmap_union(if((144: expr) AND (116: c_birth_year = 1993), 143: to_bitmap, NULL))\n" +
+                "  |  output: bitmap_union(if((129: c_birth_country = 'USA1') AND (132: c_birth_year = 2011), 159: to_bitmap, " +
+                "NULL)), bitmap_union(if((160: expr) AND (132: c_birth_year = 1995), 159: to_bitmap, NULL)), bitmap_union(if((" +
+                "(160: expr) AND (132: c_birth_year >= 1990)) AND (132: c_birth_year <= 2000), 159: to_bitmap, NULL)), " +
+                "bitmap_union(if((160: expr) AND (132: c_birth_year = 1993), 159: to_bitmap, NULL))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 113> : 113: c_birth_country\n" +
-                "  |  <slot 116> : 116: c_birth_year\n" +
-                "  |  <slot 143> : 143: to_bitmap\n" +
-                "  |  <slot 144> : 144: expr\n" +
+                "  |  <slot 129> : 129: c_birth_country\n" +
+                "  |  <slot 132> : 132: c_birth_year\n" +
+                "  |  <slot 159> : 159: to_bitmap\n" +
+                "  |  <slot 160> : 160: expr\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 144> : 113: c_birth_country = 'USA'\n" +
-                "  |  <slot 143> : to_bitmap(120: c_customer_id)");
+                "  |  <slot 160> : 129: c_birth_country = 'USA'\n" +
+                "  |  <slot 159> : to_bitmap(136: c_customer_id)");
     }
 
     @Test
@@ -334,31 +334,31 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: sum(48: c_birth_day), sum_if(67: c_birth_day, 66: expr), any_value_if(TRUE, 66: expr)\n" +
-                "  |  group by: 51: c_current_addr_sk\n" +
+                "  |  output: sum(56: c_birth_day), sum_if(75: c_birth_day, 74: expr), any_value_if(TRUE, 74: expr)\n" +
+                "  |  group by: 59: c_current_addr_sk\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 48> : 48: c_birth_day\n" +
-                "  |  <slot 51> : 51: c_current_addr_sk\n" +
-                "  |  <slot 66> : 51: c_current_addr_sk > 100\n" +
-                "  |  <slot 67> : clone(48: c_birth_day)");
+                "  |  <slot 56> : 56: c_birth_day\n" +
+                "  |  <slot 59> : 59: c_current_addr_sk\n" +
+                "  |  <slot 74> : 59: c_current_addr_sk > 100\n" +
+                "  |  <slot 75> : clone(56: c_birth_day)");
 
         assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
-                "  |  output: sum(65: sum), sum_if(68: sum), any_value_if(69: row_hit, TRUE)\n" +
-                "  |  group by: 51: c_current_addr_sk");
+                "  |  output: sum(73: sum), sum_if(76: sum), any_value_if(77: row_hit, TRUE)\n" +
+                "  |  group by: 59: c_current_addr_sk");
 
         assertContains(plan, "11:SELECT\n" +
-                "  |  predicates: 70: row_hit IS NOT NULL\n" +
+                "  |  predicates: 78: row_hit IS NOT NULL\n" +
                 "  |  \n" +
                 "  10:Project\n" +
-                "  |  <slot 27> : 51: c_current_addr_sk\n" +
-                "  |  <slot 44> : 68: sum\n" +
-                "  |  <slot 70> : 69: row_hit");
+                "  |  <slot 31> : 59: c_current_addr_sk\n" +
+                "  |  <slot 52> : 76: sum\n" +
+                "  |  <slot 78> : 77: row_hit");
     }
 
     @Test
     public void testUnionPredicate() throws Exception {
-        String sql  = "SELECT\n"
+        String sql = "SELECT\n"
                 + "      CURRENT_TIMESTAMP() AS MessageDateAndTime,\n"
                 + "      3 AS BatchID,\n"
                 + "      MessageSource,\n"
@@ -404,18 +404,18 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  5:Project\n" +
-                "  |  <slot 80> : 80: count\n" +
-                "  |  <slot 82> : 82: count\n" +
+                "  |  <slot 88> : 88: count\n" +
+                "  |  <slot 90> : 90: count\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count_if(82: count, 1), count_if(80: count, 1)\n" +
-                "  |  group by: 74: ss_sold_date_sk\n" +
-                "  |  having: (82: count > 0) OR (80: count > 0)");
+                "  |  output: count_if(88: count, 1), count_if(90: count, 1)\n" +
+                "  |  group by: 82: ss_sold_date_sk\n" +
+                "  |  having: (90: count > 0) OR (88: count > 0)");
         assertContains(plan, "13:SELECT\n" +
-                "  |  predicates: 54: count > 0\n" +
+                "  |  predicates: 62: count > 0\n" +
                 "  |  \n" +
                 "  12:Project\n" +
-                "  |  <slot 54> : 82: count\n" +
+                "  |  <slot 62> : 90: count\n" +
                 "  |  \n" +
                 "  11:EXCHANGE");
 
@@ -431,32 +431,35 @@ public class TPCDS1TExtractCTETest extends TPCDS1TTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  5:Project\n" +
-                "  |  <slot 80> : 80: count\n" +
-                "  |  <slot 81> : 81: row_hit\n" +
-                "  |  <slot 83> : 83: count\n" +
-                "  |  <slot 84> : 84: row_hit\n" +
+                "  |  <slot 88> : 88: count\n" +
+                "  |  <slot 89> : 89: row_hit\n" +
+                "  |  <slot 91> : 91: count\n" +
+                "  |  <slot 92> : 92: row_hit\n" +
                 "  |  \n" +
                 "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: any_value_if(81: row_hit, TRUE), count_if(83: count, 1), any_value_if(84: row_hit, TRUE), " +
-                "count_if(80: count, 1)\n" +
-                "  |  group by: 74: ss_sold_date_sk\n" +
-                "  |  having: (84: row_hit IS NOT NULL) OR (81: row_hit IS NOT NULL)");
+                "  |  output: count_if(88: count, 1), any_value_if(89: row_hit, TRUE), count_if(91: count, 1), " +
+                "any_value_if(92: row_hit, TRUE)\n" +
+                "  |  group by: 82: ss_sold_date_sk\n" +
+                "  |  having: (92: row_hit IS NOT NULL) OR (89: row_hit IS NOT NULL)");
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: any_value_if(TRUE, 79: expr), count_if(1, 82: expr), any_value_if(TRUE, 82: expr), count_if(1, " +
-                "79: expr)\n" +
-                "  |  group by: 74: ss_sold_date_sk");
+                "  |  output: count_if(1, 87: expr), any_value_if(TRUE, 87: expr), count_if(1, 90: expr), " +
+                "any_value_if(TRUE, 90: expr)\n" +
+                "  |  group by: 82: ss_sold_date_sk");
         assertContains(plan, "9:SELECT\n" +
-                "  |  predicates: 85: row_hit IS NOT NULL");
+                "  |  predicates: 93: row_hit IS NOT NULL");
     }
 
     @Test
     public void testSumAvg() throws Exception {
-        String sql = "select sum(ss_store_sk), avg(ss_promo_sk) from store_sales where ss_item_sk =2 group by ss_sold_date_sk " +
-                "except select sum(ss_store_sk), avg(ss_promo_sk) from store_sales where ss_item_sk = 3 group by ss_sold_date_sk";
+        String sql = "select sum(ss_store_sk), avg(ss_promo_sk) from store_sales " +
+                "where ss_item_sk =2 group by ss_sold_date_sk " +
+                "except select sum(ss_store_sk), avg(ss_promo_sk) from store_sales " +
+                "where ss_item_sk = 3 group by ss_sold_date_sk";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "output: sum_if(84: sum), avg_if(86: avg), any_value_if(87: row_hit, TRUE), sum_if(89: sum), " +
-                "avg_if(90: avg), any_value_if(91: row_hit, TRUE)\n" +
-                "  |  group by: 77: ss_sold_date_sk");
+        assertContains(plan, "output: sum_if(97: sum), avg_if(98: avg), " +
+                "any_value_if(99: row_hit, TRUE), sum_if(92: sum), " +
+                "avg_if(94: avg), any_value_if(95: row_hit, TRUE)\n" +
+                "  |  group by: 85: ss_sold_date_sk");
     }
 }
