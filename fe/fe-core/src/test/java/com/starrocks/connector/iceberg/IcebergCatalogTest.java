@@ -18,8 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.IcebergTable;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.iceberg.DataTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
@@ -34,6 +32,7 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.Map;
@@ -71,26 +70,24 @@ public class IcebergCatalogTest {
         CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(Lists.newArrayList(task));
         Mockito.when(scan.planFiles()).thenReturn(taskIterable);
 
-        new MockUp<MetadataTableUtils>() {
-            @Mock
-            public Table createMetadataTableInstance(Table table, MetadataTableType type) {
-                return partitionsTable;
-            }
-        };
+        // Use Mockito.mockStatic instead of JMockit's MockUp
+        try (MockedStatic<MetadataTableUtils> metadataTableUtils = Mockito.mockStatic(MetadataTableUtils.class)) {
+            metadataTableUtils.when(() -> MetadataTableUtils.createMetadataTableInstance(
+                    nativeTable, MetadataTableType.PARTITIONS)).thenReturn(partitionsTable);
 
-        // Mock PartitionUtil.convertIcebergPartitionToPartitionName to avoid NPE
-        new MockUp<com.starrocks.connector.PartitionUtil>() {
-            @Mock
-            public String convertIcebergPartitionToPartitionName(PartitionSpec spec,
-                                                                 StructProjection partition) {
-                return "dt=2023-12-01";
-            }
-        };
+            // Mock PartitionUtil.convertIcebergPartitionToPartitionName
+            try (MockedStatic<com.starrocks.connector.PartitionUtil> partitionUtil = 
+                    Mockito.mockStatic(com.starrocks.connector.PartitionUtil.class)) {
+                partitionUtil.when(() -> com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName(
+                        Mockito.any(PartitionSpec.class), Mockito.any(StructProjection.class)))
+                        .thenReturn("dt=2023-12-01");
 
-        Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
-        // Since we use valid specId, partition should be returned
-        Assertions.assertFalse(partitions.isEmpty());
-        Assertions.assertNotNull(partitions.get("dt=2023-12-01"));
+                Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
+                // Since we use valid specId, partition should be returned
+                Assertions.assertFalse(partitions.isEmpty());
+                Assertions.assertNotNull(partitions.get("dt=2023-12-01"));
+            }
+        }
     }
 
     @Test
@@ -135,25 +132,23 @@ public class IcebergCatalogTest {
         CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(Lists.newArrayList(task));
         Mockito.when(scan.planFiles()).thenReturn(taskIterable);
 
-        new MockUp<MetadataTableUtils>() {
-            @Mock
-            public Table createMetadataTableInstance(Table table, MetadataTableType type) {
-                return partitionsTable;
-            }
-        };
+        // Use Mockito.mockStatic instead of JMockit's MockUp
+        try (MockedStatic<MetadataTableUtils> metadataTableUtils = Mockito.mockStatic(MetadataTableUtils.class)) {
+            metadataTableUtils.when(() -> MetadataTableUtils.createMetadataTableInstance(
+                    nativeTable, MetadataTableType.PARTITIONS)).thenReturn(partitionsTable);
 
-        // Fix: Use correct method signature with 2 parameters instead of 3
-        new MockUp<com.starrocks.connector.PartitionUtil>() {
-            @Mock
-            public String convertIcebergPartitionToPartitionName(PartitionSpec spec,
-                                                                 StructProjection partition) {
-                return "dt=2023-12-04";
-            }
-        };
+            // Mock PartitionUtil.convertIcebergPartitionToPartitionName
+            try (MockedStatic<com.starrocks.connector.PartitionUtil> partitionUtil = 
+                    Mockito.mockStatic(com.starrocks.connector.PartitionUtil.class)) {
+                partitionUtil.when(() -> com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName(
+                        Mockito.any(PartitionSpec.class), Mockito.any(StructProjection.class)))
+                        .thenReturn("dt=2023-12-04");
 
-        Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
-        Partition partition = partitions.get("dt=2023-12-04");
-        Assertions.assertNotNull(partition);
-        Assertions.assertTrue(partition.getVersion() >= 0);
+                Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
+                Partition partition = partitions.get("dt=2023-12-04");
+                Assertions.assertNotNull(partition);
+                Assertions.assertTrue(partition.getVersion() >= 0);
+            }
+        }
     }
 }
