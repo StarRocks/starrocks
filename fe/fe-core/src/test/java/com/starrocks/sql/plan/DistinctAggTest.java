@@ -103,6 +103,15 @@ public class DistinctAggTest extends PlanTestBase {
                 "  |  offset: 0");
     }
 
+    @Test
+    void testDistinctArrayAggOnConstantSubqueryColumns() throws Exception {
+        String sql = "select array_agg(distinct aaa), array_agg(distinct bbb) as equip_type " +
+                "from (select 'xxxx' as aaa, 'xxx' as bbb) t";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: array_agg(DISTINCT 'xxxx'), array_agg(DISTINCT 'xxx')");
+        assertNotContains(plan, "array_agg_distinct");
+    }
+
     private static Stream<Arguments> sqlWithDistinctLimit() {
         List<Arguments> argumentsList = Lists.newArrayList();
         argumentsList.add(Arguments.of("select count(distinct v1, v2) from (select * from t0 limit 2) t",
