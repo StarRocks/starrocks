@@ -62,6 +62,7 @@ class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryCol
 
 public:
     using ValueType = Slice;
+    using SuperClass = CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
     using Offset = T;
     using Offsets = Buffer<T>;
@@ -74,16 +75,26 @@ public:
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumnBase() { _offsets.emplace_back(0); }
+    BinaryColumnBase() : BinaryColumnBase(memory::get_default_column_allocator()) {}
+    explicit BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {
+        _offsets.emplace_back(0);
+    }
     // Default value is empty string
-    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
-    BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    explicit BinaryColumnBase(size_t size) : BinaryColumnBase(memory::get_default_column_allocator(), size) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, size_t size)
+            : SuperClass(allocator), _offsets(size + 1, 0) {}
+    BinaryColumnBase(Bytes bytes, Offsets offsets)
+            : BinaryColumnBase(memory::get_default_column_allocator(), std::move(bytes), std::move(offsets)) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, Bytes bytes, Offsets offsets)
+            : SuperClass(allocator), _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
+            : BinaryColumnBase(memory::get_default_column_allocator(), std::move(resource), std::move(offsets)) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, ContainerResource resource, Offsets offsets);
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 

@@ -19,7 +19,10 @@
 
 namespace starrocks {
 
-StructColumn::StructColumn(MutableColumns&& fields) {
+StructColumn::StructColumn(MutableColumns&& fields)
+        : StructColumn(memory::get_default_column_allocator(), std::move(fields)) {}
+
+StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields) : Base(allocator) {
     DCHECK_GT(fields.size(), 0);
     size_t size = fields[0]->size();
     for (auto&& f : fields) {
@@ -31,7 +34,11 @@ StructColumn::StructColumn(MutableColumns&& fields) {
 }
 
 StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> field_names)
-        : _field_names(std::move(field_names)) {
+        : StructColumn(memory::get_default_column_allocator(), std::move(fields), std::move(field_names)) {}
+
+StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields,
+                           std::vector<std::string> field_names)
+        : Base(allocator), _field_names(std::move(field_names)) {
     // Struct must have at least one field.
     DCHECK_GT(_field_names.size(), 0);
     for (auto&& f : fields) {
@@ -41,6 +48,19 @@ StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> fie
     // fields and field_names must have the same size.
     DCHECK(_fields.size() == _field_names.size());
 }
+
+StructColumn::StructColumn(const Columns& fields)
+        : StructColumn(memory::get_default_column_allocator(), fields) {}
+
+StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields)
+        : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields)) {}
+
+StructColumn::StructColumn(const Columns& fields, std::vector<std::string> field_names)
+        : StructColumn(memory::get_default_column_allocator(), fields, std::move(field_names)) {}
+
+StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields,
+                           std::vector<std::string> field_names)
+        : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields), std::move(field_names)) {}
 
 StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
     MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);

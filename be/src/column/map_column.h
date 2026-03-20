@@ -30,6 +30,8 @@ public:
     using ValueType = void;
 
     MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets);
+    MapColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& keys, MutableColumnPtr&& values,
+              MutableColumnPtr&& offsets);
 
     DISALLOW_COPY(MapColumn);
 

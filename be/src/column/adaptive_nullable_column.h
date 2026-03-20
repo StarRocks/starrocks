@@ -68,10 +68,15 @@ public:
         kMaterialized,
     };
 
-    AdaptiveNullableColumn() = default;
+    AdaptiveNullableColumn() : SuperClass(memory::get_default_column_allocator()) {}
 
     explicit AdaptiveNullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
-            : SuperClass(std::move(data_column), std::move(null_column)) {
+            : AdaptiveNullableColumn(memory::get_default_column_allocator(), std::move(data_column),
+                                     std::move(null_column)) {}
+
+    AdaptiveNullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                           MutableColumnPtr&& null_column)
+            : SuperClass(allocator, std::move(data_column), std::move(null_column)) {
         DCHECK_EQ(_null_column->size(), _data_column->size());
         if (_data_column->size() == 0) {
             _state = State::kUninitialized;

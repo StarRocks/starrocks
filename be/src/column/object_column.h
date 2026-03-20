@@ -50,9 +50,15 @@ public:
         const ObjectColumn* _column = nullptr;
     };
 
-    ObjectColumn() = default;
+    ObjectColumn() : ObjectColumn(memory::get_default_column_allocator()) {}
 
-    explicit ObjectColumn(size_t size) : _pool(size) {}
+    explicit ObjectColumn([[maybe_unused]] memory::Allocator* allocator)
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator) {}
+
+    explicit ObjectColumn(size_t size) : ObjectColumn(memory::get_default_column_allocator(), size) {}
+
+    ObjectColumn([[maybe_unused]] memory::Allocator* allocator, size_t size)
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(size) {}
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 

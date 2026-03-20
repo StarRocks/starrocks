@@ -29,9 +29,12 @@ class ConstColumn final : public CowFactory<ColumnFactory<Column, ConstColumn>, 
 
 public:
     using ValueType = void;
+    using SuperClass = CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn>;
 
     explicit ConstColumn(ColumnPtr data_column);
+    ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
+    ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data_column, size_t size);
 
     DISALLOW_COPY(ConstColumn);
 

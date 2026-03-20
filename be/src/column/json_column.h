@@ -35,8 +35,10 @@ public:
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column>;
     using BaseClass = JsonColumnBase;
 
-    JsonColumn() = default;
-    explicit JsonColumn(size_t size) : SuperClass(size) {}
+    JsonColumn() : JsonColumn(memory::get_default_column_allocator()) {}
+    explicit JsonColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
+    explicit JsonColumn(size_t size) : JsonColumn(memory::get_default_column_allocator(), size) {}
+    JsonColumn([[maybe_unused]] memory::Allocator* allocator, size_t size) : SuperClass(allocator, size) {}
     DISALLOW_COPY(JsonColumn);
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {

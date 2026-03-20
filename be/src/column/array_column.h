@@ -42,6 +42,7 @@ public:
     using OffsetColumnPtr = UInt32Column::Ptr;
 
     ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
+    ArrayColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
 
     DISALLOW_COPY(ArrayColumn);
 

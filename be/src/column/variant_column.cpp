@@ -39,12 +39,16 @@ namespace starrocks {
 static void append_null_base_payload_rows(BinaryColumn::MutablePtr& metadata_column,
                                           BinaryColumn::MutablePtr& remain_column, size_t count);
 
-VariantColumn::VariantColumn() : SuperClass(0) {
+VariantColumn::VariantColumn() : VariantColumn(memory::get_default_column_allocator()) {}
+
+VariantColumn::VariantColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator, 0) {
     _metadata_column = BinaryColumn::create();
     _remain_value_column = BinaryColumn::create();
 }
 
-VariantColumn::VariantColumn(size_t size) : SuperClass(0) {
+VariantColumn::VariantColumn(size_t size) : VariantColumn(memory::get_default_column_allocator(), size) {}
+
+VariantColumn::VariantColumn([[maybe_unused]] memory::Allocator* allocator, size_t size) : SuperClass(allocator, 0) {
     _metadata_column = BinaryColumn::create();
     _remain_value_column = BinaryColumn::create();
     if (size > 0) {

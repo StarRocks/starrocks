@@ -30,10 +30,18 @@ class DecimalV3Column final
                             DecimalV3Column<DecimalType<T>>, Column>;
 
 public:
-    DecimalV3Column() = default;
+    using SuperClass =
+            CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                       DecimalV3Column<DecimalType<T>>, Column>;
+
+    DecimalV3Column() : DecimalV3Column(memory::get_default_column_allocator()) {}
+    explicit DecimalV3Column([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
     explicit DecimalV3Column(size_t num_rows);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, size_t num_rows);
     DecimalV3Column(int precision, int scale);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, int precision, int scale, size_t num_rows);
 
     DISALLOW_COPY_TEMPLATE(DecimalV3Column, DecimalV3Column<DecimalType<T>>);
 

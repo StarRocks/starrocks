@@ -59,7 +59,12 @@ void MapColumn::check_or_die() const {
 }
 
 MapColumn::MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets)
-        : _keys(std::move(keys)),
+        : MapColumn(memory::get_default_column_allocator(), std::move(keys), std::move(values), std::move(offsets)) {}
+
+MapColumn::MapColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& keys, MutableColumnPtr&& values,
+                     MutableColumnPtr&& offsets)
+        : Base(allocator),
+          _keys(std::move(keys)),
           _values(std::move(values)),
           _offsets(UInt32Column::static_pointer_cast(std::move(offsets))) {
     DCHECK(_keys->is_nullable());

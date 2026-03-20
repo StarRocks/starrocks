@@ -35,7 +35,11 @@ void ArrayColumn::check_or_die() const {
 }
 
 ArrayColumn::ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets)
-        : _elements(std::move(elements)), _offsets(OffsetColumn::static_pointer_cast(std::move(offsets))) {
+        : ArrayColumn(memory::get_default_column_allocator(), std::move(elements), std::move(offsets)) {}
+
+ArrayColumn::ArrayColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& elements,
+                         MutableColumnPtr&& offsets)
+        : Base(allocator), _elements(std::move(elements)), _offsets(OffsetColumn::static_pointer_cast(std::move(offsets))) {
     DCHECK(_elements->is_nullable());
     if (_offsets->empty()) {
         _offsets->append(0);

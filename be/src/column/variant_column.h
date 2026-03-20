@@ -51,7 +51,9 @@ public:
     using BaseClass = VariantColumnBase;
 
     VariantColumn();
+    explicit VariantColumn([[maybe_unused]] memory::Allocator* allocator);
     explicit VariantColumn(size_t size);
+    VariantColumn([[maybe_unused]] memory::Allocator* allocator, size_t size);
     DISALLOW_COPY(VariantColumn);
 
     VariantColumn(VariantColumn&& rhs) noexcept

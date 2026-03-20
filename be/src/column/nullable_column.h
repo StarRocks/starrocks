@@ -36,6 +36,7 @@ class NullableColumn : public CowFactory<ColumnFactory<Column, NullableColumn>, 
 
 public:
     using ValueType = void;
+    using SuperClass = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
 
     inline static MutableColumnPtr wrap_if_necessary(ColumnPtr&& column) {
         if (column->is_nullable()) {
@@ -53,9 +54,12 @@ public:
         return NullableColumn::create(column, std::move(null));
     }
 
-    NullableColumn() = default;
+    NullableColumn() : SuperClass(memory::get_default_column_allocator()) {}
+    explicit NullableColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
+    NullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                   MutableColumnPtr&& null_column);
 
     DISALLOW_COPY(NullableColumn);
 
@@ -70,7 +74,7 @@ public:
         return *this;
     }
 
-    using Base = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
+    using Base = SuperClass;
     static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
         return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
     }

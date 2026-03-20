@@ -52,11 +52,19 @@ public:
     using Container = Buffer<ValueType>;
     using ImmContainer = std::span<const ValueType>;
 
-    FixedLengthColumnBase() = default;
+    FixedLengthColumnBase() : FixedLengthColumnBase(memory::get_default_column_allocator()) {}
 
-    explicit FixedLengthColumnBase(const size_t n) : _data(n) {}
+    explicit FixedLengthColumnBase(const size_t n) : FixedLengthColumnBase(memory::get_default_column_allocator(), n) {}
 
-    FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
+    FixedLengthColumnBase(const size_t n, const ValueType x)
+            : FixedLengthColumnBase(memory::get_default_column_allocator(), n, x) {}
+
+    explicit FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator) : Column(allocator) {}
+
+    FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator, const size_t n) : Column(allocator), _data(n) {}
+
+    FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator, const size_t n, const ValueType x)
+            : Column(allocator), _data(n, x) {}
 
     DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 

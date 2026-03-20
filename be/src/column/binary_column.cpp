@@ -31,8 +31,9 @@
 
 namespace starrocks {
 template <typename T>
-BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
-        : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
+BinaryColumnBase<T>::BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, ContainerResource resource,
+                                      Offsets offsets)
+        : SuperClass(allocator), _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
     if (_offsets.empty()) {
         _offsets.emplace_back(0);
     }

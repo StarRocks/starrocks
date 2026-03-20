@@ -27,11 +27,19 @@ public:
     using Container = Buffer<ValueType>;
     using SuperClass =
             CowFactory<ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>>, FixedLengthColumn<T>, Column>;
-    FixedLengthColumn() = default;
+    FixedLengthColumn() : SuperClass(memory::get_default_column_allocator()) {}
 
-    explicit FixedLengthColumn(const size_t n) : SuperClass(n) {}
+    explicit FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
 
-    FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(n, x) {}
+    explicit FixedLengthColumn(const size_t n) : SuperClass(memory::get_default_column_allocator(), n) {}
+
+    FixedLengthColumn(const size_t n, const ValueType x)
+            : SuperClass(memory::get_default_column_allocator(), n, x) {}
+
+    FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator, const size_t n) : SuperClass(allocator, n) {}
+
+    FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator, const size_t n, const ValueType x)
+            : SuperClass(allocator, n, x) {}
 
     DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
 

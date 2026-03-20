@@ -23,7 +23,11 @@
 namespace starrocks {
 
 NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
-        : _data_column(std::move(data_column)), _has_null(false) {
+        : NullableColumn(memory::get_default_column_allocator(), std::move(data_column), std::move(null_column)) {}
+
+NullableColumn::NullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                               MutableColumnPtr&& null_column)
+        : SuperClass(allocator), _data_column(std::move(data_column)), _has_null(false) {
     DCHECK(!_data_column->is_constant() && !_data_column->is_nullable())
             << "nullable column's data must be single column";
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())

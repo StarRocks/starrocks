@@ -28,9 +28,15 @@ public:
 
     // Used to construct an unnamed struct
     StructColumn(MutableColumns&& fields);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields);
     StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields,
+                 std::vector<std::string> field_names);
     StructColumn(const Columns& fields);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields);
     StructColumn(const Columns& fields, std::vector<std::string> field_names);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields,
+                 std::vector<std::string> field_names);
     DISALLOW_COPY(StructColumn);
 
     StructColumn(StructColumn&& rhs) noexcept
