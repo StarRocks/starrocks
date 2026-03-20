@@ -143,7 +143,7 @@ public final class MetricRepo {
                             ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
 
     // Per-catalog-type query counters
-    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_ALL =
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
             new MetricWithLabelGroup<>("catalog_type",
                     () -> new LongCounterMetric("catalog_query_total", MetricUnit.REQUESTS,
                             "total query by catalog type"));

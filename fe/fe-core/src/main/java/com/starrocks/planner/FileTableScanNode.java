@@ -28,8 +28,6 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -183,12 +181,7 @@ public class FileTableScanNode extends ScanNode {
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
 
-        // Set catalog_type for BE catalog scan metrics
-        if (fileTable != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
-            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(fileTable.getType()));
-            msg.setConnector_scan_node(connectorScanNode);
-        }
+        setConnectorCatalogType(msg);
     }
 
     @Override

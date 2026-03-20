@@ -54,8 +54,6 @@ import com.starrocks.thrift.TEsScanNode;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -157,12 +155,7 @@ public class EsScanNode extends ScanNode {
         }
         msg.es_scan_node = esScanNode;
 
-        // Set catalog_type for BE catalog scan metrics
-        if (table != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
-            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
-            msg.setConnector_scan_node(connectorScanNode);
-        }
+        setConnectorCatalogType(msg);
     }
 
     public void assignNodes() throws StarRocksException {

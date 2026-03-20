@@ -285,7 +285,7 @@ public class ConnectProcessor {
                 if (executor != null) {
                     Set<String> catalogTypes = executor.getCatalogTypesInvolved();
                     for (String catalogType : catalogTypes) {
-                        MetricRepo.COUNTER_CATALOG_QUERY_ALL.getMetric(catalogType).increase(1L);
+                        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric(catalogType).increase(1L);
                         if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                             MetricRepo.COUNTER_CATALOG_QUERY_ERR.getMetric(catalogType).increase(1L);
                             if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {

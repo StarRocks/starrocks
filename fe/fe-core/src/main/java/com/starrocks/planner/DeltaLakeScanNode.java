@@ -32,8 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -238,12 +236,7 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
 
-        // Set catalog_type for BE catalog scan metrics
-        if (deltaLakeTable != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
-            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(deltaLakeTable.getType()));
-            msg.setConnector_scan_node(connectorScanNode);
-        }
+        setConnectorCatalogType(msg);
     }
 
     @Override

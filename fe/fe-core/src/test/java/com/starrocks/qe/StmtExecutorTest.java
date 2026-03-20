@@ -14,6 +14,8 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -22,6 +24,8 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.QueryDetail.QueryMemState;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -38,6 +42,7 @@ import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,6 +55,8 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -1028,5 +1035,69 @@ public class StmtExecutorTest {
         } finally {
             Config.enable_collect_query_detail_info = oldCollect;
         }
+    }
+
+    public void testToCatalogTypeMapping() {
+        Assertions.assertEquals("default", StmtExecutor.toCatalogType(Table.TableType.OLAP));
+        Assertions.assertEquals("default", StmtExecutor.toCatalogType(Table.TableType.CLOUD_NATIVE));
+        Assertions.assertEquals("default", StmtExecutor.toCatalogType(Table.TableType.MATERIALIZED_VIEW));
+        Assertions.assertEquals("default", StmtExecutor.toCatalogType(Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW));
+        Assertions.assertEquals("hive", StmtExecutor.toCatalogType(Table.TableType.HIVE));
+        Assertions.assertEquals("hive", StmtExecutor.toCatalogType(Table.TableType.HIVE_VIEW));
+        Assertions.assertEquals("iceberg", StmtExecutor.toCatalogType(Table.TableType.ICEBERG));
+        Assertions.assertEquals("iceberg", StmtExecutor.toCatalogType(Table.TableType.ICEBERG_VIEW));
+        Assertions.assertEquals("hudi", StmtExecutor.toCatalogType(Table.TableType.HUDI));
+        Assertions.assertEquals("deltalake", StmtExecutor.toCatalogType(Table.TableType.DELTALAKE));
+        Assertions.assertEquals("jdbc", StmtExecutor.toCatalogType(Table.TableType.JDBC));
+        Assertions.assertEquals("paimon", StmtExecutor.toCatalogType(Table.TableType.PAIMON));
+        Assertions.assertEquals("paimon", StmtExecutor.toCatalogType(Table.TableType.PAIMON_VIEW));
+        Assertions.assertEquals("odps", StmtExecutor.toCatalogType(Table.TableType.ODPS));
+        Assertions.assertEquals("kudu", StmtExecutor.toCatalogType(Table.TableType.KUDU));
+        Assertions.assertEquals("elasticsearch", StmtExecutor.toCatalogType(Table.TableType.ELASTICSEARCH));
+        Assertions.assertEquals("default", StmtExecutor.toCatalogType(Table.TableType.MYSQL));
+    }
+
+    @Test
+    public void testExtractCatalogTypes(@Mocked ScanNode scanNode,
+                                        @Mocked TupleDescriptor tupleDescriptor,
+                                        @Mocked Table table) throws Exception {
+        StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        ConnectContext ctx = new ConnectContext();
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        java.lang.reflect.Method extractCatalogTypesMethod =
+                StmtExecutor.class.getDeclaredMethod("extractCatalogTypes", ExecPlan.class);
+        extractCatalogTypesMethod.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Set<String> nullPlanTypes = (Set<String>) extractCatalogTypesMethod.invoke(executor, new Object[] {null});
+        Assertions.assertEquals(Collections.emptySet(), nullPlanTypes);
+
+        ExecPlan emptyScanPlan = new ExecPlan();
+        ctx.setCurrentCatalog(null);
+        Set<String> nullCatalogTypes = Deencapsulation.invoke(executor, "extractCatalogTypes", emptyScanPlan);
+        Assertions.assertEquals(Collections.singleton("default"), nullCatalogTypes);
+
+        ctx.setCurrentCatalog("hive0");
+        Set<String> externalCatalogTypes = Deencapsulation.invoke(executor, "extractCatalogTypes", emptyScanPlan);
+        Assertions.assertEquals(Collections.singleton("default"), externalCatalogTypes);
+
+        ExecPlan scanPlan = new ExecPlan();
+        new Expectations(scanNode, tupleDescriptor, table) {
+            {
+                scanNode.getDesc();
+                result = tupleDescriptor;
+                tupleDescriptor.getTable();
+                result = table;
+                table.getType();
+                result = Table.TableType.HUDI;
+            }
+        };
+        scanPlan.getScanNodes().add(scanNode);
+        Set<String> scanNodeTypes = Deencapsulation.invoke(executor, "extractCatalogTypes", scanPlan);
+        Assertions.assertEquals(Sets.newHashSet("hudi"), scanNodeTypes);
+
+        Deencapsulation.setField(executor, "catalogTypesInvolved", Sets.newHashSet("hive", "hudi"));
+        Assertions.assertEquals(Sets.newHashSet("hive", "hudi"), executor.getCatalogTypesInvolved());
     }
 }

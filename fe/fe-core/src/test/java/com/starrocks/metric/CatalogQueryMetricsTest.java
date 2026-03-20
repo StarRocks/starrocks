@@ -15,6 +15,7 @@
 package com.starrocks.metric;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
@@ -71,10 +72,10 @@ public class CatalogQueryMetricsTest extends PlanTestBase {
 
     @Test
     public void testCatalogQueryMetrics() {
-        MetricRepo.COUNTER_CATALOG_QUERY_ALL.getMetric("hive").increase(1L);
-        MetricRepo.COUNTER_CATALOG_QUERY_ALL.getMetric("iceberg").increase(2L);
-        assertEquals(1L, MetricRepo.COUNTER_CATALOG_QUERY_ALL.getMetric("hive").getValue().longValue());
-        assertEquals(2L, MetricRepo.COUNTER_CATALOG_QUERY_ALL.getMetric("iceberg").getValue().longValue());
+        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric("hive").increase(1L);
+        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric("iceberg").increase(2L);
+        assertEquals(1L, MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric("hive").getValue().longValue());
+        assertEquals(2L, MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric("iceberg").getValue().longValue());
     }
 
     @Test

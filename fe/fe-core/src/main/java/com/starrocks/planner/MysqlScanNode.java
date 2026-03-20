@@ -47,8 +47,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TMySQLScanNode;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -171,12 +169,7 @@ public class MysqlScanNode extends ScanNode {
             msg.mysql_scan_node.setTemporal_clause(temporalClause);
         }
 
-        // Set catalog_type for BE catalog scan metrics
-        if (desc.getTable() != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
-            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(desc.getTable().getType()));
-            msg.setConnector_scan_node(connectorScanNode);
-        }
+        setConnectorCatalogType(msg);
     }
 
     /**

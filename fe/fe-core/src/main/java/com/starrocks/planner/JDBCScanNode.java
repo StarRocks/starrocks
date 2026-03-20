@@ -29,8 +29,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -207,12 +205,7 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
 
-        // Set catalog_type for BE catalog scan metrics
-        if (table != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
-            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
-            msg.setConnector_scan_node(connectorScanNode);
-        }
+        setConnectorCatalogType(msg);
     }
 
     @Override
