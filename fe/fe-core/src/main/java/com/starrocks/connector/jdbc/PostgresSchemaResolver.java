@@ -65,12 +65,21 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            String comment = "";
+            // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
+            try {
+                if (columnSet.getString("REMARKS") != null) {
+                    comment = columnSet.getString("REMARKS");
+                }
+            } catch (SQLException ignored) { }
+
             String columnName = columnSet.getString("COLUMN_NAME");
             if (!columnName.equals(columnName.toLowerCase())) {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;
     }
