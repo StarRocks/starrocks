@@ -56,7 +56,7 @@ public:
                                    bool done) = 0;
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
-    virtual void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) {}
+    virtual void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
     virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
 
