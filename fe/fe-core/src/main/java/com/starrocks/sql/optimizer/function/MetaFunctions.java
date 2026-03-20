@@ -36,11 +36,7 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
->>>>>>> 7167951600 ([BugFix] [Followup] Fix mv refresh bugs with expired snapshot iceberg partitions to avoid repeat refresh (#70523))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
