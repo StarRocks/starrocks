@@ -55,6 +55,7 @@
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "base/failpoint/fail_point.h"
+#include "base/path/path_util.h"
 #include "base/uid_util.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -133,7 +134,8 @@ int main(int argc, char** argv) {
             puts(starrocks::get_build_version(false).c_str());
             exit(0);
         } else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-?") == 0) {
-            help(basename(argv[0]));
+            std::string program_name = starrocks::path_util::base_name(argv[0]);
+            help(program_name.c_str());
             exit(0);
         } else if (strcmp(argv[1], "--cn") == 0) {
             as_cn = true;

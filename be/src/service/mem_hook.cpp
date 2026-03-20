@@ -31,6 +31,13 @@
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
+// glibc exposes __THROW on allocator declarations; Darwin does not.
+#ifdef __THROW
+#define STARROCKS_MEM_HOOK_THROW_SPEC __THROW
+#else
+#define STARROCKS_MEM_HOOK_THROW_SPEC
+#endif
+
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
 #define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
 #define STARROCKS_MALLOC(size) je_malloc(size)
@@ -152,7 +159,7 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 
 extern "C" {
 // malloc
-void* my_malloc(size_t size) __THROW {
+void* my_malloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     int64_t alloc_size = STARROCKS_NALLOX(size, 0);
     SET_DELTA_MEMORY(alloc_size);
@@ -186,7 +193,7 @@ void* my_malloc(size_t size) __THROW {
 }
 
 // free
-void my_free(void* p) __THROW {
+void my_free(void* p) STARROCKS_MEM_HOOK_THROW_SPEC {
     if (UNLIKELY(p == nullptr)) {
         RESET_DELTA_MEMORY();
         return;
@@ -198,7 +205,7 @@ void my_free(void* p) __THROW {
 }
 
 // realloc
-void* my_realloc(void* p, size_t size) __THROW {
+void* my_realloc(void* p, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
@@ -235,7 +242,7 @@ void* my_realloc(void* p, size_t size) __THROW {
 }
 
 // calloc
-void* my_calloc(size_t n, size_t size) __THROW {
+void* my_calloc(size_t n, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(n * size);
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -270,7 +277,7 @@ void* my_calloc(size_t n, size_t size) __THROW {
     }
 }
 
-void my_cfree(void* ptr) __THROW {
+void my_cfree(void* ptr) STARROCKS_MEM_HOOK_THROW_SPEC {
     if (UNLIKELY(ptr == nullptr)) {
         RESET_DELTA_MEMORY();
         return;
@@ -282,7 +289,7 @@ void my_cfree(void* ptr) __THROW {
 }
 
 // memalign
-void* my_memalign(size_t align, size_t size) __THROW {
+void* my_memalign(size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
@@ -308,7 +315,7 @@ void* my_memalign(size_t align, size_t size) __THROW {
 }
 
 // aligned_alloc
-void* my_aligned_alloc(size_t align, size_t size) __THROW {
+void* my_aligned_alloc(size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
@@ -334,7 +341,7 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 }
 
 // valloc
-void* my_valloc(size_t size) __THROW {
+void* my_valloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
@@ -360,7 +367,7 @@ void* my_valloc(size_t size) __THROW {
 }
 
 // pvalloc
-void* my_pvalloc(size_t size) __THROW {
+void* my_pvalloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
@@ -386,7 +393,7 @@ void* my_pvalloc(size_t size) __THROW {
 }
 
 // posix_memalign
-int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
+int my_posix_memalign(void** r, size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(-1);
@@ -415,23 +422,58 @@ int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
     }
 }
 
-size_t my_malloc_usebale_size(void* ptr) __THROW {
+size_t my_malloc_usebale_size(void* ptr) STARROCKS_MEM_HOOK_THROW_SPEC {
     size_t ret = STARROCKS_MALLOC_SIZE(ptr);
     return ret;
 }
 
-void* malloc(size_t size) __THROW ALIAS(my_malloc);
-void free(void* p) __THROW ALIAS(my_free);
-void* realloc(void* p, size_t size) __THROW ALIAS(my_realloc);
-void* calloc(size_t n, size_t size) __THROW ALIAS(my_calloc);
-void cfree(void* ptr) __THROW ALIAS(my_cfree);
-void* memalign(size_t align, size_t size) __THROW ALIAS(my_memalign);
-void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
-void* valloc(size_t size) __THROW ALIAS(my_valloc);
-void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
-int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
-size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
+#ifdef __APPLE__
+void* malloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_malloc(size);
+}
 
+void free(void* p) STARROCKS_MEM_HOOK_THROW_SPEC {
+    my_free(p);
+}
+
+void* realloc(void* p, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_realloc(p, size);
+}
+
+void* calloc(size_t n, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_calloc(n, size);
+}
+
+void cfree(void* ptr) STARROCKS_MEM_HOOK_THROW_SPEC {
+    my_cfree(ptr);
+}
+
+void* aligned_alloc(size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_aligned_alloc(align, size);
+}
+
+void* valloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_valloc(size);
+}
+
+int posix_memalign(void** r, size_t a, size_t s) STARROCKS_MEM_HOOK_THROW_SPEC {
+    return my_posix_memalign(r, a, s);
+}
+#else
+void* malloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_malloc);
+void free(void* p) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_free);
+void* realloc(void* p, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_realloc);
+void* calloc(size_t n, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_calloc);
+void cfree(void* ptr) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_cfree);
+void* memalign(size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_memalign);
+void* aligned_alloc(size_t align, size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_aligned_alloc);
+void* valloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_valloc);
+void* pvalloc(size_t size) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_pvalloc);
+int posix_memalign(void** r, size_t a, size_t s) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_posix_memalign);
+size_t malloc_usable_size(void* ptr) STARROCKS_MEM_HOOK_THROW_SPEC ALIAS(my_malloc_usebale_size);
+#endif
+
+#ifndef __APPLE__
 // This is the bug of glibc: https://sourceware.org/bugzilla/show_bug.cgi?id=17730,
 // some version of glibc will alloc thread local storage using __libc_memalign
 // If we use jemalloc, the tls memory will be allocated by __libc_memalign and
@@ -440,4 +482,5 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
+#endif
 }
