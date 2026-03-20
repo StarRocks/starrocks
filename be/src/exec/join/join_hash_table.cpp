@@ -781,7 +781,12 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
                 const size_t row_count = key_columns[i]->size();
                 key_columns[i] = NullableColumn::create(key_columns[i], NullColumn::create(row_count, 0));
             }
-            key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i]);
+            // Skip the dummy row at index 0 (same as build column merge above).
+            // other_sz == 1 means the other partition only had the dummy row and no real rows.
+            const size_t other_sz = other_key_columns[i]->size();
+            if (other_sz > 1) {
+                key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i], 1, other_sz - 1);
+            }
         }
     }
     defer.cancel();
