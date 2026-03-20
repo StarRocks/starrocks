@@ -190,7 +190,8 @@ public class ConnectorPartitionTraitsTest {
                 return Map.of("p1", new PartitionInfo() {
                     @Override
                     public long getModifiedTime() {
-                        return 100L;
+                        // Return 0 to trigger version comparison path
+                        return 0L;
                     }
 
                     @Override

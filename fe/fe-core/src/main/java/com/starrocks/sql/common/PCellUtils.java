@@ -77,6 +77,14 @@ public class PCellUtils {
                             "Range partition expr must be present");
                     return getMVPartitionNameWithRange(baseTable, partitionColumn,
                             partitionNames, partitionExprOpt.get());
+                } else if (partitionInfo.isUnPartitioned()) {
+                    // For non-partitioned MV, any updated partition in the base table triggers a full refresh.
+                    // Wrap each updated base-table partition name as a PCellNone so the caller can detect
+                    // non-empty update info without needing a partition-column mapping.
+                    Set<PCellWithName> defaultCells = partitionNames.stream()
+                            .map(name -> new PCellWithName(name, new PCellNone()))
+                            .collect(Collectors.toSet());
+                    return PCellSortedSet.of(defaultCells);
                 } else {
                     return null;
                 }
