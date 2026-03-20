@@ -20,6 +20,7 @@
 #include <jemalloc/jemalloc.h>
 #include <unistd.h>
 
+#include <cinttypes>
 #include <limits>
 
 #include "base/uid_util.h"
@@ -144,11 +145,7 @@ static void dump_trace_info() {
     std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
     mbuffer.clear();
 
-#ifdef __APPLE__
-#define JEMALLOC_CTL mallctl
-#else
 #define JEMALLOC_CTL je_mallctl
-#endif
 
 static int jemalloc_purge() {
     char buffer[100];
@@ -164,6 +161,7 @@ static int jemalloc_dontdump() {
     return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
 }
 
+#ifndef __APPLE__
 static void dontdump_unused_pages() {
     size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
     static bool start_dump = false;
@@ -197,6 +195,7 @@ static void dontdump_unused_pages() {
     DCHECK_EQ(prev_allocate_size, CurrentThread::current().get_consumed_bytes());
     start_dump = true;
 }
+#endif
 
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
@@ -465,7 +464,7 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
     struct tm tm_time;
     localtime_r(&secs_since_epoch, &tm_time);
 
-    return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
+    return StringPrintf("%02d%02d %02d:%02d:%02d.%06" PRId64, 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 

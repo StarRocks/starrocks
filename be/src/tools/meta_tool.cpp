@@ -39,6 +39,7 @@
 #include <thrift/transport/TBufferTransports.h>
 #include <thrift/transport/TSocket.h>
 
+#include <cinttypes>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -606,9 +607,10 @@ void list_meta(DataDir* data_dir) {
            "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
-               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
-               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
+        printf("%8" PRId64 " %8" PRId64 " %18zu %4zu %16zu %8zu %18zu %6zu %18zu %18zu %26zu\n",
+               static_cast<int64_t>(st.table_id), static_cast<int64_t>(st.tablet_id), st.tablet_meta_bytes,
+               st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes, st.rowset_count,
+               st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
     printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_count,
            stats.total_meta_bytes, stats.tablets.size(), stats.update_tablet_count, stats.tablet_count,

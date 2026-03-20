@@ -116,6 +116,15 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
             case Aws::Http::HttpMethod::HTTP_PATCH:
                 poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_PATCH);
                 break;
+            case Aws::Http::HttpMethod::HTTP_CONNECT:
+                poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_CONNECT);
+                break;
+            case Aws::Http::HttpMethod::HTTP_OPTIONS:
+                poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_OPTIONS);
+                break;
+            case Aws::Http::HttpMethod::HTTP_TRACE:
+                poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_TRACE);
+                break;
             }
 
             for (const auto& [header_name, header_value] : request.GetHeaders()) {
