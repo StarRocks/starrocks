@@ -17,6 +17,7 @@
 #include <random>
 
 #include "column/chunk.h"
+#include "fs/key_cache.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
