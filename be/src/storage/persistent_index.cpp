@@ -3813,7 +3813,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
-    IOStatEntry* _io_stat_entry;
+    [[maybe_unused]] IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3960,8 +3960,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         } else {
-            iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[_key_size].first);
-            iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[_key_size].second);
+            iter->second.first = std::max<int64_t>(0, iter->second.first + add_usage_and_size[_key_size].first);
+            iter->second.second = std::max<int64_t>(0, iter->second.second + add_usage_and_size[_key_size].second);
         }
     } else {
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
@@ -3972,8 +3972,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             } else {
-                iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
-                iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
+                iter->second.first = std::max<int64_t>(0, iter->second.first + add_usage_and_size[key_size].first);
+                iter->second.second = std::max<int64_t>(0, iter->second.second + add_usage_and_size[key_size].second);
             }
         }
 
@@ -3991,8 +3991,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
-        iter->second.first = std::max(0L, iter->second.first + slice_usage);
-        iter->second.second = std::max(0L, iter->second.second + slice_size);
+        iter->second.first = std::max<int64_t>(0, iter->second.first + slice_usage);
+        iter->second.second = std::max<int64_t>(0, iter->second.second + slice_size);
     }
     return Status::OK();
 }

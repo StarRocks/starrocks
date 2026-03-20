@@ -1732,8 +1732,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 return apply_st;
             }
             if (VLOG_IS_ON(1)) {
-                StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
-                              cur_add, cur_new);
+                StringAppendF(&delvec_change_info, " %u:%zu(%lld)+%zu=%zu", rssid, cur_old,
+                              static_cast<long long>(old_del_vec->version()), cur_add, cur_new);
             }
             old_total_del += cur_old;
             new_del += cur_add;
@@ -2939,7 +2939,7 @@ int64_t TabletUpdates::get_compaction_score() {
         }
     }
     // scale score to a reasonable range relative to the number of files * 10
-    return total_score / std::max(1L, config::update_compaction_size_threshold / 10);
+    return total_score / std::max<int64_t>(1, config::update_compaction_size_threshold / 10);
 }
 
 struct CompactionEntry {
@@ -3750,7 +3750,7 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     last_version = _edit_version_infos.back()->version;
     rowsets = _edit_version_infos.back()->rowsets;
     for (auto const& pending_commit : _pending_commits) {
-        StringAppendF(&pending_info, "%ld,", pending_commit.first);
+        StringAppendF(&pending_info, "%lld,", static_cast<long long>(pending_commit.first));
     }
     if (lock) _lock.unlock();
 
@@ -5032,8 +5032,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
             const auto new_id = rowset_meta_pb.rowset_seg_id() + _next_rowset_id;
-            new_next_rowset_id =
-                    std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
+            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id,
+                                                    new_id + std::max<int64_t>(1, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
             RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(),

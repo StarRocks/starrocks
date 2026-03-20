@@ -34,7 +34,7 @@ enum class SerdeType {
 };
 
 struct AlignedBuffer {
-    static constexpr int PAGE_SIZE = 4096;
+    static constexpr int kPageSize = 4096;
     AlignedBuffer() = default;
 
     ~AlignedBuffer() noexcept {
@@ -62,7 +62,7 @@ struct AlignedBuffer {
     void resize(size_t size) {
         if (_capacity < size) {
             void* new_data = nullptr;
-            if (UNLIKELY(posix_memalign(&new_data, PAGE_SIZE, size) != 0)) {
+            if (UNLIKELY(posix_memalign(&new_data, kPageSize, size) != 0)) {
                 throw ::std::bad_alloc();
             }
             if (_data != nullptr) {

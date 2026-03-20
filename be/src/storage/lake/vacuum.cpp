@@ -350,7 +350,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto final_retain_version = min_retain_version;
     auto version = final_retain_version;
     auto tablet_id = tablet_info.tablet_id();
-    auto min_version = std::max(1L, tablet_info.min_version());
+    auto min_version = std::max<int64_t>(1, tablet_info.min_version());
     // grace_timestamp <= 0 means no grace timestamp
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
     size_t extra_file_size = 0;
@@ -1293,7 +1293,7 @@ static StatusOr<std::pair<int64_t, int64_t>> partition_datafile_gc(std::string_v
         files_to_delete.push_back(join_path(segment_root_location, name));
         transaction_ids.insert(extract_txn_id_prefix(name).value_or(0));
         bytes_to_delete += entry.size.value_or(0);
-        auto time = entry.mtime.value_or(0);
+        std::time_t time = static_cast<std::time_t>(entry.mtime.value_or(0));
         auto outtime = std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
         ++progress;
         if (audit_ostream) {
