@@ -57,35 +57,63 @@ set enable_materialized_view_rewrite=false;
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- test normal refresh's result
+[UC]select inspect_mv_refresh_info("test_mv1");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+-- test force refresh's result
+[UC]select inspect_mv_refresh_info("test_mv1");
 
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 
-[UC]select inspect_mv_refresh_info("test_mv1");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv1");
 select count(1) from test_mv1;
 
 -- 1st time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+function: check_mv_to_refresh_contains("test_mv1", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231201", "p20231202", "p20231203", "p20231204")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv1", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231201", "p20231202", "p20231203", "p20231204")
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv1", "")
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 select count(1) from test_mv1;
 
 -- 2nd time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+-- after iceberg table updated, only the new partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv1", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231201", "p20231202", "p20231203", "p20231204")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+-- after iceberg table updated, only the new partition will be refreshed even if the old partition is expired
+function: check_mv_to_refresh_contains("test_mv1", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231201", "p20231202", "p20231203", "p20231204")
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- after refresh, no partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv1", "")
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 select count(1) from test_mv1;
 
 -- 3nd time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-06');
+-- after iceberg table updated, only the new partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv1", "p20231206")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231205", "p20231201", "p20231202", "p20231203", "p20231204")
+
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+-- after expire, no partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv1", "p20231206")
+function: check_mv_to_refresh_not_contains("test_mv1", "p20231205", "p20231201", "p20231202", "p20231203", "p20231204")
+
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- after refresh, no partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv1", "")
+
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 select count(1) from test_mv1;
 
@@ -93,8 +121,11 @@ select count(1) from test_mv1;
 CREATE MATERIALIZED VIEW test_mv2 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv2 FORCE WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
 
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
@@ -108,54 +139,83 @@ select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
 -- 1th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-04');
+-- after iceberg table updated, only the new partition will be refreshed
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv2", "")
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
-
 -- 2th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-05');
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv2", "")
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
 -- 3th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('test', 2002, '2023-12-06');
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv2", "test_mv2")
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv2", "")
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
 -- test partitioned mv
 CREATE MATERIALIZED VIEW test_mv3 
-REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 
-[UC]select inspect_mv_refresh_info("test_mv3");
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv3");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv3 FORCE WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv3");
+
 select count(1) from test_mv3;
 
 -- 1th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+function: check_mv_to_refresh_contains("test_mv3", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231201", "p20231202", "p20231203", "p20231204")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv3", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231201", "p20231202", "p20231203", "p20231204")
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv3", "")
 select count(1) from test_mv3;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
 -- 2th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-05');
+function: check_mv_to_refresh_contains("test_mv3", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231201", "p20231202", "p20231203", "p20231204")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv3", "p20231205")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231201", "p20231202", "p20231203", "p20231204")
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv3", "")
 select count(1) from test_mv3;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
 -- 3th time expire snapshot
 insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} values ('test', 2002, '2023-12-07');
+function: check_mv_to_refresh_contains("test_mv3", "p20231207")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231205", "p20231201", "p20231202", "p20231203", "p20231204")
 alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
+function: check_mv_to_refresh_contains("test_mv3", "p20231207")
+function: check_mv_to_refresh_not_contains("test_mv3", "p20231205", "p20231201", "p20231202", "p20231203", "p20231204")
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
+function: check_mv_to_refresh_contains("test_mv3", "")
 select count(1) from test_mv3;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
