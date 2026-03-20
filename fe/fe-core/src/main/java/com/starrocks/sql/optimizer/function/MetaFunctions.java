@@ -230,11 +230,11 @@ public class MetaFunctions {
             MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
                     mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
             if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
-                // For a full refresh, getMvPartitionNameToCellMap() is empty by design (no partition-level tracking).
+                // For a full refresh, getMvToRefreshPartitionNames() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.
                 mvToRefreshPartitions = mv.getPartitionNames();
             } else {
-                mvToRefreshPartitions = mvUpdateInfo.getMvPartitionNameToCellMap().keySet();
+                mvToRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
             }
         } catch (Exception e) {
             LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
