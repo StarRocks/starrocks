@@ -147,26 +147,26 @@ public class CachingIcebergCatalogTest {
             }
 
             @Override
-            public List<String> listAllDatabases(ConnectContext context) {
+            public List<String> listAllDatabases() {
                 return List.of();
             }
 
             @Override
-            public Database getDB(ConnectContext context, String dbName) {
+            public Database getDB(String dbName) {
                 return null;
             }
 
             @Override
-            public List<String> listTables(ConnectContext context, String dbName) {
+            public List<String> listTables(String dbName) {
                 return List.of();
             }
 
             @Override
-            public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) {
+            public void renameTable(String dbName, String tblName, String newTblName) {
             }
 
             @Override
-            public Table getTable(ConnectContext context, String dbName, String tableName) {
+            public Table getTable(String dbName, String tableName) {
                 throw new UnsupportedOperationException();
             }
         };
