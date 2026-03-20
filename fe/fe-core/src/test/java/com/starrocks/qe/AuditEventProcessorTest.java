@@ -45,11 +45,11 @@ import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 
 import java.io.IOException;
