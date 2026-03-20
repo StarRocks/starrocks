@@ -53,6 +53,27 @@ starrocks_resolve_tool_command() {
     command -v "${tool_name}" 2>/dev/null
 }
 
+starrocks_same_tool_binary() {
+    local left_path="$1"
+    local right_path="$2"
+    local left_id=""
+    local right_id=""
+
+    if [[ -z "${left_path}" || -z "${right_path}" || ! -e "${left_path}" || ! -e "${right_path}" ]]; then
+        return 1
+    fi
+
+    if starrocks_is_darwin; then
+        left_id="$(stat -f '%d:%i' "${left_path}" 2>/dev/null || true)"
+        right_id="$(stat -f '%d:%i' "${right_path}" 2>/dev/null || true)"
+    else
+        left_id="$(stat -Lc '%d:%i' "${left_path}" 2>/dev/null || true)"
+        right_id="$(stat -Lc '%d:%i' "${right_path}" 2>/dev/null || true)"
+    fi
+
+    [[ -n "${left_id}" && "${left_id}" == "${right_id}" ]]
+}
+
 starrocks_resolve_c_compiler() {
     if [[ -n "${CC:-}" ]]; then
         starrocks_resolve_tool_command "${CC}"
@@ -87,13 +108,30 @@ starrocks_resolve_cxx_compiler() {
 
 starrocks_extract_tool_version() {
     local tool_path="$1"
+    local version_line=""
 
     if [[ -z "${tool_path}" || ! -x "${tool_path}" ]]; then
         return 1
     fi
 
-    "${tool_path}" --version 2>/dev/null | awk '
-        NR == 1 {
+    version_line="$("${tool_path}" --version 2>/dev/null | sed -n '1p')"
+    if [[ -z "${version_line}" ]]; then
+        return 1
+    fi
+
+    # CMake caches AppleClang as semantic-version plus the first three clang build components,
+    # e.g. "17.0.0.17000604" for "Apple clang version 17.0.0 (clang-1700.6.4.2)".
+    if [[ "${version_line}" =~ ^Apple[[:space:]](LLVM|clang)[[:space:]]version[[:space:]]([0-9]+(\.[0-9]+)+)[[:space:]]+\(clang-([0-9]+)\.([0-9]+)\.([0-9]+)(\.[0-9]+)*\)$ ]]; then
+        printf '%s.%d%02d%02d\n' \
+            "${BASH_REMATCH[2]}" \
+            "$((10#${BASH_REMATCH[4]}))" \
+            "$((10#${BASH_REMATCH[5]}))" \
+            "$((10#${BASH_REMATCH[6]}))"
+        return 0
+    fi
+
+    echo "${version_line}" | awk '
+        {
             for (i = 1; i <= NF; ++i) {
                 if ($i ~ /^[0-9]+(\.[0-9]+)+$/) {
                     print $i
@@ -171,10 +209,14 @@ starrocks_reconcile_be_build_dir() {
     current_c_version="$(starrocks_extract_tool_version "${current_c_compiler}" || true)"
     current_cxx_version="$(starrocks_extract_tool_version "${current_cxx_compiler}" || true)"
 
-    if [[ -n "${cached_c_compiler}" && -n "${current_c_compiler}" && "${cached_c_compiler}" != "${current_c_compiler}" ]]; then
+    if [[ -n "${cached_c_compiler}" && -n "${current_c_compiler}" &&
+          "${cached_c_compiler}" != "${current_c_compiler}" ]] &&
+       ! starrocks_same_tool_binary "${cached_c_compiler}" "${current_c_compiler}"; then
         mismatch_reasons+=("C compiler path changed: cached ${cached_c_compiler}, current ${current_c_compiler}")
     fi
-    if [[ -n "${cached_cxx_compiler}" && -n "${current_cxx_compiler}" && "${cached_cxx_compiler}" != "${current_cxx_compiler}" ]]; then
+    if [[ -n "${cached_cxx_compiler}" && -n "${current_cxx_compiler}" &&
+          "${cached_cxx_compiler}" != "${current_cxx_compiler}" ]] &&
+       ! starrocks_same_tool_binary "${cached_cxx_compiler}" "${current_cxx_compiler}"; then
         mismatch_reasons+=("C++ compiler path changed: cached ${cached_cxx_compiler}, current ${current_cxx_compiler}")
     fi
     if [[ -n "${cached_c_version}" && -n "${current_c_version}" && "${cached_c_version}" != "${current_c_version}" ]]; then
