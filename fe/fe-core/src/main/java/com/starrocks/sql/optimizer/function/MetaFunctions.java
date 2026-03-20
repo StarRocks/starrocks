@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.function;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -228,12 +229,12 @@ public class MetaFunctions {
         try {
             MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
                     mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-            if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
-                // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
+            if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
+                // For a full refresh, getMvPartitionNameToCellMap() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.
                 mvToRefreshPartitions = mv.getPartitionNames();
             } else {
-                mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+                mvToRefreshPartitions = mvUpdateInfo.getMvPartitionNameToCellMap().keySet();
             }
         } catch (Exception e) {
             LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
