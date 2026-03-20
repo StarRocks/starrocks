@@ -17,9 +17,19 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
@@ -31,12 +41,16 @@ import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
+import com.starrocks.sql.common.PCell;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -109,5 +123,265 @@ public class ConnectorPartitionTraitsTest {
                 Maps.newHashMap(), HudiTable.HudiTableType.COW);
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
         Assertions.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
+    }
+
+    @Test
+    public void testIcebergTable(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable,
+                Maps.newHashMap());
+        ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(icebergTable);
+        Assertions.assertEquals(connectorPartitionTraits.getTableName(), "icebergTable");
+        try {
+            PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"),
+                    Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+            // The DecimalLiteral creates the narrowest type that fits the value,
+            // so DECIMAL32(4,1) is created for value "123.3" instead of DECIMAL64(18,6)
+            Assertions.assertEquals(key.getKeys().get(0).getType(),
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 1));
+        } catch (Exception e) {
+            throw new RuntimeException("createPartitionKeyWithType failed", e);
+        }
+    }
+
+    @Test
+    public void testDefaultTraitsDetectsExternalRefreshByVersion() {
+        DefaultTraits traits = new DefaultTraits() {
+            @Override
+            public boolean isSupportPCTRefresh() {
+                return true;
+            }
+
+            @Override
+            public PartitionKey createEmptyKey() {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public List<String> getPartitionNames() {
+                return List.of("p1");
+            }
+
+            @Override
+            public List<Column> getPartitionColumns() {
+                return List.of();
+            }
+
+            @Override
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                return Map.of("p1", new PartitionInfo() {
+                    @Override
+                    public long getModifiedTime() {
+                        return 100L;
+                    }
+
+                    @Override
+                    public long getVersion() {
+                        return 2L;
+                    }
+                });
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+                return getPartitionNameWithPartitionInfo();
+            }
+        };
+
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getTableIdentifier()).thenReturn("identifier");
+        Mockito.when(table.getType()).thenReturn(Table.TableType.ICEBERG);
+        traits.table = table;
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo("iceberg", "db", "tbl", "identifier");
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        context.getBaseTableRefreshInfo(baseTableInfo)
+                .put("p1", new MaterializedView.BasePartitionInfo(-1, 1L, 100L));
+
+        Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
+        Assertions.assertEquals(Set.of("p1"), updated);
+    }
+
+    @Test
+    public void testDefaultTraitsKeepsLegacyIcebergPartitionInfoCompatible() {
+        DefaultTraits traits = new DefaultTraits() {
+            @Override
+            public boolean isSupportPCTRefresh() {
+                return true;
+            }
+
+            @Override
+            public PartitionKey createEmptyKey() {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public List<String> getPartitionNames() {
+                return List.of("p1");
+            }
+
+            @Override
+            public List<Column> getPartitionColumns() {
+                return List.of();
+            }
+
+            @Override
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                return Map.of("p1", new PartitionInfo() {
+                    @Override
+                    public long getModifiedTime() {
+                        return 100L;
+                    }
+
+                    @Override
+                    public long getVersion() {
+                        return 2L;
+                    }
+                });
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+                return getPartitionNameWithPartitionInfo();
+            }
+        };
+
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getTableIdentifier()).thenReturn("identifier");
+        Mockito.when(table.getType()).thenReturn(Table.TableType.ICEBERG);
+        traits.table = table;
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo("iceberg", "db", "tbl", "identifier");
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        // Legacy external-table metadata stored version == lastRefreshTime == modifiedTime.
+        context.getBaseTableRefreshInfo(baseTableInfo)
+                .put("p1", new MaterializedView.BasePartitionInfo(-1, 100L, 100L));
+
+        Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
+        Assertions.assertEquals(Set.of(), updated);
+    }
+
+    @Test
+    public void testDefaultTraitsKeepsLegacyIcebergMillisAndMicrosCompatible() {
+        long legacyModifiedTimeMillis = 1_710_000_000_000L;
+        long latestModifiedTimeMicros = 1_710_000_000_000_000L;
+        DefaultTraits traits = new DefaultTraits() {
+            @Override
+            public boolean isSupportPCTRefresh() {
+                return true;
+            }
+
+            @Override
+            public PartitionKey createEmptyKey() {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) {
+                return null;
+            }
+
+            @Override
+            public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public List<String> getPartitionNames() {
+                return List.of("p1");
+            }
+
+            @Override
+            public List<Column> getPartitionColumns() {
+                return List.of();
+            }
+
+            @Override
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+                return null;
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+                return Map.of("p1", new PartitionInfo() {
+                    @Override
+                    public long getModifiedTime() {
+                        return latestModifiedTimeMicros;
+                    }
+
+                    @Override
+                    public long getVersion() {
+                        return 2L;
+                    }
+                });
+            }
+
+            @Override
+            public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+                return getPartitionNameWithPartitionInfo();
+            }
+        };
+
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getTableIdentifier()).thenReturn("identifier");
+        Mockito.when(table.getType()).thenReturn(Table.TableType.ICEBERG);
+        traits.table = table;
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo("iceberg", "db", "tbl", "identifier");
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        // Historical metadata may have stored modifiedTime in milliseconds while current Iceberg partition
+        // metadata uses microseconds for the same wall-clock instant.
+        context.getBaseTableRefreshInfo(baseTableInfo)
+                .put("p1", new MaterializedView.BasePartitionInfo(-1, legacyModifiedTimeMillis,
+                        legacyModifiedTimeMillis));
+
+        Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
+        Assertions.assertEquals(Set.of(), updated);
     }
 }
