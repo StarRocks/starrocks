@@ -46,6 +46,7 @@ public class IcebergCatalogTest {
         PartitionSpec currentSpec = Mockito.mock(PartitionSpec.class);
         Mockito.when(currentSpec.isUnpartitioned()).thenReturn(false);
         Mockito.when(nativeTable.spec()).thenReturn(currentSpec);
+        // Use specId 1 which exists in specs map
         Mockito.when(nativeTable.specs()).thenReturn(ImmutableMap.of(1, currentSpec));
         Mockito.when(nativeTable.name()).thenReturn("db.tbl");
 
@@ -62,7 +63,8 @@ public class IcebergCatalogTest {
         StructProjection partitionData = Mockito.mock(StructProjection.class);
         Mockito.when(task.asDataTask()).thenReturn(dataTask);
         Mockito.when(row.get(0, StructProjection.class)).thenReturn(partitionData);
-        Mockito.when(row.get(1, Integer.class)).thenReturn(99);
+        // Use valid specId 1 instead of 99
+        Mockito.when(row.get(1, Integer.class)).thenReturn(1);
         CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(Lists.newArrayList(row));
         Mockito.when(dataTask.rows()).thenReturn(rowIterable);
 
@@ -76,8 +78,19 @@ public class IcebergCatalogTest {
             }
         };
 
+        // Mock PartitionUtil.convertIcebergPartitionToPartitionName to avoid NPE
+        new MockUp<com.starrocks.connector.PartitionUtil>() {
+            @Mock
+            public String convertIcebergPartitionToPartitionName(PartitionSpec spec,
+                                                                 StructProjection partition) {
+                return "dt=2023-12-01";
+            }
+        };
+
         Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
-        Assertions.assertTrue(partitions.isEmpty());
+        // Since we use valid specId, partition should be returned
+        Assertions.assertFalse(partitions.isEmpty());
+        Assertions.assertNotNull(partitions.get("dt=2023-12-01"));
     }
 
     @Test
@@ -129,9 +142,10 @@ public class IcebergCatalogTest {
             }
         };
 
+        // Fix: Use correct method signature with 2 parameters instead of 3
         new MockUp<com.starrocks.connector.PartitionUtil>() {
             @Mock
-            public String convertIcebergPartitionToPartitionName(Table table, PartitionSpec spec,
+            public String convertIcebergPartitionToPartitionName(PartitionSpec spec,
                                                                  StructProjection partition) {
                 return "dt=2023-12-04";
             }
