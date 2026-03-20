@@ -31,9 +31,6 @@ keywords: ['huan cun']
 ### 缓存使用磁盘容量
 
 - [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
-- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
-
-存算分离集群的缓存使用磁盘容量会取 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 中的较大值。
 
 ## 查看 Data Cache 状态
 
@@ -46,11 +43,11 @@ keywords: ['huan cun']
 
   通常，缓存数据存储在 `storage_root_path` 的子路径 `datacache/` 下。
 
-- 执行以下语句以查看 Data Cache 的磁盘使用上限：
+- 执行以下语句通过 `DataCacheMetrics` 字段查看 Data Cache 的磁盘使用上限：
 
   ```SQL
-  SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
+  SHOW BACKENDS;
+  SHOW COMPUTE NODES;
   ```
 
 ## 监控 Data Cache
@@ -115,21 +112,6 @@ storage_root_path =
 
 - 如果云原生表的 `datacache.enable` 属性设置为 `false`，则不会为该表启用 Data Cache。
 - 如果云原生表的 `datacache.partition_duration` 属性设置为一个特定的时间范围，则超出该时间范围的数据将不会被缓存。
-- 从 v3.3 版本降级到 v3.2.8 及其之前版本时，如需复用先前缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。v3.2.9 及以后版本自动兼容 v3.3 文件名格式，无需手动执行该操作。您可使用以下脚本进行批量修改：
-
-```Bash
-#!/bin/bash
-
-# 将 <starlet_cache_path> 替换为集群的 Data Cache 目录，例如 /usr/be/storage/starlet_cache
-starlet_cache_path="<starlet_cache_path>"
-
-for blockfile in ${starlet_cache_path}/blockfile_*; do
-    if [ -f "$blockfile" ]; then
-        new_blockfile=$(echo "$blockfile" | cut -d'.' -f1)
-        mv "$blockfile" "$new_blockfile"
-    fi
-done
-```
 
 ## 已知问题
 
