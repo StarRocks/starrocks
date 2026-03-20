@@ -347,7 +347,14 @@ public class MvRewritePreprocessor {
         }
     }
 
-    private static MaterializedView copyOnlyMaterializedView(MaterializedView mv, long timeoutMs) {
+    public enum MvCopyFailurePolicy {
+        SKIP_ON_COPY_FAILURE,
+        FALLBACK_TO_LIVE_MV
+    }
+
+    private static MaterializedView copyOnlyMaterializedView(MaterializedView mv,
+                                                             long timeoutMs,
+                                                             MvCopyFailurePolicy copyFailurePolicy) {
         // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
@@ -356,8 +363,14 @@ public class MvRewritePreprocessor {
         // Add a timeout to avoid waiting too long for the lock in some cases to avoid affecting query latency.
         if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.READ,
                 timeoutMsPerTry, TimeUnit.MILLISECONDS)) {
-            logMVPrepare("Failed to lock mv {} for copying, use mv directly", mv.getName());
-            return mv;
+            if (copyFailurePolicy == MvCopyFailurePolicy.FALLBACK_TO_LIVE_MV) {
+                logMVPrepare("Failed to lock mv {} for copying, use live mv to preserve transparent rewrite semantics",
+                        mv.getName());
+                return mv;
+            }
+            logMVPrepare("Failed to lock mv {} for copying under lock-free planning, skip this mv candidate",
+                    mv.getName());
+            return null;
         }
         try {
             MaterializedView copiedMV = new MaterializedView();
@@ -798,7 +811,8 @@ public class MvRewritePreprocessor {
         }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel(), timeoutMs);
+                mvUpdateInfo, queryTables, mvWithPlanContext.getLevel(), timeoutMs,
+                MvCopyFailurePolicy.SKIP_ON_COPY_FAILURE);
         if (materializationContext == null) {
             logMVPrepare(connectContext, "Prepare MV {} failed to build materialization context", mv.getName());
             return;
@@ -980,7 +994,20 @@ public class MvRewritePreprocessor {
                                                                      Set<Table> queryTables,
                                                                      int level) {
         long timeoutMs = getPrepareTimeoutMsPerMV(context.getConnectContext(), 1);
-        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs);
+        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs,
+                MvCopyFailurePolicy.SKIP_ON_COPY_FAILURE);
+    }
+
+    public static MaterializationContext buildMaterializationContext(OptimizerContext context,
+                                                                     MaterializedView mv,
+                                                                     MvPlanContext mvPlanContext,
+                                                                     MvUpdateInfo mvUpdateInfo,
+                                                                     Set<Table> queryTables,
+                                                                     int level,
+                                                                     MvCopyFailurePolicy copyFailurePolicy) {
+        long timeoutMs = getPrepareTimeoutMsPerMV(context.getConnectContext(), 1);
+        return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs,
+                copyFailurePolicy);
     }
 
     private static MaterializationContext buildMaterializationContext(OptimizerContext context,
@@ -989,7 +1016,8 @@ public class MvRewritePreprocessor {
                                                                       MvUpdateInfo mvUpdateInfo,
                                                                       Set<Table> queryTables,
                                                                       int level,
-                                                                      long timeoutMs) {
+                                                                      long timeoutMs,
+                                                                      MvCopyFailurePolicy copyFailurePolicy) {
         if (mvPlanContext == null) {
             logMVPrepare(context.getConnectContext(), "MV {} plan context is null", mv.getName());
             return null;
@@ -1013,7 +1041,14 @@ public class MvRewritePreprocessor {
 
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
-        MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv, timeoutMs) : mv;
+        MaterializedView copiedMV = (context.getQueryTables() != null)
+                ? copyOnlyMaterializedView(mv, timeoutMs, copyFailurePolicy)
+                : mv;
+        if (copiedMV == null) {
+            logMVPrepare(context.getConnectContext(),
+                    "MV {} cannot build materialization context because its metadata copy is unavailable", mv.getName());
+            return null;
+        }
         return buildMaterializationContext(context, copiedMV, mvPlanContext, mvUpdateInfo,
                 baseTables, intersectingTables, mvPlan, level);
     }
