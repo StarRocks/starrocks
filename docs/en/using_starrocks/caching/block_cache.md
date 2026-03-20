@@ -30,9 +30,6 @@ You can configure Data Cache using the following CN(BE) configuration items:
 ### Cache disk size
 
 - [datacache_disk_size](../../administration/management/BE_configuration.md#datacache_disk_size)
-- [starlet_star_cache_disk_size_percent](../../administration/management/BE_configuration.md#starlet_star_cache_disk_size_percent)
-
-The disk size of the cache in a shared-data cluster takes the greater value between `datacache_disk_size` and `starlet_star_cache_disk_size_percent`.
 
 ## View Data Cache status
 
@@ -45,11 +42,11 @@ The disk size of the cache in a shared-data cluster takes the greater value betw
 
   Usually, the cached data is stored under the sub-path `datacache/` of your `storage_root_path`.
 
-- Execute the following statement to view the maximum percentage of storage that Data Cache can use:
+- Execute the following statement to view the disk usage limit of Data Cache via the `DataCacheMetrics` field:
 
   ```SQL
-  SELECT * FROM information_schema.be_configs 
-  WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
+  SHOW BACKENDS;
+  SHOW COMPUTE NODES;
   ```
 
 ## Monitor Data Cache
@@ -112,21 +109,6 @@ Follow these steps to clear the cached data on a CN node:
 
 - If the `datacache.enable` property is set to `false` for a cloud-native table, Data Cache will not be enabled for the table.
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
-- After downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, if you want to re-use the cached data in Data Cache, you need to manually rename the Blockfile in the directory `starlet_cache` by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. v3.2.9 and later versions are compatible with the file name format in v3.3, so you do not need to perform this operation manually. You can change the name by running the following shell script:
-
-```Bash
-#!/bin/bash
-
-# Replace <starlet_cache_path> with the directory of Data Cache of your cluster, for example, /usr/be/storage/starlet_cache.
-starlet_cache_path="<starlet_cache_path>"
-
-for blockfile in ${starlet_cache_path}/blockfile_*; do
-    if [ -f "$blockfile" ]; then
-        new_blockfile=$(echo "$blockfile" | cut -d'.' -f1)
-        mv "$blockfile" "$new_blockfile"
-    fi
-done
-```
 
 ## Known issues
 
