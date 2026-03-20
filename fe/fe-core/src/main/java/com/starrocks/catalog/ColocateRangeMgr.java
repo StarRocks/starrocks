@@ -1,0 +1,119 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog;
+
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Range;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Manages colocate ranges for range distribution colocate groups.
+ *
+ * <p>Each colocate group (identified by colocateGroupId, i.e., GroupId.grpId) maintains
+ * an ordered list of {@link ColocateRange} entries that:
+ * <ul>
+ *   <li>Cover the full value domain [MIN, MAX)</li>
+ *   <li>Are non-overlapping, ordered, and contiguous</li>
+ *   <li>Each map to a unique PACK shard group ID</li>
+ * </ul>
+ *
+ * <p>This structure is shared across databases: tables in different databases with the
+ * same colocateGroupId share the same colocate ranges and PACK shard groups.
+ */
+public class ColocateRangeMgr {
+
+    @SerializedName("cr")
+    private Map<Long, List<ColocateRange>> colocateGroupToRanges = Maps.newHashMap();
+
+    // ---- Query ----
+
+    /**
+     * Returns all colocate ranges for the given colocate group.
+     *
+     * @param colocateGroupId the colocate group id (GroupId.grpId)
+     * @return ordered list of ColocateRange, or empty list if group not found
+     */
+    public List<ColocateRange> getColocateRanges(long colocateGroupId) {
+        return colocateGroupToRanges.getOrDefault(colocateGroupId, Collections.emptyList());
+    }
+
+    /**
+     * Finds the ColocateRange that contains the given colocate value using binary search.
+     *
+     * <p>Creates a point range [value, value] and uses {@link Collections#binarySearch}.
+     * This works because {@link ColocateRange} implements {@code Comparable<Range<Tuple>>}
+     * by delegating to {@link Range#compareTo(Range)}, which returns 0 for overlapping ranges.
+     *
+     * @param colocateGroupId the colocate group id
+     * @param colocateValue the colocate column value to look up
+     * @return the ColocateRange containing the value, or null if not found
+     */
+    public ColocateRange getColocateRange(long colocateGroupId, Tuple colocateValue) {
+        List<ColocateRange> colocateRanges = colocateGroupToRanges.get(colocateGroupId);
+        if (colocateRanges == null || colocateRanges.isEmpty()) {
+            return null;
+        }
+        Range<Tuple> pointRange = Range.gele(colocateValue, colocateValue);
+        int index = Collections.binarySearch(colocateRanges, pointRange);
+        return index >= 0 ? colocateRanges.get(index) : null;
+    }
+
+    /**
+     * Returns true if the given colocate group exists.
+     */
+    public boolean containsColocateGroup(long colocateGroupId) {
+        return colocateGroupToRanges.containsKey(colocateGroupId);
+    }
+
+    // ---- Initialize ----
+
+    /**
+     * Initializes a new colocate group with a single range covering the full value domain.
+     *
+     * @param colocateGroupId the colocate group id
+     * @param shardGroupId the PACK shard group id for the initial full range
+     */
+    public void initColocateGroup(long colocateGroupId, long shardGroupId) {
+        List<ColocateRange> ranges = new ArrayList<>();
+        ranges.add(new ColocateRange(Range.all(), shardGroupId));
+        List<ColocateRange> existing = colocateGroupToRanges.putIfAbsent(colocateGroupId, ranges);
+        if (existing != null) {
+            throw new IllegalArgumentException("Colocate group " + colocateGroupId + " already exists");
+        }
+    }
+
+    // ---- Set (for replay) ----
+
+    /**
+     * Directly sets the colocate ranges for a group. Used during edit log replay and image loading.
+     */
+    public void setColocateRanges(long colocateGroupId, List<ColocateRange> ranges) {
+        colocateGroupToRanges.put(colocateGroupId, new ArrayList<>(ranges));
+    }
+
+    // ---- Remove ----
+
+    /**
+     * Removes the colocate group and all its ranges.
+     */
+    public void removeColocateGroup(long colocateGroupId) {
+        colocateGroupToRanges.remove(colocateGroupId);
+    }
+}
