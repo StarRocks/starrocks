@@ -18,24 +18,19 @@ aes_decrypt(str, key_str[, init_vector][, encryption_mode][, aad_str]);
 
 ## Parameters
 - Required parameters:
-
-
-    - `str`: the string to decrypt. It must be of the VARCHAR type.
-
-    - `key_str`: the key used to encrypt `str`. It must be of the VARCHAR type.
-  - 
+  - `str`: the string to decrypt. It must be of the VARCHAR type.
+  - `key_str`: the key used to encrypt `str`. It must be of the VARCHAR type.
 - Optional parameters:
-    - `init_vector`: Initialization Vector (IV): A crucial security parameter in AES encryption that ensures identical plaintexts yield distinct ciphertexts. It is only utilized in CBC, CFB, OFB, CTR, and GCM modes. It must be of the VARCHAR type.
-    - `encryption_mode`: The encryption algorithm. Supported algorithms are listed below. It must be of the VARCHAR type.
+  - `init_vector`: Initialization Vector (IV): A crucial security parameter in AES encryption that ensures identical plaintexts yield distinct ciphertexts. It is only utilized in CBC, CFB, OFB, CTR, and GCM modes. It must be of the VARCHAR type.
+  - `encryption_mode`: The encryption algorithm. Supported algorithms are listed below. It must be of the VARCHAR type.
 
-        | ECB         | CBC         | CFB         | CFB1        | CFB8        | CFB128        | OFB         | CTR       | GCM        |
-        |-------------|-------------|-------------|-------------|-------------|---------------|-------------|-----------|------------|
-        | AES_128_ECB | AES_128_CBC | AES_128_CFB | AES_128_CFB1| AES_128_CFB8| AES_128_CFB128| AES_128_OFB| AES_128_CTR| AES_128_GCM|
-        | AES_192_ECB | AES_192_CBC | AES_192_CFB | AES_192_CFB1| AES_192_CFB8| AES_192_CFB128| AES_192_OFB| AES_192_CTR| AES_192_GCM|
-        | AES_256_ECB | AES_256_CBC | AES_256_CFB | AES_256_CFB1| AES_256_CFB8| AES_256_CFB128| AES_256_OFB| AES_256_CTR| AES_256_GCM|
+    | ECB         | CBC         | CFB         | CFB1        | CFB8        | CFB128        | OFB         | CTR       | GCM        |
+    |-------------|-------------|-------------|-------------|-------------|---------------|-------------|-----------|------------|
+    | AES_128_ECB | AES_128_CBC | AES_128_CFB | AES_128_CFB1| AES_128_CFB8| AES_128_CFB128| AES_128_OFB| AES_128_CTR| AES_128_GCM|
+    | AES_192_ECB | AES_192_CBC | AES_192_CFB | AES_192_CFB1| AES_192_CFB8| AES_192_CFB128| AES_192_OFB| AES_192_CTR| AES_192_GCM|
+    | AES_256_ECB | AES_256_CBC | AES_256_CFB | AES_256_CFB1| AES_256_CFB8| AES_256_CFB128| AES_256_OFB| AES_256_CTR| AES_256_GCM|
 
-    - `aad_str`:  Denotes Additional Authenticated Data (AAD). This is a parameter unique to authenticated encryption modes (e.g., GCM). It allows for including data that must be authenticated for integrity (preventing tampering) but does not require confidentiality (it remains unencrypted). It must be of the VARCHAR type.
-
+  - `aad_str`:  Denotes Additional Authenticated Data (AAD). This is a parameter unique to authenticated encryption modes (e.g., GCM). It allows for including data that must be authenticated for integrity (preventing tampering) but does not require confidentiality (it remains unencrypted). It must be of the VARCHAR type.
 
 ## Return value
 
