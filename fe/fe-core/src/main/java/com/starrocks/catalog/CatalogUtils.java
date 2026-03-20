@@ -88,13 +88,8 @@ public class CatalogUtils {
         long partitionId = partition.getId();
         if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
-<<<<<<< HEAD
             List<String> values = MapUtils.emptyIfNull(listInfo.getIdToValues()).get(partitionId);
             List<List<String>> multiValues = MapUtils.emptyIfNull(listInfo.getIdToMultiValues()).get(partitionId);
-=======
-            List<String> values = listInfo.getIdToValues().get(partitionId);
-            List<List<String>> multiValues = listInfo.getIdToMultiValues().get(partitionId);
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
             if (values != null && !values.isEmpty()) {
                 return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
                         .collect(Collectors.joining(",")) + ")";
@@ -126,15 +121,11 @@ public class CatalogUtils {
                     // add more information for user
                     // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
                     Partition existedPartition = olapTable.getPartition(partitionName);
-<<<<<<< HEAD
-                    String existedValues = formatExistedPartitionValues(olapTable, existedPartition);
-=======
                     if (existedPartition == null) {
                         existedPartition = olapTable.getPartition(partitionName, true);
                     }
                     String existedValues = existedPartition != null
                             ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
                     String currentValues = partitionDesc.toString();
                     LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
                             existedValues, currentValues);

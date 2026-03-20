@@ -186,18 +186,10 @@ public class SyncPartitionUtilsTest {
         return toRangeMap(result);
     }
 
-<<<<<<< HEAD
     private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
                                             Map<String, PCell> mvListMap) {
         Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap, true);
         return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
-=======
-    private Map<String, PListCell> diffList(PCellSortedSet baseListMap,
-                                            PCellSortedSet mvListMap) {
-        PCellSortedSet result = ListPartitionDiffer.diffList(baseListMap, mvListMap, true);
-        return result.getPartitions().stream()
-                .collect(Collectors.toMap(PCellWithName::name, entry -> (PListCell) entry.cell()));
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
     }
 
     @Test
@@ -306,17 +298,10 @@ public class SyncPartitionUtilsTest {
     @Test
     public void testDiffListWithExistingPartitionNameConflict() {
         // Same partition name with different values (e.g. domain values that sanitize to same partition name)
-<<<<<<< HEAD
         Map<String, PCell> baseListMap = Maps.newHashMap();
         addIntoListPartitionMap(baseListMap, "psampledomain2ecom", "sample-domain.com");
 
         Map<String, PCell> mvListMap = Maps.newHashMap();
-=======
-        PCellSortedSet baseListMap = PCellSortedSet.of();
-        addIntoListPartitionMap(baseListMap, "psampledomain2ecom", "sample-domain.com");
-
-        PCellSortedSet mvListMap = PCellSortedSet.of();
->>>>>>> 5d006fadc6 ([BugFix] Fix duplicated partition names in mv refresh (#70354))
         addIntoListPartitionMap(mvListMap, "psampledomain2ecom", "sample-domain2.com");
 
         Map<String, PListCell> diff = diffList(baseListMap, mvListMap);
