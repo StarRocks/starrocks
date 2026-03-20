@@ -17,7 +17,6 @@
 
 #include <arrow/buffer.h>
 #include <arrow/io/type_fwd.h>
-#include <arrow/util/string_builder.h>
 #include <fmt/core.h>
 #include <glog/logging.h>
 #include <parquet/exception.h>

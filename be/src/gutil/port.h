@@ -12,6 +12,7 @@
 #include <cstring> // for memcpy()
 
 #if defined(__APPLE__)
+#include <sys/mman.h>
 #include <unistd.h> // for sysconf() on mac
 #elif defined(OS_CYGWIN)
 #include <malloc.h> // for memalign()
@@ -205,6 +206,9 @@ typedef int uid_t;
 
 // For mmap, Linux defines both MAP_ANONYMOUS and MAP_ANON and says MAP_ANON is
 // deprecated. In Darwin, MAP_ANON is all there is.
+#if !defined MAP_ANON
+#define MAP_ANON 0x1000
+#endif
 #if !defined MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
 #endif

@@ -333,7 +333,7 @@ static inline Status check_append_bytes_to_decimal_column(const std::vector<uint
     }
 
     // to new decimal value if different
-    int128_t x = std::abs(integer_v) / get_scale_factor<T>(avro_scale);
+    int128_t x = starrocks::abs(integer_v) / get_scale_factor<T>(avro_scale);
     if (x / get_scale_factor<T>(new_precision - new_scale) != 0) {
         return Status::DataQualityError(
                 fmt::format("Value is overflow. value: {}, column: {}, "
@@ -341,7 +341,7 @@ static inline Status check_append_bytes_to_decimal_column(const std::vector<uint
                             integer_v, col_name, avro_precision, avro_scale, new_precision, new_scale));
     }
 
-    int128_t y = std::abs(integer_v) % get_scale_factor<T>(avro_scale);
+    int128_t y = starrocks::abs(integer_v) % get_scale_factor<T>(avro_scale);
     if (new_scale > avro_scale) {
         y *= get_scale_factor<T>(new_scale - avro_scale);
     } else if (new_scale < avro_scale) {
