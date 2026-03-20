@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.Type;
 
@@ -109,8 +110,16 @@ public class ColocateGroupSchema implements Writable {
         return distributionColTypes.size();
     }
 
-    public void checkColocateSchema(OlapTable tbl) throws DdlException {
-        checkDistribution(tbl, tbl.getDefaultDistributionInfo());
+    public void checkColocateSchema(OlapTable tbl, String colocateGroup) throws DdlException {
+        DistributionInfo distributionInfo = tbl.getDefaultDistributionInfo();
+        if (distributionInfo instanceof RangeDistributionInfo) {
+            ColocatePropertyInfo propertyInfo = ColocatePropertyInfo.of(colocateGroup);
+            List<Column> colocateColumns = MetaUtils.getRangeColocateColumns(
+                    tbl, propertyInfo == null ? null : propertyInfo.getColocateColumnNames());
+            checkRangeColocateSchema(colocateColumns);
+        } else {
+            checkDistribution(tbl, distributionInfo);
+        }
         checkReplicationNum(tbl.getPartitionInfo());
     }
 
@@ -146,22 +155,24 @@ public class ColocateGroupSchema implements Writable {
                 }
             }
         } else if (distributionInfo instanceof RangeDistributionInfo) {
-            // For range distribution colocate, the colocate columns are the sort key prefix.
-            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
-            // colocate column count
-            if (sortKeyColumns.size() < distributionColTypes.size()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE,
-                        distributionColTypes.size(), groupId.toString(),
-                        "sort key columns: " + sortKeyColumns.size());
-            }
-            // colocate column type
-            for (int i = 0; i < distributionColTypes.size(); i++) {
-                Type expectedType = distributionColTypes.get(i);
-                if (!expectedType.equals(sortKeyColumns.get(i).getType())) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
-                            groupId.toString(), sortKeyColumns.get(i).getName(),
-                            expectedType, "sort key prefix");
-                }
+            checkRangeColocateSchema(MetaUtils.getRangeDistributionColumns(table));
+        }
+    }
+
+    public void checkRangeColocateSchema(List<Column> colocateColumns) throws DdlException {
+        if (distributionType != DistributionInfoType.RANGE) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_TYPE,
+                    groupId.toString(), distributionType.name(), DistributionInfoType.RANGE.name());
+        }
+        if (colocateColumns.size() != distributionColTypes.size()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE,
+                    distributionColTypes.size(), groupId.toString(), "sort key columns: " + colocateColumns.size());
+        }
+        for (int i = 0; i < distributionColTypes.size(); i++) {
+            Type expectedType = distributionColTypes.get(i);
+            if (!expectedType.equals(colocateColumns.get(i).getType())) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
+                        groupId.toString(), colocateColumns.get(i).getName(), expectedType, "sort key prefix");
             }
         }
     }
@@ -182,7 +193,4 @@ public class ColocateGroupSchema implements Writable {
                     replicationNum, groupId.toString(), String.valueOf(repNum));
         }
     }
-
-
-
 }
