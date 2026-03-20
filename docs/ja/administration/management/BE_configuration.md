@@ -2363,6 +2363,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
 - 導入バージョン: -
 
+##### lake_metadata_fetch_thread_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
+- 導入バージョン: -
+
 ##### transaction_apply_worker_count
 
 - デフォルト: 0

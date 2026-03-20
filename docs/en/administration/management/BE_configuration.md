@@ -2865,6 +2865,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: Threshold (in milliseconds) for logging slow tablet-stat collection tasks. If a single tablet stat task exceeds this value, StarRocks emits a warning log with diagnostics such as `tablet_id`, version, rowset count, accurate mode, and elapsed time.
 - Introduced in: -
 
+##### lake_metadata_fetch_thread_count
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The count of threads for shared-data table tablet metadata fetch operations (e.g., `get_tablet_stats`, `get_tablet_metadatas`).
+- Introduced in: -
+
 ##### tablet_writer_open_rpc_timeout_sec
 
 - Default: 300
