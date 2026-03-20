@@ -1713,8 +1713,95 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
         Assertions.assertEquals(2, partitions.size());
-        // partition's modified time should not be -1 even if snapshot has been expired
-        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
+        // When snapshot has been expired, last_updated_at can be null and modifiedTime will be -1.
+        // version (stats fingerprint) must be non-negative for DefaultTraits version comparison path.
+        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getVersion() == -1));
+    }
+
+    @Test
+    public void testExpiredSnapshotPartitionsHaveDistinctVersions() {
+        // FILE_B_1: k2=2, recordCount=3, fileSize=20
+        // FILE_B_2: k2=3, recordCount=4, fileSize=20
+        // Append each to separate snapshots, then expire both.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        Map<String, Partition> partitionMap = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Assertions.assertEquals(2, partitionMap.size());
+        Partition p1 = partitionMap.get("k2=2");
+        Partition p2 = partitionMap.get("k2=3");
+        Assertions.assertNotNull(p1);
+        Assertions.assertNotNull(p2);
+        // Both versions must be >= 0 (valid for DefaultTraits comparison)
+        Assertions.assertTrue(p1.getVersion() >= 0,
+                "Expired snapshot partition k2=2 must have non-negative version, got: " + p1.getVersion());
+        Assertions.assertTrue(p2.getVersion() >= 0,
+                "Expired snapshot partition k2=3 must have non-negative version, got: " + p2.getVersion());
+        // Partitions with different stats (different recordCount) must have distinct versions
+        Assertions.assertNotEquals(p1.getVersion(), p2.getVersion(),
+                "Partitions with different record counts should have distinct version fingerprints");
+    }
+
+    @Test
+    public void testExpiredSnapshotVersionStableWhenUnrelatedPartitionChanges() {
+        // Append FILE_B_1 (k2=2, recordCount=3) and expire that snapshot.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        // Capture the version of k2=2 when its snapshot is expired.
+        Map<String, Partition> partitionMapBefore = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Partition p1Before = partitionMapBefore.get("k2=2");
+        Assertions.assertNotNull(p1Before);
+        long versionBefore = p1Before.getVersion();
+        Assertions.assertTrue(versionBefore >= 0,
+                "Expired snapshot partition must have non-negative version, got: " + versionBefore);
+
+        // Now write to a different partition (k2=3) — this creates a new non-expired snapshot for the table.
+        // FILE_B_2: k2=3, recordCount=4, fileSize=20
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        // Capture version of k2=2 again — its stats are unchanged, so the fingerprint must be stable.
+        Map<String, Partition> partitionMapAfter = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Partition p1After = partitionMapAfter.get("k2=2");
+        Assertions.assertNotNull(p1After);
+        long versionAfter = p1After.getVersion();
+
+        // Core regression test: writing to k2=3 must NOT change k2=2's version.
+        Assertions.assertEquals(versionBefore, versionAfter,
+                "Writing to an unrelated partition (k2=3) must not change the version of k2=2's expired-snapshot fingerprint");
     }
 
     @Test
