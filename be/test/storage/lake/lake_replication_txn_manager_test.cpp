@@ -1135,14 +1135,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_non_s3_type_rejected
 TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_copy) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
-    // Mock new_fs_starlet to return a valid filesystem
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = mock_fs;
     });
 
     // Create source tablet metadata at version 2 with a rowset containing segment files.
-    // This is needed so that filename_map is non-empty and the file copy loop is entered.
     auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
     src_meta_v2->set_version(2);
     auto* rowset = src_meta_v2->add_rowsets();
@@ -1154,14 +1152,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
-    // Pre-populate the metacache with source tablet metadata at the starlet URI path
-    // that build_source_tablet_meta will look up (for has_full_path=false code path).
-    // RemoteStarletLocationProvider::metadata_root_location returns:
-    //   staros://{tablet_id}/db{db_id}/{table_id}/{partition_id}/meta
-    std::string src_meta_dir =
-            fmt::format("staros://{}/db{}/{}/{}/meta", _src_tablet_id, _src_db_id, _src_table_id, _src_partition_id);
-    std::string src_meta_path = lake::join_path(src_meta_dir, lake::tablet_metadata_filename(_src_tablet_id, 2));
-    _tablet_mgr->metacache()->cache_tablet_metadata(src_meta_path, src_meta_v2);
+    // Inject source tablet metadata via SyncPoint to avoid metacache dependency
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
 
     // Save original master info and set min_active_txn_id > txn_id to trigger fast cancel
     auto original_master_info = get_master_info();
@@ -1173,7 +1169,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
 
     // Restore original master info
-    update_master_info(original_master_info);
+    (void)update_master_info(original_master_info);
 
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_aborted()) << status;
@@ -1185,7 +1181,6 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
 TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_copy) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
-    // Mock new_fs_starlet to return a valid filesystem
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = mock_fs;
@@ -1203,11 +1198,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000002.dat");
     src_meta_v2->set_next_rowset_id(2);
 
-    // Pre-populate the metacache with source tablet metadata at the starlet URI path
-    std::string src_meta_dir =
-            fmt::format("staros://{}/db{}/{}/{}/meta", _src_tablet_id, _src_db_id, _src_table_id, _src_partition_id);
-    std::string src_meta_path = lake::join_path(src_meta_dir, lake::tablet_metadata_filename(_src_tablet_id, 2));
-    _tablet_mgr->metacache()->cache_tablet_metadata(src_meta_path, src_meta_v2);
+    // Inject source tablet metadata via SyncPoint to avoid metacache dependency
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
 
     // Save original master info. Start with min_active_txn_id <= txn_id (no abort yet).
     auto original_master_info = get_master_info();
@@ -1223,10 +1219,9 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
                                           [&](void*) {
                                               before_copy_count++;
                                               if (before_copy_count == 1) {
-                                                  // Advance min_active_txn_id past txn_id during first file's copy
                                                   TMasterInfo updated_info = get_master_info();
                                                   updated_info.__set_min_active_txn_id(_transaction_id + 1);
-                                                  update_master_info(updated_info);
+                                                  (void)update_master_info(updated_info);
                                               }
                                           });
 
@@ -1234,15 +1229,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
 
     // Restore original master info
-    update_master_info(original_master_info);
+    (void)update_master_info(original_master_info);
 
     // The first iteration's before_copy callback runs (file copy attempt happens but may
     // fail due to mock filesystem). Either:
     // a) The first file copy fails (IOError from mock fs) - this is acceptable, OR
     // b) If we somehow get past the first copy, the second iteration detects the abort.
-    //
-    // In practice with the mock filesystem, the first file copy will fail.
-    // But the before_copy callback was still invoked, verifying the SyncPoint is reachable.
     EXPECT_FALSE(status.ok());
     EXPECT_GE(before_copy_count, 1) << "SyncPoint before_copy should have been invoked at least once";
 }
@@ -1252,7 +1244,6 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
 TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
-    // Mock new_fs_starlet to return a valid filesystem
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
         *fs_st = mock_fs;
@@ -1269,11 +1260,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     rowset->add_segments("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
     src_meta_v2->set_next_rowset_id(2);
 
-    // Pre-populate the metacache with source tablet metadata at the starlet URI path
-    std::string src_meta_dir =
-            fmt::format("staros://{}/db{}/{}/{}/meta", _src_tablet_id, _src_db_id, _src_table_id, _src_partition_id);
-    std::string src_meta_path = lake::join_path(src_meta_dir, lake::tablet_metadata_filename(_src_tablet_id, 2));
-    _tablet_mgr->metacache()->cache_tablet_metadata(src_meta_path, src_meta_v2);
+    // Inject source tablet metadata via SyncPoint to avoid metacache dependency
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
 
     // Set min_active_txn_id <= txn_id so fast cancel does NOT trigger
     auto original_master_info = get_master_info();
@@ -1289,13 +1281,12 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     Status status = _replication_txn_manager->replicate_lake_remote_storage(request);
 
     // Restore original master info
-    update_master_info(original_master_info);
+    (void)update_master_info(original_master_info);
 
     // The fast cancel check should NOT have triggered. The function should proceed past
     // the fast cancel check to the before_copy SyncPoint and then to file copy.
     // The file copy will fail due to the mock filesystem, but that's expected.
     EXPECT_TRUE(before_copy_invoked) << "before_copy SyncPoint should have been reached (fast cancel did not trigger)";
-    // The status should NOT be Aborted (it should be some other error from file copy)
     EXPECT_FALSE(status.is_aborted()) << "Should not abort when min_active_txn_id <= txn_id, status: " << status;
 }
 #endif // USE_STAROS
