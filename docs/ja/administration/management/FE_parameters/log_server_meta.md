@@ -5,7 +5,47 @@ sidebar_label: "ログ、サーバー、およびメタデータ"
 
 # FE 設定 - ログ、サーバー、およびメタデータ
 
+import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
+
+import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note.mdx'
+
+import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
+
 import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item.mdx'
+
+<FEConfigMethod />
+
+## FE 設定項目の表示
+
+FE の起動後、MySQL クライアントで ADMIN SHOW FRONTEND CONFIG コマンドを実行して、パラメーター設定を確認できます。特定のパラメーターの設定をクエリするには、次のコマンドを実行します。
+
+```SQL
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+```
+
+返されるフィールドの詳細な説明については、[`ADMIN SHOW CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md) を参照してください。
+
+:::note
+クラスター管理関連コマンドを実行するには、管理者権限が必要です。
+:::
+
+## FE パラメーターの設定
+
+### FE 動的パラメーターの設定
+
+[`ADMIN SET FRONTEND CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) を使用して、FE 動的パラメーターの設定を構成または変更できます。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("key" = "value");
+```
+
+<AdminSetFrontendNote />
+
+### FE 静的パラメーターの設定
+
+<StaticFEConfigNote />
+
+---
 
 このトピックでは、以下の種類のFE構成について紹介します：
 - [ログ](#ログ)
