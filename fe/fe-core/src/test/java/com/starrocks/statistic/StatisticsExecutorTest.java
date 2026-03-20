@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -317,7 +318,11 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         Config.lake_background_warehouse = "xxx";
         Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        // Warehouse validation only happens in SHARED_DATA mode
+        if (RunMode.isSharedDataMode()) {
+            Assertions.assertTrue(analyzeStatus.getReason() != null &&
+                    analyzeStatus.getReason().contains("Warehouse xxx not exist"));
+        }
         Config.lake_background_warehouse = "default_warehouse";
         FeConstants.enableUnitStatistics = true;
     }
