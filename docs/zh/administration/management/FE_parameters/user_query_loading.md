@@ -5,6 +5,46 @@ sidebar_label: "用户管理、查询引擎和导入导出"
 
 # FE 配置 - 用户管理、查询引擎和导入导出
 
+import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
+
+import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note.mdx'
+
+import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
+
+<FEConfigMethod />
+
+## 查看 FE 配置项
+
+FE 启动后，您可以在 MySQL 客户端运行 ADMIN SHOW FRONTEND CONFIG 命令查看参数配置。如果要查询特定参数的配置，请运行以下命令：
+
+```SQL
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+```
+
+有关返回字段的详细说明，请参阅 [`ADMIN SHOW CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)。
+
+:::note
+您必须具有管理员权限才能运行集群管理相关命令。
+:::
+
+## 配置 FE 参数
+
+### 配置 FE 动态参数
+
+您可以使用 [`ADMIN SET FRONTEND CONFIG`](../../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令配置或修改 FE 动态参数。
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("key" = "value");
+```
+
+<AdminSetFrontendNote />
+
+### 配置 FE 静态参数
+
+<StaticFEConfigNote />
+
+---
+
 当前主题包含以下类型的 FE 配置：
 - [用户、角色和权限](#用户角色和权限)
 - [查询引擎](#查询引擎)
