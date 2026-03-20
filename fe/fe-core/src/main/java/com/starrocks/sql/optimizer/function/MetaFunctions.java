@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.function;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -37,12 +38,8 @@ import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
->>>>>>> 7167951600 ([BugFix] [Followup] Fix mv refresh bugs with expired snapshot iceberg partitions to avoid repeat refresh (#70523))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -236,12 +233,12 @@ public class MetaFunctions {
         try {
             MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
                     mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-            if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
-                // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
+            if (mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
+                // For a full refresh, getMvToRefreshPartitionNames() is empty by design (no partition-level tracking).
                 // Use the MV's actual partition names so callers can see which partitions need refreshing.
                 mvToRefreshPartitions = mv.getPartitionNames();
             } else {
-                mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+                mvToRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
             }
         } catch (Exception e) {
             LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
