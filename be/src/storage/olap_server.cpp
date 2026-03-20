@@ -390,6 +390,20 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
             continue;
         }
 
+        if (!status.ok()) {
+            if (!status.is_not_found()) {
+                LOG_EVERY_N(INFO, 10) << "Update compaction suspended because of status: " << status
+                                      << ", data_dir: " << data_dir->path();
+            }
+        } else {
+            LOG_EVERY_N(INFO, 10) << "Update compaction suspended because memory limit exceeded. "
+                                  << "Compaction mem tracker limit exceeded: "
+                                  << _options.compaction_mem_tracker->any_limit_exceeded()
+                                  << ", Update mem tracker limit exceeded: "
+                                  << _options.update_mem_tracker->any_limit_exceeded()
+                                  << ", data_dir: " << data_dir->path();
+        }
+
         int32_t interval = config::update_compaction_check_interval_seconds;
         if (interval <= 0) {
             LOG(WARNING) << "update compaction check interval config is illegal: " << interval << ", force set to 1";
@@ -401,6 +415,12 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
                 !_options.update_mem_tracker->any_limit_exceeded()) {
                 break;
             }
+            LOG_EVERY_N(INFO, 10) << "Update compaction still suspended due to memory limit"
+                                  << ", Compaction mem tracker limit exceeded: "
+                                  << _options.compaction_mem_tracker->any_limit_exceeded()
+                                  << ", Update mem tracker limit exceeded: "
+                                  << _options.update_mem_tracker->any_limit_exceeded()
+                                  << ", data_dir: " << data_dir->path();
         } while (true);
     }
 
