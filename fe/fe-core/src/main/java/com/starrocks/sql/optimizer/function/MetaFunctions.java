@@ -77,6 +77,8 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
@@ -96,6 +98,8 @@ import static com.starrocks.type.PrimitiveType.VARCHAR;
  * Meta functions can be used to inspect the content of in-memory structures, for debug purpose.
  */
 public class MetaFunctions {
+
+    private static final Logger LOG = LogManager.getLogger(MetaFunctions.class);
 
     public static Table inspectExternalTable(TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
@@ -224,11 +228,25 @@ public class MetaFunctions {
 
     public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+        // Compute mvToRefreshPartitions before acquiring the lock to avoid holding the lock
+        // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan).
+        Set<String> mvToRefreshPartitions;
         try {
             MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(
                     mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-            Set<String> mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+            if (mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL) {
+                // For a full refresh, getMVToRefreshPCells() is empty by design (no partition-level tracking).
+                // Use the MV's actual partition names so callers can see which partitions need refreshing.
+                mvToRefreshPartitions = mv.getPartitionNames();
+            } else {
+                mvToRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
+            mvToRefreshPartitions = Sets.newHashSet();
+        }
+        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+        try {
             Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
             Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
             Map<String, String> tablePartitionInfos = Maps.newHashMap();

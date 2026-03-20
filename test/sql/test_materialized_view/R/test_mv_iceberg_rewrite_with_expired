@@ -92,7 +92,7 @@ alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute e
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019d051a-29d7-7d6e-8605-f2308290a57b
+019d0911-1dae-7904-bcbe-59dba0f85954
 -- !result
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 -- result:
@@ -103,15 +103,15 @@ alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute e
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv1");
 -- result:
-{"mvName":"test_mv1","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_1594920586354c678205d26aa08b8fd8":"{\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":32638,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":1773907092717000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":32643,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.mv_ice_tbl_1594920586354c678205d26aa08b8fd8":{"dt\u003d2023-12-02":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":32638,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":32465,"lastRefreshTime":1773907092717000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":32643,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv1","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":"{\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":77107326,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":1773973608426000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":81724931,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":{"dt\u003d2023-12-02":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":77107326,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":2064821841,"lastRefreshTime":1773973608426000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":81724931,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019d051a-3432-799d-a461-6ddc5f91ac4c
+019d0911-25f4-7224-810e-5a9690413168
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv1");
 -- result:
-{"mvName":"test_mv1","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_1594920586354c678205d26aa08b8fd8":"{\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":32638,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":1773907092717000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":32643,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.mv_ice_tbl_1594920586354c678205d26aa08b8fd8":{"dt\u003d2023-12-02":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":32638,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":32465,"lastRefreshTime":1773907092717000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":32643,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv1","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":"{\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":77107326,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":1773973608426000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":81724931,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":{"dt\u003d2023-12-02":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":77107326,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":2064821841,"lastRefreshTime":1773973608426000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":81724931,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 select count(1) from test_mv1;
 -- result:
@@ -141,7 +141,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019d051a-3747-7c6b-893c-33710298f677
+019d0911-28ef-7555-a3e2-548273c8d70f
 -- !result
 function: check_mv_to_refresh_contains("test_mv1", "")
 -- result:
@@ -179,7 +179,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019d051a-41b3-7aee-9197-54edc3e01de8
+019d0911-32d9-7aef-a8e1-421d6029fe66
 -- !result
 function: check_mv_to_refresh_contains("test_mv1", "")
 -- result:
@@ -217,7 +217,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019d051a-48b2-7a4d-90bd-57b83eb77366
+019d0911-36cb-771e-8c35-a2c77ce5750a
 -- !result
 function: check_mv_to_refresh_contains("test_mv1", "")
 -- result:
@@ -240,7 +240,7 @@ alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute e
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019d051a-5327-7a8b-8f99-20ab4c02c205
+019d0911-3d1a-7216-8463-bb783a85ac55
 -- !result
 select count(1) from test_mv2;
 -- result:
@@ -255,15 +255,15 @@ alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 execute expire_snapshots(n
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv2");
 -- result:
-{"mvName":"test_mv2","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"t1":"{\"t1\":{\"id\":-1,\"version\":40838,\"lastRefreshTime\":1773907093730000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.t1":{"t1":{"id":-1,"version":40838,"lastRefreshTime":1773907093730000,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv2","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"t1":"{\"t1\":{\"id\":-1,\"version\":1207528582,\"lastRefreshTime\":1773973609690000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.t1":{"t1":{"id":-1,"version":1207528582,"lastRefreshTime":1773973609690000,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019d051a-5728-728e-83b4-fab46bac0c0b
+019d0911-4153-751c-be33-663afe0250e8
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv2");
 -- result:
-{"mvName":"test_mv2","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"t1":"{\"t1\":{\"id\":-1,\"version\":40838,\"lastRefreshTime\":1773907093730000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.t1":{"t1":{"id":-1,"version":40838,"lastRefreshTime":1773907093730000,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv2","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"t1":"{\"t1\":{\"id\":-1,\"version\":1207528582,\"lastRefreshTime\":1773973609690000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.t1":{"t1":{"id":-1,"version":1207528582,"lastRefreshTime":1773973609690000,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 select count(1) from test_mv2;
 -- result:
@@ -289,7 +289,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019d051a-59b1-7356-b20b-216315d291b0
+019d0911-4424-7109-8e5c-c4f3ca2fd003
 -- !result
 function: check_mv_to_refresh_contains("test_mv2", "")
 -- result:
@@ -319,7 +319,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019d051a-6029-7e5f-ae4a-7a3f35f716ea
+019d0911-49f8-74ca-8b64-206b95b19d37
 -- !result
 function: check_mv_to_refresh_contains("test_mv2", "")
 -- result:
@@ -349,7 +349,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019d051a-677d-7e06-8e92-a00515c77682
+019d0911-4dcc-7e55-8a40-6bcd050b65b8
 -- !result
 function: check_mv_to_refresh_contains("test_mv2", "")
 -- result:
@@ -364,24 +364,26 @@ select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 11
 -- !result
 CREATE MATERIALIZED VIEW test_mv3 
-REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-019d051a-6a42-7123-89f0-277b77bca211
+019d0911-50b0-79fe-9ac5-99696a2325a3
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv3");
 -- result:
-{"mvName":"test_mv3","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_1594920586354c678205d26aa08b8fd8":"{\"dt\u003d2023-12-06\":{\"id\":-1,\"version\":31509,\"lastRefreshTime\":1773907101599000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-05\":{\"id\":-1,\"version\":33227,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":32638,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":32643,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.mv_ice_tbl_1594920586354c678205d26aa08b8fd8":{"dt\u003d2023-12-06":{"id":-1,"version":31509,"lastRefreshTime":1773907101599000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-05":{"id":-1,"version":33227,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-02":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":32638,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":32643,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv3","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":"{\"dt\u003d2023-12-06\":{\"id\":-1,\"version\":1181935765,\"lastRefreshTime\":1773973616089000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-05\":{\"id\":-1,\"version\":621061195,\"lastRefreshTime\":1773973615075000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":77107326,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":81724931,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":{"dt\u003d2023-12-06":{"id":-1,"version":1181935765,"lastRefreshTime":1773973616089000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-05":{"id":-1,"version":621061195,"lastRefreshTime":1773973615075000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-02":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":77107326,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":81724931,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-019d051a-6da5-7756-b5dc-8fc79ae0e4fb
+019d0911-5922-7b50-8616-5c0f69e45a28
 -- !result
 [UC]select inspect_mv_refresh_info("test_mv3");
 -- result:
-{"mvName":"test_mv3","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_1594920586354c678205d26aa08b8fd8":"{\"dt\u003d2023-12-06\":{\"id\":-1,\"version\":31509,\"lastRefreshTime\":1773907101599000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-05\":{\"id\":-1,\"version\":33227,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":32638,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":32465,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":32643,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_1594920586354c678205d26aa08b8fd8.mv_ice_db_1594920586354c678205d26aa08b8fd8.mv_ice_tbl_1594920586354c678205d26aa08b8fd8":{"dt\u003d2023-12-06":{"id":-1,"version":31509,"lastRefreshTime":1773907101599000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-05":{"id":-1,"version":33227,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-02":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":32638,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":32465,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":32643,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
+{"mvName":"test_mv3","mvToRefreshPartitions":[],"tableToUpdatePartitions":{},"tablePartitionInfos":{"mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":"{\"dt\u003d2023-12-06\":{\"id\":-1,\"version\":1181935765,\"lastRefreshTime\":1773973616089000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-05\":{\"id\":-1,\"version\":621061195,\"lastRefreshTime\":1773973615075000,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-02\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-01\":{\"id\":-1,\"version\":77107326,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-04\":{\"id\":-1,\"version\":2064821841,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1},\"dt\u003d2023-12-03\":{\"id\":-1,\"version\":81724931,\"lastRefreshTime\":-1,\"lastFileModifiedTime\":-1,\"fileNumber\":-1}}"},"baseOlapTableVisibleVersionMap":{},"baseExternalTableInfoVisibleVersionMap":{"mv_iceberg_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_db_85acab3aa2d44492b183a97eaf39bd7f.mv_ice_tbl_85acab3aa2d44492b183a97eaf39bd7f":{"dt\u003d2023-12-06":{"id":-1,"version":1181935765,"lastRefreshTime":1773973616089000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-05":{"id":-1,"version":621061195,"lastRefreshTime":1773973615075000,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-02":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-01":{"id":-1,"version":77107326,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-04":{"id":-1,"version":2064821841,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1},"dt\u003d2023-12-03":{"id":-1,"version":81724931,"lastRefreshTime":-1,"lastFileModifiedTime":-1,"fileNumber":-1}}}}
 -- !result
 select count(1) from test_mv3;
 -- result:
@@ -411,7 +413,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-019d051a-71c5-7e92-873e-bf272d235b70
+019d0911-5b98-7b9a-985a-1e262e3e9176
 -- !result
 function: check_mv_to_refresh_contains("test_mv3", "")
 -- result:
@@ -449,7 +451,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-019d051a-7944-76fc-9184-9602dc79e5a6
+019d0911-61f1-7554-81f5-4acdeaf37683
 -- !result
 function: check_mv_to_refresh_contains("test_mv3", "")
 -- result:
@@ -487,7 +489,7 @@ True
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 -- result:
-019d051a-8044-7170-8bae-2c6595b5659f
+019d0911-699a-774a-95c9-b3c44501e4e9
 -- !result
 function: check_mv_to_refresh_contains("test_mv3", "")
 -- result:

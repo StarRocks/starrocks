@@ -163,7 +163,9 @@ select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
 -- test partitioned mv
 CREATE MATERIALIZED VIEW test_mv3 
-REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 
 [UC]select inspect_mv_refresh_info("test_mv3");

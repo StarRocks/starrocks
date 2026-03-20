@@ -111,6 +111,10 @@ public class IcebergCatalogTest {
         Mockito.when(row.get(IcebergCatalog.PARTITION_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(7);
         Mockito.when(row.get(IcebergCatalog.PARTITION_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(2);
         Mockito.when(row.get(IcebergCatalog.PARTITION_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX, Number.class)).thenReturn(99L);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_POSITION_DELETE_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_POSITION_DELETE_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_EQUALITY_DELETE_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_EQUALITY_DELETE_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
 
         CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(Lists.newArrayList(row));
         Mockito.when(dataTask.rows()).thenReturn(rowIterable);

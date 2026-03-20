@@ -2205,13 +2205,13 @@ class StarrocksSQLApiLib(object):
                           "assert mv %s inspect result should be json string, but got: %s" % (mv_name, type(json_payload)))
         json_result = json.loads(json_payload)
         mv_to_refresh_partitions = json_result.get("mvToRefreshPartitions")
-        expect_no_refresh = should_contain and len(expects) == 0
+        expect_no_refresh = should_contain and (len(expects) == 0 or (len(expects) == 1 and expects[0] == ""))
         if expect_no_refresh:
-            tools.assert_true(mv_to_refresh_partitions is None, "assert mv %s mvToRefreshPartitions is not empty, but expect to no refresh: %s" % (mv_name, json_result))
+            tools.assert_true(mv_to_refresh_partitions is None or len(mv_to_refresh_partitions) == 0, "assert mv %s mvToRefreshPartitions is not empty, but expect to no refresh: %s" % (mv_name, json_result))
             return True
         if should_contain:
-            tools.assert_true(all(partition in expects for partition in mv_to_refresh_partitions),
-                              "assert mv %s mvToRefreshPartitions is not found in plan: %s" % (mv_name, json_result))
+            tools.assert_true(all(partition in mv_to_refresh_partitions for partition in expects),
+                              "assert mv %s expected partitions not all found in mvToRefreshPartitions: %s" % (mv_name, json_result))
         else:
             tools.assert_true(all(partition not in expects for partition in mv_to_refresh_partitions),
                               "assert mv %s mvToRefreshPartitions should not be in plan: %s" % (mv_name, json_result))
