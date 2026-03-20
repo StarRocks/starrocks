@@ -17,20 +17,19 @@ aes_encrypt(str, key_str[, init_vector][, encryption_mode][, aad_str]);
 ## Parameters
 
 - 必須パラメータ:
-
-    - `str`: 復号する文字列。VARCHAR 型でなければなりません。
-
-    - `key_str`: `str` を暗号化するために使用されるキー。VARCHAR 型でなければなりません。
+  - `str`: 復号する文字列。VARCHAR 型でなければなりません。
+  - `key_str`: `str` を暗号化するために使用されるキー。VARCHAR 型でなければなりません。
 - オプションパラメータ:
-    - `init_vector`: Initialization Vector (IV) は、AES暗号化において重要なセキュリティパラメータであり、同一の平文が暗号化されるごとに異なる暗号文を生成することを保証します。CBC、CFB、OFB、CTR、GCM モードでのみ有効です。VARCHAR 型でなければなりません。
-    - `encryption_mode`: 対応アルゴリズムは以下の通りです。VARCHAR 型でなければなりません。
+  - `init_vector`: Initialization Vector (IV) は、AES暗号化において重要なセキュリティパラメータであり、同一の平文が暗号化されるごとに異なる暗号文を生成することを保証します。CBC、CFB、OFB、CTR、GCM モードでのみ有効です。VARCHAR 型でなければなりません。
+  - `encryption_mode`: 対応アルゴリズムは以下の通りです。VARCHAR 型でなければなりません。
 
-        | ECB         | CBC         | CFB         | CFB1        | CFB8        | CFB128        | OFB         | CTR       | GCM        |
-        |-------------|-------------|-------------|-------------|-------------|---------------|-------------|-----------|------------|
-        | AES_128_ECB | AES_128_CBC | AES_128_CFB | AES_128_CFB1| AES_128_CFB8| AES_128_CFB128| AES_128_OFB| AES_128_CTR| AES_128_GCM|
-        | AES_192_ECB | AES_192_CBC | AES_192_CFB | AES_192_CFB1| AES_192_CFB8| AES_192_CFB128| AES_192_OFB| AES_192_CTR| AES_192_GCM|
-        | AES_256_ECB | AES_256_CBC | AES_256_CFB | AES_256_CFB1| AES_256_CFB8| AES_256_CFB128| AES_256_OFB| AES_256_CTR| AES_256_GCM|
-    - `aad_str` 附加認証データ（AAD）を指します。これはGCMなどの認証暗号モードに特有の概念であり、暗号化プロセスにおいて暗号化されないデータです。VARCHAR 型でなければなりません。
+    | ECB         | CBC         | CFB         | CFB1        | CFB8        | CFB128        | OFB         | CTR       | GCM        |
+    |-------------|-------------|-------------|-------------|-------------|---------------|-------------|-----------|------------|
+    | AES_128_ECB | AES_128_CBC | AES_128_CFB | AES_128_CFB1| AES_128_CFB8| AES_128_CFB128| AES_128_OFB| AES_128_CTR| AES_128_GCM|
+    | AES_192_ECB | AES_192_CBC | AES_192_CFB | AES_192_CFB1| AES_192_CFB8| AES_192_CFB128| AES_192_OFB| AES_192_CTR| AES_192_GCM|
+    | AES_256_ECB | AES_256_CBC | AES_256_CFB | AES_256_CFB1| AES_256_CFB8| AES_256_CFB128| AES_256_OFB| AES_256_CTR| AES_256_GCM|
+
+  - `aad_str` 附加認証データ（AAD）を指します。これはGCMなどの認証暗号モードに特有の概念であり、暗号化プロセスにおいて暗号化されないデータです。VARCHAR 型でなければなりません。
 
 ## Return value
 
