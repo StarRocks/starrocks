@@ -18,8 +18,7 @@ namespace starrocks {
 
 CatalogScanMetrics::CatalogScanMetrics(MetricRegistry* registry) : _registry(registry) {}
 
-CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_metrics(
-        const std::string& catalog_type) {
+CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_metrics(const std::string& catalog_type) {
     std::lock_guard<std::mutex> lock(_mutex);
     auto it = _metrics_map.find(catalog_type);
     if (it != _metrics_map.end()) {
@@ -37,12 +36,10 @@ CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_met
     _registry->register_metric("catalog_query_scan_rows", labels, metrics->scan_rows.get());
 
     metrics->files_scan_bytes_read = std::make_unique<IntCounter>(MetricUnit::BYTES);
-    _registry->register_metric("catalog_files_scan_num_bytes_read", labels,
-                               metrics->files_scan_bytes_read.get());
+    _registry->register_metric("catalog_files_scan_num_bytes_read", labels, metrics->files_scan_bytes_read.get());
 
     metrics->files_scan_rows_return = std::make_unique<IntCounter>(MetricUnit::ROWS);
-    _registry->register_metric("catalog_files_scan_num_rows_return", labels,
-                               metrics->files_scan_rows_return.get());
+    _registry->register_metric("catalog_files_scan_num_rows_return", labels, metrics->files_scan_rows_return.get());
 
     auto* ptr = metrics.get();
     _metrics_map.emplace(catalog_type, std::move(metrics));

@@ -940,6 +940,9 @@ void ConnectorChunkSource::_update_catalog_metrics() {
     }
 
     const std::string& catalog_type = _scan_node->catalog_type();
+    if (catalog_type.empty()) {
+        return;
+    }
 
     catalog_metrics->update_scan_bytes(catalog_type, _scan_bytes);
     catalog_metrics->update_scan_rows(catalog_type, _scan_rows_num);

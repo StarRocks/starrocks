@@ -366,4 +366,39 @@ TEST_F(ConnectorScanNodeTest, test_stream_load_thread_pool) {
     ASSERT_TRUE(scan_node->use_stream_load_thread_pool());
 }
 
+// When FE sets catalog_type explicitly, use it.
+TEST_F(ConnectorScanNodeTest, test_catalog_type_with_explicit_value) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = std::make_shared<TPlanNode>();
+    tnode->__set_node_id(1);
+    tnode->__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
+    std::vector<::starrocks::TTupleId> tuple_ids{0};
+    tnode->__set_row_tuples(tuple_ids);
+    tnode->__set_limit(-1);
+    TConnectorScanNode connector_scan_node;
+    connector_scan_node.connector_name = connector::Connector::HIVE;
+    connector_scan_node.__set_catalog_type("iceberg");
+    tnode->__set_connector_scan_node(connector_scan_node);
+
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_EQ("iceberg", scan_node->catalog_type());
+}
+
+// When FE does not set catalog_type (rolling upgrade), catalog_type should be empty
+// so that BE skips catalog metrics rather than reporting wrong values.
+TEST_F(ConnectorScanNodeTest, test_catalog_type_empty_without_fe_value) {
+    std::shared_ptr<RuntimeState> runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    auto tnode = create_tplan_node_hive();
+    auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
+    ASSERT_TRUE(scan_node->catalog_type().empty());
+}
+
 } // namespace starrocks

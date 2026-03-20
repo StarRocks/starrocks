@@ -40,10 +40,9 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
-    } else {
-        // Fallback: derive from connector name
-        _catalog_type = tnode.connector_scan_node.connector_name;
     }
+    // else: leave _catalog_type empty. During rolling upgrades (old FE -> new BE),
+    // catalog_type is not set — skip catalog metrics rather than guess wrong values.
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
