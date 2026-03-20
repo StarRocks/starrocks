@@ -221,8 +221,8 @@ void FragmentContext::set_final_status(const Status& status) {
             hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
         }
 
-        const bool benign_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
-        if (!_s_status.ok() && !benign_cancel) {
+        const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        if (!_s_status.ok() && !finished_cancel) {
             const auto* executors = _workgroup != nullptr
                                             ? _workgroup->executors()
                                             : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
