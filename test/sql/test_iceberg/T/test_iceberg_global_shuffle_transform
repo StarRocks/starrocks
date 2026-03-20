@@ -1,0 +1,153 @@
+-- name: test_iceberg_global_shuffle_transform
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_global_shuffle_transform/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog iceberg_shuffle_${uuid0} PROPERTIES (
+    "type" = "iceberg", 
+    "iceberg.catalog.type" = "hadoop", 
+    "iceberg.catalog.warehouse" = "oss://${oss_bucket}/test_catalog/test_iceberg_global_shuffle_transform/${uuid0}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0};
+
+set connector_sink_shuffle_mode = 'force';
+
+-- test bucket partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition (
+    id int,
+    name string
+) partition by bucket(id, 3);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition values (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition order by id;
+
+-- test year partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.year_partition (
+    event_date date,
+    name string
+) partition by year(event_date);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.year_partition values 
+    (date '2023-01-15', 'a'), 
+    (date '2024-02-20', 'b'), 
+    (date '2023-06-10', 'c');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.year_partition order by event_date;
+
+-- test month partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.month_partition (
+    event_date date,
+    name string
+) partition by month(event_date);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.month_partition values 
+    (date '2023-01-15', 'a'), 
+    (date '2023-02-20', 'b'), 
+    (date '2023-01-25', 'c');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.month_partition order by event_date;
+
+-- test day partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.day_partition (
+    event_date date,
+    name string
+) partition by day(event_date);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.day_partition values 
+    (date '2023-01-15', 'a'), 
+    (date '2023-01-16', 'b'), 
+    (date '2023-01-15', 'c');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.day_partition order by event_date;
+
+-- test hour partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.hour_partition (
+    event_ts datetime,
+    name string
+) partition by hour(event_ts);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.hour_partition values 
+    (datetime '2023-01-15 10:30:00', 'a'), 
+    (datetime '2023-01-15 11:45:00', 'b'), 
+    (datetime '2023-01-15 10:00:00', 'c');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.hour_partition order by event_ts;
+
+-- test truncate partition with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.truncate_partition (
+    name string,
+    value int
+) partition by truncate(name, 3);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.truncate_partition values 
+    ('apple', 1), 
+    ('application', 2), 
+    ('banana', 3);
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.truncate_partition order by name;
+
+-- test multiple transform partitions with global shuffle
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.multi_transform_partition (
+    id int,
+    event_date date,
+    name string
+) partition by bucket(id, 2), month(event_date);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.multi_transform_partition values 
+    (1, date '2023-01-15', 'a'), 
+    (2, date '2023-01-20', 'b'), 
+    (1, date '2023-02-10', 'c');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.multi_transform_partition order by id, event_date;
+
+-- test with connector_sink_shuffle_mode = auto
+set connector_sink_shuffle_mode = 'auto';
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition values (5, 'e'), (6, 'f');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition order by id;
+
+-- test with connector_sink_shuffle_mode = never (no shuffle)
+set connector_sink_shuffle_mode = 'never';
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition values (7, 'g'), (8, 'h');
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition order by id;
+
+-- test insert from source table with transform partition
+set connector_sink_shuffle_mode = 'force';
+
+create table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.source_table (
+    id int,
+    event_date date,
+    name string
+) partition by bucket(id, 2);
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.source_table values 
+    (10, date '2024-01-01', 'src_a'),
+    (20, date '2024-01-02', 'src_b'),
+    (10, date '2024-01-03', 'src_c');
+
+insert into iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition 
+select id, name from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.source_table order by id;
+
+select * from iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition where id >= 10 order by id;
+
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.source_table force;
+
+-- cleanup
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.bucket_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.year_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.month_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.day_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.hour_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.truncate_partition force;
+drop table iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0}.multi_transform_partition force;
+drop database iceberg_shuffle_${uuid0}.iceberg_shuffle_db_${uuid0};
+drop catalog iceberg_shuffle_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_global_shuffle_transform/${uuid0} >/dev/null || echo "exit 0" >/dev/null
