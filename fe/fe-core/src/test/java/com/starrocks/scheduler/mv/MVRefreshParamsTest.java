@@ -42,7 +42,6 @@ public class MVRefreshParamsTest {
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(true);
             Mockito.when(partitionInfo.isRangePartition()).thenReturn(false);
             Mockito.when(partitionInfo.isListPartition()).thenReturn(false);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             MVRefreshParams params = new MVRefreshParams(mv, properties);
@@ -74,7 +73,6 @@ public class MVRefreshParamsTest {
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(false);
             Mockito.when(partitionInfo.isRangePartition()).thenReturn(true);
             Mockito.when(partitionInfo.isListPartition()).thenReturn(false);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             MVRefreshParams params = new MVRefreshParams(mv, properties);
@@ -106,7 +104,6 @@ public class MVRefreshParamsTest {
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(false);
             Mockito.when(partitionInfo.isRangePartition()).thenReturn(false);
             Mockito.when(partitionInfo.isListPartition()).thenReturn(true);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             MVRefreshParams params = new MVRefreshParams(mv, properties);
@@ -135,7 +132,6 @@ public class MVRefreshParamsTest {
             MaterializedView mv = Mockito.mock(MaterializedView.class);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             
@@ -178,38 +174,12 @@ public class MVRefreshParamsTest {
             MaterializedView mv = Mockito.mock(MaterializedView.class);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             properties.put(TaskRun.FORCE, "true");
             
             MVRefreshParams params = new MVRefreshParams(mv, properties);
             Assertions.assertTrue(params.isForce(), "MV should be forced when FORCE property is true");
-            
-        } finally {
-            // Restore original config value
-            Config.mv_refresh_force_partition_type = originalValue;
-        }
-    }
-
-    @Test
-    public void testIsForceWithPartitionRefreshStrategy() {
-        // Save original config value
-        int originalValue = Config.mv_refresh_force_partition_type;
-        
-        try {
-            // Even with config = 0, FORCE strategy should work
-            Config.mv_refresh_force_partition_type = 0;
-            
-            MaterializedView mv = Mockito.mock(MaterializedView.class);
-            PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
-            Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.FORCE);
-            
-            Map<String, String> properties = new HashMap<>();
-            MVRefreshParams params = new MVRefreshParams(mv, properties);
-            
-            Assertions.assertTrue(params.isForce(), "MV should be forced when PartitionRefreshStrategy is FORCE");
             
         } finally {
             // Restore original config value
@@ -231,7 +201,6 @@ public class MVRefreshParamsTest {
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(true);
             Mockito.when(partitionInfo.isRangePartition()).thenReturn(false);
             Mockito.when(partitionInfo.isListPartition()).thenReturn(false);
-            Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
             
             Map<String, String> properties = new HashMap<>();
             MVRefreshParams params = new MVRefreshParams(mv, properties);

@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.TaskRun;
@@ -34,6 +35,8 @@ public class MVRefreshParams {
     private final boolean isForce;
     private final Set<PListCell> listValues;
     private final PartitionInfo mvPartitionInfo;
+    private final Map<String, String> properties;
+    private boolean isTentative;
 
     public MVRefreshParams(PartitionInfo partitionInfo,
                            Map<String, String> properties,
@@ -45,21 +48,32 @@ public class MVRefreshParams {
         this.isForce = tentative | Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         this.listValues = PListCell.batchDeserialize(properties.get(TaskRun.PARTITION_VALUES));
         this.mvPartitionInfo = partitionInfo;
+        this.properties = properties;
+        this.isTentative = tentative;
+    }
+
+    /**
+     * Constructor for testing and new code that needs the full MaterializedView.
+     */
+    public MVRefreshParams(MaterializedView mv,
+                           Map<String, String> properties) {
+        Preconditions.checkArgument(mv != null, "MaterializedView is null");
+        Preconditions.checkArgument(properties != null, "Properties is null");
+        this.rangeStart = properties.get(TaskRun.PARTITION_START);
+        this.rangeEnd = properties.get(TaskRun.PARTITION_END);
+        this.listValues = PListCell.batchDeserialize(properties.get(TaskRun.PARTITION_VALUES));
+        this.mvPartitionInfo = mv.getPartitionInfo();
+        this.properties = properties;
+        this.isTentative = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
+        // isForce is computed dynamically in isForce() method
+        this.isForce = false;
     }
 
     public boolean isForce() {
-<<<<<<< HEAD
-        return isForce;
-=======
         if (this.isTentative) {
             return true;
         }
-        if (Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
-            return true;
-        }
-        MaterializedView.PartitionRefreshStrategy partitionRefreshStrategy =
-                mv.getPartitionRefreshStrategy();
-        if (partitionRefreshStrategy == MaterializedView.PartitionRefreshStrategy.FORCE) {
+        if (properties != null && Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
             return true;
         }
         // Check if force refresh is enabled for this partition type via config
@@ -79,14 +93,13 @@ public class MVRefreshParams {
         if (configValue == 0) {
             return false;
         }
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (partitionInfo.isUnPartitioned() && (configValue & 1) != 0) {
+        if (mvPartitionInfo.isUnPartitioned() && (configValue & 1) != 0) {
             return true;
         }
-        if (partitionInfo.isRangePartition() && (configValue & 2) != 0) {
+        if (mvPartitionInfo.isRangePartition() && (configValue & 2) != 0) {
             return true;
         }
-        if (partitionInfo.isListPartition() && (configValue & 4) != 0) {
+        if (mvPartitionInfo.isListPartition() && (configValue & 4) != 0) {
             return true;
         }
         return false;
@@ -102,7 +115,6 @@ public class MVRefreshParams {
 
     public boolean isTentative() {
         return isTentative;
->>>>>>> 90e2b980c4 ([BugFix] Add mv_refresh_force_partition_type config to support force mv refresh  (#70381))
     }
 
     public boolean isCompleteRefresh() {
