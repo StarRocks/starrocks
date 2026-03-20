@@ -44,6 +44,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <StaticFEConfigNote />
 
+<<<<<<< HEAD
 ## Understand FE parameters
 
 ### Logging
@@ -4158,3 +4159,19 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 
 <EditionSpecificFEItem />
+=======
+## Parameter groups
+
+The parameters are grouped in these categories:
+
+- [Logging](./FE_parameters/log_server_meta.md)
+- [Server](./FE_parameters/log_server_meta.md)
+- [Metadata and Cluster management](./FE_parameters/log_server_meta.md)
+- [User, role, and privilege](./FE_parameters/user_query_loading.md)
+- [Query engine](./FE_parameters/user_query_loading.md)
+- [Loading and unloading](./FE_parameters/user_query_loading.md)
+- [Statistic report](./FE_parameters/stats_storage.md)
+- [Storage](./FE_parameters/stats_storage.md)
+- [Shared-data](./FE_parameters/shared_lake_other.md)
+- [Data Lake](./FE_parameters/shared_lake_other.md)
+>>>>>>> 3d92429d93 ([Doc] FE config doc too large (#70474))
