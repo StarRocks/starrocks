@@ -1,0 +1,26 @@
+# 使用 dev-env 作为基础（已有 Java 17）
+FROM starrocks/dev-env-ubuntu:latest
+
+# 安装运行依赖
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    nginx \
+    net-tools \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制 StarRocks 运行时文件（从 allin1-ubuntu 镜像方式）
+# 我们使用挂载卷方式在运行时提供
+
+# 设置环境变量
+ENV STARROCKS_HOME=/workspace
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+WORKDIR /workspace
+
+# 暴露端口
+EXPOSE 9030 8080 8040 9060
+
+# 使用简单的启动脚本
+CMD ["/bin/bash"]
