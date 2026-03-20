@@ -1,0 +1,18 @@
+-- name: test_array_agg_pseudo_type
+create table t1(c1 int, c2 array<int>) duplicate key(c1) distributed by hash(c1) buckets 3 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t1 values (1, [1,2]), (2, [3,4]), (3, [5, 6]);
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize=false;
+-- result:
+-- !result
+function: assert_explain_costs_contains('WITH int_agg AS (     SELECT array_agg(c2) AS int_array     FROM t1     WHERE c1 = 1 ), other_int_agg AS (     SELECT array_agg(c2) AS other_int_array     FROM t1 ) SELECT     array_intersect(int_array,    other_int_array)    AS intersected_int FROM  int_agg JOIN other_int_agg', 'MultiCastDataSinks', 'struct<`col1` array<array<int(11)>>>')
+-- result:
+None
+-- !result
+WITH int_agg AS (     SELECT array_agg(c2) AS int_array     FROM t1     WHERE c1 = 1 ), other_int_agg AS (     SELECT array_agg(c2) AS other_int_array     FROM t1 ) SELECT     array_intersect(int_array,    other_int_array)    AS intersected_int FROM  int_agg JOIN other_int_agg;
+-- result:
+[[1,2]]
+-- !result
