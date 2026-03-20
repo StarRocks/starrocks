@@ -125,6 +125,17 @@ __hash_memory(const void* __ptr, size_t __size) noexcept {
 EOF
 }
 
+ensure_thrift_enum_iterator_equality() {
+    local thrift_header="$1"
+
+    [[ -f "${thrift_header}" ]] || return 0
+    if grep -q 'operator==(const TEnumIterator&' "${thrift_header}" 2>/dev/null; then
+        return 0
+    fi
+
+    perl -0pi -e 's/bool operator!=\(const TEnumIterator& end\) \{\n    THRIFT_UNUSED_VARIABLE\(end\);\n    assert\(end.n_ == -1\);\n    return \(ii_ != n_\);\n  \}/bool operator!=(const TEnumIterator& end) {\n    THRIFT_UNUSED_VARIABLE(end);\n    assert(end.n_ == -1);\n    return (ii_ != n_);\n  }\n\n  bool operator==(const TEnumIterator& end) {\n    return !(*this != end);\n  }/' "${thrift_header}"
+}
+
 append_object_to_archive() {
     local archive="$1"
     local object_file="$2"
@@ -229,12 +240,32 @@ link_formula_metadata() {
 
 sync_lib64_links() {
     local lib
+    local lib_name
+    local lib_path
+    local lib64_path
     mkdir -p "${TP_INSTALL_DIR}/lib64"
     for lib in "${TP_INSTALL_DIR}"/lib/*; do
         [[ -e "${lib}" || -L "${lib}" ]] || continue
         case "$(basename "${lib}")" in
             *.a|*.dylib|*.so|*.so.*)
-                link_if_missing "../lib/$(basename "${lib}")" "${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                lib_name="$(basename "${lib}")"
+                lib64_path="${TP_INSTALL_DIR}/lib64/${lib_name}"
+                if [[ ! -e "${lib64_path}" && ! -L "${lib64_path}" ]]; then
+                    ln -s "../lib/${lib_name}" "${lib64_path}"
+                fi
+                ;;
+        esac
+    done
+
+    for lib in "${TP_INSTALL_DIR}"/lib64/*; do
+        [[ -e "${lib}" || -L "${lib}" ]] || continue
+        case "$(basename "${lib}")" in
+            *.a|*.dylib|*.so|*.so.*)
+                lib_name="$(basename "${lib}")"
+                lib_path="${TP_INSTALL_DIR}/lib/${lib_name}"
+                if [[ ! -e "${lib_path}" && ! -L "${lib_path}" ]]; then
+                    ln -s "../lib64/${lib_name}" "${lib_path}"
+                fi
                 ;;
         esac
     done
@@ -401,6 +432,7 @@ build_glog() {
 
 build_boost() {
     if [[ -f "${TP_INSTALL_DIR}/lib/libboost_system.a" && -f "${TP_INCLUDE_DIR}/boost/version.hpp" ]]; then
+        sync_lib64_links
         return 0
     fi
 
@@ -480,6 +512,7 @@ build_protobuf() {
 
 build_thrift() {
     if [[ -f "${TP_INSTALL_DIR}/lib/libthrift.a" && -f "${TP_INSTALL_DIR}/lib/libthriftnb.a" && -f "${TP_INCLUDE_DIR}/thrift/Thrift.h" ]]; then
+        ensure_thrift_enum_iterator_equality "${TP_INCLUDE_DIR}/thrift/Thrift.h"
         return 0
     fi
 
@@ -487,6 +520,7 @@ build_thrift() {
 
     check_if_source_exist "${THRIFT_SOURCE}"
     cd "${TP_SOURCE_DIR}/${THRIFT_SOURCE}"
+    ensure_thrift_enum_iterator_equality "${TP_SOURCE_DIR}/${THRIFT_SOURCE}/lib/cpp/src/thrift/Thrift.h"
     if [[ ! -f configure ]]; then
         ./bootstrap.sh
     fi
@@ -558,6 +592,7 @@ build_thrift() {
         echo "Failed to build thrift"
         exit 1
     fi
+    ensure_thrift_enum_iterator_equality "${TP_INSTALL_DIR}/include/thrift/Thrift.h"
     sync_lib64_links
 }
 
@@ -1383,10 +1418,16 @@ build_formula_aws_cpp_sdk() {
     if [[ -L "${TP_INCLUDE_DIR}/aws" ]]; then
         rm -f "${TP_INCLUDE_DIR}/aws"
     fi
+    if [[ -L "${TP_INCLUDE_DIR}/smithy" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/smithy"
+    fi
     mkdir -p "${TP_INCLUDE_DIR}/aws"
+    mkdir -p "${TP_INCLUDE_DIR}/smithy"
     link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    link_children_if_missing "${prefix}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
@@ -1409,6 +1450,7 @@ build_formula_fast_float() {
     local prefix
     prefix="$(formula_prefix fast_float)"
     link_if_missing "${prefix}/include/fast_float" "${TP_INCLUDE_DIR}/fast_float"
+    link_formula_metadata "${prefix}"
 }
 
 build_formula_streamvbyte() {
@@ -1613,6 +1655,9 @@ build_benchmark() {
     if grep -q 'add_cxx_compiler_flag(-Wthread-safety)' CMakeLists.txt; then
         perl -0pi -e 's/\n(\s*)add_cxx_compiler_flag\(-Wthread-safety\)\n/\n$1# Disabled on macOS: Clang thread-safety analysis rejects benchmark mutex wrappers.\n/' CMakeLists.txt
     fi
+    if grep -q 'add_cxx_compiler_flag(-pedantic-errors)' CMakeLists.txt && ! grep -q 'Wno-c2y-extensions' CMakeLists.txt; then
+        perl -0pi -e 's/\n(\s*)add_cxx_compiler_flag\(-pedantic-errors\)\n/\n$1add_cxx_compiler_flag(-pedantic-errors)\n$1# Clang 22 diagnoses __COUNTER__ in benchmark 1.5.x as a c2y extension.\n$1add_cxx_compiler_flag(-Wno-c2y-extensions)\n/' CMakeLists.txt
+    fi
     mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
     rm -rf CMakeCache.txt CMakeFiles/
@@ -1733,7 +1778,7 @@ build_clucene() {
     rm -rf CMakeCache.txt CMakeFiles/
     "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
-        -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DBUILD_STATIC_LIBRARIES=ON \
         -DBUILD_SHARED_LIBRARIES=OFF \
         -DENABLE_TESTS=OFF \
@@ -1748,6 +1793,7 @@ build_clucene() {
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
     "${BUILD_SYSTEM}" -j"${PARALLEL}"
     "${BUILD_SYSTEM}" install
+    sync_lib64_links
 }
 
 build_flamegraph() {
@@ -1762,6 +1808,12 @@ build_flamegraph() {
 build_benchgen() {
     check_if_source_exist "${BENCHGEN_SOURCE}"
     cd "${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}"
+    if grep -q 'benchmark_add_arrow_from_prefix("")' cmake_modules/BenchmarkArrow.cmake; then
+        perl -0pi -e 's/benchmark_add_arrow_from_prefix\(""\)/benchmark_add_arrow_from_prefix\("\$\{BENCHGEN_ARROW_PREFIX\}"\)/g' cmake_modules/BenchmarkArrow.cmake
+    fi
+    if grep -q 'find_package(Arrow QUIET)' cmake_modules/BenchmarkArrow.cmake && ! grep -q 'Prefer the prepared thirdparty prefix on Darwin' cmake_modules/BenchmarkArrow.cmake; then
+        perl -0pi -e 's/find_package\(Arrow QUIET\)/# Prefer the prepared thirdparty prefix on Darwin before consulting exported Arrow CMake metadata.\nif(APPLE AND BENCHGEN_ARROW_PREFIX)\n    benchmark_add_arrow_from_prefix\("\$\{BENCHGEN_ARROW_PREFIX\}"\)\nendif()\n\nif\(NOT Arrow_FOUND AND NOT TARGET Arrow::arrow_shared AND NOT TARGET Arrow::arrow_static\n   AND NOT TARGET Arrow::arrow AND NOT TARGET arrow::arrow AND NOT TARGET arrow_shared\n   AND NOT TARGET arrow_static\)\n    find_package\(Arrow QUIET\)\nendif()/g' cmake_modules/BenchmarkArrow.cmake
+    fi
     "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \

@@ -37,6 +37,163 @@ starrocks_detect_parallelism() {
     echo "${cpu_count}"
 }
 
+starrocks_resolve_tool_command() {
+    local tool_name="$1"
+
+    if [[ -z "${tool_name}" ]]; then
+        return 1
+    fi
+
+    if [[ "${tool_name}" == */* ]]; then
+        [[ -x "${tool_name}" ]] || return 1
+        echo "${tool_name}"
+        return 0
+    fi
+
+    command -v "${tool_name}" 2>/dev/null
+}
+
+starrocks_resolve_c_compiler() {
+    if [[ -n "${CC:-}" ]]; then
+        starrocks_resolve_tool_command "${CC}"
+        return $?
+    fi
+    if [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/gcc" ]]; then
+        echo "${STARROCKS_GCC_HOME}/bin/gcc"
+        return 0
+    fi
+    if [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang" ]]; then
+        echo "${STARROCKS_LLVM_HOME}/bin/clang"
+        return 0
+    fi
+    starrocks_resolve_tool_command cc
+}
+
+starrocks_resolve_cxx_compiler() {
+    if [[ -n "${CXX:-}" ]]; then
+        starrocks_resolve_tool_command "${CXX}"
+        return $?
+    fi
+    if [[ -n "${STARROCKS_GCC_HOME:-}" && -x "${STARROCKS_GCC_HOME}/bin/g++" ]]; then
+        echo "${STARROCKS_GCC_HOME}/bin/g++"
+        return 0
+    fi
+    if [[ -n "${STARROCKS_LLVM_HOME:-}" && -x "${STARROCKS_LLVM_HOME}/bin/clang++" ]]; then
+        echo "${STARROCKS_LLVM_HOME}/bin/clang++"
+        return 0
+    fi
+    starrocks_resolve_tool_command c++
+}
+
+starrocks_extract_tool_version() {
+    local tool_path="$1"
+
+    if [[ -z "${tool_path}" || ! -x "${tool_path}" ]]; then
+        return 1
+    fi
+
+    "${tool_path}" --version 2>/dev/null | awk '
+        NR == 1 {
+            for (i = 1; i <= NF; ++i) {
+                if ($i ~ /^[0-9]+(\.[0-9]+)+$/) {
+                    print $i
+                    exit
+                }
+            }
+        }
+    '
+}
+
+starrocks_extract_cmake_set_value() {
+    local cmake_file="$1"
+    local variable_name="$2"
+
+    if [[ ! -f "${cmake_file}" ]]; then
+        return 1
+    fi
+
+    awk -v key="${variable_name}" '
+        index($0, "set(" key " ") == 1 {
+            value = substr($0, length("set(" key " ") + 1)
+            sub(/\)$/, "", value)
+            sub(/^"/, "", value)
+            sub(/"$/, "", value)
+            print value
+            exit
+        }
+    ' "${cmake_file}"
+}
+
+starrocks_find_cmake_compiler_dir() {
+    local build_dir="$1"
+
+    if [[ ! -d "${build_dir}/CMakeFiles" ]]; then
+        return 1
+    fi
+
+    find "${build_dir}/CMakeFiles" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' -print 2>/dev/null | LC_ALL=C sort | tail -n 1
+}
+
+starrocks_reconcile_be_build_dir() {
+    local build_dir="$1"
+    local compiler_dir=""
+    local c_compiler_file=""
+    local cxx_compiler_file=""
+    local cached_c_compiler=""
+    local cached_cxx_compiler=""
+    local cached_c_version=""
+    local cached_cxx_version=""
+    local current_c_compiler=""
+    local current_cxx_compiler=""
+    local current_c_version=""
+    local current_cxx_version=""
+    local mismatch_reasons=()
+
+    if [[ ! -d "${build_dir}" ]]; then
+        return 0
+    fi
+
+    compiler_dir="$(starrocks_find_cmake_compiler_dir "${build_dir}")"
+    if [[ -z "${compiler_dir}" ]]; then
+        return 0
+    fi
+
+    c_compiler_file="${compiler_dir}/CMakeCCompiler.cmake"
+    cxx_compiler_file="${compiler_dir}/CMakeCXXCompiler.cmake"
+
+    cached_c_compiler="$(starrocks_extract_cmake_set_value "${c_compiler_file}" "CMAKE_C_COMPILER" || true)"
+    cached_cxx_compiler="$(starrocks_extract_cmake_set_value "${cxx_compiler_file}" "CMAKE_CXX_COMPILER" || true)"
+    cached_c_version="$(starrocks_extract_cmake_set_value "${c_compiler_file}" "CMAKE_C_COMPILER_VERSION" || true)"
+    cached_cxx_version="$(starrocks_extract_cmake_set_value "${cxx_compiler_file}" "CMAKE_CXX_COMPILER_VERSION" || true)"
+
+    current_c_compiler="$(starrocks_resolve_c_compiler || true)"
+    current_cxx_compiler="$(starrocks_resolve_cxx_compiler || true)"
+    current_c_version="$(starrocks_extract_tool_version "${current_c_compiler}" || true)"
+    current_cxx_version="$(starrocks_extract_tool_version "${current_cxx_compiler}" || true)"
+
+    if [[ -n "${cached_c_compiler}" && -n "${current_c_compiler}" && "${cached_c_compiler}" != "${current_c_compiler}" ]]; then
+        mismatch_reasons+=("C compiler path changed: cached ${cached_c_compiler}, current ${current_c_compiler}")
+    fi
+    if [[ -n "${cached_cxx_compiler}" && -n "${current_cxx_compiler}" && "${cached_cxx_compiler}" != "${current_cxx_compiler}" ]]; then
+        mismatch_reasons+=("C++ compiler path changed: cached ${cached_cxx_compiler}, current ${current_cxx_compiler}")
+    fi
+    if [[ -n "${cached_c_version}" && -n "${current_c_version}" && "${cached_c_version}" != "${current_c_version}" ]]; then
+        mismatch_reasons+=("C compiler version changed: cached ${cached_c_version}, current ${current_c_version}")
+    fi
+    if [[ -n "${cached_cxx_version}" && -n "${current_cxx_version}" && "${cached_cxx_version}" != "${current_cxx_version}" ]]; then
+        mismatch_reasons+=("C++ compiler version changed: cached ${cached_cxx_version}, current ${current_cxx_version}")
+    fi
+
+    if (( ${#mismatch_reasons[@]} == 0 )); then
+        return 0
+    fi
+
+    echo "Detected a compiler toolchain change for ${build_dir}."
+    echo "Removing the stale BE build directory so CMake can regenerate PCH artifacts."
+    printf '  - %s\n' "${mismatch_reasons[@]}"
+    rm -rf "${build_dir}"
+}
+
 starrocks_resolve_java_home() {
     local java_home_candidate="$1"
 
@@ -78,102 +235,6 @@ starrocks_setup_darwin_build_env() {
         export JAVA_HOME="$(starrocks_resolve_java_home "${JAVA_HOME}")"
     elif [[ -d "${bundled_java_home}" ]]; then
         export JAVA_HOME="$(starrocks_resolve_java_home "${bundled_java_home}")"
-    fi
-}
-
-starrocks_validate_darwin_thirdparty() {
-    local tp_root="${STARROCKS_THIRDPARTY}"
-    local tp_installed="${tp_root}/installed"
-
-    if [[ ! -d "${tp_installed}" ]]; then
-        if [[ -d "${tp_root}/bin" || -d "${tp_root}/lib" || -d "${tp_root}/lib64" ]]; then
-            echo "Error: STARROCKS_THIRDPARTY must point to the thirdparty root, not the installed directory: ${tp_root}"
-        else
-            echo "Error: macOS BE build requires STARROCKS_THIRDPARTY to point to a prepared Darwin thirdparty root."
-            echo "Expected directory: ${tp_installed}"
-        fi
-        exit 1
-    fi
-
-    local required_paths=(
-        "${tp_installed}/bin/protoc"
-        "${tp_installed}/bin/thrift"
-    )
-    local required_path=""
-    for required_path in "${required_paths[@]}"; do
-        if [[ ! -e "${required_path}" ]]; then
-            echo "Error: missing macOS thirdparty artifact: ${required_path}"
-            exit 1
-        fi
-    done
-
-    local required_libs=(
-        "libprotobuf.a"
-        "librocksdb.a"
-        "libglog.a"
-        "libbrpc.a"
-    )
-    local required_lib=""
-    for required_lib in "${required_libs[@]}"; do
-        if [[ ! -e "${tp_installed}/lib/${required_lib}" && ! -e "${tp_installed}/lib64/${required_lib}" ]]; then
-            echo "Error: missing macOS thirdparty artifact: ${required_lib} under ${tp_installed}/lib or ${tp_installed}/lib64"
-            exit 1
-        fi
-    done
-
-    local required_darwin_dylibs=(
-        "libgrpc.dylib"
-        "libgrpc++.dylib"
-        "libkrb5support.dylib"
-        "libkrb5.dylib"
-        "libcom_err.dylib"
-        "libk5crypto.dylib"
-        "libgssapi_krb5.dylib"
-        "libsasl2.dylib"
-        "libxml2.dylib"
-    )
-    local required_darwin_dylib=""
-    for required_darwin_dylib in "${required_darwin_dylibs[@]}"; do
-        if [[ ! -e "${tp_installed}/lib/${required_darwin_dylib}" &&
-              ! -e "${tp_installed}/lib64/${required_darwin_dylib}" ]]; then
-            echo "Error: missing macOS thirdparty dylib: ${required_darwin_dylib} under ${tp_installed}/lib or ${tp_installed}/lib64"
-            exit 1
-        fi
-    done
-
-    local jemalloc_shared_lib=""
-    jemalloc_shared_lib=$(find "${tp_installed}/jemalloc/lib-shared" -maxdepth 1 -name 'libjemalloc*.dylib' -print -quit 2>/dev/null)
-    if [[ -z "${jemalloc_shared_lib}" ]]; then
-        echo "Error: missing macOS thirdparty jemalloc dylib under ${tp_installed}/jemalloc/lib-shared"
-        exit 1
-    fi
-
-    local bundled_java_home="$(starrocks_resolve_java_home "${tp_installed}/open_jdk")"
-    local resolved_java_home=""
-    if [[ -n "${JAVA_HOME:-}" ]]; then
-        resolved_java_home="$(starrocks_resolve_java_home "${JAVA_HOME}")"
-    fi
-    local bundled_jni_header="${bundled_java_home}/include/jni.h"
-    local java_home_jni_header=""
-    if [[ -n "${resolved_java_home}" ]]; then
-        java_home_jni_header="${resolved_java_home}/include/jni.h"
-    fi
-    if [[ ! -f "${bundled_jni_header}" && ! -f "${java_home_jni_header}" ]]; then
-        echo "Error: missing JNI headers. Expected ${bundled_jni_header} or ${resolved_java_home}/include/jni.h"
-        exit 1
-    fi
-
-    local bundled_libjvm=""
-    local java_home_libjvm=""
-    if [[ -d "${bundled_java_home}/lib" ]]; then
-        bundled_libjvm=$(find "${bundled_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
-    fi
-    if [[ -n "${resolved_java_home}" && -d "${resolved_java_home}/lib" ]]; then
-        java_home_libjvm=$(find "${resolved_java_home}/lib" -name 'libjvm.dylib' -print -quit 2>/dev/null)
-    fi
-    if [[ -z "${bundled_libjvm}" && -z "${java_home_libjvm}" ]]; then
-        echo "Error: missing libjvm.dylib under ${bundled_java_home} and ${resolved_java_home:-${JAVA_HOME:-JAVA_HOME}}"
-        exit 1
     fi
 }
 

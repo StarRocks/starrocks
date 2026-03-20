@@ -377,10 +377,6 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     BUILD_JAVA_EXT=OFF
 fi
 
-if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
-    starrocks_validate_darwin_thirdparty
-fi
-
 echo "Get params:
     BUILD_BE                    -- $BUILD_BE
     BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
@@ -498,6 +494,8 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if [ ${CLEAN} -eq 1 ]; then
         rm -rf $CMAKE_BUILD_DIR
         rm -rf ${STARROCKS_HOME}/be/output/
+    else
+        starrocks_reconcile_be_build_dir "${CMAKE_BUILD_DIR}"
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
 
