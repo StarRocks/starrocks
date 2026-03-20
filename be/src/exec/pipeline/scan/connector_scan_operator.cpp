@@ -69,7 +69,7 @@ public:
         int64_t running_chunk_source_count_value = running_chunk_source_count.load(std::memory_order_relaxed);
         int64_t chunk_source_mem_bytes_value = get_chunk_source_mem_bytes();
 
-        int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
+        int64_t max_count = std::max<int64_t>(1, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
         int64_t per_count = avail_count / dop;
         if (shared_scan) {

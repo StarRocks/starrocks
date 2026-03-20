@@ -378,8 +378,10 @@ Status Analytor::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 
     auto create_fn_states = [this]() {
+#ifndef __APPLE__
         std::vector<int> attached_udaf_idx;
         bool init_success = false;
+#endif
         DeferOp cleanup_on_fail([&]() {
 #ifndef __APPLE__
             if (init_success) {
@@ -407,7 +409,9 @@ Status Analytor::open(RuntimeState* state) {
         SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
         _managed_fn_states.emplace_back(
                 std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+#ifndef __APPLE__
         init_success = true;
+#endif
         return Status::OK();
     };
 

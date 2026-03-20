@@ -29,6 +29,7 @@
 
 namespace starrocks {
 
+#ifndef __APPLE__
 static void append_bigint(MutableColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
@@ -77,6 +78,7 @@ static void fill_rowset_row(MutableColumns& columns, const RowsetMetadataPB& row
         (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
     }
 }
+#endif
 
 std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime_state,
                                                            TableFunctionState* base_state) const {
