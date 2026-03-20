@@ -449,15 +449,6 @@ public interface IcebergCatalog extends MemoryTrackable {
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
             }
         }
-<<<<<<< HEAD
-        if (lastUpdated ==  -1) {
-            // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
-            lastUpdated = getTableLatestSnapshotTime(icebergTable, logger);
-            logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
-                    "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
-        }
-=======
->>>>>>> 7167951600 ([BugFix] [Followup] Fix mv refresh bugs with expired snapshot iceberg partitions to avoid repeat refresh (#70523))
         return lastUpdated;
     }
 
