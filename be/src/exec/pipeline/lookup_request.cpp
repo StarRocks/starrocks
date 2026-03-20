@@ -901,6 +901,11 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
     for (const auto& slot : slots) {
         size_t column_index = accumulated->schema()->get_field_index_by_name(slot->col_name());
         accumulated->set_slot_id_to_index(slot->id(), column_index);
+        auto column = accumulated->get_column_by_slot_id(slot->id());
+        if (slot->is_nullable() && !column->is_nullable()) {
+            auto nullable_column = NullableColumn::wrap_if_necessary(std::move(column));
+            accumulated->update_column(std::move(nullable_column), slot->id());
+        }
     }
 
     return accumulated;

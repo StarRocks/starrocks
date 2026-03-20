@@ -94,6 +94,7 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
         connectContext.getSessionVariable().setCboExtractCommonPlan(false);
         connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
