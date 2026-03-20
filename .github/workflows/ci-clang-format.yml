@@ -71,9 +71,17 @@ jobs:
           }
           trap cleanup EXIT
 
-          pr_changed_paths=$(
-            git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD" | sort -u
-          )
+          base_ref_exists=true
+          if ! git rev-parse --verify "${FORMAT_BASE_REF}" >/dev/null 2>&1; then
+            base_ref_exists=false
+          fi
+
+          pr_changed_paths=""
+          if [[ "${base_ref_exists}" == "true" ]]; then
+            pr_changed_paths=$(
+              git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD" | sort -u
+            )
+          fi
 
           for path in "${fetched_files[@]}"; do
             mkdir -p "$(dirname "${helper_dir}/${path}")"
@@ -95,7 +103,7 @@ jobs:
           excludes_file="${helper_dir}/build-support/excludes"
           source_dirs="${GITHUB_WORKSPACE}/be/src,${GITHUB_WORKSPACE}/be/test"
 
-          if ! git rev-parse --verify "${FORMAT_BASE_REF}" >/dev/null 2>&1; then
+          if [[ "${base_ref_exists}" != "true" ]]; then
             echo "${FORMAT_BASE_REF} not found; formatting all C++ files."
             python3 "${helper_dir}/build-support/run_clang_format.py" \
               --clang_format_binary="${CLANG_FORMAT_BINARY}" \
