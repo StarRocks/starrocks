@@ -597,8 +597,11 @@ public abstract class BaseMVRefreshProcessor {
                         baseTableInfo.getDbName(), table, realPartitionNames, false);
             } else {
                 // refresh the whole table, which may be costly in extreme case
+                // Hive/Hudi can refresh table-level cache incrementally. Other external connectors may still need a
+                // full table metadata invalidation so the next syncPartitions() can rebuild snapshotBaseTables correctly.
+                boolean onlyCachedPartitions = supportsPreciseExternalTableRefresh(table);
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
+                        baseTableInfo.getDbName(), table, Lists.newArrayList(), onlyCachedPartitions);
             }
             // should clear query cache
             connectContext.getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
