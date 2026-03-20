@@ -145,7 +145,6 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
             localTopNSortInfo = new LogicalTopNOperator.TopNSortInfo(
                     topn.getOrderByElements(), topn.getSortPhase(), topn.getTopNType(),
                     topn.getLimit(), topn.getOffset());
-            localTopNOp.setTopNPushDownAgg();
         }
         // Create new local aggregation with TopN information for filtering during aggregation
         OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
