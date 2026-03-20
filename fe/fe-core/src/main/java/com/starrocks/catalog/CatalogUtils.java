@@ -119,8 +119,13 @@ public class CatalogUtils {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     // add more information for user
+                    // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    String existedValues = formatExistedPartitionValues(olapTable, existedPartition);
+                    if (existedPartition == null) {
+                        existedPartition = olapTable.getPartition(partitionName, true);
+                    }
+                    String existedValues = existedPartition != null
+                            ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
                     String currentValues = partitionDesc.toString();
                     LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
                             existedValues, currentValues);
