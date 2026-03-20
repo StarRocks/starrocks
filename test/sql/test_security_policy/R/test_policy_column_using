@@ -134,7 +134,7 @@ alter table t0 drop row access policy empty_param_rp;
 create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
     -> case when current_role() = 'root' then row(0) else col end;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<`s1` int(11), `sa2` int(11)> and struct<`col1` tinyint(4)>.')
 -- !result
 create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
     -> case when current_role() = 'root' then row(0, 1) else col end;
@@ -142,17 +142,17 @@ create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns stru
 -- !result
 alter table t0 modify column v2 set masking policy policy_struct;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<`s1` int(11), `sa2` int(11)>.")
 -- !result
 alter table t0 modify column v2 set masking policy policy_struct using(v1);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<`s1` int(11), `sa2` int(11)>.")
 -- !result
 alter table t0 modify column v2 set masking policy policy_struct using(v2);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<`s1` int(11), `sa2` int(11)>.")
 -- !result
-create row access policy policy_row_access_struct as (col struct<s1 int,sa2 int>) returns boolean
+create row access policy policy_row_access_struct as (`col` struct<`s1` int,`sa2` int>) returns boolean
         -> case when current_role() = 'root' then true else false end;
 -- result:
 -- !result
@@ -162,7 +162,7 @@ E: (1064, 'Getting analyzing error. Detail message: The number of on columns doe
 -- !result
 alter table t0 add row access policy policy_row_access_struct on (v1);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<s1 int(11), sa2 int(11)>.")
+E: (1064, "Getting analyzing error. Detail message: Can't cast param type from BIGINT to struct<`s1` int(11), `sa2` int(11)>.")
 -- !result
 alter table t0 add row access policy policy_row_access_struct on (v1, v2);
 -- result:
@@ -190,7 +190,7 @@ create masking policy return_struct as (col1 bigint, col2 bigint) returns struct
 -- !result
 alter table t1 modify column v1 set masking policy return_struct using(v1, v2);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Can't cast return type from struct<s1 int(11), sa2 int(11)> to BIGINT.")
+E: (1064, "Getting analyzing error. Detail message: Can't cast return type from struct<`s1` int(11), `sa2` int(11)> to BIGINT.")
 -- !result
 alter table t1 modify column v1 set masking policy return_struct using(v3);
 -- result:

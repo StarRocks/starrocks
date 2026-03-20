@@ -32,7 +32,7 @@ alter row access policy if exists not_exists_policy set comment = "foo";
 -- !result
 alter row access policy rp set body -> row(0, 1);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(0, 1)' from struct<col1 tinyint(4), col2 tinyint(4)> to BOOLEAN.")
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(0, 1)' from struct<`col1` tinyint(4), `col2` tinyint(4)> to BOOLEAN.")
 -- !result
 alter row access policy rp set body -> if (v2 = 2, true, false);
 -- result:
@@ -40,12 +40,12 @@ E: (1064, "Getting analyzing error. Detail message: Column 'v2' cannot be resolv
 -- !result
 alter row access policy rp set body -> if (v1 = 2, row(0, 1), row(1,1));
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot cast 'if(v1 = 2, row(0, 1), row(1, 1))' from struct<col1 tinyint(4), col2 tinyint(4)> to BOOLEAN.")
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'if(v1 = 2, row(0, 1), row(1, 1))' from struct<`col1` tinyint(4), `col2` tinyint(4)> to BOOLEAN.")
 -- !result
 create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
     -> case when current_role() = 'root' then row(0) else col end;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<`s1` int(11), `sa2` int(11)> and struct<`col1` tinyint(4)>.')
 -- !result
 create masking policy policy_struct as (col struct<s1 int,sa2 int>) returns struct<s1 int,sa2 int>
     -> case when current_role() = 'root' then row(0,0) else col end;
@@ -56,7 +56,7 @@ alter masking policy if exists not_exists_policy set comment = "foo";
 -- !result
 alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0) else col end;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<s1 int(11), sa2 int(11)> and struct<col1 tinyint(4)>.')
+E: (1064, 'Getting analyzing error. Detail message: Failed to get compatible type for CaseWhen with struct<`s1` int(11), `sa2` int(11)> and struct<`col1` tinyint(4)>.')
 -- !result
 alter masking policy if exists policy_struct set body -> case when current_role() = 'root' then row(0, 0) else col end;
 -- result:
@@ -83,7 +83,7 @@ create masking policy policy_struct2 as (col struct<s1 int,sa2 int>) returns str
 -- !result
 show create masking policy policy_struct2;
 -- result:
-policy_struct2	CREATE MASKING POLICY policy_struct2 AS (col struct<s1 int(11), sa2 int(11)>) RETURNS struct<s1 int(11), sa2 int(11)> -> CASE WHEN ((CURRENT_ROLE()) = 'root') THEN (row(0, 0)) ELSE (row(-1, -1)) END
+policy_struct2	CREATE MASKING POLICY policy_struct2 AS (col struct<`s1` int(11), `sa2` int(11)>) RETURNS struct<`s1` int(11), `sa2` int(11)> -> CASE WHEN ((CURRENT_ROLE()) = 'root') THEN (row(0, 0)) ELSE (row(-1, -1)) END
 -- !result
 create database test_create_policy_2;
 -- result:
