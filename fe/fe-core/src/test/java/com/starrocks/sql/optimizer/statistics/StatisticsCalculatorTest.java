@@ -28,7 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -690,7 +689,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testNotFoundColumnStatistics() {
+    public void testNotFoundColumnStatisticsReturnsUnknown() {
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
         ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
 
@@ -700,7 +699,57 @@ public class StatisticsCalculatorTest {
         builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
         builder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
         Statistics statistics = builder.build();
-        Assertions.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
+        ColumnStatistic result = statistics.getColumnStatistic(v3);
+        Assertions.assertTrue(result.isUnknown());
+    }
+
+    @Test
+    public void testComputeGroupByStatisticsWithMissingColumn() {
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(10000);
+        builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        builder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
+        Statistics inputStatistics = builder.build();
+
+        List<ColumnRefOperator> groupBys = Lists.newArrayList(v1, v2, v3);
+        Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
+        double rowCount = StatisticsCalculator.computeGroupByStatistics(groupBys, inputStatistics,
+                groupStatisticsMap);
+
+        Assertions.assertEquals(3, groupStatisticsMap.size());
+        Assertions.assertTrue(groupStatisticsMap.get(v3).isUnknown());
+        Assertions.assertTrue(rowCount > 0);
+    }
+
+    @Test
+    public void testAggregationWithMissingGroupByColumnStats() throws Exception {
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        ColumnRefOperator v3 = columnRefFactory.create("v3", DateType.DATETIME, true);
+
+        Statistics.Builder childBuilder = Statistics.builder();
+        childBuilder.setOutputRowCount(10000);
+        childBuilder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        childBuilder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
+
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childBuilder.build());
+
+        List<ColumnRefOperator> groupByColumns = Lists.newArrayList(v1, v2, v3);
+        Map<ColumnRefOperator, CallOperator> aggCall = new HashMap<>();
+
+        LogicalAggregationOperator aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
+        GroupExpression groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        statisticsCalculator.estimatorStats();
+        Assertions.assertTrue(expressionContext.getStatistics().getOutputRowCount() > 0);
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {

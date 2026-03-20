@@ -16,11 +16,11 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -32,6 +32,8 @@ import java.util.Set;
 import static java.lang.Double.NaN;
 
 public class Statistics {
+    private static final Logger LOG = LogManager.getLogger(Statistics.class);
+
     private final double outputRowCount;
     private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
     // This flag set true if get table row count from GlobalStateMgr LE 1
@@ -128,13 +130,13 @@ public class Statistics {
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
-        if (columnStatistics.get(column) == null) {
-            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
-                    "only found column statistics: %s, but missing statistic of col: %s.",
-                    ColumnRefOperator.toString(columnStatistics.keySet()), column);
-        } else {
-            return columnStatistics.get(column);
+        ColumnStatistic result = columnStatistics.get(column);
+        if (result == null) {
+            LOG.warn("Missing column statistic for col: {}, available: {}",
+                    column, ColumnRefOperator.toString(columnStatistics.keySet()));
+            return ColumnStatistic.unknown();
         }
+        return result;
     }
 
     public Map<ColumnRefOperator, ColumnStatistic> getColumnStatistics() {

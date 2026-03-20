@@ -3488,4 +3488,17 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*)\n" +
                 "  |  group by: ");
     }
+
+    @Test
+    public void testGroupByFunctionExpressionNoStatisticsError() throws Exception {
+        String sql = "SELECT COUNT(*) FROM (" +
+                "SELECT t1a, t1b, DATE(id_datetime) AS dt, " +
+                "SUM(t1c) AS sum_c, " +
+                "IFNULL(SUM(CASE WHEN t1b > 0 THEN id_decimal ELSE 0 END), 0) AS cond_sum " +
+                "FROM test_all_type " +
+                "WHERE id_datetime BETWEEN '2014-01-01' AND '2014-12-01' " +
+                "GROUP BY t1a, t1b, DATE(id_datetime)) tmp";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "AGGREGATE");
+    }
 }
