@@ -5,11 +5,11 @@ sidebar_label: "统计报告和存储"
 
 # FE 配置 - 统计报告和存储
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
+import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
+import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
+import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
 <FEConfigMethod />
 

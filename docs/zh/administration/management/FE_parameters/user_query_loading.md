@@ -5,11 +5,11 @@ sidebar_label: "用户管理、查询引擎和导入导出"
 
 # FE 配置 - 用户管理、查询引擎和导入导出
 
-import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
+import FEConfigMethod from '../../../_assets/commonMarkdown/FE_config_method.mdx'
 
-import AdminSetFrontendNote from '../../_assets/commonMarkdown/FE_config_note.mdx'
+import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note.mdx'
 
-import StaticFEConfigNote from '../../_assets/commonMarkdown/StaticFE_config_note.mdx'
+import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
 <FEConfigMethod />
 
