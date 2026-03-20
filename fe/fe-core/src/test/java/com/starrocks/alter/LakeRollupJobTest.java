@@ -33,7 +33,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
@@ -159,8 +159,8 @@ public class LakeRollupJobTest {
 
     private static LakeRollupJob createJob(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assertions.assertTrue(stmt instanceof CreateMaterializedViewStmt);
-        CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+        Assertions.assertTrue(stmt instanceof CreateSyncMVStmt);
+        CreateSyncMVStmt createMaterializedViewStmt = (CreateSyncMVStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
         Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         List<AlterJobV2> alterJobV2List = new ArrayList<>(alterJobV2Map.values());

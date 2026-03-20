@@ -41,7 +41,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -331,7 +331,7 @@ public interface ConnectorMetadata {
     default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {
     }
 
-    default void createMaterializedView(CreateMaterializedViewStmt stmt)
+    default void createMaterializedView(CreateSyncMVStmt stmt)
             throws AnalysisException, DdlException {
     }
 

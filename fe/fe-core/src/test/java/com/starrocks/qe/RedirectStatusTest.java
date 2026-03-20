@@ -72,13 +72,13 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -936,13 +936,13 @@ public class RedirectStatusTest {
     }
 
     @Test
-    public void testCreateMaterializedViewStmt() {
-        // CreateMaterializedViewStmt requires: TableName, QueryStatement, Map<String,String>
+    public void testCreateSyncMVStmt() {
+        // CreateSyncMVStmt requires: TableName, QueryStatement, Map<String,String>
         // This test is simplified due to complex constructor
         TableName tableName = new TableName("catalog", "db", "mv");
         SelectRelation selectRelation = new SelectRelation(new SelectList(), null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
-        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(
+        CreateSyncMVStmt stmt = new CreateSyncMVStmt(
                 new TableRef(QualifiedName.of(Lists.newArrayList(
                         tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
                         null, NodePosition.ZERO), queryStatement,

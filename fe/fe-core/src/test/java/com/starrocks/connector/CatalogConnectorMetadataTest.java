@@ -25,7 +25,7 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
@@ -184,7 +184,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropPartition(null, null, null);
                 connectorMetadata.renamePartition(null, null, null);
                 connectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
-                connectorMetadata.createMaterializedView((CreateMaterializedViewStmt) null);
+                connectorMetadata.createMaterializedView((CreateSyncMVStmt) null);
                 connectorMetadata.dropMaterializedView(null);
                 connectorMetadata.alterMaterializedView(null);
                 connectorMetadata.refreshMaterializedView(null);
@@ -221,7 +221,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropPartition(null, null, null);
         catalogConnectorMetadata.renamePartition(null, null, null);
         catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStatement) null);
-        catalogConnectorMetadata.createMaterializedView((CreateMaterializedViewStmt) null);
+        catalogConnectorMetadata.createMaterializedView((CreateSyncMVStmt) null);
         catalogConnectorMetadata.dropMaterializedView(null);
         catalogConnectorMetadata.alterMaterializedView(null);
         catalogConnectorMetadata.refreshMaterializedView(null);
