@@ -37,12 +37,13 @@
 
 namespace starrocks::pipeline {
 
-Status FetchProcessor::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
+Status FetchProcessor::prepare(RuntimeState* state, std::shared_ptr<RuntimeProfile>& runtime_profile) {
     if (auto opt = get_backend_id(); opt.has_value()) {
         _local_be_id = opt.value();
     } else {
         return Status::InternalError("can't get local backend id");
     }
+    _runtime_profile = runtime_profile;
 
     runtime_profile->add_info_string("LookUpNode", std::to_string(_target_node_id));
     _build_row_id_chunk_timer = ADD_TIMER(runtime_profile, "BuildRowIdChunkTime");

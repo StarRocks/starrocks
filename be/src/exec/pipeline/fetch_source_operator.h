@@ -59,7 +59,6 @@ public:
     void close(RuntimeState* state) override {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
-    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
     bool support_event_scheduler() const override { return true; }
 
     void close_processor();
