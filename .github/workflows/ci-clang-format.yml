@@ -166,6 +166,6 @@ jobs:
             else
               echo "::error::Same-repo push failed unexpectedly. Check repository permissions."
             fi
-            echo "::error::To fix locally: if [ -f build-support/clang-format-changed.sh ] && [ -f build-support/format_changed_files.py ]; then CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh; else CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh; fi"
+            echo "::error::To fix locally: CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh"
             exit 1
           fi
