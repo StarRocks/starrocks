@@ -49,6 +49,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -99,7 +100,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             Map<String, String> properties) {
         this.storageVolumeName = storageVolumeName;
         this.automatedSnapshotIntervalSeconds = intervalSeconds;
-        this.properties = properties != null ? new java.util.HashMap<>(properties) : null;
+        this.properties = properties != null ? new HashMap<>(properties) : null;
     }
 
     public String getAutomatedSnapshotSvName() {
@@ -235,6 +236,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             }
 
             if (job.isFinished()) {
+                // Don't expire jobs that still have pending cleanup work
+                if (job instanceof ExternalClusterSnapshotJob
+                        && !((ExternalClusterSnapshotJob) job).isCleaningCompleted()) {
+                    continue;
+                }
                 job.setState(ClusterSnapshotJobState.EXPIRED);
                 job.logJob();
             }
@@ -368,7 +374,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
 
         boolean safe = true;
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        Map<Long, AlterJobV2> alterJobs = new HashMap<>(
+                GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2());
         alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
         for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
             AlterJobV2 alterJob = entry.getValue();

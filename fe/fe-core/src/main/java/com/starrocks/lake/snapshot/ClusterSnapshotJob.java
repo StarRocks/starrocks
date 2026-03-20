@@ -250,10 +250,9 @@ public class ClusterSnapshotJob implements Writable {
             throw new StarRocksException("checkpoint journal id for starMgr is smaller than image version");
         }
 
-        ClusterSnapshotInfo snapshotInfo = feController.getClusterSnapshotInfo();
-
         LOG.info("Finished create image for starMgr image, version: {}", starMgrCheckpointJournalId);
-        return snapshotInfo;
+
+        return feController.getClusterSnapshotInfo();
     }
 
     protected void runUploadingJob(SnapshotJobContext context) throws StarRocksException {

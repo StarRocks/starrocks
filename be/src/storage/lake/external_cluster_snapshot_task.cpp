@@ -208,7 +208,7 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
 
         // Get first tablet ID for log
         int64_t first_tablet_id = 0;
-        if (!request.compute_node_tablets.empty()) {
+        if (!request.compute_node_tablets.empty() && !request.compute_node_tablets[0].tablets.empty()) {
             first_tablet_id = request.compute_node_tablets[0].tablets[0];
         }
 

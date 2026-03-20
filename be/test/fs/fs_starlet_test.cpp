@@ -559,8 +559,10 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_true) {
     int64_t test_shard_id = 88888;
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
+        FileSystemHandle handle;
+        handle.file_system = mock_fs;
+        *fs_st = std::move(handle);
     });
 
     // Call with use_raw_path=true
@@ -574,8 +576,10 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_with_s3_raw_path_mode_false) {
     int64_t test_shard_id = 77777;
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
+        FileSystemHandle handle;
+        handle.file_system = mock_fs;
+        *fs_st = std::move(handle);
     });
 
     // Call with use_raw_path=false
@@ -591,8 +595,10 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_cache_hit) {
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         callback_count++;
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
+        FileSystemHandle handle;
+        handle.file_system = mock_fs;
+        *fs_st = std::move(handle);
     });
 
     // First call - should miss cache and create new filesystem
@@ -616,8 +622,10 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_separate_cache_for_modes) {
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         callback_count++;
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
+        FileSystemHandle handle;
+        handle.file_system = mock_fs;
+        *fs_st = std::move(handle);
     });
 
     // First call with raw path mode
@@ -646,7 +654,7 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_get_shard_filesystem_failure) {
     int64_t test_shard_id = 44444;
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
         *fs_st = absl::InternalError("Mock error: failed to get shard filesystem");
     });
 
@@ -667,8 +675,10 @@ TEST_F(NewFsStarletTest, test_new_fs_starlet_different_shard_ids) {
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
         callback_count++;
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<FileSystemHandle>*>(arg);
+        FileSystemHandle handle;
+        handle.file_system = mock_fs;
+        *fs_st = std::move(handle);
     });
 
     // Create filesystem for shard 1

@@ -19,6 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -99,8 +101,10 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
             return;
         }
 
+        retryPendingCleanup();
+
         setInterval(Config.automated_cluster_snapshot_schedule_interval_millisecond);
-        if (runningJob == null && 
+        if (runningJob == null &&
                 !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
             return;
         }
@@ -118,6 +122,55 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
                 runningJob = null;
             }
             CheckpointController.exclusiveUnlock();
+        }
+    }
+
+    /**
+     * Periodically check for FINISHED ExternalClusterSnapshotJobs whose cleaning was incomplete,
+     * and retry delete tasks. This runs outside the exclusive lock since it's independent of
+     * the main snapshot job lifecycle.
+     */
+    private void retryPendingCleanup() {
+        for (ClusterSnapshotJob job : GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                .getAutomatedSnapshotJobs().values()) {
+            if (!(job instanceof ExternalClusterSnapshotJob)) {
+                continue;
+            }
+            ExternalClusterSnapshotJob extJob = (ExternalClusterSnapshotJob) job;
+            if (!extJob.isFinished() || extJob.isCleaningCompleted()) {
+                continue;
+            }
+
+            try {
+                AgentBatchTask batchTask = extJob.getLakeSnapshotBatchTask();
+                if (batchTask.getTaskNum() > 0) {
+                    // Check if all tasks have received responses (finished or failed)
+                    boolean allResponded = batchTask.getAllTasks().stream()
+                            .allMatch(t -> t.isFinished() || t.isFailed());
+                    if (!allResponded) {
+                        // Some tasks still running, skip
+                        continue;
+                    }
+                    boolean anyFailed = batchTask.getAllTasks().stream().anyMatch(AgentTask::isFailed);
+                    if (!anyFailed) {
+                        extJob.setCleaningCompleted(true);
+                        LOG.info("Cleanup completed for snapshot job: {}", extJob.getId());
+                        continue;
+                    }
+                    LOG.info("Some cleanup tasks failed for job: {}, will retry", extJob.getId());
+                }
+
+                // (Re)create and dispatch delete tasks
+                if (extJob.getSnapshotDiff() == null) {
+                    LOG.warn("snapshotDiff is null for job: {}, marking cleaning as completed", extJob.getId());
+                    extJob.setCleaningCompleted(true);
+                    continue;
+                }
+                extJob.createDeleteClusterSnasphotTasks();
+                LOG.info("Dispatched cleanup retry tasks for snapshot job: {}", extJob.getId());
+            } catch (Exception e) {
+                LOG.warn("Failed to retry cleanup for snapshot job: {}", extJob.getId(), e);
+            }
         }
     }
 }
