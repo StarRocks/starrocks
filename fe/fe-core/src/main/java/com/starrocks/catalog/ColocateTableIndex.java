@@ -244,7 +244,8 @@ public class ColocateTableIndex implements Writable {
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         MetaUtils.getColumnsByColumnIds(tbl, distributionInfo.getDistributionColumns()),
                         distributionInfo.getBucketNum(),
-                        tbl.getDefaultReplicationNum());
+                        tbl.getDefaultReplicationNum(),
+                        distributionInfo.getType());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
             }
