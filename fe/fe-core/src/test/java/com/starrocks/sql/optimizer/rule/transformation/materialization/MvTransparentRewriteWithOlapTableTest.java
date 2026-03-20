@@ -18,12 +18,23 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.schema.MTable;
+import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor.MvCopyFailurePolicy;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     private static MTable m1;
@@ -256,6 +268,52 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
                 }
             }
+        });
+    }
+
+    @Test
+    public void testTransparentRewritePreservesSemanticsWhenMvCopyLockFails() {
+        withPartialScanMv(() -> {
+            MaterializedView mv = getMv("test", "mv0");
+            long mvDbId = mv.getDbId();
+            long mvTableId = mv.getId();
+            new MockUp<Locker>() {
+                @Mock
+                public boolean tryLockTableWithIntensiveDbLock(Invocation invocation, Long dbId, Long tableId,
+                                                               LockType lockType, long timeout, TimeUnit unit) {
+                    if (lockType == LockType.READ && mvDbId == dbId && mvTableId == tableId) {
+                        return false;
+                    }
+                    return invocation.proceed(dbId, tableId, lockType, timeout, unit);
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ":UNION");
+            PlanTestBase.assertContains(plan, "mv0");
+            PlanTestBase.assertContains(plan, "m1");
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteBuildContextFailureFallsBackToOriginalScan() {
+        withPartialScanMv(() -> {
+            new MockUp<MvRewritePreprocessor>() {
+                @Mock
+                public MaterializationContext buildMaterializationContext(OptimizerContext context,
+                                                                         MaterializedView mv,
+                                                                         MvPlanContext mvPlanContext,
+                                                                         MvUpdateInfo mvUpdateInfo,
+                                                                         Set<Table> queryTables,
+                                                                         int level,
+                                                                         MvCopyFailurePolicy copyFailurePolicy) {
+                    return null;
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertNotContains(plan, ":UNION");
+            PlanTestBase.assertContains(plan, "mv0");
         });
     }
 
