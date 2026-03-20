@@ -3087,7 +3087,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。
+- 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
 
 ##### starlet_use_star_cache
@@ -3199,6 +3199,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：Data Cache 自动扩缩容时的最小有效容量。当需要调整的目标容量小于该值时，系统会直接将缓存空间调整为 `0`，以避免缓存空间过小导致频繁填充和淘汰带来负优化。
 - 引入版本：v3.3.0
+
+##### datacache_unified_instance_enable
+
+- 默认值：true
+- 类型：Bool
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，是否使用统一的 data cache 实例管理 internal catalog 和 external catalog 的数据缓存。
+- 引入版本：v3.4.0
 
 ##### disk_high_level
 
