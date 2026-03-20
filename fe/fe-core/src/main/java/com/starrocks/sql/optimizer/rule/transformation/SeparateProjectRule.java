@@ -15,11 +15,18 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 // SeparateProjectRule is used to separate the projection from Operator and construct
 // a LogicalProjectOperator which resides above the Operator from the projection.
@@ -43,9 +50,39 @@ public class SeparateProjectRule implements TreeRewriteRule {
             // Clear statistics to recompute statistics when calculating statistics later,
             // because some operators only recompute statistics when statistics is null.
             root.setStatistics(null);
-            return OptExpression.create(new LogicalProjectOperator(projection.getColumnRefMap()), root);
+
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+                    filterProjectionByAvailableColumns(operator, projection);
+            if (columnRefMap.isEmpty()) {
+                return root;
+            }
+            return OptExpression.create(new LogicalProjectOperator(columnRefMap), root);
         } else {
             return root;
         }
+    }
+
+    /**
+     * After column pruning removes columns from an operator's base output (e.g. Union's
+     * outputColumnRefOp), the embedded projection may still reference those pruned columns.
+     * Filter out such stale entries to prevent creating a Project that references
+     * columns unavailable from its child.
+     */
+    private Map<ColumnRefOperator, ScalarOperator> filterProjectionByAvailableColumns(
+            Operator operator, Projection projection) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
+        if (!(operator instanceof LogicalSetOperator)) {
+            return columnRefMap;
+        }
+        ColumnRefSet availableColumns =
+                new ColumnRefSet(((LogicalSetOperator) operator).getOutputColumnRefOp());
+        Map<ColumnRefOperator, ScalarOperator> filtered = new LinkedHashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+            ColumnRefSet usedCols = entry.getValue().getUsedColumns();
+            if (availableColumns.containsAll(usedCols)) {
+                filtered.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return filtered;
     }
 }

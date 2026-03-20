@@ -19,14 +19,18 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class PruneUnionColumnsRule extends TransformationRule {
@@ -47,6 +51,11 @@ public class PruneUnionColumnsRule extends TransformationRule {
                         .map(Lists::newArrayList)
                         .collect(Collectors.toList()))
                 .build();
+
+        // If the Union has an embedded projection, propagate required columns from
+        // projection expressions into the base output required set, and prune the
+        // projection entries that are no longer needed.
+        pruneProjectionAndPropagateRequired(luo, requiredOutputColumns);
 
         List<ColumnRefOperator> outputs = luo.getOutputColumnRefOp();
 
@@ -95,5 +104,43 @@ public class PruneUnionColumnsRule extends TransformationRule {
         }
 
         return Collections.singletonList(OptExpression.create(luo, input.getInputs()));
+    }
+
+    /**
+     * When a Union has an embedded projection (e.g. from MV rewrite + MergeProjectWithChildRule),
+     * the projection's expressions reference the Union's base output columns. If we prune those
+     * base columns without considering the projection, a later SeparateProjectRule will create a
+     * Project that references columns no longer in the Union's output, causing an "Invalid plan" error.
+     *
+     * This method:
+     * 1. Keeps projection entries whose output column is required
+     * 2. Adds the base columns used by kept entries to requiredOutputColumns
+     * 3. Removes projection entries that are no longer needed
+     */
+    void pruneProjectionAndPropagateRequired(LogicalUnionOperator luo,
+                                                      ColumnRefSet requiredOutputColumns) {
+        Projection projection = luo.getProjection();
+        if (projection == null) {
+            return;
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = new HashMap<>();
+        ColumnRefSet baseColumnsNeededByProjection = new ColumnRefSet();
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+            if (requiredOutputColumns.contains(entry.getKey())) {
+                newColumnRefMap.put(entry.getKey(), entry.getValue());
+                baseColumnsNeededByProjection.union(entry.getValue().getUsedColumns());
+            }
+        }
+
+        requiredOutputColumns.union(baseColumnsNeededByProjection);
+
+        if (newColumnRefMap.isEmpty()) {
+            luo.setProjection(null);
+        } else if (newColumnRefMap.size() != columnRefMap.size()) {
+            luo.setProjection(new Projection(newColumnRefMap));
+        }
     }
 }
