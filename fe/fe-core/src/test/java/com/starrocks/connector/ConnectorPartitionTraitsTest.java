@@ -136,8 +136,10 @@ public class ConnectorPartitionTraitsTest {
         try {
             PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"),
                     Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+            // The DecimalLiteral creates the narrowest type that fits the value,
+            // so DECIMAL32(4,1) is created for value "123.3" instead of DECIMAL64(18,6)
             Assertions.assertEquals(key.getKeys().get(0).getType(),
-                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 4, 1));
         } catch (Exception e) {
             throw new RuntimeException("createPartitionKeyWithType failed", e);
         }
