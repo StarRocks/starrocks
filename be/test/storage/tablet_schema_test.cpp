@@ -338,4 +338,69 @@ TEST(TabletSchemaTest, test_partial_schema_create_keeps_pk_encoding_type) {
     ASSERT_EQ(partial_pb.primary_key_encoding_type(), PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 }
 
+// Test that partial schema has consistent num_short_key_columns when sort key columns
+// are not in the referenced columns (e.g. column-mode partial update on table with ORDER BY).
+TEST(TabletSchemaTest, test_partial_schema_short_key_consistency_with_separate_sort_key) {
+    // Build a PK table schema: pk=k0, ORDER BY(k3, k2), num_short_key_columns=2
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_num_short_key_columns(2);
+
+    auto c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("k0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("k1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+
+    auto c2 = schema_pb.add_column();
+    c2->set_unique_id(2);
+    c2->set_name("k2");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+
+    auto c3 = schema_pb.add_column();
+    c3->set_unique_id(3);
+    c3->set_name("k3");
+    c3->set_type("INT");
+    c3->set_is_key(false);
+
+    auto c4 = schema_pb.add_column();
+    c4->set_unique_id(4);
+    c4->set_name("k4");
+    c4->set_type("INT");
+    c4->set_is_key(false);
+
+    // Set sort key to (k3, k2) — separate from primary key (k0)
+    schema_pb.add_sort_key_idxes(3);
+    schema_pb.add_sort_key_idxes(2);
+
+    auto src_schema = TabletSchema::create(schema_pb);
+    ASSERT_NE(src_schema, nullptr);
+    ASSERT_EQ(src_schema->num_short_key_columns(), 2);
+    ASSERT_EQ(src_schema->sort_key_idxes().size(), 2);
+
+    // Create partial schema with only [k0, k4] — no sort key columns included
+    auto partial_schema = TabletSchema::create(src_schema, {0, 4});
+    ASSERT_NE(partial_schema, nullptr);
+    // num_short_key_columns must not exceed sort_key_idxes.size()
+    ASSERT_LE(partial_schema->num_short_key_columns(), partial_schema->sort_key_idxes().size());
+
+    // Create partial schema with [k0, k2] — one of two sort key columns included
+    auto partial_schema2 = TabletSchema::create(src_schema, {0, 2});
+    ASSERT_NE(partial_schema2, nullptr);
+    ASSERT_LE(partial_schema2->num_short_key_columns(), partial_schema2->sort_key_idxes().size());
+
+    // Create partial schema with all sort keys [k0, k2, k3] — both sort key columns included
+    auto partial_schema3 = TabletSchema::create(src_schema, {0, 2, 3});
+    ASSERT_NE(partial_schema3, nullptr);
+    ASSERT_LE(partial_schema3->num_short_key_columns(), partial_schema3->sort_key_idxes().size());
+}
+
 } // namespace starrocks
