@@ -821,6 +821,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     _mem_tracker->release(closure->request_size);
 
     COUNTER_UPDATE(_ts_profile->client_rpc_timer, closure->latency());
+    _add_batch_counter.client_rpc_time_ns += closure->latency();
 
     if (closure->cntl.Failed()) {
         _cancelled = true;

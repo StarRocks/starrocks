@@ -14,6 +14,7 @@
 
 #include "exec/tablet_sink_sender.h"
 
+#include <limits>
 #include <utility>
 
 #include "column/chunk.h"
@@ -347,6 +348,13 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
 
     int64_t total_server_rpc_time_us = 0;
     int64_t total_server_wait_memtable_flush_time_us = 0;
+    int64_t total_client_rpc_time_ns = 0;
+    int64_t min_server_rpc_time_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_server_rpc_time_ns = std::numeric_limits<int64_t>::min();
+    int64_t min_server_wait_flush_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_server_wait_flush_ns = std::numeric_limits<int64_t>::min();
+    int64_t min_client_rpc_time_ns = std::numeric_limits<int64_t>::max();
+    int64_t max_client_rpc_time_ns = std::numeric_limits<int64_t>::min();
     // print log of add batch time of all node, for tracing load performance easily
     std::stringstream ss;
     ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
@@ -354,11 +362,33 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
     for (auto const& pair : node_add_batch_counter_map) {
         total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
         total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        total_client_rpc_time_ns += pair.second.client_rpc_time_ns;
+
+        int64_t server_rpc_ns = pair.second.add_batch_execution_time_us * 1000;
+        min_server_rpc_time_ns = std::min(min_server_rpc_time_ns, server_rpc_ns);
+        max_server_rpc_time_ns = std::max(max_server_rpc_time_ns, server_rpc_ns);
+
+        int64_t server_wait_flush_ns = pair.second.add_batch_wait_memtable_flush_time_us * 1000;
+        min_server_wait_flush_ns = std::min(min_server_wait_flush_ns, server_wait_flush_ns);
+        max_server_wait_flush_ns = std::max(max_server_wait_flush_ns, server_wait_flush_ns);
+
+        min_client_rpc_time_ns = std::min(min_client_rpc_time_ns, pair.second.client_rpc_time_ns);
+        max_client_rpc_time_ns = std::max(max_client_rpc_time_ns, pair.second.client_rpc_time_ns);
+
         ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
            << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
     }
     COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
     COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
+
+    if (!node_add_batch_counter_map.empty()) {
+        ts_profile->server_rpc_timer->set_min(min_server_rpc_time_ns);
+        ts_profile->server_rpc_timer->set_max(max_server_rpc_time_ns);
+        ts_profile->server_wait_flush_timer->set_min(min_server_wait_flush_ns);
+        ts_profile->server_wait_flush_timer->set_max(max_server_wait_flush_ns);
+        ts_profile->client_rpc_timer->set_min(min_client_rpc_time_ns);
+        ts_profile->client_rpc_timer->set_max(max_client_rpc_time_ns);
+    }
     LOG(INFO) << ss.str();
 
     ExprExecutor::close(_output_expr_ctxs, state);

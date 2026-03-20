@@ -58,8 +58,8 @@ struct AddBatchCounter {
     int64_t add_batch_wait_lock_time_us = 0;
     // number of add_batch call
     int64_t add_batch_num = 0;
-    // total time of client rpc
-    int64_t client_prc_time_us = 0;
+    // total time of client rpc (in nanoseconds)
+    int64_t client_rpc_time_ns = 0;
     // total time of wait memtable flush
     int64_t add_batch_wait_memtable_flush_time_us = 0;
 
@@ -68,6 +68,7 @@ struct AddBatchCounter {
         add_batch_wait_lock_time_us += rhs.add_batch_wait_lock_time_us;
         add_batch_num += rhs.add_batch_num;
         add_batch_wait_memtable_flush_time_us += rhs.add_batch_wait_memtable_flush_time_us;
+        client_rpc_time_ns += rhs.client_rpc_time_ns;
         return *this;
     }
     friend AddBatchCounter operator+(const AddBatchCounter& lhs, const AddBatchCounter& rhs) {
