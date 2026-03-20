@@ -56,6 +56,8 @@ jobs:
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
           FORMAT_BASE_REF: upstream/${{ github.base_ref }}
+          BASE_REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           fetched_files=(
             "build-support/format_changed_files.py"
@@ -69,9 +71,25 @@ jobs:
           }
           trap cleanup EXIT
 
+          pr_changed_paths=$(
+            git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD" | sort -u
+          )
+
           for path in "${fetched_files[@]}"; do
             mkdir -p "$(dirname "${helper_dir}/${path}")"
-            git show "upstream/main:${path}" > "${helper_dir}/${path}"
+            if [[ "${HEAD_REPO}" == "${BASE_REPO}" ]] && printf '%s\n' "${pr_changed_paths}" | grep -Fxq "${path}"; then
+              if [[ -L "${path}" ]]; then
+                echo "::error::Refusing to load helper from symlinked path ${path}"
+                exit 1
+              fi
+              if [[ ! -f "${path}" ]]; then
+                echo "::error::Expected helper file ${path} to exist in the PR workspace"
+                exit 1
+              fi
+              cp "${path}" "${helper_dir}/${path}"
+            else
+              git show "upstream/main:${path}" > "${helper_dir}/${path}"
+            fi
           done
 
           excludes_file="${helper_dir}/build-support/excludes"
