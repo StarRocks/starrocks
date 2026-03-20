@@ -26,6 +26,7 @@ import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
@@ -77,5 +78,68 @@ public class IcebergCatalogTest {
 
         Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
         Assertions.assertTrue(partitions.isEmpty());
+    }
+
+    @Test
+    public void testGetPartitionsAcceptsIntegerStatsColumns() {
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class, Mockito.CALLS_REAL_METHODS);
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec currentSpec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(currentSpec.isUnpartitioned()).thenReturn(false);
+        Mockito.when(nativeTable.spec()).thenReturn(currentSpec);
+        Mockito.when(nativeTable.specs()).thenReturn(ImmutableMap.of(1, currentSpec));
+        Mockito.when(nativeTable.name()).thenReturn("db.tbl");
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.snapshotId()).thenReturn(10L);
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTable", "iceberg_catalog",
+                "resource", "db", "tbl", "", Lists.newArrayList(), nativeTable, Maps.newHashMap());
+
+        PartitionsTable partitionsTable = Mockito.mock(PartitionsTable.class);
+        TableScan scan = Mockito.mock(TableScan.class);
+        Mockito.when(partitionsTable.newScan()).thenReturn(scan);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DataTask dataTask = Mockito.mock(DataTask.class);
+        StructLike row = Mockito.mock(StructLike.class);
+        StructProjection partitionData = Mockito.mock(StructProjection.class);
+        Mockito.when(task.asDataTask()).thenReturn(dataTask);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_DATA_COLUMN_INDEX, StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row.get(IcebergCatalog.SPEC_ID_COLUMN_INDEX, Integer.class)).thenReturn(1);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_LAST_UPDATED_AT_COLUMN_INDEX, Long.class)).thenReturn(123L);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(7);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(2);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_TOTAL_DATA_FILE_SIZE_COLUMN_INDEX, Number.class)).thenReturn(99L);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_POSITION_DELETE_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_POSITION_DELETE_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_EQUALITY_DELETE_RECORD_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+        Mockito.when(row.get(IcebergCatalog.PARTITION_EQUALITY_DELETE_FILE_COUNT_COLUMN_INDEX, Number.class)).thenReturn(0);
+
+        CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(Lists.newArrayList(row));
+        Mockito.when(dataTask.rows()).thenReturn(rowIterable);
+
+        CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(Lists.newArrayList(task));
+        Mockito.when(scan.planFiles()).thenReturn(taskIterable);
+
+        new MockUp<MetadataTableUtils>() {
+            @Mock
+            public Table createMetadataTableInstance(Table table, MetadataTableType type) {
+                return partitionsTable;
+            }
+        };
+
+        new MockUp<com.starrocks.connector.PartitionUtil>() {
+            @Mock
+            public String convertIcebergPartitionToPartitionName(Table table, PartitionSpec spec,
+                                                                 StructProjection partition) {
+                return "dt=2023-12-04";
+            }
+        };
+
+        Map<String, Partition> partitions = catalog.getPartitions(icebergTable, -1, null);
+        Partition partition = partitions.get("dt=2023-12-04");
+        Assertions.assertNotNull(partition);
+        Assertions.assertTrue(partition.getVersion() >= 0);
     }
 }
