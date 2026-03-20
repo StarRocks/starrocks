@@ -44,6 +44,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <StaticFEConfigNote />
 
+<<<<<<< HEAD
 ## FE パラメーターについて
 
 ### ロギング
@@ -4404,3 +4405,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.5.8
 
 <EditionSpecificFEItem />
+=======
+## パラメータグループ
+
+パラメータは以下のカテゴリに分類されています：
+
+- [ログ](./FE_parameters/log_server_meta.md)
+- [サーバー](./FE_parameters/log_server_meta.md)
+- [メタデータおよびクラスタ管理](./FE_parameters/log_server_meta.md)
+- [ユーザー、ロール、および権限](./FE_parameters/user_query_loading.md)
+- [クエリエンジン](./FE_parameters/user_query_loading.md)
+- [ロードおよびアンロード](./FE_parameters/user_query_loading.md)
+- [統計レポート](./FE_parameters/stats_storage.md)
+- [ストレージ](./FE_parameters/stats_storage.md)
+- [共有データ](./FE_parameters/shared_lake_other.md)
+- [データレイク](./FE_parameters/shared_lake_other.md)
+>>>>>>> 3d92429d93 ([Doc] FE config doc too large (#70474))
