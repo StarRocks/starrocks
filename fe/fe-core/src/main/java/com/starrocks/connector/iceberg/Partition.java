@@ -20,11 +20,8 @@ import java.util.concurrent.TimeUnit;
 
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
-<<<<<<< HEAD
-=======
     private final long version;
     private int specId;
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
 
     @Override
     public long getModifiedTime() {
@@ -41,10 +38,11 @@ public class Partition implements PartitionInfo {
         return TimeUnit.MICROSECONDS;
     }
 
+    public int getSpecId() {
+        return specId;
+    }
+
     public Partition(long modifiedTime) {
-<<<<<<< HEAD
-        this.modifiedTime = modifiedTime;
-=======
         this(modifiedTime, modifiedTime, -1);
     }
 
@@ -60,6 +58,5 @@ public class Partition implements PartitionInfo {
         this.modifiedTime = modifiedTime;
         this.version = version;
         this.specId = specId;
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
     }
 }

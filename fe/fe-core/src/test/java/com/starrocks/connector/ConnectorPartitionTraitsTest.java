@@ -17,17 +17,19 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
@@ -39,16 +41,10 @@ import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
+import com.starrocks.sql.common.PCell;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -128,8 +124,6 @@ public class ConnectorPartitionTraitsTest {
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
         Assertions.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testIcebergTable(@Mocked org.apache.iceberg.Table nativeTable) {
@@ -141,9 +135,9 @@ public class ConnectorPartitionTraitsTest {
         Assertions.assertEquals(connectorPartitionTraits.getTableName(), "icebergTable");
         try {
             PartitionKey key = connectorPartitionTraits.createPartitionKeyWithType(Lists.newArrayList("123.3"),
-                    Lists.newArrayList(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
+                    Lists.newArrayList(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6)));
             Assertions.assertEquals(key.getKeys().get(0).getType(),
-                    TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
+                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6));
         } catch (Exception e) {
             throw new RuntimeException("createPartitionKeyWithType failed", e);
         }
@@ -183,12 +177,12 @@ public class ConnectorPartitionTraitsTest {
             }
 
             @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
                 return null;
             }
 
             @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
                 return null;
             }
 
@@ -261,12 +255,12 @@ public class ConnectorPartitionTraitsTest {
             }
 
             @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
                 return null;
             }
 
             @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
                 return null;
             }
 
@@ -342,12 +336,12 @@ public class ConnectorPartitionTraitsTest {
             }
 
             @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+            public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
                 return null;
             }
 
             @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
+            public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
                 return null;
             }
 
@@ -388,5 +382,4 @@ public class ConnectorPartitionTraitsTest {
         Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
         Assertions.assertEquals(Set.of(), updated);
     }
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
 }

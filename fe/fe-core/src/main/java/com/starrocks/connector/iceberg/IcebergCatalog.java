@@ -338,16 +338,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             String partitionName =
                                     PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
                             long lastUpdated =
-<<<<<<< HEAD
-                                    getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                            Partition partition = new Partition(lastUpdated);
-=======
                                     getPartitionLastUpdatedTime(icebergTable, row, PARTITION_LAST_UPDATED_AT_COLUMN_INDEX,
                                             partitionName, snapshotId);
                             long version = getPartitionVersion(icebergTable, row,
                                     PARTITION_LAST_UPDATED_SNAPSHOT_ID_COLUMN_INDEX, partitionName, snapshotId);
                             Partition partition = new Partition(lastUpdated, version, specId);
->>>>>>> d001e92d71 ([BugFix] Make Iceberg MV refresh tolerate non-monotonic snapshot timestamps (#70382))
                             partitionMap.put(partitionName, partition);
                         }
                     }
