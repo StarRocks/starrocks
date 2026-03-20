@@ -475,7 +475,20 @@
                         "id": "administration/management/configuration"
                     },
                     "items": [
-                        "administration/management/FE_configuration",
+                        {
+                            "type": "category",
+                            "label": "FE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/FE_configuration"
+                            },
+                            "items": [
+                                "administration/management/FE_parameters/log_server_meta",
+                                "administration/management/FE_parameters/user_query_loading",
+                                "administration/management/FE_parameters/stats_storage",
+                                "administration/management/FE_parameters/shared_lake_other"
+                            ]
+                        },
                         "administration/management/BE_configuration"
                 ]
                 },
