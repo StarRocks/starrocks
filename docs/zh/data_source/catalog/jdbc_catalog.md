@@ -57,8 +57,18 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | password     | 目标数据库用户登录密码。                                     |
 | jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。 |
 | driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE（或 CN）所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
-| driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
+| driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
 | schema_resolver | （可选）显式指定要使用的 Schema Resolver。有效值：`postgresql`、`mysql`、`oracle`、`sqlserver`、`clickhouse`。当使用非标准 JDBC 驱动程序且无法通过驱动类名自动检测时，请使用此参数。如果未指定，StarRocks 将根据 `driver_class` 参数自动检测相应的 Resolver。 |
+
+#### 可选 Oracle 属性
+
+当 `driver_class` 设置为 Oracle 时，您可以配置以下可选属性：
+
+| **参数**                        | **默认**    | **描述**                                                                                                       |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| oracle.number.default-scale    | 6           | 当 Oracle `NUMBER` 元数据未明确指定精度和规模时，请设置此参数。有效范围：`0` 至 `38`。                                  |
+| oracle.temporal.to-datetime    | false       | 控制 Oracle `DATE`、`TIMESTAMP` 和 `TIMESTAMP WITH LOCAL TIME ZONE` 的映射。如果设置为 `true`，这些数据类型将映射到 StarRocks 的 `DATETIME` 类型；否则，`DATE` 保持为 `DATE`，而 `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` 将映射到 `VARCHAR(64)`。 |
+| oracle.timestamptz.to-datetime | false       | 控制 Oracle `TIMESTAMP WITH TIME ZONE` 的映射。如果设置为 `true`，则映射为 StarRocks 的 `DATETIME` 类型；否则，则映射为 `VARCHAR(64)`。 |
 
 > **说明**
 >
@@ -101,6 +111,20 @@ PROPERTIES
     "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521:ORCL",
     "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
     "driver_class"="oracle.jdbc.driver.OracleDriver"
+);
+-- Oracle (with Oracle-specific optional properties)
+CREATE EXTERNAL CATALOG jdbc2_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="root",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:oracle:thin:@127.0.0.1:1521/ORCLPDB1",
+    "driver_url"="https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc10/19.18.0.0/ojdbc10-19.18.0.0.jar",
+    "driver_class"="oracle.jdbc.driver.OracleDriver",
+    "oracle.number.default-scale"="6",
+    "oracle.temporal.to-datetime"="true",
+    "oracle.timestamptz.to-datetime"="true"
 );
 -- SQL Server
 CREATE EXTERNAL CATALOG jdbc3
