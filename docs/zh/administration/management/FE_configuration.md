@@ -44,6 +44,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <StaticFEConfigNote />
 
+<<<<<<< HEAD
 ## 理解 FE 参数
 
 ### 日志
@@ -4650,3 +4651,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.0.0
 
 <EditionSpecificFEItem />
+=======
+## 参数组
+
+参数分为以下几类：
+
+- [日志](./FE_parameters/log_server_meta.md)
+- [服务器](./FE_parameters/log_server_meta.md)
+- [元数据和集群管理](./FE_parameters/log_server_meta.md)
+- [用户、角色和权限](./FE_parameters/user_query_loading.md)
+- [查询引擎](./FE_parameters/user_query_loading.md)
+- [加载与卸载](./FE_parameters/user_query_loading.md)
+- [统计报告](./FE_parameters/stats_storage.md)
+- [存储](./FE_parameters/stats_storage.md)
+- [共享数据](./FE_parameters/shared_lake_other.md)
+- [数据湖](./FE_parameters/shared_lake_other.md)
+>>>>>>> 3d92429d93 ([Doc] FE config doc too large (#70474))
