@@ -2716,7 +2716,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "MVRefreshSyncPartitionsRetryTimes",
                             "MVTimelinessUpdateInfo",
                             "MVQueryContextCacheStats",
-                            "MVQueryCacheStats"
+                            "MVQueryCacheStats",
+                            "CollectBaseTableUpdatePartitionNames"
                     );
                     for (Map.Entry<String, String> e : result.entrySet()) {
                         logSysInfo(e.getKey() + ": " + e.getValue());
