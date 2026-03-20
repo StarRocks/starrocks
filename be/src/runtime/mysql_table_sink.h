@@ -74,7 +74,7 @@ public:
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
 
 private:
-    ObjectPool* _pool;
+    [[maybe_unused]] ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;
 #ifndef __APPLE__
     int _chunk_size;

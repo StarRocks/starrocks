@@ -242,6 +242,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(3);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;
@@ -263,6 +264,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
+            _column_child_type = static_cast<LogicalType>(meta->children_columns(0).type());
             _sub_readers->reserve(2);
 
             auto sub_column = (column != nullptr) ? column->subcolumn_ptr(0) : nullptr;

@@ -27,11 +27,7 @@ namespace {
 
 // Reset jemalloc arena state by purging unused memory
 static void reset_arena_state() {
-#ifdef __APPLE__
-#define JEMALLOC_CTL mallctl
-#else
 #define JEMALLOC_CTL je_mallctl
-#endif
     char buffer[100];
     // MALLCTL_ARENAS_ALL is defined as 4096 in jemalloc.h, representing all arenas
     // Use the value directly if the macro is not available

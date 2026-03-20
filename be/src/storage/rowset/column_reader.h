@@ -258,7 +258,7 @@ private:
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
-    LogicalType _column_child_type = TYPE_UNKNOWN;
+    [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
