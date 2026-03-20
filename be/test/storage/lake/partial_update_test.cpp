@@ -2245,5 +2245,4 @@ TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
 }
 
-
 } // namespace starrocks::lake
