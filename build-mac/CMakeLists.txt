@@ -786,8 +786,10 @@ message(STATUS "Apple frameworks configured for brpc support")
 # Include all source directories
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/include)
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/override)
+# Build-tree generated proto/thrift headers must come BEFORE be/src/ so they
+# shadow the stale copies that may exist under be/src/gen_cpp/.
+include_directories(BEFORE ${BE_PROTO_THRIFT_GENSRC_DIR})
 include_directories(${SRC_DIR})
-include_directories(${BE_PROTO_THRIFT_GENSRC_DIR})
 include_directories(${GENSRC_DIR})
 include_directories(${BASE_DIR}/build)
 include_directories(${THIRDPARTY_DIR}/installed/include)
@@ -823,6 +825,10 @@ set(STARROCKS_SOURCE_DIRS
 # Create a library for all StarRocks sources
 file(GLOB_RECURSE STARROCKS_SOURCES
     ${SRC_DIR}/agent/*.cpp
+    ${SRC_DIR}/base/*.cpp
+    ${SRC_DIR}/base/*.cc
+    ${SRC_DIR}/base/**/*.cpp
+    ${SRC_DIR}/base/**/*.cc
     ${SRC_DIR}/common/*.cpp
     ${SRC_DIR}/column/*.cpp
     ${SRC_DIR}/exec/*.cpp
@@ -860,6 +866,10 @@ file(GLOB_RECURSE STARROCKS_SOURCES
 
 # Exclude generated sources under gen_cpp to avoid duplicate compilation
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/gen_cpp/.*")
+
+# Exclude jemalloc allocator — homebrew jemalloc uses symbol renaming macros
+# that are incompatible with the je_* prefixed calls in this file
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/base/memory/jemalloc_allocator\\.cpp$")
 
 # Avoid compiling aggregate operator helper sources twice; aggregate_operators.cpp
 # already includes the individual operator implementations.

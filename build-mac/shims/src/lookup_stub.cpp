@@ -25,14 +25,10 @@ namespace starrocks {
 
 // LookUpNode stubs
 LookUpNode::LookUpNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs) {}
+        : PipelineNode(pool, tnode, descs) {}
 LookUpNode::~LookUpNode() = default;
 
 Status LookUpNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    return Status::NotSupported("LookUpNode is disabled on macOS");
-}
-
-Status LookUpNode::prepare(RuntimeState* state) {
     return Status::NotSupported("LookUpNode is disabled on macOS");
 }
 
@@ -57,9 +53,10 @@ pipeline::OpFactories FetchNode::decompose_to_pipeline(pipeline::PipelineBuilder
 }
 
 // LookUpDispatcherMgr stubs
-LookUpDispatcherPtr LookUpDispatcherMgr::create_dispatcher(RuntimeState* /*state*/, const TUniqueId& /*query_id*/,
+LookUpDispatcherPtr LookUpDispatcherMgr::create_dispatcher(const TUniqueId& /*query_id*/,
                                                            PlanNodeId /*target_node_id*/,
-                                                           const std::vector<TupleId>& /*request_tuple_ids*/) {
+                                                           const std::vector<TupleId>& /*request_tuple_ids*/,
+                                                           int64_t /*rpc_ref_cnt*/) {
     return nullptr;
 }
 
@@ -68,9 +65,11 @@ StatusOr<LookUpDispatcherPtr> LookUpDispatcherMgr::get_dispatcher(const TUniqueI
     return Status::NotSupported("Lookup is disabled on macOS");
 }
 
-void LookUpDispatcherMgr::remove_dispatcher(const TUniqueId& /*query_id*/, PlanNodeId /*target_node_id*/) {}
-
 Status LookUpDispatcherMgr::lookup(const pipeline::RemoteLookUpRequestContextPtr& /*ctx*/) {
+    return Status::NotSupported("Lookup is disabled on macOS");
+}
+
+Status LookUpDispatcherMgr::lookup_close(const TUniqueId& /*query_id*/, PlanNodeId /*target_node_id*/) {
     return Status::NotSupported("Lookup is disabled on macOS");
 }
 
@@ -81,7 +80,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr /*chunk*/) {
     return Status::NotSupported("Lookup is disabled on macOS");
 }
 
-StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& /*result_chunk*/, SlotId /*source_id_slot*/,
+StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& /*result_chunk*/,
                                                            const std::vector<SlotDescriptor*>& /*slots*/,
                                                            size_t /*start_offset*/) {
     return Status::NotSupported("Lookup is disabled on macOS");

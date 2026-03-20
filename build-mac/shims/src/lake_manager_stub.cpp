@@ -17,6 +17,7 @@
 
 #include <string_view>
 
+#include "base/container/lru_cache.h"
 #include "common/status.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -155,6 +156,17 @@ void LakePersistentIndexParallelCompactMgr::shutdown() {}
 
 Status LakePersistentIndexParallelCompactMgr::update_max_threads(int /*max_threads*/) {
     return Status::NotSupported("Lake storage is disabled on macOS");
+}
+
+// Rowset stubs (vtable anchor for dynamic_cast)
+Rowset::~Rowset() = default;
+
+RowsetId Rowset::rowset_id() const {
+    return RowsetId();
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    return {};
 }
 
 } // namespace starrocks::lake
