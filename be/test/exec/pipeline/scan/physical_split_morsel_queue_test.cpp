@@ -56,6 +56,10 @@ TEST_F(PhysicalSplitMorselQueueTest, test_empty_rowset) {
     tablet_rowsets.emplace_back(); // Empty rowsets for the tablet
     queue.set_tablet_rowsets(tablet_rowsets);
 
+    // Set a non-null tablet schema to avoid null dereference in _init_segment
+    auto tablet_schema = std::make_shared<TabletSchema>();
+    queue.set_tablet_schema(tablet_schema);
+
     // Call try_get, this should not crash with empty rowsets
     auto result = queue.try_get();
     ASSERT_TRUE(result.ok());
