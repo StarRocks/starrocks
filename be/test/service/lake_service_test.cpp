@@ -2898,6 +2898,26 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(0, response.tablet_stats_size());
 }
 
+TEST_F(LakeServiceTest, test_get_tablet_stats_null_thread_pool) {
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:thread_pool",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:thread_pool");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    brpc::Controller cntl;
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(1);
+    _lake_service.get_tablet_stats(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("lake metadata fetch thread pool is null", cntl.ErrorText());
+}
+
 // Verify that DUP_KEYS tablet stats are computed correctly without involving
 // get_rowset_num_deletes() (which is only meaningful for PK tablets).
 TEST_F(LakeServiceTest, test_get_tablet_stats_dup_keys_no_delvec) {
@@ -4038,11 +4058,11 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
 
     // 2. thread pool is null
     {
-        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
-                                              [](void* arg) { *(ThreadPool**)arg = nullptr; });
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_metadatas:thread_pool",
+                                              [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_metadatas:thread_pool");
             SyncPoint::GetInstance()->DisableProcessing();
         });
 
@@ -4055,7 +4075,7 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
-        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "tablet stats thread pool is null"));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "lake metadata fetch thread pool is null"));
     }
 
     // 3. success case
