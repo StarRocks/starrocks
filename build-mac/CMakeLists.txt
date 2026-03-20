@@ -152,12 +152,16 @@ set(PROTOBUF_INCLUDE_DIR "${PROTOBUF_HOME}/include" CACHE PATH "protobuf include
 set(PROTOBUF_PROTOC_EXECUTABLE "${PROTOBUF_HOME}/bin/protoc" CACHE FILEPATH "protoc" FORCE)
 set(STARROCKS_PROTOC_EXECUTABLE "${PROTOBUF_PROTOC_EXECUTABLE}")
 if(NOT EXISTS "${STARROCKS_PROTOC_EXECUTABLE}")
-    find_program(STARROCKS_PROTOC_EXECUTABLE NAMES protoc REQUIRED)
+    message(FATAL_ERROR
+            "macOS BE builds require the bundled protoc at ${STARROCKS_PROTOC_EXECUTABLE} "
+            "(libprotoc 3.14.0). Host protoc on PATH is not supported.")
 endif()
 
 set(STARROCKS_THRIFT_EXECUTABLE "${THIRDPARTY_DIR}/installed/bin/thrift")
 if(NOT EXISTS "${STARROCKS_THRIFT_EXECUTABLE}")
-    find_program(STARROCKS_THRIFT_EXECUTABLE NAMES thrift REQUIRED)
+    message(FATAL_ERROR
+            "macOS BE builds require the bundled thrift at ${STARROCKS_THRIFT_EXECUTABLE}. "
+            "Host thrift on PATH is not supported.")
 endif()
 
 # Create protobuf target - STATIC ONLY to avoid dynamic linking issues

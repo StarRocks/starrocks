@@ -53,6 +53,65 @@ starrocks_resolve_tool_command() {
     command -v "${tool_name}" 2>/dev/null
 }
 
+starrocks_should_require_bundled_codegen_tools() {
+    local build_be="${1:-0}"
+    local build_format_lib="${2:-0}"
+
+    if ! starrocks_is_darwin; then
+        return 1
+    fi
+
+    [[ "${build_be}" == "1" || "${build_format_lib}" == "1" ]]
+}
+
+starrocks_resolve_gensrc_tool() {
+    local tool_name="$1"
+    local require_bundled="${2:-0}"
+    local bundled_tool="${STARROCKS_THIRDPARTY}/installed/bin/${tool_name}"
+
+    if [[ -z "${tool_name}" ]]; then
+        return 1
+    fi
+
+    if [[ "${require_bundled}" == "1" ]]; then
+        [[ -x "${bundled_tool}" ]] || return 1
+        echo "${bundled_tool}"
+        return 0
+    fi
+
+    if [[ -x "${bundled_tool}" ]]; then
+        echo "${bundled_tool}"
+        return 0
+    fi
+
+    starrocks_resolve_tool_command "${tool_name}"
+}
+
+starrocks_require_gensrc_tool() {
+    local tool_name="$1"
+    local require_bundled="${2:-0}"
+    local tool_path=""
+    local bundled_tool="${STARROCKS_THIRDPARTY}/installed/bin/${tool_name}"
+
+    if tool_path="$(starrocks_resolve_gensrc_tool "${tool_name}" "${require_bundled}")"; then
+        echo "${tool_path}"
+        return 0
+    fi
+
+    if [[ "${require_bundled}" == "1" ]]; then
+        if [[ "${tool_name}" == "protoc" ]]; then
+            echo "macOS BE and format-lib builds require ${bundled_tool} (libprotoc 3.14.0)." >&2
+        else
+            echo "macOS BE and format-lib builds require ${bundled_tool}." >&2
+        fi
+        echo "Host ${tool_name} on PATH is not supported because StarRocks must use the bundled generator." >&2
+        return 1
+    fi
+
+    echo "Can't find command tool '${tool_name}'!" >&2
+    return 1
+}
+
 starrocks_same_tool_binary() {
     local left_path="$1"
     local right_path="$2"

@@ -17,11 +17,21 @@ set(Boost_USE_STATIC_RUNTIME ON)
 
 set(STARROCKS_PROTOC_EXECUTABLE "${THIRDPARTY_DIR}/bin/protoc")
 if(NOT EXISTS "${STARROCKS_PROTOC_EXECUTABLE}")
+    if(APPLE)
+        message(FATAL_ERROR
+                "macOS BE builds require the bundled protoc at ${STARROCKS_PROTOC_EXECUTABLE} "
+                "(libprotoc 3.14.0). Host protoc on PATH is not supported.")
+    endif()
     find_program(STARROCKS_PROTOC_EXECUTABLE NAMES protoc REQUIRED)
 endif()
 
 set(STARROCKS_THRIFT_EXECUTABLE "${THIRDPARTY_DIR}/bin/thrift")
 if(NOT EXISTS "${STARROCKS_THRIFT_EXECUTABLE}")
+    if(APPLE)
+        message(FATAL_ERROR
+                "macOS BE builds require the bundled thrift at ${STARROCKS_THRIFT_EXECUTABLE}. "
+                "Host thrift on PATH is not supported.")
+    endif()
     find_program(STARROCKS_THRIFT_EXECUTABLE NAMES thrift REQUIRED)
 endif()
 

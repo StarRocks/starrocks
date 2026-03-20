@@ -411,23 +411,15 @@ echo "Get params:
     BUILD_BE_MODULE             -- $BUILD_BE_MODULE
 "
 
-check_tool()
-{
-    local toolname=$1
-    if [ -e $STARROCKS_THIRDPARTY/installed/bin/$toolname ] ; then
-        return 0
-    fi
-    if which $toolname &>/dev/null ; then
-        return 0
-    fi
-    return 1
-}
+require_bundled_codegen_tools=0
+if starrocks_should_require_bundled_codegen_tools "${BUILD_BE}" "${BUILD_FORMAT_LIB}"; then
+    require_bundled_codegen_tools=1
+fi
 
-# check protoc and thrift
+# Check protoc and thrift before any generator step can fall back to unsupported host binaries.
 for tool in protoc thrift
 do
-    if ! check_tool $tool ; then
-        echo "Can't find command tool '$tool'!"
+    if ! starrocks_require_gensrc_tool "$tool" "${require_bundled_codegen_tools}" >/dev/null; then
         exit 1
     fi
 done
