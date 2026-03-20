@@ -57,13 +57,17 @@ set enable_materialized_view_rewrite=false;
 CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- test normal refresh's result
+[UC]select inspect_mv_refresh_info("test_mv1");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 FORCE WITH SYNC MODE;
+-- test force refresh's result
+[UC]select inspect_mv_refresh_info("test_mv1");
 
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 
-[UC]select inspect_mv_refresh_info("test_mv1");
+alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv1");
 select count(1) from test_mv1;
@@ -117,8 +121,11 @@ select count(1) from test_mv1;
 CREATE MATERIALIZED VIEW test_mv2 
 REFRESH DEFERRED MANUAL AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
 
-alter table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} execute expire_snapshots(now());
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv2 FORCE WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv2");
 
 select count(1) from test_mv2;
 select count(1) from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
@@ -168,9 +175,12 @@ REFRESH DEFERRED MANUAL
 AS SELECT * FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 
-[UC]select inspect_mv_refresh_info("test_mv3");
 [UC]REFRESH MATERIALIZED VIEW test_mv3 WITH SYNC MODE;
 [UC]select inspect_mv_refresh_info("test_mv3");
+
+[UC]REFRESH MATERIALIZED VIEW test_mv3 FORCE WITH SYNC MODE;
+[UC]select inspect_mv_refresh_info("test_mv3");
+
 select count(1) from test_mv3;
 
 -- 1th time expire snapshot

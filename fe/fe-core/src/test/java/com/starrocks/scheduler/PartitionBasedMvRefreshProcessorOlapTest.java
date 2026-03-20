@@ -2714,6 +2714,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "MVRefreshLockRetryTimes",
                             "MVRefreshRetryTimes",
                             "MVRefreshSyncPartitionsRetryTimes",
+                            "MVTimelinessUpdateInfo",
                             "MVQueryContextCacheStats",
                             "MVQueryCacheStats"
                     );

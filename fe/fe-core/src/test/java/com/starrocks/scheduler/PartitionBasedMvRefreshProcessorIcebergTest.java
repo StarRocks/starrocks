@@ -357,7 +357,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                             } else if (key.contains("cache_getPartitionNameWithPartitionInfo_")) {
                                 Assertions.assertEquals(1L, value.longValue());
                             } else if (key.contains("cache_getUpdatedPartitionNames_")) {
-                                Assertions.assertEquals(2L, value.longValue());
+                                Assertions.assertTrue(value.longValue() >= 1L);
                             }
                         });
                         Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);

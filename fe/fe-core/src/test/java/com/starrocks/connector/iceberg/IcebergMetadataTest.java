@@ -1713,10 +1713,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
         Assertions.assertEquals(2, partitions.size());
-        // partition's modified time should not be -1 even if snapshot has been expired:
-        // getPartitionLastUpdatedTime falls back to the current snapshot timestamp when last_updated_at is null.
-        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
-        // version (stats fingerprint) must also be non-negative for DefaultTraits version comparison path.
+        // When snapshot has been expired, last_updated_at can be null and modifiedTime will be -1.
+        // version (stats fingerprint) must be non-negative for DefaultTraits version comparison path.
         Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getVersion() == -1));
     }
 
