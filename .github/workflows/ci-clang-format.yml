@@ -56,32 +56,70 @@ jobs:
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
           FORMAT_BASE_REF: upstream/${{ github.base_ref }}
-          FALLBACK_HELPER_REF: e8fb00c3b4346229d0916c9d6243b94a63d8237e
         run: |
           fetched_files=(
-            "build-support/clang-format-changed.sh"
             "build-support/format_changed_files.py"
             "build-support/run_clang_format.py"
             "build-support/lintutils.py"
             "build-support/excludes"
           )
-          helper_root=$(mktemp -d)
+          helper_dir=$(mktemp -d)
           cleanup() {
-            rm -rf "${helper_root}"
+            rm -rf "${helper_dir}"
           }
           trap cleanup EXIT
 
-          ln -s "${GITHUB_WORKSPACE}/.git" "${helper_root}/.git"
-          ln -s "${GITHUB_WORKSPACE}/be" "${helper_root}/be"
-          ln -s "${GITHUB_WORKSPACE}/.clang-format" "${helper_root}/.clang-format"
-
           for path in "${fetched_files[@]}"; do
-            mkdir -p "$(dirname "${helper_root}/${path}")"
-            git show "${FALLBACK_HELPER_REF}:${path}" > "${helper_root}/${path}"
+            mkdir -p "$(dirname "${helper_dir}/${path}")"
+            git show "upstream/main:${path}" > "${helper_dir}/${path}"
           done
 
-          chmod +x "${helper_root}/build-support/clang-format-changed.sh"
-          "${helper_root}/build-support/clang-format-changed.sh"
+          excludes_file="${helper_dir}/build-support/excludes"
+          source_dirs="${GITHUB_WORKSPACE}/be/src,${GITHUB_WORKSPACE}/be/test"
+
+          if ! git rev-parse --verify "${FORMAT_BASE_REF}" >/dev/null 2>&1; then
+            echo "${FORMAT_BASE_REF} not found; formatting all C++ files."
+            python3 "${helper_dir}/build-support/run_clang_format.py" \
+              --clang_format_binary="${CLANG_FORMAT_BINARY}" \
+              --fix \
+              --source_dirs="${source_dirs}" \
+              --exclude_globs="${excludes_file}"
+            exit 0
+          fi
+
+          changed_files=$(
+            {
+              git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD"
+              git diff --name-only --diff-filter=ACMR --cached -- be
+              git diff --name-only --diff-filter=ACMR -- be
+            } | sort -u
+          )
+
+          if [[ -z "${changed_files}" ]]; then
+            echo "No files changed since ${FORMAT_BASE_REF}."
+            exit 0
+          fi
+
+          tmpfile=$(mktemp)
+          trap 'rm -f "${tmpfile}"; rm -rf "${helper_dir}"' EXIT
+
+          python3 "${helper_dir}/build-support/format_changed_files.py" \
+            --repo_root "${GITHUB_WORKSPACE}" \
+            --exclude_globs "${excludes_file}" \
+            --source_dirs "${source_dirs}" \
+            --null < <(printf '%s\n' "${changed_files}") > "${tmpfile}"
+
+          if [[ ! -s "${tmpfile}" ]]; then
+            echo "No changed C++ files to format since ${FORMAT_BASE_REF}."
+            exit 0
+          fi
+
+          echo "C++ files to format:"
+          while IFS= read -r -d '' filename; do
+            echo "${filename}"
+          done < "${tmpfile}"
+
+          xargs -0 -n 16 "${CLANG_FORMAT_BINARY}" -style=file -i < "${tmpfile}"
 
       - name: Commit and push formatting fixes
         env:
