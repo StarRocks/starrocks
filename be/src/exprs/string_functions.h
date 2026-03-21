@@ -719,7 +719,7 @@ template <bool to_upper>
 struct StringCaseToggleFunction {
 public:
     template <LogicalType Type, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1);
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1);
 };
 
 template <LogicalType Type, bool scale_up, bool check_overflow>

@@ -97,7 +97,7 @@ struct CastFn {
     template <bool AllowThrowException>                                                                      \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                 \
         static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) {       \
-            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(allocator, column); \
         }                                                                                                    \
     };
 
@@ -109,14 +109,14 @@ struct CastFn {
                           std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
                 if constexpr (!AllowThrowException) {                                                                  \
                     return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE,    \
-                                                                                                         TO_TYPE>(     \
+                                                                                                         TO_TYPE>(allocator, \
                             column);                                                                                   \
                 } else {                                                                                               \
                     return VectorizedInputCheckUnaryFunction<                                                          \
-                            UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+                            UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<FROM_TYPE, TO_TYPE>(allocator, column); \
                 }                                                                                                      \
             }                                                                                                          \
-            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);           \
+            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(allocator, column);           \
         }                                                                                                              \
     };
 
@@ -124,7 +124,7 @@ struct CastFn {
     template <bool AllowThrowException>                                                                             \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                        \
         static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) {              \
-            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
+            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>(allocator, \
                     column);                                                                                        \
         }                                                                                                           \
     };
@@ -1211,10 +1211,10 @@ public:
                 ColumnPtr double_column;
                 if (context != nullptr && context->error_if_overflow()) {
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
-                            FromType, TYPE_DOUBLE>(column);
+                            FromType, TYPE_DOUBLE>(context->allocator(), column);
                 } else {
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
-                            FromType, TYPE_DOUBLE>(column);
+                            FromType, TYPE_DOUBLE>(context->allocator(), column);
                 }
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(allocator, std::move(double_column));
             } else {
@@ -1223,11 +1223,9 @@ public:
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
                 if (context != nullptr && context->error_if_overflow()) {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
-                            column, to_type.precision, to_type.scale);
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
                 } else {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                            column, to_type.precision, to_type.scale);
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
                 }
             } else {
                 result_column =
@@ -1236,27 +1234,21 @@ public:
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
                 return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
-                                                                                                       ToType>(
-                        column, to_type.precision, to_type.scale);
+                                                                                                       ToType>(context->allocator(), column, to_type.precision, to_type.scale);
             } else {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_decimal<FromType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
-                        column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column);
             } else {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                        column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column);
             }
         } else if constexpr (lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
             } else {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
-                        column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
@@ -1384,7 +1376,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
                 return ColumnHelper::create_const_null_column(column->size());                                  \
             }                                                                                                   \
                                                                                                                 \
-            return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(_now, column); \
+            return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(context->allocator(), _now, column); \
         };                                                                                                      \
                                                                                                                 \
         std::string debug_string() const override {                                                             \
@@ -1432,9 +1424,9 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
 #define DEFINE_INT_CAST_TO_STRING(FROM_TYPE, TO_TYPE)                                                       \
     template <>                                                                                             \
     template <>                                                                                             \
-    inline ColumnPtr StringUnaryFunction<CastToString>::evaluate<FROM_TYPE, TO_TYPE>(const ColumnPtr& v1) { \
+    inline ColumnPtr StringUnaryFunction<CastToString>::evaluate<FROM_TYPE, TO_TYPE>(memory::Allocator* allocator, const ColumnPtr& v1) { \
         auto& r1 = ColumnHelper::cast_to_raw<FROM_TYPE>(v1)->get_data();                                    \
-        auto result = RunTimeColumnType<TO_TYPE>::create();                                                 \
+        auto result = RunTimeColumnType<TO_TYPE>::create(allocator);                                        \
         auto& offset = result->get_offset();                                                                \
         offset.resize(v1->size() + 1);                                                                      \
         auto& bytes = result->get_bytes();                                                                  \
@@ -1492,7 +1484,7 @@ public:
         if constexpr (Type == TYPE_DATE || Type == TYPE_DATETIME || Type == TYPE_DECIMALV2 || Type == TYPE_BOOLEAN ||
                       Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT || Type == TYPE_BIGINT ||
                       Type == TYPE_LARGEINT) {
-            return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(column);
+            return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
         }
 
         if constexpr (Type == TYPE_VARBINARY) {
@@ -1501,11 +1493,9 @@ public:
 
         if constexpr (lt_is_decimal<Type>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(
-                        column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
             } else {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(
-                        column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
             }
         }
 
@@ -1539,10 +1529,10 @@ private:
         if (type().len == -1) {
             if constexpr (FloatType == TYPE_FLOAT) {
                 return VectorizedStringStrictUnaryFunction<FloatCastToString>::template evaluate<TYPE_FLOAT,
-                                                                                                 TYPE_VARCHAR>(column);
+                                                                                                 TYPE_VARCHAR>(context->allocator(), column);
             } else {
                 return VectorizedStringStrictUnaryFunction<DoubleCastToString>::template evaluate<TYPE_DOUBLE,
-                                                                                                  TYPE_VARCHAR>(column);
+                                                                                                  TYPE_VARCHAR>(context->allocator(), column);
             }
         }
         if (type().len < 0) {

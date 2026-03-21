@@ -280,7 +280,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_ends_with_fn(FunctionContext* contex
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantEndsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantEndsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(), value, pattern);
 }
 
 // constant_starts
@@ -295,7 +295,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_starts_with_fn(FunctionContext* cont
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantStartsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantStartsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(), value, pattern);
 }
 
 // constant_equals
@@ -309,7 +309,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, 
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(), value, pattern);
 }
 
 StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* context, const starrocks::Columns& columns) {

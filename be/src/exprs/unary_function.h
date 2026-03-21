@@ -41,10 +41,10 @@ template <typename OP, typename INPUT_NULL_OP = NopCheck, typename OUTPUT_NULL_O
 class ProduceNullUnaryFunction {
 public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
         auto* r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data().data();
 
-        auto result = RunTimeColumnType<ResultType>::create(std::forward<Args>(args)...);
+        auto result = RunTimeColumnType<ResultType>::create(allocator, std::forward<Args>(args)...);
         result->resize(v1->size());
         auto* r3 = result->get_data().data();
 
@@ -53,7 +53,7 @@ public:
             r3[i] = OP::template apply<RunTimeCppType<Type>, RunTimeCppType<ResultType>>(r1[i]);
         }
 
-        auto nulls = RunTimeColumnType<TYPE_NULL>::create();
+        auto nulls = RunTimeColumnType<TYPE_NULL>::create(allocator);
         nulls->resize(v1->size());
         auto* ns = nulls->get_data().data();
 
@@ -70,7 +70,7 @@ public:
         }
 
         if (SIMD::count_nonzero(nulls->get_data())) {
-            return NullableColumn::create(std::move(result), std::move(nulls));
+            return NullableColumn::create(allocator, std::move(result), std::move(nulls));
         }
         return result;
     }
@@ -91,13 +91,13 @@ public:
    * The method declaration like: ResultType::CppType apply(Type::CppType l)
    */
     template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
         using ResultColumnType = RunTimeColumnType<ResultType>;
         using CppType = RunTimeCppType<Type>;
         using ResultCppType = RunTimeCppType<ResultType>;
 
         int size = v1->size();
-        auto result = ResultColumnType::create(std::forward<Args>(args)...);
+        auto result = ResultColumnType::create(allocator, std::forward<Args>(args)...);
         result->resize(size);
         auto* r3 = result->get_data().data();
 
@@ -125,10 +125,10 @@ public:
 template <typename OP>
 struct StringUnaryFunction {
     template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
         const auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->immutable_data();
 
-        auto result = RunTimeColumnType<TYPE_VARCHAR>::create(std::forward<Args>(args)...);
+        auto result = RunTimeColumnType<TYPE_VARCHAR>::create(allocator, std::forward<Args>(args)...);
 
         auto& offset = result->get_offset();
         auto& bytes = result->get_bytes();
@@ -152,14 +152,15 @@ template <typename FN>
 class UnpackConstColumnUnaryFunction {
 public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
         if (v1->is_constant()) {
             auto eva1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
-            ColumnPtr data_column = FN::template evaluate<Type, ResultType, Args...>(eva1, std::forward<Args>(args)...);
+            ColumnPtr data_column =
+                    FN::template evaluate<Type, ResultType, Args...>(allocator, eva1, std::forward<Args>(args)...);
 
-            return ConstColumn::create(std::move(data_column), v1->size());
+            return ConstColumn::create(allocator, std::move(data_column), v1->size());
         } else {
-            return FN::template evaluate<Type, ResultType, Args...>(v1, std::forward<Args>(args)...);
+            return FN::template evaluate<Type, ResultType, Args...>(allocator, v1, std::forward<Args>(args)...);
         }
     }
 };
@@ -173,7 +174,7 @@ template <typename FN>
 class DealNullableColumnUnaryFunction {
 public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
         if (v1->only_null()) {
             return v1;
         }
@@ -182,15 +183,15 @@ public:
             auto col = ColumnHelper::as_raw_column<NullableColumn>(v1);
 
             if (v1->size() == ColumnHelper::count_nulls(v1)) {
-                auto data = RunTimeColumnType<ResultType>::create();
+                auto data = RunTimeColumnType<ResultType>::create(allocator);
                 data->resize(v1->size());
-                auto nul = NullColumn::create();
+                auto nul = NullColumn::create(allocator);
                 nul->append(*col->null_column(), 0, col->null_column()->size());
-                return NullableColumn::create(std::move(data), std::move(nul));
+                return NullableColumn::create(allocator, std::move(data), std::move(nul));
             }
 
-            ColumnPtr result =
-                    FN::template evaluate<Type, ResultType, Args...>(col->data_column(), std::forward<Args>(args)...);
+            ColumnPtr result = FN::template evaluate<Type, ResultType, Args...>(allocator, col->data_column(),
+                                                                                 std::forward<Args>(args)...);
             if (result->is_nullable()) {
                 // when result column is NullableColumn, null columns in src and dst columns
                 // must be merged to produce finally result.
@@ -206,29 +207,31 @@ public:
                     // both inside the input column and inside the results.
                     auto finally_null_column =
                             FunctionHelper::union_null_column(col->null_column(), nullable_data->null_column());
-                    return NullableColumn::create(nullable_data->data_column(), std::move(finally_null_column));
+                    return NullableColumn::create(allocator, nullable_data->data_column()->as_mutable_ptr(),
+                                                  finally_null_column->as_mutable_ptr());
 
                 } else {
                     // case 3: the result rows are all non-nulls, the data of null column should
                     // keep same as before
-                    auto nul = NullColumn::create();
+                    auto nul = NullColumn::create(allocator);
                     nul->append(*col->null_column(), 0, col->null_column()->size());
-                    return NullableColumn::create(nullable_data->data_column(), std::move(nul));
+                    return NullableColumn::create(allocator, nullable_data->data_column()->as_mutable_ptr(),
+                                                  std::move(nul));
                 }
             } else {
                 // the result of data column is not NullableColumn
-                auto nul = NullColumn::create();
+                auto nul = NullColumn::create(allocator);
                 nul->append(*col->null_column(), 0, col->null_column()->size());
-                return NullableColumn::create(result, std::move(nul));
+                return NullableColumn::create(allocator, result->as_mutable_ptr(), std::move(nul));
             }
         } else {
-            return FN::template evaluate<Type, ResultType, Args...>(v1, std::forward<Args>(args)...);
+            return FN::template evaluate<Type, ResultType, Args...>(allocator, v1, std::forward<Args>(args)...);
         }
     }
 
     template <LogicalType Type, typename... Args>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
-        return evaluate<Type, Type, Args...>(v1, std::forward<Args>(args)...);
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, Args&&... args) {
+        return evaluate<Type, Type, Args...>(allocator, v1, std::forward<Args>(args)...);
     }
 };
 
