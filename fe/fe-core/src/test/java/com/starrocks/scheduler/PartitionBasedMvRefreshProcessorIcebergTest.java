@@ -102,7 +102,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                     "start('2020-01-01') end('2020-01-03')");
             Assertions.assertFalse(calls.isEmpty());
             Assertions.assertTrue(calls.stream().allMatch(List::isEmpty));
-            Assertions.assertTrue(onlyCachedPartitions.stream().allMatch(Boolean::booleanValue));
+            Assertions.assertTrue(onlyCachedPartitions.stream().allMatch(value -> !value));
         } finally {
             Config.enable_materialized_view_external_table_precise_refresh = originalConfig;
             starRocksAssert.dropMaterializedView(mvName);
