@@ -24,8 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-import com.starrocks.type.NullType;
-import com.starrocks.type.StringType;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -283,27 +282,27 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
         Assertions.assertEquals(Map.of(col7, ConstantOperator.createInt(2)), constantEncodingMap.get(1));
     }
-
+   
     @Test
     void testConstantCasts() {
-        ColumnRefOperator col1 = new ColumnRefOperator(1, StringType.STRING, "col1", true);
-        ColumnRefOperator col2 = new ColumnRefOperator(2, StringType.STRING, "col2", true);
-        ColumnRefOperator col3 = new ColumnRefOperator(3, StringType.STRING, "col3", true);
-        ColumnRefOperator col4 = new ColumnRefOperator(4, StringType.STRING, "col4", true);
-        ColumnRefOperator col5 = new ColumnRefOperator(3, StringType.STRING, "col3", true);
-        ColumnRefOperator col6 = new ColumnRefOperator(4, StringType.STRING, "col4", true);
-        ColumnRefOperator col7 = new ColumnRefOperator(7, StringType.STRING, "col4", true);
-        ColumnRefOperator col8 = new ColumnRefOperator(8, StringType.STRING, "col4", true);
+        ColumnRefOperator col1 = new ColumnRefOperator(1, Type.STRING, "col1", true);
+        ColumnRefOperator col2 = new ColumnRefOperator(2,  Type.STRING, "col2", true);
+        ColumnRefOperator col3 = new ColumnRefOperator(3,  Type.STRING, "col3", true);
+        ColumnRefOperator col4 = new ColumnRefOperator(4,  Type.STRING, "col4", true);
+        ColumnRefOperator col5 = new ColumnRefOperator(3,  Type.STRING, "col3", true);
+        ColumnRefOperator col6 = new ColumnRefOperator(4,  Type.STRING, "col4", true);
+        ColumnRefOperator col7 = new ColumnRefOperator(7,  Type.STRING, "col4", true);
+        ColumnRefOperator col8 = new ColumnRefOperator(8,  Type.STRING, "col4", true);
 
         UnionDictionaryManager dictManager =
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), Map.of(), Set.of());
-        dictManager.recordIfConstant(col1, ConstantOperator.createNull(NullType.NULL));
+        dictManager.recordIfConstant(col1, ConstantOperator.createNull(Type.NULL));
         dictManager.recordIfConstant(col2, ConstantOperator.createVarchar("abc"));
-        dictManager.recordIfConstant(col3, new CastOperator(StringType.STRING, col1));
-        dictManager.recordIfConstant(col4, new CastOperator(StringType.STRING, col2));
-        dictManager.recordIfConstant(col5, new CastOperator(StringType.STRING, ConstantOperator.createNull(NullType.NULL)));
-        dictManager.recordIfConstant(col6, new CastOperator(StringType.STRING, ConstantOperator.createVarchar("abc")));
-        dictManager.recordIfConstant(col8, new CastOperator(StringType.STRING, col7));
+        dictManager.recordIfConstant(col3, new CastOperator( Type.STRING, col1));
+        dictManager.recordIfConstant(col4, new CastOperator( Type.STRING, col2));
+        dictManager.recordIfConstant(col5, new CastOperator( Type.STRING, ConstantOperator.createNull(Type.NULL)));
+        dictManager.recordIfConstant(col6, new CastOperator( Type.STRING, ConstantOperator.createVarchar("abc")));
+        dictManager.recordIfConstant(col8, new CastOperator( Type.STRING, col7));
 
         Assertions.assertTrue(dictManager.isSupportedConstant(col1));
         Assertions.assertTrue(dictManager.isSupportedConstant(col2));
