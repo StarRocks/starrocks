@@ -25,6 +25,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/dispatch.h"
+#include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
@@ -98,17 +99,17 @@ public:
         if constexpr (lt_is_collection<Type>) {
             return _evaluate_complex(list);
         } else {
-            return _evaluate_general(list);
+            return _evaluate_general(context->allocator(), list);
         }
     }
 
 private:
-    ColumnPtr _evaluate_general(const Columns& columns) {
+    ColumnPtr _evaluate_general(memory::Allocator* allocator, const Columns& columns) {
         ColumnViewer<Type> lhs_viewer(columns[0]);
         ColumnViewer<Type> rhs_viewer(columns[1]);
         auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
-        ColumnBuilder<Type> result(num_rows, this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(allocator, num_rows, this->type().precision, this->type().scale);
 
         for (int row = 0; row < num_rows; ++row) {
             if (lhs_viewer.is_null(row)) {
@@ -167,17 +168,17 @@ public:
         if constexpr (lt_is_collection<Type>) {
             return _evaluate_complex(list);
         } else {
-            return _evaluate_general(list);
+            return _evaluate_general(context->allocator(), list);
         }
     }
 
 private:
-    ColumnPtr _evaluate_general(const Columns& columns) {
+    ColumnPtr _evaluate_general(memory::Allocator* allocator, const Columns& columns) {
         ColumnViewer<Type> lhs_viewer(columns[0]);
         ColumnViewer<Type> rhs_viewer(columns[1]);
 
         size_t size = columns[0]->size();
-        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(allocator, size, this->type().precision, this->type().scale);
         for (int row = 0; row < size; ++row) {
             if (lhs_viewer.is_null(row)) {
                 result.append_null();
@@ -257,7 +258,7 @@ public:
             if constexpr (lt_is_collection<Type>) {
                 return _evaluate_complex<false>(list);
             } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
-                return _evaluate_general<false>(list);
+                return _evaluate_general<false>(context->allocator(), list);
             } else if constexpr (isArithmeticLT<Type>) {
                 return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
             } else {
@@ -283,7 +284,7 @@ public:
                 auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));
                 return res;
             } else {
-                return _evaluate_general<true>(list);
+                return _evaluate_general<true>(context->allocator(), list);
             }
         }
     }
@@ -311,12 +312,12 @@ private:
     }
 
     template <bool check_null>
-    ColumnPtr _evaluate_general(const Columns& columns) {
+    ColumnPtr _evaluate_general(memory::Allocator* allocator, const Columns& columns) {
         auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
         ColumnViewer<Type> lhs_viewer(columns[1]);
         ColumnViewer<Type> rhs_viewer(columns[2]);
-        ColumnBuilder<Type> result(num_rows, this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(allocator, num_rows, this->type().precision, this->type().scale);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
                 if (bhs_viewer.is_null(row) || !bhs_viewer.value(row)) {
@@ -419,12 +420,12 @@ public:
         if constexpr (lt_is_collection<Type>) {
             return _evaluate_complex(columns);
         } else {
-            return _evaluate_general(columns);
+            return _evaluate_general(context->allocator(), columns);
         }
     }
 
 private:
-    StatusOr<ColumnPtr> _evaluate_general(const Columns& columns) {
+    StatusOr<ColumnPtr> _evaluate_general(memory::Allocator* allocator, const Columns& columns) {
         std::vector<ColumnViewer<Type>> viewers;
         for (auto& value : columns) {
             viewers.push_back(ColumnViewer<Type>(value));
@@ -432,7 +433,7 @@ private:
         // choose not null
         int size = columns[0]->size();
         int col_size = viewers.size();
-        ColumnBuilder<Type> builder(size, this->type().precision, this->type().scale);
+        ColumnBuilder<Type> builder(allocator, size, this->type().precision, this->type().scale);
 
         for (int row = 0; row < size; ++row) {
             int col;

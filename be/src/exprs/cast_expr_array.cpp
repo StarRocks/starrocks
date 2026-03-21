@@ -164,7 +164,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     // 1. Split string with ',' delimiter
     uint32_t offset = 0;
     bool has_null = false;
-    ColumnBuilder<TYPE_VARCHAR> slice_builder(src.size());
+    ColumnBuilder<TYPE_VARCHAR> slice_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {
@@ -267,7 +267,7 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
 
     // 1. Cast JsonArray to ARRAY<JSON>
     uint32_t offset = 0;
-    ColumnBuilder<TYPE_JSON> json_column_builder(src.size());
+    ColumnBuilder<TYPE_JSON> json_column_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {
@@ -329,7 +329,7 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
     // 1. Cast a variant(type=ARRAY) to ARRAY<VARIANT>
     // If the variant is not array type, set null
     uint32_t offset = 0;
-    ColumnBuilder<TYPE_VARIANT> variant_column_builder(src.size());
+    ColumnBuilder<TYPE_VARIANT> variant_column_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {

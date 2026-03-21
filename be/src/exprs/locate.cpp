@@ -163,7 +163,7 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
     ColumnViewer<TYPE_INT> start_pos_viewer(start_pos_ptr);
 
     size_t size = haystack_ptr->size();
-    ColumnBuilder<TYPE_INT> builder(size);
+    ColumnBuilder<TYPE_INT> builder(haystack_ptr->allocator(), size);
 
     for (size_t i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || needle_viewer.is_null(i) || start_pos_viewer.is_null(i)) {

@@ -67,7 +67,7 @@ StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Colu
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), size);
     auto& cancelled = context->state()->cancelled_ref();
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
@@ -345,7 +345,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
             fe_addr.hostname, fe_addr.port,
             [&](FrontendServiceConnection& client) { client->getQueryProfile(res, req); }));
 
-    ColumnBuilder<TYPE_VARCHAR> builder(state->chunk_size());
+    ColumnBuilder<TYPE_VARCHAR> builder(context->allocator(), state->chunk_size());
     for (const auto& result : res.query_result) {
         builder.append(result);
     }
@@ -365,7 +365,7 @@ StatusOr<ColumnPtr> UtilityFunctions::bar(FunctionContext* context, const Column
     ColumnViewer<TYPE_BIGINT> viewer_max(columns[2]);
     ColumnViewer<TYPE_BIGINT> viewer_width(columns[3]);
     size_t rows = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> builder(rows);
+    ColumnBuilder<TYPE_VARCHAR> builder(context->allocator(), rows);
 
     size_t min = viewer_min.value(0);
     size_t max = viewer_max.value(0);
@@ -400,7 +400,7 @@ StatusOr<ColumnPtr> UtilityFunctions::equiwidth_bucket(FunctionContext* context,
     ColumnViewer<TYPE_BIGINT> viewer_max(columns[2]);
     ColumnViewer<TYPE_BIGINT> viewer_buckets(columns[3]);
     size_t rows = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(rows);
+    ColumnBuilder<TYPE_BIGINT> builder(context->allocator(), rows);
 
     size_t min = viewer_min.value(0);
     size_t max = viewer_max.value(0);
@@ -567,7 +567,7 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     RETURN_IF(num_args < 1, Status::InvalidArgument("encode_sort_key requires at least 1 argument"));
 
     size_t num_rows = columns[0]->size();
-    auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);
+    auto result = ColumnBuilder<TYPE_VARBINARY>(context->allocator(), num_rows);
 
     std::vector<std::string> buffs(num_rows);
     detail::EncoderVisitor visitor;

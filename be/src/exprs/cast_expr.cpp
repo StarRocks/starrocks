@@ -82,7 +82,7 @@ namespace starrocks {
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException = false>
 struct CastFn {
-    static ColumnPtr cast_fn(ColumnPtr&& column);
+    static ColumnPtr cast_fn(memory::Allocator* allocator, ColumnPtr&& column);
 };
 
 // clang-format off
@@ -90,13 +90,13 @@ struct CastFn {
 #define SELF_CAST(FROM_TYPE)                                                    \
     template <bool AllowThrowException>                                         \
     struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr&& column) { return Column::mutate(std::move(column)); } \
+        static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) { return Column::mutate(std::move(column)); } \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
     template <bool AllowThrowException>                                                                      \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                 \
-        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                        \
+        static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) {       \
             return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
         }                                                                                                    \
     };
@@ -104,7 +104,7 @@ struct CastFn {
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                            \
     template <bool AllowThrowException>                                                                                \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                           \
-        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                                  \
+        static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) {                 \
             if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                        \
                           std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
                 if constexpr (!AllowThrowException) {                                                                  \
@@ -123,7 +123,7 @@ struct CastFn {
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <bool AllowThrowException>                                                                             \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                        \
-        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                               \
+        static ColumnPtr cast_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr&& column) {              \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                     column);                                                                                        \
         }                                                                                                           \
@@ -132,8 +132,8 @@ struct CastFn {
 #define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                       \
     template <bool AllowThrowException>                                             \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                        \
-        static ColumnPtr cast_fn(ColumnPtr&& column) {                               \
-            return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(column); \
+        static ColumnPtr cast_fn(memory::Allocator* allocator, ColumnPtr&& column) { \
+            return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(allocator, column); \
         }                                                                           \
     };
 // clang-format on
@@ -160,9 +160,9 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
+static ColumnPtr cast_to_json_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
-    ColumnBuilder<TYPE_JSON> builder(viewer.size());
+    ColumnBuilder<TYPE_JSON> builder(allocator, viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -249,9 +249,9 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_json_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_JSON> viewer(column);
-    ColumnBuilder<ToType> builder(viewer.size());
+    ColumnBuilder<ToType> builder(allocator, viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -273,9 +273,9 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_variant_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARIANT> viewer(column);
-    ColumnBuilder<ToType> builder(viewer.size());
+    ColumnBuilder<ToType> builder(allocator, viewer.size());
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
 
     for (int row = 0; row < viewer.size(); ++row) {
@@ -310,13 +310,13 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_to_variant_fn(ColumnPtr& column) {
+static ColumnPtr cast_to_variant_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     if constexpr (FromType != TYPE_JSON) {
         THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
     }
 
     ColumnViewer<TYPE_JSON> viewer(column);
-    ColumnBuilder<TYPE_VARIANT> builder(viewer.size());
+    ColumnBuilder<TYPE_VARIANT> builder(allocator, viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -362,9 +362,9 @@ CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_BOOLEAN, cast_from_variant_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_VARIANT, cast_to_variant_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_bool_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_BOOLEAN> builder(viewer.size());
+    ColumnBuilder<TYPE_BOOLEAN> builder(allocator, viewer.size());
 
     StringParser::ParseResult result;
 
@@ -414,9 +414,9 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_BOOLEAN, cast_from_string_to_bool_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_hll_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_HLL> builder(viewer.size());
+    ColumnBuilder<TYPE_HLL> builder(allocator, viewer.size());
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -441,9 +441,9 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_bitmap_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_OBJECT> builder(viewer.size());
+    ColumnBuilder<TYPE_OBJECT> builder(allocator, viewer.size());
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -507,7 +507,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
+ColumnPtr cast_int_from_string_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     StringParser::ParseResult result;
     int sz = column.get()->size();
     if (column->only_null()) {
@@ -572,9 +572,9 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
+ColumnPtr cast_float_from_string_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<ToType> builder(viewer.size());
+    ColumnBuilder<ToType> builder(allocator, viewer.size());
 
     StringParser::ParseResult result;
 
@@ -799,9 +799,9 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DECIMALV2, DateToDecimal);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_decimalv2_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_decimalv2_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_DECIMALV2> builder(viewer.size());
+    ColumnBuilder<TYPE_DECIMALV2> builder(allocator, viewer.size());
 
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -842,9 +842,9 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DECIMALV2, cast_from_string_to_decimalv2_fn
 
 // date
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-ColumnPtr cast_to_date_fn(ColumnPtr& column) {
+ColumnPtr cast_to_date_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
-    ColumnBuilder<TYPE_DATE> builder(viewer.size());
+    ColumnBuilder<TYPE_DATE> builder(allocator, viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -886,9 +886,9 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 // Time to date need rewrite CastExpr
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_date_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_DATE> builder(viewer.size());
+    ColumnBuilder<TYPE_DATE> builder(allocator, viewer.size());
 
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
@@ -928,9 +928,9 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATE, cast_from_string_to_date_fn);
 
 // datetime(timestamp)
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
+ColumnPtr cast_to_timestamp_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
-    ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
+    ColumnBuilder<TYPE_DATETIME> builder(allocator, viewer.size());
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -977,7 +977,7 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     const int num_rows = column->size();
 
     if (column->only_null()) {
@@ -1086,9 +1086,9 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 SELF_CAST(TYPE_JSON);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
+static ColumnPtr cast_from_string_to_time_fn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr& column) {
     auto size = column->size();
-    ColumnBuilder<TYPE_TIME> builder(size);
+    ColumnBuilder<TYPE_TIME> builder(allocator, size);
     ColumnViewer<TYPE_VARCHAR> viewer_time(column);
     for (size_t row = 0; row < size; ++row) {
         if (viewer_time.is_null(row)) {
@@ -1200,6 +1200,7 @@ public:
             return ColumnHelper::create_const_null_column(col_size);
         }
         const TypeDescriptor& to_type = this->type();
+        memory::Allocator* allocator = context->allocator();
 
         ColumnPtr result_column;
         // NOTE
@@ -1215,9 +1216,9 @@ public:
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
                             FromType, TYPE_DOUBLE>(column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(allocator, std::move(double_column));
             } else {
-                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column));
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
@@ -1230,7 +1231,7 @@ public:
                 }
             } else {
                 result_column =
-                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column))->as_mutable_ptr();
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
@@ -1260,7 +1261,7 @@ public:
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column));
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
@@ -1483,6 +1484,7 @@ public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
+        memory::Allocator* allocator = context->allocator();
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1509,23 +1511,23 @@ public:
 
         // must be: TYPE_FLOAT, TYPE_DOUBLE, TYPE_CHAR, TYPE_VARCHAR...
         if constexpr (Type == TYPE_FLOAT) {
-            return _evaluate_float<TYPE_FLOAT>(context, column);
+            return _evaluate_float<TYPE_FLOAT>(allocator, context, column);
         }
 
         if constexpr (Type == TYPE_DOUBLE) {
-            return _evaluate_float<TYPE_DOUBLE>(context, column);
+            return _evaluate_float<TYPE_DOUBLE>(allocator, context, column);
         }
 
         if constexpr (Type == TYPE_TIME) {
-            return _evaluate_time(context, column);
+            return _evaluate_time(allocator, context, column);
         }
 
         if constexpr (Type == TYPE_JSON) {
-            return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR, AllowThrowException>(column);
+            return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR, AllowThrowException>(allocator, column);
         }
 
         if constexpr (Type == TYPE_VARIANT) {
-            return cast_from_variant_fn<TYPE_VARIANT, TYPE_VARCHAR, AllowThrowException>(column);
+            return cast_from_variant_fn<TYPE_VARIANT, TYPE_VARCHAR, AllowThrowException>(allocator, column);
         }
 
         return _evaluate_string(context, std::move(column));
@@ -1533,7 +1535,7 @@ public:
 
 private:
     template <LogicalType FloatType>
-    ColumnPtr _evaluate_float(ExprContext* context, const ColumnPtr& column) {
+    ColumnPtr _evaluate_float(memory::Allocator* allocator, ExprContext* context, const ColumnPtr& column) {
         if (type().len == -1) {
             if constexpr (FloatType == TYPE_FLOAT) {
                 return VectorizedStringStrictUnaryFunction<FloatCastToString>::template evaluate<TYPE_FLOAT,
@@ -1549,7 +1551,7 @@ private:
 
         // type.length > 0
         ColumnViewer<FloatType> viewer(column);
-        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
+        ColumnBuilder<TYPE_VARCHAR> builder(allocator, viewer.size());
 
         char value[MAX_DOUBLE_STR_LENGTH];
         size_t len = 0;
@@ -1586,9 +1588,9 @@ private:
     // of the length of char/varchar and return input column directly.
     ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr&& column) { return Column::mutate(std::move(column)); }
 
-    ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
+    ColumnPtr _evaluate_time(memory::Allocator* allocator, ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
-        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
+        ColumnBuilder<TYPE_VARCHAR> builder(allocator, viewer.size());
 
         for (int row = 0; row < viewer.size(); ++row) {
             if (viewer.is_null(row)) {
@@ -1731,12 +1733,13 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
 StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
     const size_t num_rows = column->size();
+    memory::Allocator* allocator = context->allocator();
 
     if (num_rows != 0 && ColumnHelper::count_nulls(column) == num_rows) {
         return ColumnHelper::create_const_null_column(num_rows);
     }
 
-    ColumnBuilder<TYPE_VARIANT> builder(num_rows);
+    ColumnBuilder<TYPE_VARIANT> builder(allocator, num_rows);
     RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
 
     return builder.build(column->is_constant());

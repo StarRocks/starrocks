@@ -884,7 +884,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_int(FunctionContext* context, const Colu
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (bigint.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -919,7 +919,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (string_viewer.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -1009,7 +1009,7 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
 
 StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    ColumnBuilder<TYPE_DOUBLE> result(num_rows);
+    ColumnBuilder<TYPE_DOUBLE> result(context->allocator(), num_rows);
     for (int i = 0; i < num_rows; ++i) {
         result.append(distribution(generator));
     }

@@ -247,7 +247,7 @@ StatusOr<ColumnPtr> LikePredicate::match_fn_with_long_constant_pattern(FunctionC
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     for (int row = 0; row < num_rows; ++row) {
         if (value_viewer.is_null(row)) {
@@ -509,7 +509,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -595,7 +595,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {

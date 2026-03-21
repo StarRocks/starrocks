@@ -2066,7 +2066,7 @@ StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, cons
     }
     auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(columns[0].get()));
 
-    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), size);
     if (columns[0]->is_nullable()) {
         auto* nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         const auto& null_data = nullable_column->null_column_data();

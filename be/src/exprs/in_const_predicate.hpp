@@ -25,6 +25,7 @@
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "types/type_descriptor.h"
 
@@ -230,10 +231,10 @@ public:
     // null_in_set: true means null is a value of _hash_set.
     // equal_null: true means that 'null' in column and 'null' in set is equal.
     template <bool null_in_set, bool equal_null, bool use_array>
-    ColumnPtr eval_on_chunk(const ColumnPtr& lhs, uint8_t* filter) {
+    ColumnPtr eval_on_chunk(ExprContext* context, const ColumnPtr& lhs, uint8_t* filter) {
         ColumnViewer<Type> viewer(lhs);
         size_t size = viewer.size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         builder.resize_uninitialized(size);
 
         uint8_t* null_data = builder.null_column_raw_ptr()->get_data().data();
@@ -301,22 +302,22 @@ public:
         if (_null_in_set) {
             if (_eq_null) {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, true, false>(lhs, filter);
+                    return this->template eval_on_chunk<true, true, false>(context, lhs, filter);
                 } else {
-                    return this->template eval_on_chunk<true, true, true>(lhs, filter);
+                    return this->template eval_on_chunk<true, true, true>(context, lhs, filter);
                 }
             } else {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, false, false>(lhs, filter);
+                    return this->template eval_on_chunk<true, false, false>(context, lhs, filter);
                 } else {
-                    return this->template eval_on_chunk<true, false, true>(lhs, filter);
+                    return this->template eval_on_chunk<true, false, true>(context, lhs, filter);
                 }
             }
         } else if (lhs->is_nullable()) {
             if (!use_array) {
-                return this->template eval_on_chunk<false, false, false>(lhs, filter);
+                return this->template eval_on_chunk<false, false, false>(context, lhs, filter);
             } else {
-                return this->template eval_on_chunk<false, false, true>(lhs, filter);
+                return this->template eval_on_chunk<false, false, true>(context, lhs, filter);
             }
         } else {
             if (!use_array) {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exprs/case_expr.h"
+#include "exprs/expr_context.h"
 
 #include <cstdint>
 
@@ -31,7 +32,9 @@
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/expr_context.h"
 #endif
 
 namespace starrocks {
@@ -411,7 +414,7 @@ private:
             ColumnViewer<WhenType> case_viewer(case_column);
             then_viewers.emplace_back(else_column);
 
-            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+            ColumnBuilder<ResultType> builder(context->allocator(), size, this->type().precision, this->type().scale);
 
             size_t view_size = when_viewers.size();
             if (!when_columns_has_null) {
@@ -564,7 +567,7 @@ private:
             for (auto& col : then_columns) {
                 then_viewers.emplace_back(col);
             }
-            ColumnBuilder<ResultType> builder(size, this->type().precision, this->type().scale);
+            ColumnBuilder<ResultType> builder(context->allocator(), size, this->type().precision, this->type().scale);
             // max case size in use SIMD CASE WHEN implements
             constexpr int max_simd_case_when_size = 8;
 

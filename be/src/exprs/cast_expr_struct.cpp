@@ -52,7 +52,7 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
     DCHECK_EQ(field_size, _type.field_names.size());
     vector<ColumnBuilder<TYPE_JSON>> json_columns;
     for (size_t i = 0; i < field_size; i++) {
-        ColumnBuilder<TYPE_JSON> json_column_builder(src.size());
+        ColumnBuilder<TYPE_JSON> json_column_builder(context->allocator(), src.size());
         json_columns.emplace_back(json_column_builder);
     }
     for (size_t i = 0; i < src.size(); i++) {
@@ -146,7 +146,7 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     DCHECK_EQ(field_size, _type.field_names.size());
     vector<ColumnBuilder<TYPE_VARIANT>> variant_columns;
     for (size_t i = 0; i < field_size; i++) {
-        ColumnBuilder<TYPE_VARIANT> variant_column_builder(viewer.size());
+        ColumnBuilder<TYPE_VARIANT> variant_column_builder(context->allocator(), viewer.size());
         variant_columns.emplace_back(variant_column_builder);
     }
 

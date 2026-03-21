@@ -17,6 +17,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
 #include "types/logical_type.h"
 
@@ -47,7 +48,7 @@ public:
         if (column->is_json()) {
             // Consider JSON NULL as NULL
             ColumnViewer<TYPE_JSON> viewer(column);
-            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), column->size());
             for (size_t i = 0; i < column->size(); i++) {
                 bool value = viewer.is_null(i) || viewer.value(i)->is_null_or_none();
                 builder.append(value);
@@ -82,7 +83,7 @@ public:
         if (column->is_json()) {
             // Consider JSON NULL as NULL
             ColumnViewer<TYPE_JSON> viewer(column);
-            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), column->size());
             for (size_t i = 0; i < column->size(); i++) {
                 bool value = !viewer.is_null(i) && !viewer.value(i)->is_null_or_none();
                 builder.append(value);

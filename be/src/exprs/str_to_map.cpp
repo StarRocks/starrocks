@@ -79,8 +79,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     // construct result
     size_t str_num = nullable_str->size();
     size_t column_size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> keys_builder(str_num);
-    ColumnBuilder<TYPE_VARCHAR> values_builder(str_num);
+    ColumnBuilder<TYPE_VARCHAR> keys_builder(context->allocator(), str_num);
+    ColumnBuilder<TYPE_VARCHAR> values_builder(context->allocator(), str_num);
     auto res_null = NullColumn::create();
     auto res_offsets = UInt32Column::create();
     res_offsets->reserve(nullable_str->size() + 1);

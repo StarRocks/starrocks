@@ -13,13 +13,16 @@
 // limitations under the License.
 
 #include "exprs/binary_predicate.h"
+#include "exprs/expr_context.h"
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
+#include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -30,7 +33,9 @@
 #include <llvm/IR/Value.h>
 
 #include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/expr_context.h"
 #endif
 
 namespace starrocks {
@@ -268,7 +273,7 @@ public:
         const auto& lhs_arr = down_cast<const ArrayColumn&>(*data1);
         const auto& rhs_arr = down_cast<const ArrayColumn&>(*data2);
 
-        ColumnBuilder<TYPE_BOOLEAN> builder(l->size());
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), l->size());
         std::vector<int8_t> cmp_result;
         lhs_arr.compare_column(rhs_arr, &cmp_result);
 
@@ -315,7 +320,7 @@ public:
         ColumnPtr data2 = FunctionHelper::get_data_column_of_nullable(const2);
 
         size_t size = l->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
             if (l->is_null(loff) || r->is_null(roff)) {
                 builder.append_null();
@@ -382,7 +387,7 @@ public:
         const auto& data2 = FunctionHelper::get_data_column_of_const(const2);
 
         size_t size = l->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
             auto ln = l->is_null(loff);
             auto rn = r->is_null(roff);
@@ -428,7 +433,7 @@ public:
         Columns list = {l, r};
 
         size_t size = list[0]->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (int row = 0; row < size; ++row) {
             auto null1 = v1.is_null(row);
             auto null2 = v2.is_null(row);

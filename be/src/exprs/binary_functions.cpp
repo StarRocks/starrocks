@@ -125,7 +125,7 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
     int32_t width = c1->get(0).get_int32();
     uint8_t* raw_null_flags = null_flags->get_data().data();
     auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
-    ColumnBuilder<TYPE_BINARY> result(size);
+    ColumnBuilder<TYPE_BINARY> result(context->allocator(), size);
     const auto raw_c0 = col->immutable_data();
 
 #define SLICE_SIZE_MIN(x, y) x < y ? x : y

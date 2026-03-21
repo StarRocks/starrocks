@@ -35,7 +35,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const
     ColumnViewer<TYPE_VARCHAR> wkt_viewer(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(ctx->allocator(), size);
 
     auto* state = (StConstructState*)ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
@@ -128,7 +128,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_circle(FunctionContext* context, const Colu
     ColumnViewer<TYPE_DOUBLE> radius_viewer(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     auto* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
         for (int row = 0; row < size; ++row) {
@@ -169,7 +169,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_point(FunctionContext* context, const Colum
     auto y_column = ColumnViewer<TYPE_DOUBLE>(columns[1]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (x_column.is_null(row) || y_column.is_null(row)) {
             result.append_null();
@@ -197,7 +197,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_x(FunctionContext* context, const Columns& 
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_DOUBLE> result(size);
+    ColumnBuilder<TYPE_DOUBLE> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (encode.is_null(row)) {
             result.append_null();
@@ -222,7 +222,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_y(FunctionContext* context, const Columns& 
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_DOUBLE> result(size);
+    ColumnBuilder<TYPE_DOUBLE> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (encode.is_null(row)) {
             result.append_null();
@@ -250,7 +250,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_distance_sphere(FunctionContext* context, c
     ColumnViewer<TYPE_DOUBLE> y_lat(columns[3]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_DOUBLE> result(size);
+    ColumnBuilder<TYPE_DOUBLE> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (x_lng.is_null(row) || x_lat.is_null(row) || y_lng.is_null(row) || y_lat.is_null(row)) {
             result.append_null();
@@ -278,7 +278,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Colu
     ColumnViewer<TYPE_VARCHAR> shape_viewer(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (shape_viewer.is_null(row)) {
             result.append_null();
@@ -358,7 +358,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_contains(FunctionContext* context, const Co
     }
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (lhs_viewer.is_null(row) || rhs_viewer.is_null(row)) {
             result.append_null();

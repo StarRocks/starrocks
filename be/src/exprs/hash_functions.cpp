@@ -30,7 +30,7 @@ StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context, con
     }
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> builder(size);
+    ColumnBuilder<TYPE_INT> builder(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         uint32_t seed = HashUtil::MURMUR3_32_SEED;
         bool has_null = false;
@@ -81,7 +81,7 @@ StatusOr<ColumnPtr> HashFunctions::xx_hash3_64(FunctionContext* context, const s
         }
     }
 
-    ColumnBuilder<TYPE_BIGINT> builder(row_size);
+    ColumnBuilder<TYPE_BIGINT> builder(context->allocator(), row_size);
     for (int row = 0; row < row_size; ++row) {
         builder.append(seeds_vec[row], is_null_vec[row]);
     }
@@ -128,7 +128,7 @@ StatusOr<ColumnPtr> HashFunctions::xx_hash3_128(FunctionContext* context, const 
         }
     }
 
-    ColumnBuilder<TYPE_LARGEINT> builder(row_size);
+    ColumnBuilder<TYPE_LARGEINT> builder(context->allocator(), row_size);
     for (int row = 0; row < row_size; ++row) {
         XXH128_hash_t value = XXH3_128bits_digest(&states[row]);
         int128_t res = ((int128_t)value.high64 << 64) | (uint64_t)value.low64;
@@ -157,7 +157,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
     std::vector<uint32_t> hash_values(row_size);
     col->crc32_hash(hash_values.data(), 0, row_size);
 
-    ColumnBuilder<TYPE_BIGINT> builder(row_size);
+    ColumnBuilder<TYPE_BIGINT> builder(context->allocator(), row_size);
 
     const bool is_nullable = col->is_nullable();
     const uint8_t* null_data = nullptr;

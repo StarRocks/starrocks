@@ -1892,7 +1892,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
         ColumnViewer<TYPE_VARCHAR> src_viewer(columns[0]);
         ColumnViewer<TYPE_VARCHAR> tailing_viewer(columns[1]);
 
-        ColumnBuilder<TYPE_VARCHAR> dst_builder(row_num);
+        ColumnBuilder<TYPE_VARCHAR> dst_builder(context->allocator(), row_num);
 
         for (int row = 0; row < row_num; ++row) {
             if (src_viewer.is_null(row) || tailing_viewer.is_null(row) || tailing_viewer.value(row).size != 1) {
@@ -2825,7 +2825,7 @@ StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, c
     ColumnViewer<TYPE_INT> instance_viewer(instance);
 
     size_t size = haystack->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_BIGINT> builder(context->allocator(), size);
 
     for (size_t i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || needle_viewer.is_null(i) || instance_viewer.is_null(i)) {
@@ -3217,7 +3217,7 @@ StatusOr<ColumnPtr> StringFunctions::null_or_empty(FunctionContext* context, con
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_BOOLEAN> result(size);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), size);
     for (int row = 0; row < size; row++) {
         if (str_viewer.is_null(row)) {
             result.append(true);
@@ -3392,7 +3392,7 @@ static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Opti
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (content_viewer.is_null(row) || ptn_viewer.is_null(row) || field_viewer.is_null(row)) {
             result.append_null();
@@ -3435,12 +3435,12 @@ static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Opti
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_extract_const(FunctionContext* context, re2::RE2* const_re, const Columns& columns) {
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (content_viewer.is_null(row) || field_viewer.is_null(row)) {
             result.append_null();
@@ -3481,7 +3481,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 
     if (state->const_pattern) {
         re2::RE2* const_re = state->get_or_prepare_regex();
-        return regexp_extract_const(const_re, columns);
+        return regexp_extract_const(context, const_re, columns);
     }
 
     re2::RE2::Options* options = state->options.get();
@@ -3742,7 +3742,7 @@ static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Opti
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || ptn_viewer.is_null(row) || rpl_viewer.is_null(row)) {
             result.append_null();
@@ -3769,12 +3769,12 @@ static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Opti
 }
 
 template <bool global_mode>
-static ColumnPtr regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const Columns& columns,
-                                                      const std::string& rpl) {
+static ColumnPtr regexp_replace_const_pattern_and_rpl(FunctionContext* context, re2::RE2* const_re,
+                                                      const Columns& columns, const std::string& rpl) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     re2::StringPiece rpl_str = re2::StringPiece(rpl);
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     std::string result_str;
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row)) {
@@ -3809,12 +3809,12 @@ static ColumnPtr regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const 
 }
 
 template <bool global_mode>
-static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_replace_const(FunctionContext* context, re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     std::string result_str;
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
@@ -3991,7 +3991,8 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunc
     return res;
 }
 
-StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(FunctionContext* context, StringFunctionsState* state,
+                                                                  const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
@@ -4010,7 +4011,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunction
     });
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
 
     MatchInfoChain match_info_chain;
     match_info_chain.info_chain.reserve(64);
@@ -4072,21 +4073,23 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
             if (columns[2]->is_constant() && context->state()->enable_hyperscan_vec() && state->use_hyperscan_vec) {
                 return regexp_replace_use_hyperscan_vec(state, columns);
             } else {
-                return regexp_replace_use_hyperscan(state, columns);
+                return regexp_replace_use_hyperscan(context, state, columns);
             }
         } else {
             re2::RE2* const_re = state->get_or_prepare_regex();
             if (state->opt_const_rpl.has_value()) {
                 if (state->global_mode) {
-                    return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, state->opt_const_rpl.value());
+                    return regexp_replace_const_pattern_and_rpl<true>(context, const_re, columns,
+                                                                      state->opt_const_rpl.value());
                 } else {
-                    return regexp_replace_const_pattern_and_rpl<false>(const_re, columns, state->opt_const_rpl.value());
+                    return regexp_replace_const_pattern_and_rpl<false>(context, const_re, columns,
+                                                                       state->opt_const_rpl.value());
                 }
             } else {
                 if (state->global_mode) {
-                    return regexp_replace_const<true>(const_re, columns);
+                    return regexp_replace_const<true>(context, const_re, columns);
                 } else {
-                    return regexp_replace_const<false>(const_re, columns);
+                    return regexp_replace_const<false>(context, const_re, columns);
                 }
             }
         }
@@ -4328,7 +4331,7 @@ Status StringFunctions::regexp_count_prepare(FunctionContext* context, FunctionC
     return Status::OK();
 }
 
-static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_count_const_pattern(FunctionContext* context, re2::RE2* const_re, const Columns& columns) {
     auto size = columns[0]->size();
 
     // return NULL if patern empty
@@ -4336,7 +4339,7 @@ static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& c
         return ColumnHelper::create_const_null_column(size);
     }
 
-    ColumnBuilder<TYPE_BIGINT> result(size);
+    ColumnBuilder<TYPE_BIGINT> result(context->allocator(), size);
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
 
     for (int row = 0; row < size; ++row) {
@@ -4371,7 +4374,7 @@ static ColumnPtr regexp_count_const_pattern(re2::RE2* const_re, const Columns& c
 
 static ColumnPtr regexp_count_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> result(size);
+    ColumnBuilder<TYPE_BIGINT> result(context->allocator(), size);
 
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_VARCHAR> pattern_viewer(columns[1]);
@@ -4442,7 +4445,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_count(FunctionContext* context, cons
 
     if (state != nullptr && state->const_pattern && state->regex != nullptr) {
         // Const col
-        return regexp_count_const_pattern(state->get_or_prepare_regex(), columns);
+        return regexp_count_const_pattern(context, state->get_or_prepare_regex(), columns);
     } else {
         // Multi
         re2::RE2::Options options;
@@ -4493,13 +4496,13 @@ Status StringFunctions::regexp_position_close(FunctionContext* context, Function
     return Status::OK();
 }
 
-static ColumnPtr regexp_position_const_pattern(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_position_const_pattern(FunctionContext* context, re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto start_viewer = ColumnViewer<TYPE_INT>(columns[2]);
     auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TYPE_INT> result(context->allocator(), size);
 
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || start_viewer.is_null(row) || occurrence_viewer.is_null(row)) {
@@ -4568,7 +4571,7 @@ static StatusOr<ColumnPtr> regexp_position_general(FunctionContext* context, re2
     auto occurrence_viewer = ColumnViewer<TYPE_INT>(columns[3]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TYPE_INT> result(context->allocator(), size);
 
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || pattern_viewer.is_null(row) || start_viewer.is_null(row) ||
@@ -4644,7 +4647,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_position(FunctionContext* context, c
 
     if (state && state->const_pattern && state->regex) {
         // Const col
-        return regexp_position_const_pattern(state->get_or_prepare_regex(), columns);
+        return regexp_position_const_pattern(context, state->get_or_prepare_regex(), columns);
     } else {
         re2::RE2::Options options;
         options.set_log_errors(false);
@@ -4744,7 +4747,7 @@ StatusOr<ColumnPtr> StringFunctions::replace(FunctionContext* context, const Col
     const auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     const auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     for (int row = 0; row < num_rows; ++row) {
         if (str_viewer.is_null(row) || (!state->const_pattern && ptn_viewer.is_null(row)) ||
             (!state->const_repl && rpl_viewer.is_null(row))) {
@@ -4771,7 +4774,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* contex
     auto money_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -4790,7 +4793,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* contex
     auto money_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -4810,7 +4813,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* cont
     auto money_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -4832,7 +4835,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* 
     auto money_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (money_viewer.is_null(row)) {
             result.append_null();
@@ -4896,7 +4899,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
     auto part_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row) || part_viewer.is_null(row)) {
             result.append_null();
@@ -4938,7 +4941,7 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (str_viewer.is_null(row)) {
             result.append_null();
@@ -5023,12 +5026,12 @@ static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std:
     return seek_param_key_in_query_params(query_params, param_key, param_value);
 }
 
-static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks::Columns& columns,
+static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(FunctionContext* context, const starrocks::Columns& columns,
                                                                  const std::string& param_key) {
     auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto num_rows = columns[0]->size();
     Slice param_key_str(param_key);
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (url_viewer.is_null(i)) {
@@ -5046,11 +5049,11 @@ static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(const starrocks
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Columns& columns) {
+static StatusOr<ColumnPtr> url_extract_parameter_general(FunctionContext* context, const starrocks::Columns& columns) {
     auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto num_rows = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (url_viewer.is_null(i) || param_key_viewer.is_null(i)) {
@@ -5075,12 +5078,13 @@ static StatusOr<ColumnPtr> url_extract_parameter_general(const starrocks::Column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(const starrocks::Columns& columns,
+static StatusOr<ColumnPtr> url_extract_parameter_const_query_params(FunctionContext* context,
+                                                                    const starrocks::Columns& columns,
                                                                     const std::string& query_params) {
     auto param_key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto num_rows = columns[1]->size();
     Slice query_params_str(query_params);
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     std::string param_value;
     for (auto i = 0; i < num_rows; ++i) {
         if (param_key_viewer.is_null(i)) {
@@ -5184,11 +5188,11 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
             return ColumnHelper::create_const_column<TYPE_VARCHAR>(state->opt_const_result.value(), num_rows);
         }
     } else if (state->opt_const_param_key.has_value()) {
-        return url_extract_parameter_const_param_key(columns, state->opt_const_param_key.value());
+        return url_extract_parameter_const_param_key(context, columns, state->opt_const_param_key.value());
     } else if (state->opt_const_query_params.has_value()) {
-        return url_extract_parameter_const_query_params(columns, state->opt_const_query_params.value());
+        return url_extract_parameter_const_query_params(context, columns, state->opt_const_query_params.value());
     } else {
-        return url_extract_parameter_general(columns);
+        return url_extract_parameter_general(context, columns);
     }
 }
 // crc32
@@ -5205,7 +5209,7 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto num_rows = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     ColumnViewer<TYPE_BIGINT> bytes_viewer(columns[0]);
 
     // Unit constants (1024-based)
@@ -5353,7 +5357,7 @@ StatusOr<ColumnPtr> StringFunctions::initcap(FunctionContext* context, const Col
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     size_t num_rows = columns[0]->size();
 
-    ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> builder(context->allocator(), num_rows);
 
     std::string result_buffer;
 

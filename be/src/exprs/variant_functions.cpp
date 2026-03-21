@@ -158,7 +158,7 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
 
-    ColumnBuilder<ResultType> result(num_rows);
+    ColumnBuilder<ResultType> result(context->allocator(), num_rows);
 
     std::vector<uint8_t> null_mask(num_rows, 0);
     if (variant_col->is_nullable()) {
@@ -233,7 +233,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     }
 
     // Row-by-row fallback.
-    ColumnBuilder<ResultType> result(num_rows);
+    ColumnBuilder<ResultType> result(context->allocator(), num_rows);
     VariantPath row_path;
     VariantPathReader row_reader;
 
@@ -277,7 +277,7 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
     const auto* variant_data_column =
             down_cast<const VariantColumn*>(ColumnHelper::get_data_column(variant_column.get()));
 
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row)) {
             result.append_null();

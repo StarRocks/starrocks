@@ -18,6 +18,7 @@
 #include "column/map_column.h"
 #include "column/variant_column.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
 #include "types/variant.h"
 
 namespace starrocks {
@@ -31,8 +32,8 @@ StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk*
     ColumnViewer<TYPE_JSON> src_viewer(src_column);
     NullColumn::MutablePtr null_column = NullColumn::create();
     UInt32Column::MutablePtr offsets_column = UInt32Column::create();
-    ColumnBuilder<TYPE_VARCHAR> keys_builder(src_column->size());
-    ColumnBuilder<TYPE_JSON> values_builder(src_column->size());
+    ColumnBuilder<TYPE_VARCHAR> keys_builder(context->allocator(), src_column->size());
+    ColumnBuilder<TYPE_JSON> values_builder(context->allocator(), src_column->size());
 
     // 1. Cast JsonObject to MAP<VARCHAR,JSON>
     uint32_t offset = 0;
@@ -93,8 +94,8 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(src_column.get()));
     NullColumn::MutablePtr null_column = NullColumn::create();
     UInt32Column::MutablePtr offsets_column = UInt32Column::create();
-    ColumnBuilder<TYPE_VARCHAR> keys_builder(src_column->size());
-    ColumnBuilder<TYPE_VARIANT> values_builder(src_column->size());
+    ColumnBuilder<TYPE_VARCHAR> keys_builder(context->allocator(), src_column->size());
+    ColumnBuilder<TYPE_VARIANT> values_builder(context->allocator(), src_column->size());
 
     // 1. Cast Variant(type=MAP) to MAP<VARCHAR,VARIANT>
     uint32_t offset = 0;

@@ -464,7 +464,7 @@ public:
         }
 
         auto size = columns[0]->size();
-        ColumnBuilder<Type> result(size, type.precision, type.scale);
+        ColumnBuilder<Type> result(context->allocator(), size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;
@@ -505,7 +505,7 @@ public:
         }
 
         auto size = columns[0]->size();
-        ColumnBuilder<Type> result(size, type.precision, type.scale);
+        ColumnBuilder<Type> result(context->allocator(), size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;
