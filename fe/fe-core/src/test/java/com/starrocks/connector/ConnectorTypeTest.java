@@ -19,6 +19,7 @@ import com.starrocks.connector.opensearch.OpenSearchConnector;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,10 +40,10 @@ public class ConnectorTypeTest {
         assertEquals("opensearch", type.toString());
         
         // Verify connector class
-        assertEquals(OpenSearchConnector.class, type.getConnectorFactory().getClass());
+        assertEquals(OpenSearchConnector.class, type.getConnectorClass());
         
         // Verify config class
-        assertEquals(OpenSearchConfig.class, type.getConfigClazz());
+        assertEquals(OpenSearchConfig.class, type.getConfigClass());
     }
 
     @Test

@@ -81,7 +81,7 @@ public class OpenSearchMetadataTest {
         Map<String, String> properties = new HashMap<>();
         OpenSearchMetadata metadata = new OpenSearchMetadata(client, properties, "test_catalog");
         
-        assertEquals(Table.TableType.ELASTICSEARCH, metadata.getTableType());
+        assertEquals(Table.TableType.OPENSEARCH, metadata.getTableType());
     }
 
     @Test

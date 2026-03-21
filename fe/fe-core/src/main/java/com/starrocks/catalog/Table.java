@@ -81,8 +81,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
     // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC, BENCHMARK
-        @SerializedName("OPENSEARCH")
-        OPENSEARCH,
     public enum TableType {
         @SerializedName("MYSQL")
         MYSQL,

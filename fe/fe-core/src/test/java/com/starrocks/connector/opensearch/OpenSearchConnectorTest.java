@@ -14,8 +14,12 @@
 
 package com.starrocks.connector.opensearch;
 
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,17 +30,20 @@ public class OpenSearchConnectorTest {
 
     @Test
     public void testConstructor() {
-        String catalogName = "opensearch_test";
+        Map<String, String> properties = new HashMap<>();
+        ConnectorContext context = new ConnectorContext("opensearch_test", "opensearch", properties);
 
-        OpenSearchConnector connector = new OpenSearchConnector(catalogName);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
         
         assertNotNull(connector);
     }
 
     @Test
     public void testBindConfig() {
-        String catalogName = "opensearch_test";
-        OpenSearchConnector connector = new OpenSearchConnector(catalogName);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("nodes", "localhost:9200");
+        ConnectorContext context = new ConnectorContext("opensearch_test", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
 
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(new String[] {"localhost:9200"});
@@ -55,8 +62,10 @@ public class OpenSearchConnectorTest {
 
     @Test
     public void testGetMetadataReturnsSameInstance() {
-        String catalogName = "opensearch_test";
-        OpenSearchConnector connector = new OpenSearchConnector(catalogName);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("nodes", "localhost:9200");
+        ConnectorContext context = new ConnectorContext("opensearch_test", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
 
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(new String[] {"localhost:9200"});
@@ -71,8 +80,10 @@ public class OpenSearchConnectorTest {
 
     @Test
     public void testMetadataType() {
-        String catalogName = "opensearch_test";
-        OpenSearchConnector connector = new OpenSearchConnector(catalogName);
+        Map<String, String> properties = new HashMap<>();
+        properties.put("nodes", "localhost:9200");
+        ConnectorContext context = new ConnectorContext("opensearch_test", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
 
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(new String[] {"localhost:9200"});
@@ -85,7 +96,10 @@ public class OpenSearchConnectorTest {
     @Test
     public void testNoSslConfigBinding() {
         // Verify that bindConfig doesn't handle SSL-related config
-        OpenSearchConnector connector = new OpenSearchConnector("test");
+        Map<String, String> properties = new HashMap<>();
+        ConnectorContext context = new ConnectorContext("test", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
+        
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(new String[] {"localhost:9200"});
         

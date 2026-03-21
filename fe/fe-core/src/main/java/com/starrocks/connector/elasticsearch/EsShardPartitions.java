@@ -36,8 +36,10 @@ package com.starrocks.connector.elasticsearch;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -45,26 +47,48 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-public class EsShardPartitions {
+public class EsShardPartitions implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(EsShardPartitions.class);
 
-    private final String indexName;
+    @SerializedName(value = "in")
+    private String indexName;
     // shardid -> host1, host2, host3
+    @SerializedName(value = "sr")
     private Map<Integer, List<EsShardRouting>> shardRoutings;
+    @SerializedName(value = "pd")
     private SingleRangePartitionDesc partitionDesc;
+    @SerializedName(value = "pk")
     private PartitionKey partitionKey;
+    @SerializedName(value = "pid")
     private long partitionId = -1;
+
+    // Default constructor for Gson deserialization
+    private EsShardPartitions() {
+        this.indexName = "";
+        this.shardRoutings = Maps.newHashMap();
+        this.partitionDesc = null;
+        this.partitionKey = null;
+    }
 
     public EsShardPartitions(String indexName) {
         this.indexName = indexName;
         this.shardRoutings = Maps.newHashMap();
         this.partitionDesc = null;
         this.partitionKey = null;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Ensure shardRoutings is not null after deserialization
+        if (shardRoutings == null) {
+            shardRoutings = Maps.newHashMap();
+        }
     }
 
     /**

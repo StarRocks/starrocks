@@ -14,8 +14,10 @@
 
 package com.starrocks.connector.opensearch;
 
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import org.junit.Assume;
+import com.starrocks.qe.ConnectContext;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,7 +25,9 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,7 +54,7 @@ public class OpenSearchIntegrationTest {
 
     @BeforeEach
     public void setUp() {
-        Assume.assumeTrue("OpenSearch not available. Set OPENSEARCH_TEST_HOSTS env var.", openSearchAvailable);
+        Assumptions.assumeTrue(openSearchAvailable, "OpenSearch not available. Set OPENSEARCH_TEST_HOSTS env var.");
     }
 
     private static boolean checkOpenSearchAvailable(String host) {
@@ -77,9 +81,13 @@ public class OpenSearchIntegrationTest {
 
     @Test
     public void testListTables() throws Exception {
-        Assume.assumeTrue("OpenSearch not available", openSearchAvailable);
+        Assumptions.assumeTrue(openSearchAvailable, "OpenSearch not available");
         
-        OpenSearchConnector connector = new OpenSearchConnector("test_catalog");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("nodes", String.join(",", testHosts));
+        ConnectorContext context = new ConnectorContext("test_catalog", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
+        
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(testHosts);
         config.setEnableWanOnly(true);
@@ -90,14 +98,18 @@ public class OpenSearchIntegrationTest {
         ConnectorMetadata metadata = connector.getMetadata();
         
         // List databases (should return default)
-        List<String> dbs = metadata.listDbNames();
+        List<String> dbs = metadata.listDbNames(new ConnectContext());
         assertNotNull(dbs);
-        assertTrue(dbs.contains("default"));
+        assertTrue(dbs.contains("default_db"));
     }
 
     @Test
     public void testMetadataInitialization() throws Exception {
-        OpenSearchConnector connector = new OpenSearchConnector("test_catalog");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("nodes", String.join(",", testHosts));
+        ConnectorContext context = new ConnectorContext("test_catalog", "opensearch", properties);
+        OpenSearchConnector connector = new OpenSearchConnector(context);
+        
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(testHosts);
         config.setEnableWanOnly(true);
@@ -111,17 +123,17 @@ public class OpenSearchIntegrationTest {
 
     @Test
     public void testListDatabases() throws Exception {
-        Assume.assumeTrue("OpenSearch not available", openSearchAvailable);
+        Assumptions.assumeTrue(openSearchAvailable, "OpenSearch not available");
         
         OpenSearchConfig config = new OpenSearchConfig();
         config.setNodes(testHosts);
         
         OpenSearchRestClient client = new OpenSearchRestClient(config.getNodes());
-        OpenSearchMetadata metadata = new OpenSearchMetadata("test_catalog", client, config);
+        OpenSearchMetadata metadata = new OpenSearchMetadata(client, null, "test_catalog");
         
-        List<String> dbs = metadata.listDbNames();
+        List<String> dbs = metadata.listDbNames(new ConnectContext());
         assertNotNull(dbs);
         // Should at least have default database
-        assertTrue(dbs.contains("default"));
+        assertTrue(dbs.contains("default_db"));
     }
 }

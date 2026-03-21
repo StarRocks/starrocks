@@ -106,6 +106,7 @@ public class EsTable extends Table implements GsonPostProcessable {
     private String mappingType = null;
     private String transport = "http";
 
+    @SerializedName(value = "etp")
     private EsTablePartitions esTablePartitions;
 
     // Whether to enable docvalues scan optimization for fetching fields more fast, default to true

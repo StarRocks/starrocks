@@ -81,7 +81,7 @@ public class OpenSearchMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String name) {
+    public Database getDb(ConnectContext context, String name) {
         if (DEFAULT_DB.equals(name)) {
             return new Database(DEFAULT_DB_ID, DEFAULT_DB);
         }
@@ -89,12 +89,12 @@ public class OpenSearchMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return Arrays.asList(DEFAULT_DB);
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         return restClient.listTables();
     }
 
@@ -109,6 +109,8 @@ public class OpenSearchMetadata implements ConnectorMetadata {
         try {
             List<Column> columns = OpenSearchUtil.convertColumnSchema(restClient, tableName);
             properties.put(EsTable.KEY_INDEX, tableName);
+            // OpenSearch 2.x has no mapping type, set to null
+            properties.put(EsTable.KEY_TYPE, "");
             EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
                     catalogName, dbName, tableName, columns, properties, new SinglePartitionInfo());
             esTable.setComment("created by external opensearch catalog");
@@ -182,11 +184,11 @@ public class OpenSearchMetadata implements ConnectorMetadata {
             for (OpenSearchShardRouting osRouting : osRoutings) {
                 // Create EsShardRouting using constructor
                 EsShardRouting esRouting = new EsShardRouting(
-                    osRouting.getIndexName(),
-                    osRouting.getShardId(),
-                    osRouting.isPrimary(),
-                    osRouting.getAddress(),  // This might be null for HTTP mode
-                    osRouting.getNodeId()
+                        osRouting.getIndexName(),
+                        osRouting.getShardId(),
+                        osRouting.isPrimary(),
+                        osRouting.getAddress(),  // This might be null for HTTP mode
+                        osRouting.getNodeId()
                 );
                 
                 // Copy HTTP address if available

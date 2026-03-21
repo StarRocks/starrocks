@@ -230,7 +230,8 @@ public class EsScanNode extends ScanNode {
                 TEsScanRange esScanRange = new TEsScanRange();
                 esScanRange.setEs_hosts(shardAllocations);
                 esScanRange.setIndex(shardRouting.get(0).getIndexName());
-                if (table.getMappingType() != null) {
+                // Only set type for legacy ES (pre-7.x). OpenSearch 2.x and ES 7.x+ don't use type.
+                if (table.getMappingType() != null && !table.getMappingType().isEmpty()) {
                     esScanRange.setType(table.getMappingType());
                 }
                 esScanRange.setShard_id(shardRouting.get(0).getShardId());
@@ -287,7 +288,7 @@ public class EsScanNode extends ScanNode {
         }
         String indexName = table.getIndexName();
         String typeName = table.getMappingType();
-        if (typeName == null) {
+        if (typeName == null || typeName.isEmpty()) {
             output.append(prefix)
                     .append(String.format("ES index: %s", indexName))
                     .append("\n");

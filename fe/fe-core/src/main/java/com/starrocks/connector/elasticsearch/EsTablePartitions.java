@@ -36,6 +36,7 @@ package com.starrocks.connector.elasticsearch;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -44,9 +45,11 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -55,13 +58,17 @@ import java.util.Map;
 /**
  * save the dynamic info parsed from es cluster state such as shard routing, partition info
  */
-public class EsTablePartitions {
+public class EsTablePartitions implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(EsTablePartitions.class);
 
+    @SerializedName(value = "pi")
     private PartitionInfo partitionInfo;
+    @SerializedName(value = "piti")
     private Map<Long, String> partitionIdToIndices;
+    @SerializedName(value = "pis")
     private Map<String, EsShardPartitions> partitionedIndexStates;
+    @SerializedName(value = "upis")
     private Map<String, EsShardPartitions> unPartitionedIndexStates;
 
     public EsTablePartitions() {
@@ -69,6 +76,20 @@ public class EsTablePartitions {
         partitionIdToIndices = Maps.newHashMap();
         partitionedIndexStates = Maps.newHashMap();
         unPartitionedIndexStates = Maps.newHashMap();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Ensure maps are not null after deserialization
+        if (partitionIdToIndices == null) {
+            partitionIdToIndices = Maps.newHashMap();
+        }
+        if (partitionedIndexStates == null) {
+            partitionedIndexStates = Maps.newHashMap();
+        }
+        if (unPartitionedIndexStates == null) {
+            unPartitionedIndexStates = Maps.newHashMap();
+        }
     }
 
     public static EsTablePartitions fromShardPartitions(EsTable esTable, EsShardPartitions shardPartitions)

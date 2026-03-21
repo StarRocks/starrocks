@@ -41,7 +41,7 @@ Success Criteria:
 
 | Stage | Protocol | Auth | Description | Status |
 |-------|----------|------|-------------|--------|
-| Stage 1 | HTTP | None | Basic connector, OpenSearch 2.9.x | ✅ Code complete |
+| Stage 1 | HTTP | None | Basic connector, OpenSearch 2.9.x | 🚀 Deploying |
 | Stage 2 | HTTPS | Server cert only | One-way TLS (CA validation) | Planned |
 | Stage 3 | HTTPS | Server + Client cert | Mutual TLS (mTLS) | Planned |
 

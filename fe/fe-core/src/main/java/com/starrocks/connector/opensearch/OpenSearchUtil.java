@@ -18,9 +18,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.catalog.Column;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,10 +39,35 @@ public class OpenSearchUtil {
     public static List<Column> convertColumnSchema(OpenSearchRestClient client, String indexName) {
         List<Column> columns = new ArrayList<>();
         try {
+            // Add _id column (always present in ES/OpenSearch)
+            columns.add(new Column("_id", VarcharType.VARCHAR, true));
+            columns.add(new Column("_index", VarcharType.VARCHAR, false));
+            
+            // Get mapping and parse fields
             String mapping = client.getMapping(indexName);
-            // Simplified - just return basic columns for testing
-            columns.add(new Column("_id", ScalarType.createType(PrimitiveType.VARCHAR), true));
-            columns.add(new Column("_source", ScalarType.createType(PrimitiveType.VARCHAR), true));
+            if (mapping != null) {
+                JsonNode root = MAPPER.readTree(mapping);
+                // Navigate to properties: {indexName: {mappings: {properties: {fields}}}}
+                JsonNode indexNode = root.get(indexName);
+                if (indexNode == null) {
+                    // Try without index name wrapper
+                    indexNode = root;
+                }
+                JsonNode mappingsNode = indexNode.get("mappings");
+                if (mappingsNode != null) {
+                    JsonNode propertiesNode = mappingsNode.get("properties");
+                    if (propertiesNode != null) {
+                        propertiesNode.fields().forEachRemaining(entry -> {
+                            String fieldName = entry.getKey();
+                            JsonNode fieldProps = entry.getValue();
+                            String fieldType = fieldProps.has("type") ? 
+                                    fieldProps.get("type").asText() : "keyword";
+                            Type srType = convertType(fieldType);
+                            columns.add(new Column(fieldName, srType, true));
+                        });
+                    }
+                }
+            }
         } catch (Exception e) {
             LOG.warn("Failed to get mapping for index: " + indexName, e);
         }
@@ -46,30 +76,30 @@ public class OpenSearchUtil {
 
     public static Type convertType(String esType) {
         if (esType == null) {
-            return Type.NULL;
+            return NullType.NULL;
         }
         switch (esType.toLowerCase()) {
             case "boolean":
-                return Type.BOOLEAN;
+                return BooleanType.BOOLEAN;
             case "byte":
-                return Type.TINYINT;
+                return IntegerType.TINYINT;
             case "short":
-                return Type.SMALLINT;
+                return IntegerType.SMALLINT;
             case "integer":
-                return Type.INT;
+                return IntegerType.INT;
             case "long":
-                return Type.BIGINT;
+                return IntegerType.BIGINT;
             case "float":
-                return Type.FLOAT;
+                return FloatType.FLOAT;
             case "double":
-                return Type.DOUBLE;
+                return FloatType.DOUBLE;
             case "date":
-                return Type.DATE;
+                return DateType.DATE;
             case "text":
             case "keyword":
-                return Type.VARCHAR;
+                return TypeFactory.createDefaultCatalogString();
             default:
-                return Type.VARCHAR;
+                return TypeFactory.createDefaultCatalogString();
         }
     }
 

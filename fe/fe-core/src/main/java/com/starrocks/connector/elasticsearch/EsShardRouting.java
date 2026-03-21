@@ -17,18 +17,25 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang.StringUtils;
 import org.json.JSONObject;
 
 public class EsShardRouting {
 
+    @SerializedName(value = "in")
     private final String indexName;
+    @SerializedName(value = "sid")
     private final int shardId;
+    @SerializedName(value = "ip")
     private final boolean isPrimary;
+    @SerializedName(value = "addr")
     private final TNetworkAddress address;
 
+    @SerializedName(value = "ha")
     private TNetworkAddress httpAddress;
+    @SerializedName(value = "nid")
     private final String nodeId;
 
     public EsShardRouting(String indexName, int shardId, boolean isPrimary, TNetworkAddress address, String nodeId) {
