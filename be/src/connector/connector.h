@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/memory/memory_allocator.h"
 #include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
@@ -75,6 +76,8 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
     virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
@@ -98,6 +101,8 @@ protected:
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
+    // TODO: wire allocator propagation from ConnectorChunkSource in a follow-up phase.
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
 

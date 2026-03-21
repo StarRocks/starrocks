@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "common/runtime_profile.h"
 #include "exec/join/join_hash_map.h"
 
@@ -69,6 +70,8 @@ public:
     std::string get_hash_map_type() const;
     void remove_duplicate_index(Filter* filter);
     JoinHashTableItems* table_items() const { return _table_items.get(); }
+    memory::Allocator* build_allocator() const { return _build_allocator; }
+    memory::Allocator* probe_allocator() const { return _probe_allocator; }
 
     int64_t mem_usage() const;
 
@@ -144,6 +147,9 @@ private:
 #undef JoinHashMapForIntBigintKey
 
     bool _is_empty_map = true;
+    // TODO: wire allocator propagation from HashTableParam in create() in a follow-up phase.
+    memory::Allocator* _build_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _probe_allocator = memory::get_default_column_allocator();
     JoinKeyConstructorUnaryType _key_constructor_type;
     JoinHashMapMethodUnaryType _hash_map_method_type;
     JoinHashMapVariant _hash_map;

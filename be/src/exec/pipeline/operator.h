@@ -16,6 +16,7 @@
 
 #include <functional>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
@@ -256,6 +257,7 @@ public:
         }
     }
     int32_t get_driver_sequence() const { return _driver_sequence; }
+    memory::Allocator* allocator() const { return _allocator; }
     void set_runtime_filter_probe_sequence(int32_t probe_sequence) {
         this->_runtime_filter_probe_sequence = probe_sequence;
     }
@@ -293,6 +295,8 @@ protected:
     const bool _is_subordinate;
     const int32_t _driver_sequence;
     int32_t _runtime_filter_probe_sequence;
+    // TODO: wire allocator propagation from upstream contexts in a follow-up phase.
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.

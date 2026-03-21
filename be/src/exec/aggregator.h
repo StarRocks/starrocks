@@ -22,6 +22,7 @@
 #include <new>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
@@ -407,6 +408,10 @@ public:
     void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
 
     bool is_streaming_all_states() const { return _streaming_all_states; }
+    void set_sink_allocator(memory::Allocator* allocator) { _sink_allocator = allocator; }
+    void set_source_allocator(memory::Allocator* allocator) { _source_allocator = allocator; }
+    memory::Allocator* sink_allocator() const { return _sink_allocator; }
+    memory::Allocator* source_allocator() const { return _source_allocator; }
 
     HashTableKeyAllocator& state_allocator() { return _state_allocator; }
 
@@ -424,6 +429,9 @@ protected:
 
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
+    // TODO: wire allocator propagation from sink/source operators in a follow-up phase.
+    memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_column_allocator();
 
     // Expr/Object pool owned by Aggregator.
     // Used to allocate ExprContext and other helper objects whose lifetime

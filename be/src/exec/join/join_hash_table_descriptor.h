@@ -20,6 +20,7 @@
 #include <set>
 #include <variant>
 
+#include "base/memory/memory_allocator.h"
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -352,6 +353,9 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
+    // TODO: wire allocator propagation from HashJoiner in a follow-up phase.
+    memory::Allocator* build_allocator = memory::get_default_column_allocator();
+    memory::Allocator* probe_allocator = memory::get_default_column_allocator();
 };
 
 inline bool is_asof_join(TJoinOp::type join_type) {

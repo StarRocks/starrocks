@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+#include "base/memory/memory_allocator.h"
 #include "cache/cache_options.h"
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
@@ -349,6 +350,8 @@ struct HdfsScannerContext {
     std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
+    // TODO: wire allocator propagation from DataSource in a follow-up phase.
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 
     bool orc_use_column_names = false;
 

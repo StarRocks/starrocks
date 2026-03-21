@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "base/hash/hash_std.hpp"
 #include "base/phmap/phmap.h"
 #include "base/string/slice.h"
@@ -75,6 +76,10 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     PipeObservable& observable() { return _observable; }
+    void set_sink_allocator(memory::Allocator* allocator) { _sink_allocator = allocator; }
+    void set_source_allocator(memory::Allocator* allocator) { _source_allocator = allocator; }
+    memory::Allocator* sink_allocator() const { return _sink_allocator; }
+    memory::Allocator* source_allocator() const { return _source_allocator; }
 
 private:
     std::unique_ptr<ExceptHashSerializeSet> _hash_set = std::make_unique<ExceptHashSerializeSet>();
@@ -90,6 +95,9 @@ private:
     // It is used to allocate keys in ExceptBuildSinkOperator, and release all allocated keys
     // when ExceptOutputSourceOperator is finished by calling close().
     std::unique_ptr<MemPool> _build_pool = nullptr;
+    // TODO: wire allocator propagation from sink/source operators in a follow-up phase.
+    memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_column_allocator();
 
     ExceptHashSerializeSet::KeyVector _remained_keys;
     // Used for traversal on the hash set to get the undeleted keys to dest chunk.

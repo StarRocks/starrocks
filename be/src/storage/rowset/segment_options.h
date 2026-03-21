@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "runtime/global_dict/types.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_common.h"
@@ -85,6 +86,8 @@ public:
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+    // TODO: wire allocator propagation from TabletReaderParams in a follow-up phase.
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
