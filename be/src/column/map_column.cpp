@@ -364,8 +364,10 @@ void MapColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_s
     }
 }
 
-MutableColumnPtr MapColumn::clone_empty() const {
-    return create(_keys->clone_empty(), _values->clone_empty(), UInt32Column::create());
+MutableColumnPtr MapColumn::clone_empty(memory::Allocator* allocator) const {
+    auto* target_allocator = allocator == nullptr ? this->allocator() : allocator;
+    return create(target_allocator, _keys->clone_empty(target_allocator), _values->clone_empty(target_allocator),
+                  UInt32Column::create(target_allocator));
 }
 
 size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {

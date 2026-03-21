@@ -47,8 +47,8 @@ public:
         _flat_column_types = std::move(rhs._flat_column_types);
     }
 
-    MutableColumnPtr clone() const override;
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override;
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
 
     void append_datum(const Datum& datum) override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,

@@ -149,9 +149,9 @@ public:
     uint32_t serialize_size(size_t idx) const override;
     uint32_t max_one_element_serialize_size() const override;
 
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
 
-    MutableColumnPtr clone() const override;
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

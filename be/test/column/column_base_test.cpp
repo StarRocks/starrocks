@@ -180,8 +180,8 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return idx < _data.size() ? sizeof(int32_t) : 0; }
 
-    MutablePtr clone_empty() const override { return nullptr; }
-    MutablePtr clone() const override { return nullptr; }
+    MutablePtr clone_empty(memory::Allocator* allocator = nullptr) const override { return nullptr; }
+    MutablePtr clone(memory::Allocator* allocator = nullptr) const override { return nullptr; }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override {
         std::vector<int32_t> kept;

@@ -349,9 +349,9 @@ public:
     virtual uint32_t serialize_size(size_t idx) const = 0;
 
     // return new empty column with the same type
-    virtual MutablePtr clone_empty() const = 0;
+    virtual MutablePtr clone_empty(memory::Allocator* allocator = nullptr) const = 0;
 
-    virtual MutablePtr clone() const = 0;
+    virtual MutablePtr clone(memory::Allocator* allocator = nullptr) const = 0;
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.

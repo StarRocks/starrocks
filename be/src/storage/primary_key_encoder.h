@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -22,6 +23,9 @@
 #include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
+namespace memory {
+class Allocator;
+}
 
 // Utility functions for encoding various data types with order-preserving encoding
 namespace encoding_utils {
@@ -150,8 +154,12 @@ public:
     //   pcolumn: output column
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
     //   encoding_type: encoding type of the primary key
+    static Status create_column(memory::Allocator* allocator, const Schema& schema, MutableColumnPtr* pcolumn,
+                                PrimaryKeyEncodingType encoding_type, bool large_column = false);
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, PrimaryKeyEncodingType encoding_type,
-                                bool large_column = false);
+                                bool large_column = false) {
+        return create_column(memory::get_default_column_allocator(), schema, pcolumn, encoding_type, large_column);
+    }
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
@@ -159,8 +167,14 @@ public:
     //   key_idxes: indexes of columns for encoding
     //   encoding_type: encoding type of the primary key
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
+    static Status create_column(memory::Allocator* allocator, const Schema& schema, MutableColumnPtr* pcolumn,
+                                const std::vector<ColumnId>& key_idxes, PrimaryKeyEncodingType encoding_type,
+                                bool large_column = false);
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
-                                PrimaryKeyEncodingType encoding_type, bool large_column = false);
+                                PrimaryKeyEncodingType encoding_type, bool large_column = false) {
+        return create_column(memory::get_default_column_allocator(), schema, pcolumn, key_idxes, encoding_type,
+                             large_column);
+    }
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
                        PrimaryKeyEncodingType encoding_type);

@@ -17,6 +17,7 @@
 
 #include "util/stack_util.h"
 
+#include <exception>
 #include <cxxabi.h>
 #include <dirent.h>
 #include <fmt/core.h>
@@ -58,6 +59,10 @@ enum class SymbolizeOptions { kNone = 0, kNoLineNumbers = 1 };
 int GetStackTrace(void** result, int max_depth, int skip_count);
 bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions options = SymbolizeOptions::kNone);
 } // namespace google::glog_internal_namespace_
+
+extern "C" [[noreturn]] __attribute__((weak)) void __cxa_call_terminate(void*) {
+    std::terminate();
+}
 
 namespace starrocks {
 

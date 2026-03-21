@@ -86,18 +86,18 @@ std::string JsonColumn::get_name() const {
     return "json";
 }
 
-MutableColumnPtr JsonColumn::clone() const {
+MutableColumnPtr JsonColumn::clone(memory::Allocator* allocator) const {
     if (this->is_flat_json()) {
-        auto p = this->create();
+        auto p = this->create(allocator);
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
         p->_path_to_index = this->_path_to_index;
         for (auto& f : this->_flat_columns) {
-            p->_flat_columns.emplace_back(f->clone());
+            p->_flat_columns.emplace_back(f->clone(allocator));
         }
         return p;
     } else {
-        return BaseClass::clone();
+        return BaseClass::clone(allocator);
     }
 }
 

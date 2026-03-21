@@ -23,10 +23,14 @@
 namespace starrocks {
 class FunctionContext;
 }
+namespace starrocks::memory {
+class Allocator;
+}
 namespace starrocks {
 
 class FunctionHelper {
 public:
+    static MutableColumnPtr create_column(memory::Allocator* allocator, const TypeDescriptor& type_desc, bool nullable);
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
     /**

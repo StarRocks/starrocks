@@ -58,6 +58,10 @@ public:
         return ArrayColumn::create(elements->as_mutable_ptr(), offsets->as_mutable_ptr());
     }
 
+    static MutablePtr create(memory::Allocator* allocator, MutableColumnPtr&& elements, MutableColumnPtr&& offsets) {
+        return Base::create(allocator, std::move(elements), std::move(offsets));
+    }
+
     template <typename... Args>
     requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
         return Base::create(std::forward<Args>(args)...);
@@ -130,9 +134,9 @@ public:
 
     uint32_t serialize_size(size_t idx) const override;
 
-    MutableColumnPtr clone_empty() const override;
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override;
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, size());
         return p;

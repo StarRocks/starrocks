@@ -23,6 +23,9 @@
 #include "tablet_schema.h"
 
 namespace starrocks {
+namespace memory {
+class Allocator;
+}
 
 class Status;
 class TabletColumn;
@@ -65,6 +68,40 @@ public:
     static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
 
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots, size_t n);
+    // Create an empty chunk according to the |schema| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(memory::Allocator* allocator, const Schema& schema, size_t n);
+    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(memory::Allocator* allocator, const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(memory::Allocator* allocator,
+                                                      const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
+                                                      size_t n);
+
+    // Create an empty mutable chunk according to the |slots| and reserve it of size |n|.
+    static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots,
+                                             size_t n);
+    static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const Schema& schema, size_t n);
+    static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
+                                             size_t n);
+    // a wrapper of new_mutable_chunk with memory check
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(memory::Allocator* allocator, const Schema& schema,
+                                                               size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(memory::Allocator* allocator,
+                                                               const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(memory::Allocator* allocator,
+                                                               const TupleDescriptor& tuple_desc, size_t n);
+
+    // Create a vectorized column from field .
+    // REQUIRE: |type| must be scalar type.
+    static MutableColumnPtr column_from_field_type(memory::Allocator* allocator, LogicalType type, bool nullable);
+
+    // Create a vectorized column from field.
+    static MutableColumnPtr column_from_field(memory::Allocator* allocator, const Field& field);
+
+    // Compatibility overloads.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
     // Create an empty chunk according to the |schema| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);

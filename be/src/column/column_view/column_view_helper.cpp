@@ -37,17 +37,24 @@ static bool should_use_view(LogicalType ltype) {
     }
     return false;
 }
-std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(const TypeDescriptor& type_desc, bool nullable,
+std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(memory::Allocator* allocator,
+                                                                     const TypeDescriptor& type_desc, bool nullable,
                                                                      long concat_rows_limit, long concat_bytes_limit) {
     if (!should_use_view(type_desc.type)) {
         return {};
     }
-    MutableColumnPtr default_column = ColumnHelper::create_column(type_desc, nullable);
+    MutableColumnPtr default_column = ColumnHelper::create_column(allocator, type_desc, nullable);
     if (default_column->is_nullable()) {
         down_cast<NullableColumn*>(default_column.get())->append_default_not_null_value();
     } else {
         default_column->append_default();
     }
     return ColumnView::create(std::move(default_column), concat_rows_limit, concat_bytes_limit);
+}
+
+std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(const TypeDescriptor& type_desc, bool nullable,
+                                                                     long concat_rows_limit, long concat_bytes_limit) {
+    return create_column_view(memory::get_default_column_allocator(), type_desc, nullable, concat_rows_limit,
+                              concat_bytes_limit);
 }
 } // namespace starrocks

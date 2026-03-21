@@ -79,6 +79,11 @@ public:
         return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
     }
 
+    static MutablePtr create(memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                             MutableColumnPtr&& null_column) {
+        return Base::create(allocator, std::move(data_column), std::move(null_column));
+    }
+
     template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
     static MutablePtr create(Args&&... args) {
         return Base::create(std::forward<Args>(args)...);
@@ -213,11 +218,11 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    MutableColumnPtr clone_empty() const override {
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
         return create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, size());
         return p;

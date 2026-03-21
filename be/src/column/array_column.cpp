@@ -303,8 +303,9 @@ void ArrayColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk
     }
 }
 
-MutableColumnPtr ArrayColumn::clone_empty() const {
-    return create(_elements->clone_empty(), OffsetColumn::create());
+MutableColumnPtr ArrayColumn::clone_empty(memory::Allocator* allocator) const {
+    auto* target_allocator = allocator == nullptr ? this->allocator() : allocator;
+    return create(target_allocator, _elements->clone_empty(target_allocator), OffsetColumn::create(target_allocator));
 }
 
 size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {

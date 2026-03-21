@@ -66,8 +66,8 @@ public:
               _metadata_column(std::move(rhs._metadata_column)),
               _remain_value_column(std::move(rhs._remain_value_column)) {}
 
-    MutableColumnPtr clone() const override;
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override;
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
 
     // Row-level serde used by generic Column key paths (e.g. multi-column GROUP BY / hash keys).
     // Use VariantRowValue wire format so each row is self-describing and does not depend on

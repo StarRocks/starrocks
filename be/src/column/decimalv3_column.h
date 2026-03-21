@@ -52,9 +52,9 @@ public:
     int precision() const;
     int scale() const;
 
-    MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(_precision, _scale); }
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, this->size());
         return p;
@@ -65,8 +65,8 @@ public:
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
 private:
-    int _precision;
-    int _scale;
+    int _precision = decimal_precision_limit<T>;
+    int _scale = 0;
 };
 
 } // namespace starrocks

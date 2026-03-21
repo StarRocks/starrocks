@@ -17,6 +17,7 @@
 // NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "base/simd/simd.h"
 #include "column/column_filter_range.h"
 #include "column/const_column.h"
@@ -30,6 +31,9 @@
 
 namespace starrocks {
 struct TypeDescriptor;
+}
+namespace starrocks::memory {
+class Allocator;
 }
 
 namespace starrocks {
@@ -78,11 +82,12 @@ public:
     static int64_t find_first_not_equal(const Column* column, int64_t target, int64_t start, int64_t end);
 
     template <LogicalType Type>
-    static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
+    static inline ColumnPtr create_const_column(memory::Allocator* allocator, const RunTimeCppType<Type>& value,
+                                                size_t chunk_size) {
         static_assert(!lt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
                       "precision and scale param");
-        auto ptr = RunTimeColumnType<Type>::create();
+        auto ptr = RunTimeColumnType<Type>::create(allocator);
         ptr->append_datum(Datum(value));
         // @FIXME: BinaryColumn get_data() will call build_slice() to modify the column's memory data,
         // but the operator is thread-unsafe, it's will cause crash in multi-thread(OLAP_SCANNER) when
@@ -91,7 +96,12 @@ public:
         if constexpr (!lt_is_object_family<Type>) {
             ptr->raw_data();
         }
-        return ConstColumn::create(std::move(ptr), chunk_size);
+        return ConstColumn::create(allocator, std::move(ptr), chunk_size);
+    }
+
+    template <LogicalType Type>
+    static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
+        return create_const_column<Type>(memory::get_default_column_allocator(), value, chunk_size);
     }
 
     template <LogicalType LT>
@@ -201,7 +211,8 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(bool dst_nullable, ColumnPtr&& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(memory::Allocator* allocator, bool dst_nullable, ColumnPtr&& src_column,
+                                            int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -219,13 +230,20 @@ public:
             } else {
                 // 4. src column is non-nullable, and dest column is nullable.
                 auto mut_column = Column::mutate(std::move(src_column));
-                return NullableColumn::create(std::move(mut_column), NullColumn::create(num_rows, 0));
+                return NullableColumn::create(allocator, std::move(mut_column), NullColumn::create(allocator, num_rows, 0));
             }
         }
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static MutableColumnPtr update_column_nullable(bool dst_nullable, MutableColumnPtr&& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, ColumnPtr&& src_column, int num_rows) {
+        return update_column_nullable(memory::get_default_column_allocator(), dst_nullable, std::move(src_column),
+                                      num_rows);
+    }
+
+    // Update column according to whether the dest column and source column are nullable or not.
+    static MutableColumnPtr update_column_nullable(memory::Allocator* allocator, bool dst_nullable,
+                                                   MutableColumnPtr&& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -242,18 +260,29 @@ public:
                 return std::move(src_column);
             } else {
                 // 4. src column is non-nullable, and dest column is nullable.
-                return NullableColumn::create(std::move(src_column), NullColumn::create(num_rows, 0));
+                return NullableColumn::create(allocator, std::move(src_column), NullColumn::create(allocator, num_rows, 0));
             }
         }
     }
 
+    // Update column according to whether the dest column and source column are nullable or not.
+    static MutableColumnPtr update_column_nullable(bool dst_nullable, MutableColumnPtr&& src_column, int num_rows) {
+        return update_column_nullable(memory::get_default_column_allocator(), dst_nullable, std::move(src_column),
+                                      num_rows);
+    }
+
     // Cast to Nullable
-    static MutableColumnPtr cast_to_nullable_column(ColumnPtr&& src_column) {
+    static MutableColumnPtr cast_to_nullable_column(memory::Allocator* allocator, ColumnPtr&& src_column) {
         auto mut_column = Column::mutate(std::move(src_column));
         if (mut_column->is_nullable()) {
             return mut_column;
         }
-        return NullableColumn::create(std::move(mut_column), NullColumn::create(mut_column->size(), 0));
+        return NullableColumn::create(allocator, std::move(mut_column), NullColumn::create(allocator, mut_column->size(), 0));
+    }
+
+    // Cast to Nullable
+    static MutableColumnPtr cast_to_nullable_column(ColumnPtr&& src_column) {
+        return cast_to_nullable_column(memory::get_default_column_allocator(), std::move(src_column));
     }
 
     // Move the source column according to the specific dest type and nullable.
@@ -263,34 +292,69 @@ public:
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return update_column_nullable(dst_nullable, std::move(src_column), num_rows);
+        return update_column_nullable(memory::get_default_column_allocator(), dst_nullable, std::move(src_column),
+                                      num_rows);
+    }
+
+    // Copy the source column according to the specific dest type and nullable.
+    static MutableColumnPtr clone_column(memory::Allocator* allocator, const TypeDescriptor& dst_type_desc,
+                                         bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
+        // Clone the source column to avoid modifying the original column.
+        auto dst_column = src_column->clone();
+        return update_column_nullable(allocator, dst_nullable, std::move(dst_column), num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static MutableColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                          const ColumnPtr& src_column, int num_rows) {
-        // Clone the source column to avoid modifying the original column.
-        auto dst_column = src_column->clone();
-        return update_column_nullable(dst_nullable, std::move(dst_column), num_rows);
+        return clone_column(memory::get_default_column_allocator(), dst_type_desc, dst_nullable, src_column, num_rows);
     }
 
     // Create an empty column
-    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
+    static MutableColumnPtr create_column(memory::Allocator* allocator, const TypeDescriptor& type_desc, bool nullable);
 
-    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable) {
+        return create_column(memory::get_default_column_allocator(), type_desc, nullable);
+    }
+
+    static MutableColumnPtr create_column(memory::Allocator* allocator, const TypeDescriptor& type_desc, bool nullable,
+                                          bool use_view_if_needed,
                                           long column_view_concat_rows_limit, long column_view_concat_bytes_limit);
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool use_view_if_needed,
+                                          long column_view_concat_rows_limit, long column_view_concat_bytes_limit) {
+        return create_column(memory::get_default_column_allocator(), type_desc, nullable, use_view_if_needed,
+                             column_view_concat_rows_limit, column_view_concat_bytes_limit);
+    }
 
     // expression trees' return column should align return type when some return columns maybe diff from the required
     // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
     // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-    static MutableColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+    static MutableColumnPtr align_return_type(memory::Allocator* allocator, ColumnPtr&& old_col,
+                                              const TypeDescriptor& type_desc, size_t num_rows,
                                               const bool is_nullable);
-    static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
+    static MutableColumnPtr align_return_type(memory::Allocator* allocator, MutableColumnPtr&& old_col,
+                                              const TypeDescriptor& type_desc,
                                               size_t num_rows, const bool is_nullable);
+    static MutableColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                              const bool is_nullable) {
+        return align_return_type(memory::get_default_column_allocator(), std::move(old_col), type_desc, num_rows,
+                                 is_nullable);
+    }
+    static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
+                                              size_t num_rows, const bool is_nullable) {
+        return align_return_type(memory::get_default_column_allocator(), std::move(old_col), type_desc, num_rows,
+                                 is_nullable);
+    }
 
     // Create a column with a specified size, the column will be resized to size
-    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+    static MutableColumnPtr create_column(memory::Allocator* allocator, const TypeDescriptor& type_desc, bool nullable,
+                                          bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                          bool use_adaptive_nullable_column = false) {
+        return create_column(memory::get_default_column_allocator(), type_desc, nullable, is_const, size,
+                             use_adaptive_nullable_column);
+    }
 
     // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
@@ -742,7 +806,10 @@ public:
         }
     }
 
-    static MutableColumnPtr create_const_null_column(size_t chunk_size);
+    static MutableColumnPtr create_const_null_column(memory::Allocator* allocator, size_t chunk_size);
+    static MutableColumnPtr create_const_null_column(size_t chunk_size) {
+        return create_const_null_column(memory::get_default_column_allocator(), chunk_size);
+    }
 
     static Status update_nested_has_null(Column* column);
 

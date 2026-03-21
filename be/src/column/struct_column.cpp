@@ -63,13 +63,22 @@ StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const 
         : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields), std::move(field_names)) {}
 
 StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
+    return StructColumn::create(memory::get_default_column_allocator(), columns, std::move(field_names));
+}
+
+StructColumn::Ptr StructColumn::create(memory::Allocator* allocator, const Columns& columns,
+                                       std::vector<std::string> field_names) {
     MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
-    return StructColumn::create(std::move(mutable_columns), std::move(field_names));
+    return StructColumn::create(allocator, std::move(mutable_columns), std::move(field_names));
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns) {
+    return StructColumn::create(memory::get_default_column_allocator(), columns);
+}
+
+StructColumn::Ptr StructColumn::create(memory::Allocator* allocator, const Columns& columns) {
     MutableColumns mutable_columns = ColumnHelper::to_mutable_columns(columns);
-    return StructColumn::create(std::move(mutable_columns));
+    return StructColumn::create(allocator, std::move(mutable_columns));
 }
 
 bool StructColumn::is_struct() const {
@@ -338,13 +347,14 @@ uint32_t StructColumn::serialize_size(size_t idx) const {
     return ser_size;
 }
 
-MutableColumnPtr StructColumn::clone_empty() const {
+MutableColumnPtr StructColumn::clone_empty(memory::Allocator* allocator) const {
+    auto* target_allocator = allocator == nullptr ? this->allocator() : allocator;
     MutableColumns fields;
     fields.reserve(_fields.size());
     for (const auto& field : _fields) {
-        fields.emplace_back(field->clone_empty());
+        fields.emplace_back(field->clone_empty(target_allocator));
     }
-    return create(std::move(fields), _field_names);
+    return create(target_allocator, std::move(fields), _field_names);
 }
 
 size_t StructColumn::filter_range(const Filter& filter, size_t from, size_t to) {

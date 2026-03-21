@@ -357,11 +357,11 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    MutableColumnPtr clone_empty() const override {
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
         return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         materialized_nullable();
         return create(_data_column->clone(), _null_column->clone());
     }
