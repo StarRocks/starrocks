@@ -52,7 +52,7 @@ namespace {
 
 ChunkPtr create_dummy_chunk() {
     auto dummy_chunk = std::make_shared<Chunk>();
-    auto column = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    auto column = ColumnHelper::create_const_column<TYPE_INT>(memory::get_default_column_allocator(), 1, 1);
     dummy_chunk->append_column(std::move(column), 0);
     return dummy_chunk;
 }

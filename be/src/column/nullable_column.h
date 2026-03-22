@@ -42,16 +42,18 @@ public:
         if (column->is_nullable()) {
             return std::move(*column).mutate();
         }
-        auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(std::move(*column).mutate(), std::move(null));
+        auto* allocator = column->allocator();
+        auto null = NullColumn::create(allocator, column->size(), 0);
+        return NullableColumn::create(allocator, std::move(*column).mutate(), std::move(null));
     }
 
     inline static ColumnPtr wrap_if_necessary(const ColumnPtr& column) {
         if (column->is_nullable()) {
             return column;
         }
-        auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(column, std::move(null));
+        auto* allocator = column->allocator();
+        auto null = NullColumn::create(allocator, column->size(), 0);
+        return NullableColumn::create(allocator, column, std::move(null));
     }
 
     NullableColumn() : SuperClass(memory::get_default_column_allocator()) {}
@@ -75,8 +77,12 @@ public:
     }
 
     using Base = SuperClass;
+    static Ptr create(memory::Allocator* allocator, const ColumnPtr& data_column, const ColumnPtr& null_column) {
+        return NullableColumn::create(allocator, data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+    }
+
     static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
-        return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+        return NullableColumn::create(memory::get_default_column_allocator(), data_column, null_column);
     }
 
     static MutablePtr create(memory::Allocator* allocator, MutableColumnPtr&& data_column,
@@ -85,8 +91,13 @@ public:
     }
 
     template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
+    static MutablePtr create(memory::Allocator* allocator, Args&&... args) {
+        return Base::create(allocator, std::forward<Args>(args)...);
+    }
+
+    template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
     static MutablePtr create(Args&&... args) {
-        return Base::create(std::forward<Args>(args)...);
+        return NullableColumn::create(memory::get_default_column_allocator(), std::forward<Args>(args)...);
     }
 
     ~NullableColumn() override = default;

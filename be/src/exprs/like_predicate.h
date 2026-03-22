@@ -215,7 +215,8 @@ private:
         void set_search_string(const std::string& search_string_arg) {
             search_string = search_string_arg;
             search_string_sv = Slice(search_string);
-            _search_string_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(search_string_sv, 1);
+            _search_string_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+                    memory::get_default_column_allocator(), search_string_sv, 1);
         }
     };
 };

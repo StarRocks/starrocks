@@ -129,13 +129,13 @@ inline void FunctionHelper::get_data_of_column<BinaryColumn, Slice>(const Column
 #define PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1)     \
     do {                                                                \
         if (c0->only_null() || c1->only_null()) {                       \
-            return ColumnHelper::create_const_null_column(c0->size());  \
+            return ColumnHelper::create_const_null_column(context->allocator(), c0->size());  \
         }                                                               \
         if (c0->has_null() || c1->has_null()) {                         \
             has_null = true;                                            \
             null_flags = FunctionHelper::union_nullable_column(c0, c1); \
         } else {                                                        \
-            auto null_flags_mut = NullColumn::create();                 \
+            auto null_flags_mut = NullColumn::create(context->allocator());  \
             null_flags_mut->reserve(c0->size());                        \
             null_flags_mut->append_default(c0->size());                 \
             null_flags = std::move(null_flags_mut);                     \

@@ -174,7 +174,7 @@ private:
         if (st.ok()) {                                                                                \
             return st.value();                                                                        \
         }                                                                                             \
-        ColumnPtr res = ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+        ColumnPtr res = ColumnHelper::create_const_null_column(c->allocator(), ptr == nullptr ? 1 : ptr->num_rows()); \
         return res;                                                                                   \
     }(ctx, expr, chunk)
 

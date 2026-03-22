@@ -146,7 +146,8 @@ StatusOr<MutableColumnPtr> NullableColumn::replicate(const Buffer<uint32_t>& off
 
     ASSIGN_OR_RETURN(auto null_col, this->_null_column->replicate(offsets));
 
-    return NullableColumn::create(std::move(data_col), NullColumn::dynamic_pointer_cast(std::move(null_col)));
+    return NullableColumn::create(data_col->allocator(), std::move(data_col),
+                                  NullColumn::dynamic_pointer_cast(std::move(null_col)));
 }
 
 bool NullableColumn::append_nulls(size_t count) {
