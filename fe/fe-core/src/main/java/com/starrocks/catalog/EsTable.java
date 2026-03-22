@@ -268,12 +268,16 @@ public class EsTable extends Table implements GsonPostProcessable {
                 && !Strings.isNullOrEmpty(properties.get(KEY_TYPE).trim())) {
             // just for compatible external es table definition
             // type in catalog means that such as es/hive/iceberg, but type in table properties also can be defined.
-            if (!"es".equalsIgnoreCase(properties.get(KEY_TYPE).trim())) {
-                mappingType = properties.get(KEY_TYPE).trim();
+            String typeValue = properties.get(KEY_TYPE).trim();
+            // "es" and "opensearch" are connector types, not ES mapping types
+            if (!"es".equalsIgnoreCase(typeValue) && !"opensearch".equalsIgnoreCase(typeValue)) {
+                mappingType = typeValue;
             } else {
                 if (!Strings.isNullOrEmpty(properties.get(KEY_CATALOG_TYPE))
                         && !Strings.isNullOrEmpty(properties.get(KEY_CATALOG_TYPE).trim())) {
                     mappingType = properties.get(KEY_CATALOG_TYPE).trim();
+                } else {
+                    mappingType = null;
                 }
             }
         } else {
