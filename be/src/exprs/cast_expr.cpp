@@ -511,7 +511,7 @@ ColumnPtr cast_int_from_string_fn([[maybe_unused]] memory::Allocator* allocator,
     StringParser::ParseResult result;
     int sz = column.get()->size();
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(sz);
+        return ColumnHelper::create_const_null_column(allocator, sz);
     }
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
@@ -521,19 +521,20 @@ ColumnPtr cast_int_from_string_fn([[maybe_unused]] memory::Allocator* allocator,
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
             }
-            return ColumnHelper::create_const_null_column(sz);
+            return ColumnHelper::create_const_null_column(allocator, sz);
         }
-        return ColumnHelper::create_const_column<ToType>(r, sz);
+        return ColumnHelper::create_const_column<ToType>(allocator, r, sz);
     }
-    auto res_data_column = RunTimeColumnType<ToType>::create();
+    auto res_data_column = RunTimeColumnType<ToType>::create(allocator);
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
-        auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
-        const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
+        NullColumn::MutablePtr null_column = NullColumn::create(allocator, sz);
         auto& null_data = null_column->get_data();
+        const auto src_null_data = input_column->immutable_null_column_data();
+        std::copy(src_null_data.begin(), src_null_data.end(), null_data.begin());
+        const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
@@ -546,9 +547,9 @@ ColumnPtr cast_int_from_string_fn([[maybe_unused]] memory::Allocator* allocator,
                 null_data[i] = (result != StringParser::PARSE_SUCCESS);
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(res_data_column), std::move(null_column));
     } else {
-        NullColumn::MutablePtr null_column = NullColumn::create(sz);
+        NullColumn::MutablePtr null_column = NullColumn::create(allocator, sz);
         auto& null_data = null_column->get_data();
         const auto* data_column = down_cast<const BinaryColumn*>(column.get());
 
@@ -567,7 +568,7 @@ ColumnPtr cast_int_from_string_fn([[maybe_unused]] memory::Allocator* allocator,
         if (!has_null) {
             return res_data_column;
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(res_data_column), std::move(null_column));
     }
 }
 
@@ -981,7 +982,7 @@ static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Alloca
     const int num_rows = column->size();
 
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(num_rows);
+        return ColumnHelper::create_const_null_column(allocator, num_rows);
     }
 
     if (column->is_constant()) {
@@ -995,12 +996,12 @@ static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Alloca
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice_value.to_string());
             }
-            return ColumnHelper::create_const_null_column(num_rows);
+            return ColumnHelper::create_const_null_column(allocator, num_rows);
         }
-        return ColumnHelper::create_const_column<ToType>(datetime_value, num_rows);
+        return ColumnHelper::create_const_column<ToType>(allocator, datetime_value, num_rows);
     }
 
-    auto res_data_column = RunTimeColumnType<ToType>::create();
+    auto res_data_column = RunTimeColumnType<ToType>::create(allocator);
     res_data_column->resize(num_rows);
     auto& res_data = res_data_column->get_data();
 
@@ -1008,9 +1009,10 @@ static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Alloca
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
 
-        auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
+        NullColumn::MutablePtr null_column = NullColumn::create(allocator, num_rows);
         auto& null_data = null_column->get_data();
+        const auto src_null_data = input_column->immutable_null_column_data();
+        std::copy(src_null_data.begin(), src_null_data.end(), null_data.begin());
 
         for (int i = 0; i < num_rows; ++i) {
             if (!null_data[i]) {
@@ -1025,10 +1027,10 @@ static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Alloca
                 null_data[i] = !success;
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(res_data_column), std::move(null_column));
     } else {
         const auto* data_column = down_cast<const BinaryColumn*>(column.get());
-        NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
+        NullColumn::MutablePtr null_column = NullColumn::create(allocator, num_rows);
         auto& null_data = null_column->get_data();
 
         bool has_null = false;
@@ -1047,7 +1049,7 @@ static ColumnPtr cast_from_string_to_datetime_fn([[maybe_unused]] memory::Alloca
         if (!has_null) {
             return res_data_column;
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(res_data_column), std::move(null_column));
     }
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATETIME, cast_from_string_to_datetime_fn);
@@ -1197,7 +1199,7 @@ public:
 
         size_t col_size = column->size();
         if (col_size != 0 && ColumnHelper::count_nulls(column) == col_size) {
-            return ColumnHelper::create_const_null_column(col_size);
+            return ColumnHelper::create_const_null_column(context->allocator(), col_size);
         }
         const TypeDescriptor& to_type = this->type();
         memory::Allocator* allocator = context->allocator();
@@ -1363,9 +1365,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {                           \
                 DateValue dv;                                                                                   \
                 dv.from_date(dtv.year(), dtv.month(), dtv.day());                                               \
-                _now = ColumnHelper::create_const_column<TYPE_DATE>(dv, 1);                                     \
+                _now = ColumnHelper::create_const_column<TYPE_DATE>(context->allocator(), dv, 1);               \
             } else {                                                                                            \
-                _now = ColumnHelper::create_const_null_column(1);                                               \
+                _now = ColumnHelper::create_const_null_column(context->allocator(), 1);                         \
             }                                                                                                   \
             return Status::OK();                                                                                \
         }                                                                                                       \
@@ -1373,7 +1375,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
         StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {                       \
             ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
-                return ColumnHelper::create_const_null_column(column->size());                                  \
+                return ColumnHelper::create_const_null_column(context->allocator(), column->size());            \
             }                                                                                                   \
                                                                                                                 \
             return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(context->allocator(), _now, column); \
@@ -1478,7 +1480,7 @@ public:
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         memory::Allocator* allocator = context->allocator();
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
-            return ColumnHelper::create_const_null_column(column->size());
+            return ColumnHelper::create_const_null_column(allocator, column->size());
         }
 
         if constexpr (Type == TYPE_DATE || Type == TYPE_DATETIME || Type == TYPE_DECIMALV2 || Type == TYPE_BOOLEAN ||
@@ -1536,7 +1538,7 @@ private:
             }
         }
         if (type().len < 0) {
-            return ColumnHelper::create_const_null_column(column->size());
+            return ColumnHelper::create_const_null_column(allocator, column->size());
         }
 
         // type.length > 0
@@ -1711,9 +1713,9 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
 
 StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     // only null
-    auto column = ColumnHelper::create_column(_type, true);
+    auto column = ColumnHelper::create_column(context->allocator(), _type, true);
     column->append_nulls(1);
-    auto only_null = ConstColumn::create(std::move(column), 1);
+    auto only_null = ConstColumn::create(context->allocator(), std::move(column), 1);
     if (ptr != nullptr) {
         only_null->resize(ptr->num_rows());
     }
@@ -1726,7 +1728,7 @@ StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Ch
     memory::Allocator* allocator = context->allocator();
 
     if (num_rows != 0 && ColumnHelper::count_nulls(column) == num_rows) {
-        return ColumnHelper::create_const_null_column(num_rows);
+        return ColumnHelper::create_const_null_column(allocator, num_rows);
     }
 
     ColumnBuilder<TYPE_VARIANT> builder(allocator, num_rows);

@@ -41,11 +41,11 @@ namespace starrocks {
 StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), column->size());
     }
 
     ColumnViewer<TYPE_JSON> src(column);
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
 
     // 1. Cast Json to json columns.
     size_t field_size = _type.children.size();
@@ -118,15 +118,15 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
         DCHECK(casted_fields[i]->is_nullable());
     }
 
-    MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
+    MutableColumnPtr res = StructColumn::create(context->allocator(), std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(context->allocator(), std::move(res), column->size());
     }
     return std::move(res);
 }
@@ -134,12 +134,12 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
 StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), column->size());
     }
 
     ColumnViewer<TYPE_VARIANT> viewer(column);
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
 
     // 1. Cast struct fields to variant columns.
     const size_t field_size = _type.children.size();
@@ -207,13 +207,13 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     }
 
     // 4. Build struct column.
-    MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
+    MutableColumnPtr res = StructColumn::create(context->allocator(), std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_column));
     }
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(context->allocator(), std::move(res), column->size());
     }
 
     return res;

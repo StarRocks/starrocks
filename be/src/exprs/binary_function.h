@@ -279,7 +279,7 @@ public:
                 ColumnHelper::as_raw_column<NullableColumn>(data)->update_has_null();
             } else {
                 if (SIMD::count_nonzero(null_flags->get_data())) {
-                    auto null_result = NullableColumn::create(data, null_flags);
+                    auto null_result = NullableColumn::create(allocator, data->as_mutable_ptr(), std::move(null_flags));
                     if (data_result->is_constant()) {
                         return ConstColumn::create(allocator, std::move(null_result), data_result->size());
                     }
@@ -337,7 +337,8 @@ public:
             if constexpr (lt_is_decimal<ResultType>) {
                 return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
             } else {
-                return NullableColumn::create(data_result, std::move(null_result));
+                return NullableColumn::create(allocator, data_result->as_mutable_ptr(),
+                                              NullColumn::static_pointer_cast(std::move(*null_result).mutate()));
             }
         }
 
@@ -356,7 +357,7 @@ public:
         if constexpr (lt_is_decimal<ResultType>) {
             return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
         } else {
-            return NullableColumn::create(data_result, std::move(null_result));
+            return NullableColumn::create(allocator, data_result->as_mutable_ptr(), std::move(null_result));
         }
     }
 

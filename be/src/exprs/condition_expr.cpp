@@ -35,12 +35,13 @@ namespace starrocks {
 
 template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
-    static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
+    static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, memory::Allocator* allocator, ColumnPtr& selector,
+                          const TypeDescriptor& type_desc) {
         [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector->as_mutable_raw_ptr());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
-        MutableColumnPtr res = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr res = ColumnHelper::create_column(allocator, type_desc, false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
         auto& res_data = res_col->get_data();
         res_data.resize(select_vec.size());
@@ -97,7 +98,7 @@ public:
 
         Columns list = {lhs, rhs};
         if constexpr (lt_is_collection<Type>) {
-            return _evaluate_complex(list);
+            return _evaluate_complex(context->allocator(), list);
         } else {
             return _evaluate_general(context->allocator(), list);
         }
@@ -122,13 +123,13 @@ private:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
-    ColumnPtr _evaluate_complex(const Columns& inputs) {
+    ColumnPtr _evaluate_complex(memory::Allocator* allocator, const Columns& inputs) {
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
-        auto res = ColumnHelper::create_column(this->type(), true);
+        auto res = ColumnHelper::create_column(allocator, this->type(), true);
         res->reserve(num_rows);
         NullColumnPtr null = nullptr;
 
@@ -156,7 +157,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
-            return ColumnHelper::create_const_null_column(lhs->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), lhs->size());
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
@@ -166,7 +167,7 @@ public:
 
         Columns list = {lhs, rhs};
         if constexpr (lt_is_collection<Type>) {
-            return _evaluate_complex(list);
+            return _evaluate_complex(context->allocator(), list);
         } else {
             return _evaluate_general(context->allocator(), list);
         }
@@ -196,13 +197,13 @@ private:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
-    ColumnPtr _evaluate_complex(const Columns& inputs) {
+    ColumnPtr _evaluate_complex(memory::Allocator* allocator, const Columns& inputs) {
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
-        auto res = ColumnHelper::create_column(this->type(), true);
+        auto res = ColumnHelper::create_column(allocator, this->type(), true);
         res->reserve(num_rows);
         ColumnPtr right_data = columns[1];
         NullColumnPtr right_nulls = nullptr;
@@ -256,32 +257,35 @@ public:
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
             if constexpr (lt_is_collection<Type>) {
-                return _evaluate_complex<false>(list);
+                return _evaluate_complex<false>(context->allocator(), list);
             } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
                 return _evaluate_general<false>(context->allocator(), list);
             } else if constexpr (isArithmeticLT<Type>) {
-                return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
+                return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, context->allocator(), bhs, type());
             } else {
                 __builtin_unreachable();
             }
         } else {
             if constexpr (lt_is_collection<Type>) {
-                return _evaluate_complex<true>(list);
+                return _evaluate_complex<true>(context->allocator(), list);
             } else if constexpr (isArithmeticLT<Type>) {
                 // SIMD branch
                 size_t num_rows = list[0]->size();
                 // get null data
-                auto lns = get_null_column(num_rows, lhs);
-                auto rns = get_null_column(num_rows, rhs);
+                auto lns = get_null_column(context->allocator(), num_rows, lhs);
+                auto rns = get_null_column(context->allocator(), num_rows, rhs);
                 // get data columns
-                auto lds = get_data_column(num_rows, lhs);
-                auto rds = get_data_column(num_rows, rhs);
+                auto lds = get_data_column(context->allocator(), num_rows, lhs);
+                auto rds = get_data_column(context->allocator(), num_rows, rhs);
                 // call select if
-                auto selector = bhs->only_null() ? UInt8Column::create(num_rows) : bhs;
-                auto select_data = dispatch_nonull_template<SelectIfOP, Type>(lds, rds, bhs, type());
-                auto select_null =
-                        dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TypeDescriptor(TYPE_BOOLEAN));
-                auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));
+                auto selector = bhs->only_null() ? UInt8Column::create(context->allocator(), num_rows) : bhs;
+                auto select_data =
+                        dispatch_nonull_template<SelectIfOP, Type>(lds, rds, context->allocator(), bhs, type());
+                auto select_null = dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(
+                        lns, rns, context->allocator(), bhs, TypeDescriptor(TYPE_BOOLEAN));
+                auto select_null_mut = NullColumn::static_pointer_cast(Column::mutate(std::move(select_null)));
+                auto res = NullableColumn::create(context->allocator(), Column::mutate(std::move(select_data)),
+                                                  std::move(select_null_mut));
                 return res;
             } else {
                 return _evaluate_general<true>(context->allocator(), list);
@@ -290,20 +294,20 @@ public:
     }
 
 private:
-    ColumnPtr get_null_column(int num_rows, ColumnPtr& input_col) {
+    ColumnPtr get_null_column(memory::Allocator* allocator, int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
-            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, num_rows);
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(allocator, 1, num_rows);
         } else if (input_col->is_nullable()) {
             return down_cast<const NullableColumn*>(input_col.get())->null_column();
         } else {
-            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(0, num_rows);
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(allocator, 0, num_rows);
         }
     }
-    ColumnPtr get_data_column(int num_rows, ColumnPtr& input_col) {
+    ColumnPtr get_data_column(memory::Allocator* allocator, int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
-            auto res = ColumnHelper::create_column(type(), false);
+            auto res = ColumnHelper::create_column(allocator, type(), false);
             res->resize(1);
-            return ConstColumn::create(std::move(res), num_rows);
+            return ConstColumn::create(allocator, std::move(res), num_rows);
         } else if (input_col->is_nullable()) {
             return down_cast<const NullableColumn*>(input_col.get())->data_column();
         } else {
@@ -347,14 +351,14 @@ private:
     }
 
     template <bool check_null>
-    ColumnPtr _evaluate_complex(const Columns& inputs) {
+    ColumnPtr _evaluate_complex(memory::Allocator* allocator, const Columns& inputs) {
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
+        MutableColumnPtr res = ColumnHelper::create_column(allocator, this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -408,7 +412,7 @@ public:
 
         // return only null
         if (columns.size() == 0) {
-            return ColumnHelper::create_const_null_column(ptr != nullptr ? ptr->num_rows() : 1);
+            return ColumnHelper::create_const_null_column(context->allocator(), ptr != nullptr ? ptr->num_rows() : 1);
         }
 
         // direct return if only one
@@ -418,7 +422,7 @@ public:
         }
 
         if constexpr (lt_is_collection<Type>) {
-            return _evaluate_complex(columns);
+            return _evaluate_complex(context->allocator(), columns);
         } else {
             return _evaluate_general(context->allocator(), columns);
         }
@@ -453,14 +457,14 @@ private:
         return builder.build(ColumnHelper::is_all_const(columns));
     }
 
-    StatusOr<ColumnPtr> _evaluate_complex(const Columns& inputs) { // without only-null columns
+    StatusOr<ColumnPtr> _evaluate_complex(memory::Allocator* allocator, const Columns& inputs) { // without only-null columns
         int size = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
         }
         int col_size = columns.size();
-        auto res = ColumnHelper::create_column(this->type(), true);
+        auto res = ColumnHelper::create_column(allocator, this->type(), true);
         res->reserve(size);
         NullColumns nullColumns;
         nullColumns.resize(col_size);

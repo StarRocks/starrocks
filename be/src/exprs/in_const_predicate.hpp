@@ -184,7 +184,8 @@ public:
     }
 
     template <bool use_array>
-    ColumnPtr eval_on_chunk_both_column_and_set_not_has_null(const ColumnPtr& lhs, uint8_t* filter) {
+    ColumnPtr eval_on_chunk_both_column_and_set_not_has_null(memory::Allocator* allocator, const ColumnPtr& lhs,
+                                                             uint8_t* filter) {
         DCHECK(!_null_in_set);
         auto size = lhs->size();
 
@@ -193,7 +194,7 @@ public:
         const auto& data = ColumnHelper::cast_to_raw<Type>(lhs_data)->immutable_data();
 
         // output data
-        auto result = RunTimeColumnType<TYPE_BOOLEAN>::create();
+        auto result = RunTimeColumnType<TYPE_BOOLEAN>::create(allocator);
         result->resize_uninitialized(size);
         uint8_t* data3 = result->get_data().data();
 
@@ -223,7 +224,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(std::move(result), size);
+            return ConstColumn::create(allocator, std::move(result), size);
         }
         return result;
     }
@@ -295,7 +296,7 @@ public:
     StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
         ASSIGN_OR_RETURN(ColumnPtr lhs, _children[0]->evaluate_checked(context, ptr));
         if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
-            return ColumnHelper::create_const_null_column(lhs->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), lhs->size());
         }
         bool use_array = is_use_array();
 
@@ -321,9 +322,9 @@ public:
             }
         } else {
             if (!use_array) {
-                return eval_on_chunk_both_column_and_set_not_has_null<false>(lhs, filter);
+                return eval_on_chunk_both_column_and_set_not_has_null<false>(context->allocator(), lhs, filter);
             } else {
-                return eval_on_chunk_both_column_and_set_not_has_null<true>(lhs, filter);
+                return eval_on_chunk_both_column_and_set_not_has_null<true>(context->allocator(), lhs, filter);
             }
         }
     }
@@ -333,7 +334,8 @@ public:
     }
 
     ColumnPtr get_all_values() const {
-        MutableColumnPtr values = ColumnHelper::create_column(TypeDescriptor{Type}, true);
+        MutableColumnPtr values =
+                ColumnHelper::create_column(memory::get_default_column_allocator(), TypeDescriptor{Type}, true);
         if constexpr (isSliceLT<Type>) {
             for (auto v : _hash_set) {
                 // v -> SliceWithHash
@@ -497,8 +499,8 @@ public:
         if (all_const) {
             dest_size = 1;
         }
-        BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
-        NullColumn::MutablePtr res_null = NullColumn::create(dest_size, DATUM_NULL);
+        BooleanColumn::MutablePtr res = BooleanColumn::create(context->allocator(), dest_size, _is_not_in);
+        NullColumn::MutablePtr res_null = NullColumn::create(context->allocator(), dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
         for (auto i = 0; i < dest_size; ++i) {
@@ -529,13 +531,13 @@ public:
         }
         if (all_const) {
             if (res_null_data[0]) { // return only_null column
-                return ColumnHelper::create_const_null_column(size);
+                return ColumnHelper::create_const_null_column(context->allocator(), size);
             } else {
-                return ConstColumn::create(std::move(res), size);
+                return ConstColumn::create(context->allocator(), std::move(res), size);
             }
         } else {
             if (SIMD::count_nonzero(res_null_data) > 0) {
-                return NullableColumn::create(std::move(res), std::move(res_null));
+                return NullableColumn::create(context->allocator(), std::move(res), std::move(res_null));
             } else {
                 return res;
             }

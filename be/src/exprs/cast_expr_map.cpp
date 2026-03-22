@@ -26,12 +26,12 @@ namespace starrocks {
 StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr src_column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(src_column) == src_column->size()) {
-        return ColumnHelper::create_const_null_column(src_column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), src_column->size());
     }
 
     ColumnViewer<TYPE_JSON> src_viewer(src_column);
-    NullColumn::MutablePtr null_column = NullColumn::create();
-    UInt32Column::MutablePtr offsets_column = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
+    UInt32Column::MutablePtr offsets_column = UInt32Column::create(context->allocator());
     ColumnBuilder<TYPE_VARCHAR> keys_builder(context->allocator(), src_column->size());
     ColumnBuilder<TYPE_JSON> values_builder(context->allocator(), src_column->size());
 
@@ -68,32 +68,33 @@ StatusOr<ColumnPtr> CastJsonToMap::evaluate_checked(ExprContext* context, Chunk*
         SlotId slot_id = down_cast<ColumnRef*>(_key_cast_expr->get_child(0))->slot_id();
         chunk->append_column(std::move(keys_column), slot_id);
         ASSIGN_OR_RETURN(auto result, _key_cast_expr->evaluate_checked(context, chunk.get()));
-        keys_column = ColumnHelper::cast_to_nullable_column(std::move(result));
+        keys_column = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(result));
     }
     if (_value_cast_expr != nullptr) {
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_value_cast_expr->get_child(0))->slot_id();
         chunk->append_column(std::move(values_column), slot_id);
         ASSIGN_OR_RETURN(auto result, _value_cast_expr->evaluate_checked(context, chunk.get()));
-        values_column = ColumnHelper::cast_to_nullable_column(std::move(result));
+        values_column = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(result));
     }
 
-    auto map_column = MapColumn::create(std::move(keys_column), std::move(values_column), std::move(offsets_column));
+    auto map_column = MapColumn::create(context->allocator(), std::move(keys_column), std::move(values_column),
+                                        std::move(offsets_column));
     map_column->remove_duplicated_keys();
     RETURN_IF_ERROR(map_column->unfold_const_children(_type));
-    return NullableColumn::create(std::move(map_column), std::move(null_column));
+    return NullableColumn::create(context->allocator(), std::move(map_column), std::move(null_column));
 }
 
 StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr src_column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(src_column) == src_column->size()) {
-        return ColumnHelper::create_const_null_column(src_column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), src_column->size());
     }
 
     ColumnViewer<TYPE_VARIANT> variant_viewer(src_column);
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(src_column.get()));
-    NullColumn::MutablePtr null_column = NullColumn::create();
-    UInt32Column::MutablePtr offsets_column = UInt32Column::create();
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
+    UInt32Column::MutablePtr offsets_column = UInt32Column::create(context->allocator());
     ColumnBuilder<TYPE_VARCHAR> keys_builder(context->allocator(), src_column->size());
     ColumnBuilder<TYPE_VARIANT> values_builder(context->allocator(), src_column->size());
 
@@ -161,7 +162,7 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
         SlotId slot_id = down_cast<ColumnRef*>(_key_cast_expr->get_child(0))->slot_id();
         chunk->append_column(keys_column, slot_id);
         ASSIGN_OR_RETURN(auto result, _key_cast_expr->evaluate_checked(context, chunk.get()));
-        keys_column = ColumnHelper::cast_to_nullable_column(std::move(result));
+        keys_column = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(result));
     }
     // 3. Try to cast values if required
     if (values_need_cast()) {
@@ -169,14 +170,15 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
         SlotId slot_id = down_cast<ColumnRef*>(_value_cast_expr->get_child(0))->slot_id();
         chunk->append_column(values_column, slot_id);
         ASSIGN_OR_RETURN(auto result, _value_cast_expr->evaluate_checked(context, chunk.get()));
-        values_column = ColumnHelper::cast_to_nullable_column(std::move(result));
+        values_column = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(result));
     }
 
     // 4. Move to MapColumn
-    auto map_column = MapColumn::create(std::move(keys_column), std::move(values_column), std::move(offsets_column));
+    auto map_column = MapColumn::create(context->allocator(), std::move(keys_column), std::move(values_column),
+                                        std::move(offsets_column));
     map_column->remove_duplicated_keys();
     RETURN_IF_ERROR(map_column->unfold_const_children(_type));
-    return NullableColumn::create(std::move(map_column), std::move(null_column));
+    return NullableColumn::create(context->allocator(), std::move(map_column), std::move(null_column));
 }
 
 } // namespace starrocks
