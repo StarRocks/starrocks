@@ -109,8 +109,9 @@ public class OpenSearchMetadata implements ConnectorMetadata {
         try {
             List<Column> columns = OpenSearchUtil.convertColumnSchema(restClient, tableName);
             properties.put(EsTable.KEY_INDEX, tableName);
-            // OpenSearch 2.x has no mapping type, set to null
-            properties.put(EsTable.KEY_TYPE, "");
+            // OpenSearch 2.x has no mapping type, remove it to avoid BE constructing wrong URL
+            properties.remove(EsTable.KEY_TYPE);
+            properties.remove("es.type");
             EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
                     catalogName, dbName, tableName, columns, properties, new SinglePartitionInfo());
             esTable.setComment("created by external opensearch catalog");
@@ -151,6 +152,11 @@ public class OpenSearchMetadata implements ConnectorMetadata {
                 Field lastExceptionField = EsTable.class.getDeclaredField("lastMetaDataSyncException");
                 lastExceptionField.setAccessible(true);
                 lastExceptionField.set(esTable, null);
+
+                // Explicitly set mappingType to null (OpenSearch 2.x has no type)
+                Field mappingTypeField = EsTable.class.getDeclaredField("mappingType");
+                mappingTypeField.setAccessible(true);
+                mappingTypeField.set(esTable, null);
 
                 LOG.info("Successfully set up OpenSearch table partitions for {} with {} shards", 
                         tableName, esShardPartitions.getShardRoutings().size());
