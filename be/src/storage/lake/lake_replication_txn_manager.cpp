@@ -388,6 +388,16 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
         const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
               << ", version: " << version << ", meta_dir: " << meta_dir;
+
+#ifdef BE_TEST
+    TabletMetadataPtr injected_meta = nullptr;
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                             static_cast<void*>(&injected_meta));
+    if (injected_meta != nullptr) {
+        return injected_meta;
+    }
+#endif
+
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
     auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);
