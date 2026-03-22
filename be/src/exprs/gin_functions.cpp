@@ -77,13 +77,13 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 
     // Array Offset
     int offset = 0;
-    UInt32Column::MutablePtr array_offsets = UInt32Column::create();
+    UInt32Column::MutablePtr array_offsets = UInt32Column::create(context->allocator());
     array_offsets->reserve(num_rows + 1);
 
     // Array Binary
-    BinaryColumn::MutablePtr array_binary_column = BinaryColumn::create();
+    BinaryColumn::MutablePtr array_binary_column = BinaryColumn::create(context->allocator());
 
-    NullColumn::MutablePtr null_array = NullColumn::create();
+    NullColumn::MutablePtr null_array = NullColumn::create(context->allocator());
 
     for (int row = 0; row < num_rows; ++row) {
         array_offsets->append(offset);
@@ -109,9 +109,12 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
         }
     }
     array_offsets->append(offset);
-    auto result_array = ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
-                                            array_offsets);
-    return NullableColumn::create(result_array, null_array);
+    auto result_array = ArrayColumn::create(
+            context->allocator(),
+            NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                   NullColumn::create(context->allocator(), offset, 0)),
+            std::move(array_offsets));
+    return NullableColumn::create(context->allocator(), std::move(result_array), std::move(null_array));
 }
 
 } // namespace starrocks

@@ -62,7 +62,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             return Status::InternalError("invalid parameter : get NULL paramenter");
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, std::move(column), column->size());
+            column = ColumnHelper::update_column_nullable(context->allocator(), false, std::move(column),
+                                                          column->size());
         }
     }
 
@@ -78,8 +79,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     }
     res = value_chunk->get_column_by_index(0)->clone_empty();
     if (!res->is_nullable()) {
-        auto null_column = UInt8Column::create(0, 0);
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        auto null_column = UInt8Column::create(context->allocator(), 0, 0);
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_column));
     }
 
     int res_idx = 0;

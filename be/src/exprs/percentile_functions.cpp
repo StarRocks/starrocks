@@ -27,7 +27,7 @@ namespace starrocks {
 StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> viewer(columns[0]);
 
-    auto percentile_column = PercentileColumn::create();
+    auto percentile_column = PercentileColumn::create(context->allocator());
     size_t size = columns[0]->size();
     for (int row = 0; row < size; ++row) {
         PercentileValue value;
@@ -38,7 +38,7 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(std::move(percentile_column), columns[0]->size());
+        return ConstColumn::create(context->allocator(), std::move(percentile_column), columns[0]->size());
     } else {
         return percentile_column;
     }
@@ -46,7 +46,7 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
 
 StatusOr<ColumnPtr> PercentileFunctions::percentile_empty(FunctionContext* context, const Columns& columns) {
     PercentileValue value;
-    return ColumnHelper::create_const_column<TYPE_PERCENTILE>(&value, 1);
+    return ColumnHelper::create_const_column<TYPE_PERCENTILE>(context->allocator(), &value, 1);
 }
 
 StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* context, const Columns& columns) {

@@ -60,10 +60,10 @@ StatusOr<ColumnPtr> GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const
         return result.build(false);
     } else {
         if (state->is_null) {
-            return ColumnHelper::create_const_null_column(size);
+            return ColumnHelper::create_const_null_column(ctx->allocator(), size);
         } else {
             return ColumnHelper::create_const_column<TYPE_VARCHAR>(
-                    Slice(state->encoded_buf.data(), state->encoded_buf.size()), size);
+                    ctx->allocator(), Slice(state->encoded_buf.data(), state->encoded_buf.size()), size);
         }
     }
 }
@@ -156,10 +156,10 @@ StatusOr<ColumnPtr> GeoFunctions::st_circle(FunctionContext* context, const Colu
         return result.build(false);
     } else {
         if (state->is_null) {
-            return ColumnHelper::create_const_null_column(size);
+            return ColumnHelper::create_const_null_column(context->allocator(), size);
         } else {
             return ColumnHelper::create_const_column<TYPE_VARCHAR>(
-                    Slice(state->encoded_buf.data(), state->encoded_buf.size()), size);
+                    context->allocator(), Slice(state->encoded_buf.data(), state->encoded_buf.size()), size);
         }
     }
 }
@@ -354,7 +354,7 @@ StatusOr<ColumnPtr> GeoFunctions::st_contains(FunctionContext* context, const Co
     const StContainsState* state =
             reinterpret_cast<StContainsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state != nullptr && state->is_null) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
     }
 
     auto size = columns[0]->size();

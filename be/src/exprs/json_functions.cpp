@@ -667,7 +667,7 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
     if (!state->init_flat) {
         if (columns[1]->only_null()) {
             // only null path, return null
-            return ColumnHelper::create_const_null_column(columns[0]->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
         } else if (LIKELY(columns[1]->is_constant())) {
             path = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1].get()).to_string();
         } else {

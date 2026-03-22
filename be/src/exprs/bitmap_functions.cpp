@@ -149,7 +149,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_count(FunctionContext* context, cons
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_empty(FunctionContext* context, const starrocks::Columns& columns) {
     BitmapValue bitmap;
-    return ColumnHelper::create_const_column<TYPE_OBJECT>(&bitmap, 1);
+    return ColumnHelper::create_const_column<TYPE_OBJECT>(context->allocator(), &bitmap, 1);
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_or(FunctionContext* context, const starrocks::Columns& columns) {
@@ -352,10 +352,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
 
     size_t size = columns[0]->size();
-    UInt32Column::MutablePtr array_offsets = UInt32Column::create();
+    UInt32Column::MutablePtr array_offsets = UInt32Column::create(context->allocator());
     array_offsets->reserve(size + 1);
 
-    Int64Column::MutablePtr array_bigint_column = Int64Column::create();
+    Int64Column::MutablePtr array_bigint_column = Int64Column::create(context->allocator());
     size_t data_size = 0;
 
     if (columns[0]->has_null()) {
@@ -400,17 +400,21 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
     //Array Column
     if (!columns[0]->has_null()) {
         return ArrayColumn::create(
-                NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
+                context->allocator(),
+                NullableColumn::create(context->allocator(), std::move(array_bigint_column),
+                                       NullColumn::create(context->allocator(), offset, 0)),
                 std::move(array_offsets));
     } else if (columns[0]->only_null()) {
-        return ColumnHelper::create_const_null_column(size);
+        return ColumnHelper::create_const_null_column(context->allocator(), size);
     } else {
         return NullableColumn::create(
-                ArrayColumn::create(
-                        NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
-                        std::move(array_offsets)),
+                context->allocator(),
+                ArrayColumn::create(context->allocator(),
+                                    NullableColumn::create(context->allocator(), std::move(array_bigint_column),
+                                                           NullColumn::create(context->allocator(), offset, 0)),
+                                    std::move(array_offsets)),
                 NullColumn::static_pointer_cast(
-                        ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()->clone()));
+                        std::move(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()).mutate()));
     }
 }
 
@@ -462,7 +466,8 @@ StatusOr<ColumnPtr> BitmapFunctions::array_to_bitmap(FunctionContext* context, c
         builder.append(std::move(bitmap));
     }
     ColumnPtr result = builder.build(false);
-    return columns[0]->is_constant() ? ConstColumn::create(std::move(result), columns[0]->size()) : std::move(result);
+    return columns[0]->is_constant() ? ConstColumn::create(context->allocator(), std::move(result), columns[0]->size())
+                                     : std::move(result);
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks::Columns& columns) {

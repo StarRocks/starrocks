@@ -43,7 +43,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, std::move(column), size);
+            column = ColumnHelper::update_column_nullable(context->allocator(), false, std::move(column), size);
         }
     }
 
@@ -59,7 +59,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     }
     value_chunk->reserve(size);
 
-    auto null_column = UInt8Column::create(size, 0);
+    auto null_column = UInt8Column::create(context->allocator(), size, 0);
     // assign the value chunk
     RETURN_IF_ERROR(DictionaryCacheManager::probe_given_dictionary_cache(
             *_key_chunk->schema().get(), *_value_chunk->schema().get(), _dictionary, key_chunk, value_chunk,
@@ -119,14 +119,18 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
 
     // construct nullable struct column
-    Columns sub_columns;
+    MutableColumns sub_columns;
     for (const ColumnPtr& column : _value_chunk->columns()) {
-        auto sub_null_column = UInt8Column::create(0, 0);
-        sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
+        auto sub_null_column = UInt8Column::create(context->allocator(), 0, 0);
+        sub_columns.emplace_back(
+                NullableColumn::create(context->allocator(), Column::mutate(column->clone_empty()), std::move(sub_null_column)));
     }
-    auto null_column = UInt8Column::create(0, 0);
-    _nullable_struct_column = NullableColumn::create(StructColumn::create(sub_columns, std::move(value_columns_name)),
-                                                     std::move(null_column));
+    auto null_column = UInt8Column::create(context->allocator(), 0, 0);
+    _nullable_struct_column =
+            NullableColumn::create(context->allocator(),
+                                   StructColumn::create(context->allocator(), std::move(sub_columns),
+                                                        std::move(value_columns_name)),
+                                   std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();
