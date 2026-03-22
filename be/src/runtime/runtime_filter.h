@@ -679,6 +679,11 @@ public:
 
     bool is_empty_range() const { return _min > _max; }
 
+    // Raw accessors used for split-level DPP file-skip pruning.
+    CppType min_raw() const { return _min; }
+    CppType max_raw() const { return _max; }
+    bool has_min_max() const { return _has_min_max; }
+
     bool is_full_range() const {
         if constexpr (IsSlice<CppType>) {
             return _min == Slice::min_value() && _max == Slice::max_value();

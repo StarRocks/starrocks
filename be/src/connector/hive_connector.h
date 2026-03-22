@@ -93,6 +93,7 @@ public:
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
     Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) override;
+    bool should_prune_by_rf_min_max_stats() const override;
 
 private:
     const HiveDataSourceProvider* _provider;
