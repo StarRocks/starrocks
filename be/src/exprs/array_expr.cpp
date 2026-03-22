@@ -20,6 +20,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks {
 
@@ -54,8 +55,8 @@ public:
             element_columns[i] = ColumnHelper::unfold_const_column(element_type, cal_rows, element_columns[i]);
         }
 
-        auto array_elements = ColumnHelper::create_column(element_type, true);
-        auto array_offsets = UInt32Column::create();
+        auto array_elements = ColumnHelper::create_column(context->allocator(), element_type, true);
+        auto array_offsets = UInt32Column::create(context->allocator());
 
         // fill array column.
         uint32_t curr_offset = 0;
@@ -68,9 +69,9 @@ public:
             array_offsets->append(curr_offset);
         }
 
-        auto ptr = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+        auto ptr = ArrayColumn::create(context->allocator(), std::move(array_elements), std::move(array_offsets));
         if (all_const) {
-            return ConstColumn::create(std::move(ptr), output_rows);
+            return ConstColumn::create(context->allocator(), std::move(ptr), output_rows);
         }
         return ptr;
     }
