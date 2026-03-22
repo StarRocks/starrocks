@@ -32,6 +32,12 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * OpenSearch utility class for type conversion and column schema extraction.
+ * NOTE: This is a CORE CLASS for OpenSearch connector functionality.
+ * Changes to this class may affect query execution and schema discovery.
+ * Please review carefully before modifying.
+ */
 public class OpenSearchUtil {
     private static final Logger LOG = LogManager.getLogger(OpenSearchUtil.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
