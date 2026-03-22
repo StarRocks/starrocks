@@ -452,7 +452,8 @@ public:
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
             MutableColumnPtr wrapper = const_cast<Column*>(to)->as_mutable_ptr();
-            auto output = NullableColumn::create(std::move(wrapper), NullColumn::create());
+            auto output =
+                    NullableColumn::create(ctx->allocator(), std::move(wrapper), NullColumn::create(ctx->allocator()));
             helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
         } else {
             helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);

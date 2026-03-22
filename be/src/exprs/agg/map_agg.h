@@ -76,7 +76,7 @@ public:
 
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) MapAggAggregateFunctionState<KT, MyHashMap>;
-        state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
+        state->value_column = FunctionHelper::create_column(ctx->allocator(), *ctx->get_arg_type(1), true);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

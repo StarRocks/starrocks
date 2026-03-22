@@ -32,11 +32,12 @@ std::pair<Columns, UInt32Column::Ptr> JsonEach::process(RuntimeState* runtime_st
     state->set_processed_rows(num_input_rows);
 
     Columns result;
-    BinaryColumn::MutablePtr key_column_ptr = BinaryColumn::create();
-    JsonColumn::MutablePtr value_column_ptr = JsonColumn::create();
+    auto* allocator = state->allocator();
+    BinaryColumn::MutablePtr key_column_ptr = BinaryColumn::create(allocator);
+    JsonColumn::MutablePtr value_column_ptr = JsonColumn::create(allocator);
     result.emplace_back(key_column_ptr);
     result.emplace_back(value_column_ptr);
-    auto offset_column = UInt32Column::create();
+    auto offset_column = UInt32Column::create(allocator);
     int offset = 0;
     offset_column->append(offset);
 

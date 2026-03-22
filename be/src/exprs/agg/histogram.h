@@ -103,8 +103,9 @@ struct Bucket {
 template <LogicalType LT>
 struct HistogramState {
     HistogramState() {
-        auto data = RunTimeColumnType<LT>::create();
-        column = NullableColumn::create(std::move(data), NullColumn::create());
+        auto data = RunTimeColumnType<LT>::create(memory::get_default_column_allocator());
+        column = NullableColumn::create(memory::get_default_column_allocator(), std::move(data),
+                                        NullColumn::create(memory::get_default_column_allocator()));
     }
 
     ColumnPtr column;

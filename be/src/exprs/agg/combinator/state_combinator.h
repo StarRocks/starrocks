@@ -92,7 +92,7 @@ protected:
 
 protected:
     // convert the column to the nullable column if the arg is nullable and the column is not nullable
-    StatusOr<ColumnPtr> _convert_to_nullable_column(const ColumnPtr& column, bool arg_nullable,
+    StatusOr<ColumnPtr> _convert_to_nullable_column(memory::Allocator* allocator, const ColumnPtr& column, bool arg_nullable,
                                                     bool is_unpack_column) const {
         // For constant columns, if we don't need to unpack, return directly to keep efficiency
         // e.g.: StateFunction with constant parameters like [0.2,0.5,0.75]
@@ -107,7 +107,7 @@ protected:
                     "AggStateBaseFunction input column is nullable but agg function is not nullable");
         }
         if (arg_nullable && !unpack_column->is_nullable()) {
-            return ColumnHelper::cast_to_nullable_column(std::move(unpack_column));
+            return ColumnHelper::cast_to_nullable_column(allocator, std::move(unpack_column));
         }
         return unpack_column;
     }

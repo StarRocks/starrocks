@@ -42,11 +42,11 @@ public:
             Column* column = ColumnHelper::get_data_column(col_idx->as_mutable_raw_ptr());
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty(state->allocator());
             unnested_array_list.emplace_back(std::move(unnested_array_elements));
         }
 
-        auto copy_count_column = UInt32Column::create();
+        auto copy_count_column = UInt32Column::create(state->allocator());
         uint32_t offset = 0;
         copy_count_column->append(offset);
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {

@@ -110,7 +110,7 @@ public:
 struct AnyValueSemiState {
     void update(FunctionContext* ctx, const Column& column, size_t offset) {
         if (!has_fill) {
-            data_column = FunctionHelper::create_column(*ctx->get_arg_type(0), false);
+            data_column = FunctionHelper::create_column(ctx->allocator(), *ctx->get_arg_type(0), false);
             data_column->append(column, offset, 1);
             has_fill = true;
         }

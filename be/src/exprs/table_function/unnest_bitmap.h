@@ -58,8 +58,8 @@ public:
         }
 
         int chunk_size = runtime_state->chunk_size();
-        auto res_data_col = RunTimeColumnType<TYPE_BIGINT>::create(chunk_size);
-        auto res_offset_col = UInt32Column::create();
+        auto res_data_col = RunTimeColumnType<TYPE_BIGINT>::create(state->allocator(), chunk_size);
+        auto res_offset_col = UInt32Column::create(state->allocator());
 
         auto* unnest_bitmap_state = down_cast<UnnestBitmapState*>(state);
         auto cur_row = unnest_bitmap_state->processed_rows();
