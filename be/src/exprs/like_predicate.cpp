@@ -317,7 +317,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(state->_search_string_column);
-    auto res = RunTimeColumnType<TYPE_BOOLEAN>::create();
+    auto res = RunTimeColumnType<TYPE_BOOLEAN>::create(context->allocator());
 
     if (columns[0]->is_constant()) {
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[0]);
@@ -331,7 +331,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         } else {
             res->append(true);
         }
-        return ConstColumn::create(std::move(res), columns[0]->size());
+        return ConstColumn::create(context->allocator(), std::move(res), columns[0]->size());
     }
 
     const BinaryColumn* haystack = nullptr;
@@ -386,7 +386,8 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
-        return NullableColumn::create(std::move(res), std::move(res_null));
+        return NullableColumn::create(context->allocator(), std::move(res),
+                                      NullColumn::static_pointer_cast(std::move(*res_null).mutate()));
     }
     return res;
 }
@@ -517,7 +518,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
             return _predicate_const_regex(context, &result, value_viewer, value_column);
         } else {
             // because pattern_column is constant, so if it is nullable means it is only_null.
-            return ColumnHelper::create_const_null_column(value_column->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), value_column->size());
         }
     }
 
@@ -603,7 +604,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
             return _predicate_const_regex(context, &result, value_viewer, value_column);
         } else {
             // because pattern_column is constant, so if it is nullable means it is only_null.
-            return ColumnHelper::create_const_null_column(value_column->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), value_column->size());
         }
     }
 

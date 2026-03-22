@@ -151,7 +151,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
         uint32_t hash_value = 0;
         auto const_column = ColumnHelper::as_raw_column<ConstColumn>(col);
         const_column->data_column()->crc32_hash(&hash_value, 0, 1);
-        return ColumnHelper::create_const_column<TYPE_BIGINT>(hash_value, row_size);
+        return ColumnHelper::create_const_column<TYPE_BIGINT>(context->allocator(), hash_value, row_size);
     }
 
     std::vector<uint32_t> hash_values(row_size);

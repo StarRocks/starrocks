@@ -55,12 +55,12 @@
 namespace starrocks {
 
 StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
-    return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), "5.1.0", 1);
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
     static std::string version = std::string(STARROCKS_VERSION) + "-" + STARROCKS_COMMIT_HASH;
-    return ColumnHelper::create_const_column<TYPE_VARCHAR>(version, 1);
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), version, 1);
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Columns& columns) {
@@ -91,9 +91,9 @@ StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, co
     starrocks::RuntimeState* state = context->state();
     const std::string& id = state->last_query_id();
     if (!id.empty()) {
-        return ColumnHelper::create_const_column<TYPE_VARCHAR>(id, 1);
+        return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), id, 1);
     } else {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
 }
 
@@ -111,7 +111,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     ASSIGN_OR_RETURN(auto col, UtilityFunctions::uuid_numeric(ctx, columns));
     const auto uuid_data = down_cast<const Int128Column*>(col.get())->immutable_data();
 
-    auto res = BinaryColumn::create();
+    auto res = BinaryColumn::create(ctx->allocator());
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
@@ -203,9 +203,9 @@ int16_t get_uniq_tid() {
     return uniq_tid;
 }
 
-StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
-    auto result = Int128Column::create(num_rows);
+    auto result = Int128Column::create(context->allocator(), num_rows);
 
     static std::random_device rd;
     static std::mt19937 mt(rd());
@@ -237,7 +237,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Colum
 StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
-    auto res = BinaryColumn::create();
+    auto res = BinaryColumn::create(ctx->allocator());
     auto& bytes = res->get_bytes();
     auto& offsets = res->get_offset();
 
@@ -261,9 +261,9 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Column
 // Note: The byte order of the numeric representation depends on the system's endianness.
 // This is consistent with other numeric UUID conversions in the codebase and provides
 // a stable representation for comparison and storage purposes.
-StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
-    auto result = Int128Column::create(num_rows);
+    auto result = Int128Column::create(context->allocator(), num_rows);
     auto& data = result->get_data();
 
     for (int i = 0; i < num_rows; ++i) {
@@ -308,17 +308,17 @@ StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, cons
             }
         }
     }
-    return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
+    return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), true, size);
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::host_name(FunctionContext* context, const Columns& columns) {
     std::string host_name;
     auto status = get_hostname(&host_name);
     if (status.ok()) {
-        return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
+        return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), host_name, 1);
     } else {
         host_name = "error";
-        return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
+        return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), host_name, 1);
     }
 }
 

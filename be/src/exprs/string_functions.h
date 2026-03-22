@@ -458,7 +458,8 @@ public:
 
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(FunctionContext* context, StringFunctionsState* state,
                                                             const Columns& columns);
-    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(FunctionContext* context, StringFunctionsState* state,
+                                                                 const Columns& columns);
 
     /**
      * @param: [string_value, pattern, max_split]

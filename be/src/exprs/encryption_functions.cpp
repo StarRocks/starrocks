@@ -654,7 +654,7 @@ Status EncryptionFunctions::sha2_prepare(FunctionContext* context, FunctionConte
 
 StatusOr<ColumnPtr> EncryptionFunctions::invalid_sha(FunctionContext* ctx, const Columns& columns) {
     auto size = columns[0]->size();
-    return ColumnHelper::create_const_null_column(size);
+    return ColumnHelper::create_const_null_column(ctx->allocator(), size);
 }
 
 StatusOr<ColumnPtr> EncryptionFunctions::sha224(FunctionContext* ctx, const Columns& columns) {

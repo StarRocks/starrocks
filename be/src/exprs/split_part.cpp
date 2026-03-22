@@ -128,7 +128,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
         // if part_number is 0, return an empty string.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
         if (part_number == 0) {
-            return ColumnHelper::create_const_column<TYPE_VARCHAR>("", columns[0]->size());
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), "", columns[0]->size());
         }
     }
 

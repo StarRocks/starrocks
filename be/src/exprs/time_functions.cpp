@@ -81,7 +81,7 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
     }
 
 template <LogicalType Type>
-ColumnPtr date_valid(const ColumnPtr& v1) {
+ColumnPtr date_valid(memory::Allocator* allocator, const ColumnPtr& v1) {
     if (v1->only_null()) {
         return v1;
     }
@@ -91,14 +91,14 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         if (value.is_valid_non_strict()) {
             return v1;
         } else {
-            return ColumnHelper::create_const_null_column(v1->size());
+            return ColumnHelper::create_const_null_column(allocator, v1->size());
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
         auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
-        auto null_column = NullColumn::create();
+        auto null_column = NullColumn::create(allocator);
         null_column->resize(v1->size());
         auto& null_result = null_column->get_data();
 
@@ -108,9 +108,9 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v->data_column(), std::move(null_column));
+        return NullableColumn::create(allocator, Column::mutate(v->data_column()), std::move(null_column));
     } else {
-        auto null_column = NullColumn::create();
+        auto null_column = NullColumn::create(allocator);
         null_column->resize(v1->size());
         auto& nulls = null_column->get_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
@@ -120,7 +120,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             nulls[i] = (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v1, std::move(null_column));
+        return NullableColumn::create(allocator, Column::mutate(v1), std::move(null_column));
     }
 }
 
@@ -128,7 +128,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) { \
         auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(context->allocator(), \
                 VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                             \
-        return date_valid<RESULT_TYPE>(p);                                                                 \
+        return date_valid<RESULT_TYPE>(context->allocator(), p);                                           \
     }
 
 Status TimeFunctions::convert_tz_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -282,7 +282,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz(FunctionContext* context, const Co
     }
 
     if (!ctc->is_valid) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
     }
 
     return convert_tz_const(context, columns, ctc->from_tz, ctc->to_tz);
@@ -294,9 +294,9 @@ StatusOr<ColumnPtr> TimeFunctions::utc_timestamp(FunctionContext* context, const
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
         TimestampValue ts;
         ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
-        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(context->allocator(), ts, 1);
     } else {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
 }
 
@@ -305,9 +305,9 @@ StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Colu
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
         double seconds = dtv.hour() * 3600 + dtv.minute() * 60 + dtv.second();
-        return ColumnHelper::create_const_column<TYPE_TIME>(seconds, 1);
+        return ColumnHelper::create_const_column<TYPE_TIME>(context->allocator(), seconds, 1);
     } else {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
 }
 
@@ -320,7 +320,7 @@ static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1
 StatusOr<ColumnPtr> TimeFunctions::current_timezone(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
     const std::string& timezone = state->timezone();
-    return ColumnHelper::create_const_column<TYPE_VARCHAR>(timezone, 1);
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), timezone, 1);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
@@ -328,12 +328,12 @@ StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& 
     int64_t timestamp_us = state->timestamp_us();
     DateTimeValue dtv;
     if (!dtv.from_unixtime(timestamp_us / 1000000, state->timezone_obj())) {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
     if (columns.empty()) {
         TimestampValue ts;
         ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
-        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(context->allocator(), ts, 1);
     }
 
     if (context->is_constant_column(1)) {
@@ -348,7 +348,7 @@ StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& 
         TimestampValue ts;
         ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
                           timestamp_us % 1000000 / NOW_PRECISION_FACTORS[precision] * NOW_PRECISION_FACTORS[precision]);
-        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(context->allocator(), ts, 1);
     }
 
     auto size = columns[0]->size();
@@ -376,9 +376,9 @@ StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Colum
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         double seconds = dtv.hour() * 3600 + dtv.minute() * 60 + dtv.second();
-        return ColumnHelper::create_const_column<TYPE_TIME>(seconds, 1);
+        return ColumnHelper::create_const_column<TYPE_TIME>(context->allocator(), seconds, 1);
     } else {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
 }
 
@@ -388,9 +388,9 @@ StatusOr<ColumnPtr> TimeFunctions::curdate(FunctionContext* context, const Colum
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
         DateValue dv;
         dv.from_date(dtv.year(), dtv.month(), dtv.day());
-        return ColumnHelper::create_const_column<TYPE_DATE>(dv, 1);
+        return ColumnHelper::create_const_column<TYPE_DATE>(context->allocator(), dv, 1);
     } else {
-        return ColumnHelper::create_const_null_column(1);
+        return ColumnHelper::create_const_null_column(context->allocator(), 1);
     }
 }
 
@@ -1076,7 +1076,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
             time_value.template floor_to_##UNIT##_period<!is_start>(period_value);                     \
             results.append(time_value);                                                                \
         }                                                                                              \
-        return date_valid<ResultType>(results.build(ColumnHelper::is_all_const(columns)));             \
+        return date_valid<ResultType>(context->allocator(), results.build(ColumnHelper::is_all_const(columns))); \
     }                                                                                                  \
     DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                 \
     DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
@@ -1495,17 +1495,17 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(Function
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
     RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
-    auto result = Int64Column::create();
+    auto result = Int64Column::create(context->allocator());
     result->append(value);
-    return ConstColumn::create(std::move(result), 1);
+    return ConstColumn::create(context->allocator(), std::move(result), 1);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
     RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
-    auto result = Int32Column::create();
+    auto result = Int32Column::create(context->allocator());
     result->append(value);
-    return ConstColumn::create(std::move(result), 1);
+    return ConstColumn::create(context->allocator(), std::move(result), 1);
 }
 
 /*
@@ -2135,7 +2135,7 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
     auto size = columns[0]->size();
     if (conv_ctx->result_is_null) {
-        return ColumnHelper::create_const_null_column(size);
+        return ColumnHelper::create_const_null_column(context->allocator(), size);
     }
 
     ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
@@ -2252,7 +2252,7 @@ DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
-    return date_valid<TYPE_DATE>(
+    return date_valid<TYPE_DATE>(context->allocator(),
             VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(context->allocator(),
                                                                                         VECTORIZED_FN_ARGS(0)));
 }
@@ -2592,11 +2592,6 @@ ColumnPtr date_format_func(memory::Allocator* allocator, const Columns& cols, si
     return builder.build(ColumnHelper::is_all_const(cols));
 }
 
-template <typename OP, LogicalType Type>
-ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
-    return date_format_func<OP, Type>(cols[0]->allocator(), cols, patten_size);
-}
-
 std::string format_for_yyyyMMdd(const DateValue& date_value) {
     int y, m, d, t;
     date_value.to_date(&y, &m, &d);
@@ -2715,7 +2710,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> standard_format(memory::Allocator* allocator, const std::string& fmt, int len,
                                     const starrocks::Columns& columns) {
     if (fmt.size() <= 0) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(allocator, columns[0]->size());
     }
 
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
@@ -2909,7 +2904,7 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> joda_standard_format(memory::Allocator* allocator, const std::string& fmt, int len,
                                          const starrocks::Columns& columns) {
     if (fmt.size() <= 0) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(allocator, columns[0]->size());
     }
 
     auto ts_viewer = ColumnViewer<Type>(columns[0]);
@@ -3033,13 +3028,13 @@ StatusOr<ColumnPtr> TimeFunctions::jodadate_format(FunctionContext* context, con
 StatusOr<ColumnPtr> TimeFunctions::date_to_iso8601(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    return date_format_func<yyyy_MM_dd_Impl, TYPE_DATE>(columns, 10);
+    return date_format_func<yyyy_MM_dd_Impl, TYPE_DATE>(context->allocator(), columns, 10);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::datetime_to_iso8601(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    return date_format_func<to_iso8601Impl, TYPE_DATETIME>(columns, 26);
+    return date_format_func<to_iso8601Impl, TYPE_DATETIME>(context->allocator(), columns, 26);
 }
 
 Status TimeFunctions::datetime_trunc_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -3385,7 +3380,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day(FunctionContext* context, const Colu
 StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const Columns& columns) {
     auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (wdc->dow_weekday == -2) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
     }
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto size = columns[0]->size();
@@ -3400,7 +3395,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const 
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+    return date_valid<TYPE_DATE>(context->allocator(), result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
@@ -3424,7 +3419,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
         result.append(date);
     }
-    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+    return date_valid<TYPE_DATE>(context->allocator(), result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -3476,7 +3471,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day(FunctionContext* context, const 
 StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, const Columns& columns) {
     auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (wdc->dow_weekday == -2) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
     }
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto size = columns[0]->size();
@@ -3491,7 +3486,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, co
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+    return date_valid<TYPE_DATE>(context->allocator(), result.build(ColumnHelper::is_all_const(columns)));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
@@ -3515,7 +3510,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context,
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
         result.append(date);
     }
-    return date_valid<TYPE_DATE>(result.build(ColumnHelper::is_all_const(columns)));
+    return date_valid<TYPE_DATE>(context->allocator(), result.build(ColumnHelper::is_all_const(columns)));
 }
 
 Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

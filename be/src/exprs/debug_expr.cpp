@@ -29,17 +29,17 @@ StatusOr<ColumnPtr> DebugExpr::evaluate_checked(ExprContext* context, Chunk* ptr
 
 StatusOr<ColumnPtr> DebugFunctions::chunk_memusage(ExprContext* context, Chunk* ptr) {
     if (ptr == nullptr) {
-        return ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1);
+        return ColumnHelper::create_const_column<TYPE_BIGINT>(context->allocator(), 0, 1);
     }
     size_t mem_usage = ptr->memory_usage();
     size_t num_rows = ptr->num_rows();
-    return ColumnHelper::create_const_column<TYPE_BIGINT>(mem_usage, num_rows);
+    return ColumnHelper::create_const_column<TYPE_BIGINT>(context->allocator(), mem_usage, num_rows);
 }
 
 StatusOr<ColumnPtr> DebugFunctions::chunk_check_valid(ExprContext* context, Chunk* ptr) {
     // check chunk valid
     if (ptr == nullptr) {
-        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, 1);
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), true, 1);
     }
     ptr->check_or_die();
     size_t num_rows = ptr->num_rows();
@@ -52,7 +52,7 @@ StatusOr<ColumnPtr> DebugFunctions::chunk_check_valid(ExprContext* context, Chun
             throw std::runtime_error(fmt::format("unmatched rows detected"));
         }
     }
-    return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, ptr->num_rows());
+    return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), true, ptr->num_rows());
 }
 
 } // namespace starrocks
