@@ -197,7 +197,8 @@ Status ESDataSource::_create_scanner() {
     // create scanner.
     const TEsScanRange& es_scan_range = _scan_range;
     _properties[ESScanReader::KEY_INDEX] = es_scan_range.index;
-    if (es_scan_range.__isset.type) {
+    // Only set type for legacy ES (pre-7.x). OpenSearch 2.x and ES 7.x+ don't use type.
+    if (es_scan_range.__isset.type && !es_scan_range.type.empty()) {
         _properties[ESScanReader::KEY_TYPE] = es_scan_range.type;
     }
     _properties[ESScanReader::KEY_SHARD] = std::to_string(es_scan_range.shard_id);
