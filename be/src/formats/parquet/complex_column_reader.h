@@ -31,6 +31,8 @@ public:
             : ColumnReader(parquet_field), _element_reader(std::move(element_reader)) {}
     ~ListColumnReader() override = default;
 
+    memory::Allocator* allocator() const override { return _element_reader->allocator(); }
+
     Status prepare() override { return _element_reader->prepare(); }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
@@ -66,6 +68,16 @@ public:
                              std::unique_ptr<ColumnReader>&& value_reader)
             : ColumnReader(parquet_field), _key_reader(std::move(key_reader)), _value_reader(std::move(value_reader)) {}
     ~MapColumnReader() override = default;
+
+    memory::Allocator* allocator() const override {
+        if (_key_reader != nullptr) {
+            return _key_reader->allocator();
+        }
+        if (_value_reader != nullptr) {
+            return _value_reader->allocator();
+        }
+        return ColumnReader::allocator();
+    }
 
     Status prepare() override {
         // Check must has one valid column reader
@@ -136,6 +148,15 @@ public:
                                 std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers)
             : ColumnReader(parquet_field), _child_readers(std::move(child_readers)) {}
     ~StructColumnReader() override = default;
+
+    memory::Allocator* allocator() const override {
+        for (const auto& pair : _child_readers) {
+            if (pair.second != nullptr) {
+                return pair.second->allocator();
+            }
+        }
+        return ColumnReader::allocator();
+    }
 
     Status prepare() override {
         if (_child_readers.empty()) {
@@ -367,6 +388,8 @@ public:
     }
 
     ~VariantColumnReader() override = default;
+
+    memory::Allocator* allocator() const override { return _top_level.value_reader->allocator(); }
 
     Status prepare() override;
 

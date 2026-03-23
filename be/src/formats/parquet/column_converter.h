@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/memory_allocator.h"
 #include "base/bit/bit_util.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
@@ -46,6 +47,8 @@ public:
         parquet_type = _parquet_type;
     }
 
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
+
     // create column according parquet data type
     MutableColumnPtr create_src_column();
 
@@ -54,6 +57,7 @@ public:
 public:
     bool need_convert = false;
     tparquet::Type::type parquet_type;
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
 };
 
 class ColumnConverterFactory {

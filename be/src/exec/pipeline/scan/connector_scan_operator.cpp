@@ -651,6 +651,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
             (split_context == nullptr) && (op->morsel_queue() != nullptr) && op->morsel_queue()->has_more_from_split();
 
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    _data_source->set_allocator(_allocator);
     _data_source->set_driver_sequence(op->get_driver_sequence());
     _data_source->set_split_context(split_context);
 

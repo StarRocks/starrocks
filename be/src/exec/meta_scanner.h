@@ -16,6 +16,7 @@
 
 #include <gen_cpp/InternalService_types.h>
 
+#include "base/memory/memory_allocator.h"
 #include "common/status.h"
 #include "exec/meta_scan_node.h"
 #include "exec/olap_utils.h"
@@ -26,6 +27,7 @@ namespace starrocks {
 
 struct MetaScannerParams {
     const TInternalScanRange* scan_range = nullptr;
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 };
 
 class MetaScanner {

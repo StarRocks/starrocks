@@ -45,7 +45,6 @@ struct MetaReaderParams {
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
-    // TODO: wire allocator propagation from MetaChunkSource in a follow-up phase.
     memory::Allocator* allocator = memory::get_default_column_allocator();
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;

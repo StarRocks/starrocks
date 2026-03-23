@@ -44,6 +44,7 @@ Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column
                                                   const ParquetField* field, const std::string& timezone) {
     std::unique_ptr<ColumnConverter> converter;
     RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
+    converter->set_allocator(column->allocator());
     bool ret = true;
     switch (field->physical_type) {
     case tparquet::Type::type::INT32: {

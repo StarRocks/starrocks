@@ -29,7 +29,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
 
           _source_chunk() {
     auto slot_id = SlotId{0};
-    auto column = ColumnHelper::create_column(source_type, nullable_source);
+    auto column = ColumnHelper::create_column(source_iter->allocator(), source_type, nullable_source);
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;

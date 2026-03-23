@@ -43,6 +43,7 @@
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "base/memory/memory_allocator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -67,6 +68,7 @@ struct ColumnIteratorOptions {
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 
     void sanity_check() const {
         CHECK_NOTNULL(read_file);
@@ -87,6 +89,8 @@ class ColumnIterator {
 public:
     ColumnIterator() = default;
     virtual ~ColumnIterator() = default;
+
+    memory::Allocator* allocator() const { return _opts.allocator; }
 
     virtual Status init(const ColumnIteratorOptions& opts) {
         _opts = opts;

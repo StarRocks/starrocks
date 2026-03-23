@@ -30,6 +30,7 @@ OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent) {}
 
 Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     _runtime_state = runtime_state;
+    _allocator = params.allocator;
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_meta_reader_params());
     _reader = std::make_shared<OlapMetaReader>();
@@ -48,6 +49,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
+    _reader_params.allocator = _allocator;
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     _reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                 ? _parent->_meta_scan_node.low_cardinality_threshold

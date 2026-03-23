@@ -30,6 +30,7 @@ ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile,
         : _scan_op(scan_op),
           _scan_operator_seq(scan_op->get_driver_sequence()),
           _runtime_profile(runtime_profile),
+          _allocator(scan_op->allocator()),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
           _chunk_token(nullptr) {}

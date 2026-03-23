@@ -231,8 +231,8 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
 
     // used to hold min/max slice values
-    const MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    const MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    const MutableColumnPtr min_column = ColumnHelper::create_column(_opts.allocator, col_type, true);
+    const MutableColumnPtr max_column = ColumnHelper::create_column(_opts.allocator, col_type, true);
     if (is_all_null) {
         // if the entire column's value is null, the min/max value not existed
         zone_map_detail = ZoneMapDetail{Datum{}, Datum{}, true};
@@ -294,8 +294,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     const size_t page_num = column_index.min_values.size();
     const std::vector<bool> null_pages = column_index.null_pages;
 
-    MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    MutableColumnPtr min_column = ColumnHelper::create_column(_opts.allocator, col_type, true);
+    MutableColumnPtr max_column = ColumnHelper::create_column(_opts.allocator, col_type, true);
     // deal with min_values
     auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, col_type,
                                                          get_column_parquet_field(), _opts.timezone);
@@ -507,7 +507,8 @@ Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const 
     if constexpr (LAZY_DICT_DECODE) {
         if (_tmp_code_column == nullptr) {
             _tmp_code_column = ColumnHelper::create_column(
-                    TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+                    _opts.allocator, TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType),
+                    true);
         }
         _ori_column = dst;
         dst = _tmp_code_column;
@@ -613,7 +614,8 @@ Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
     if (_dict_code == nullptr) {
         _dict_code = ColumnHelper::create_column(
-                TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+                _opts.allocator, TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType),
+                true);
     }
     _ori_column = dst;
     dst = _dict_code;
@@ -689,7 +691,7 @@ Status LowCardColumnReader::_check_current_dict() {
     std::vector<int16_t> code_convert_map;
 
     // create dict value chunk for evaluation.
-    auto dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    auto dict_value_column = ColumnHelper::create_column(_opts.allocator, TypeDescriptor(TYPE_VARCHAR), true);
     RETURN_IF_ERROR(_reader->get_dict_values(dict_value_column.get()));
 
     size_t dict_size = dict_value_column->size();
@@ -748,7 +750,7 @@ Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filte
     ColumnContentType content_type = ColumnContentType::VALUE;
 
     if (_tmp_column == nullptr) {
-        _tmp_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        _tmp_column = ColumnHelper::create_column(_opts.allocator, TYPE_VARCHAR_DESC, true);
     }
     _ori_column = dst;
     dst = _tmp_column;

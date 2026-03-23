@@ -1185,6 +1185,7 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
     iter_opts.use_page_cache = _opts.use_page_cache;
     iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = false;
+    iter_opts.allocator = _opts.allocator;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
     iter_opts.has_preaggregation = _opts.has_preaggregation;
@@ -1211,6 +1212,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.use_page_cache = _opts.use_page_cache;
     iter_opts.temporary_data = _opts.temporary_data;
     iter_opts.check_dict_encoding = check_dict_enc;
+    iter_opts.allocator = _opts.allocator;
     iter_opts.reader_type = _opts.reader_type;
     iter_opts.lake_io_opts = _opts.lake_io_opts;
     iter_opts.has_preaggregation = _opts.has_preaggregation;
@@ -1822,7 +1824,7 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(key.schema(), 1);
+    ChunkPtr chunk = ChunkHelper::new_chunk(_opts.allocator, key.schema(), 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -1877,7 +1879,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
     }
 
     // binary search to find the exact key
-    ChunkPtr chunk = ChunkHelper::new_chunk(short_key_schema, 1);
+    ChunkPtr chunk = ChunkHelper::new_chunk(_opts.allocator, short_key_schema, 1);
     if (lower) {
         while (start < end) {
             chunk->reset();
@@ -2170,7 +2172,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     if (_vector_index_ctx && _vector_index_ctx->use_vector_index && !_vector_index_ctx->use_ivfpq) {
         DCHECK(rowid != nullptr);
-        FloatColumn::MutablePtr distance_column = FloatColumn::create();
+        FloatColumn::MutablePtr distance_column = FloatColumn::create(_opts.allocator);
         vector<rowid_t> rowids;
         for (const auto& rid : *rowid) {
             auto it = _vector_index_ctx->id2distance_map.find(rid);
@@ -2393,13 +2395,15 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        ASSIGN_OR_RETURN(to->_read_chunk, ChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_read_chunk,
+                         ChunkHelper::new_chunk_checked(_opts.allocator, to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            ASSIGN_OR_RETURN(to->_dict_chunk,
-                             ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
+            ASSIGN_OR_RETURN(to->_dict_chunk, ChunkHelper::new_chunk_checked(_opts.allocator,
+                                                                             to->_dict_decode_schema,
+                                                                             _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -2434,13 +2438,15 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                 output_schema_idx++;
             }
         }
-        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         ChunkHelper::new_chunk_checked(_opts.allocator, final_chunk_schema, _reserve_chunk_size));
     } else {
-        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+        ASSIGN_OR_RETURN(to->_final_chunk,
+                         ChunkHelper::new_chunk_checked(_opts.allocator, this->output_schema(), _reserve_chunk_size));
     }
     if (to->_has_force_dict_encode) {
         ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
-                         ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+                         ChunkHelper::new_chunk_checked(_opts.allocator, this->output_schema(), _reserve_chunk_size));
     } else {
         to->_adapt_global_dict_chunk = to->_final_chunk;
     }
@@ -2686,7 +2692,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                         _column_decoders[cid].code_convert_data(),
-                                                        _column_decoders[cid].dict_convert_size());
+                                                        _column_decoders[cid].dict_convert_size(), _opts.allocator);
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid].get());
             }
@@ -2961,7 +2967,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                          _column_decoders[cid].code_convert_data(),
-                                                         _column_decoders[cid].dict_convert_size());
+                                                         _column_decoders[cid].dict_convert_size(),
+                                                         _opts.allocator);
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }
@@ -2973,8 +2980,8 @@ Status SegmentIterator::_rewrite_predicates() {
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
-        ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
-                                         _scan_range);
+        ColumnPredicateRewriter rewriter(_opts.allocator, _column_iterators, _schema, _predicate_need_rewrite,
+                                         _predicate_columns, _scan_range);
         auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
         if (st.is_not_supported()) {
             VLOG(2) << "not supported predicate rewrite: " << _opts.pred_tree.root().debug_string() << " " << st;

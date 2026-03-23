@@ -470,6 +470,7 @@ Status GroupReader::_create_column_readers() {
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata;
     opts.first_row_index = _row_group_first_row;
+    opts.allocator = _param.allocator;
     opts.modification_time = _param.modification_time;
     opts.file_size = _param.file_size;
     opts.datacache_options = _param.datacache_options;
@@ -739,7 +740,7 @@ Status GroupReader::_init_read_chunk() {
         }
     }
     size_t chunk_size = _param.chunk_size;
-    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(_param.allocator, read_slots, chunk_size));
     return Status::OK();
 }
 

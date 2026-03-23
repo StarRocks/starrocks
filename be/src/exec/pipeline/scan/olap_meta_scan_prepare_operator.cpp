@@ -35,6 +35,7 @@ Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     for (auto& scan_range : meta_scan_ranges) {
         MetaScannerParams params;
         params.scan_range = scan_range;
+        params.allocator = allocator();
         auto scanner = std::make_shared<OlapMetaScanner>(_scan_node);
         RETURN_IF_ERROR(scanner->init(state, params));
         TTabletId tablet_id = scan_range->tablet_id;

@@ -98,7 +98,7 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file
 
     int dict_size = file_column_iter->dict_size();
 
-    auto column = BinaryColumn::create();
+    auto column = BinaryColumn::create(file_column_iter->allocator());
 
     int dict_codes[dict_size];
     for (int i = 0; i < dict_size; ++i) {
@@ -126,14 +126,16 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file
 }
 
 MutableColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
-    MutableColumnPtr res = Int32Column::create();
+    MutableColumnPtr res = Int32Column::create(_allocator);
     auto code_data = ColumnHelper::get_data_column(src);
     if (code_data->is_array()) {
-        res = ArrayColumn::create(NullableColumn::create(std::move(res), NullColumn::create()), UInt32Column::create());
+        res = ArrayColumn::create(_allocator,
+                                  NullableColumn::create(_allocator, std::move(res), NullColumn::create(_allocator)),
+                                  UInt32Column::create(_allocator));
     }
 
     if (src->is_nullable()) {
-        res = NullableColumn::create(std::move(res), NullColumn::create());
+        res = NullableColumn::create(_allocator, std::move(res), NullColumn::create(_allocator));
     }
     return res;
 }

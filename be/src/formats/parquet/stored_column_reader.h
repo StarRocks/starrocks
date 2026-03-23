@@ -52,6 +52,7 @@ public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, std::unique_ptr<StoredColumnReader>* out);
     virtual ~StoredColumnReader() = default;
+    virtual memory::Allocator* allocator() const { return memory::get_default_column_allocator(); }
 
     // If need_levels is set, client will get all levels through get_levels function.
     // If need_levels is not set, read_records may not records levels information, this will
@@ -88,6 +89,7 @@ public:
     StoredColumnReaderImpl(const ColumnReaderOptions& opts) : _opts(opts) {}
 
     ~StoredColumnReaderImpl() override = default;
+    memory::Allocator* allocator() const override { return _opts.allocator; }
 
     // Reset internal state and ready for next read_values
     virtual void reset_levels() = 0;

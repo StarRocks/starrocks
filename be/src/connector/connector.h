@@ -101,13 +101,12 @@ protected:
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
-    // TODO: wire allocator propagation from ConnectorChunkSource in a follow-up phase.
     memory::Allocator* _allocator = memory::get_default_column_allocator();
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(_allocator, *_tuple_desc, n));
         return Status::OK();
     }
 

@@ -128,13 +128,13 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
             << ", source: " << JsonFlatPath::debug_flat_json(_source_paths, _source_types, has_remain);
 
     for (int i = 0; i < _source_paths.size(); i++) {
-        auto column = ColumnHelper::create_column(TypeDescriptor(_source_types[i]), true);
+        auto column = ColumnHelper::create_column(_opts.allocator, TypeDescriptor(_source_types[i]), true);
         _source_column_modules.emplace_back(std::move(column));
     }
 
     DCHECK_EQ(_source_column_modules.size(), _source_paths.size());
     if (has_remain) {
-        _source_column_modules.emplace_back(JsonColumn::create());
+        _source_column_modules.emplace_back(JsonColumn::create(_opts.allocator));
     }
 
     if (!opts.has_preaggregation && config::enable_lazy_dynamic_flat_json) {
@@ -186,7 +186,7 @@ template <typename FUNC>
 Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     MutableColumns columns;
     for (int i = 0; i < _source_column_modules.size(); i++) {
-        columns.emplace_back(_source_column_modules[i]->clone_empty());
+        columns.emplace_back(_source_column_modules[i]->clone_empty(_opts.allocator));
     }
 
     for (int i = 0; i < _flat_iters.size(); i++) {
@@ -379,7 +379,7 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     if (_is_direct) {
         return read_fn(_json_iter.get(), output);
     }
-    auto proxy = output->clone_empty();
+    auto proxy = output->clone_empty(output->allocator());
     RETURN_IF_ERROR(read_fn(_json_iter.get(), proxy.get()));
     output->set_delete_state(proxy->delete_state());
 
@@ -512,13 +512,13 @@ Status JsonMergeIterator::init(const ColumnIteratorOptions& opts) {
     VLOG(2) << "JsonMergeIterator init, source: " << JsonFlatPath::debug_flat_json(_src_paths, _src_types, has_remain);
     DCHECK(_all_iter.size() == _src_paths.size() || _all_iter.size() == _src_paths.size() + 1);
     for (int i = 0; i < _src_paths.size(); i++) {
-        auto column = ColumnHelper::create_column(TypeDescriptor(_src_types[i]), true);
+        auto column = ColumnHelper::create_column(_opts.allocator, TypeDescriptor(_src_types[i]), true);
         _src_column_modules.emplace_back(std::move(column));
     }
 
     if (_all_iter.size() != _src_paths.size()) {
         // remain
-        _src_column_modules.emplace_back(JsonColumn::create());
+        _src_column_modules.emplace_back(JsonColumn::create(_opts.allocator));
     }
 
     opts.stats->merge_json_hits["MergeAllSubfield"] += 1;
@@ -533,7 +533,7 @@ Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
     Columns all_columns;
     for (size_t i = 0; i < _all_iter.size(); i++) {
         auto iter = _all_iter[i].get();
-        auto c = _src_column_modules[i]->clone_empty();
+        auto c = _src_column_modules[i]->clone_empty(_opts.allocator);
         RETURN_IF_ERROR(func(iter, c.get()));
         all_columns.emplace_back(std::move(c));
     }
@@ -666,7 +666,8 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_ran
 
 class JsonExtractIterator final : public ColumnIteratorDecorator {
 public:
-    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, bool source_nullable, JsonPath path, LogicalType type)
+    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, bool source_nullable, JsonPath path, LogicalType type,
+                                 memory::Allocator* allocator)
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
@@ -674,16 +675,16 @@ public:
               _mem_pool(),
               _source_chunk() {
         // prepare the source chunk
-        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), source_nullable);
+        auto column = ColumnHelper::create_column(allocator, TypeDescriptor::create_json_type(), source_nullable);
         _source_chunk.append_column(std::move(column), SlotId(0));
-        auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
+        auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(allocator, _path.to_string(), 1);
         _source_chunk.append_column(std::move(path_column), SlotId(1));
 
         // prepare the function
         TypeDescriptor return_type(_type);
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::create_json_type(), TypeDescriptor(TYPE_VARCHAR)};
         _fn_context.reset(FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types));
-        auto const_path = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
+        auto const_path = ColumnHelper::create_const_column<TYPE_VARCHAR>(allocator, _path.to_string(), 1);
         _fn_context->set_constant_columns(Columns{nullptr, const_path});
     }
 
@@ -697,10 +698,13 @@ public:
     Status init(const ColumnIteratorOptions& opts) override {
         RETURN_IF_ERROR(JsonFunctions::native_json_path_prepare(_fn_context.get(),
                                                                 FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+        _opts = opts;
         // record the hits into stats
         opts.stats->extract_json_hits[_path.to_string()]++;
         return _parent->init(opts);
     }
+
+    memory::Allocator* allocator() const { return _opts.allocator; }
 
     DISALLOW_COPY_AND_MOVE(JsonExtractIterator);
 
@@ -828,7 +832,9 @@ StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr sou
                                                           const std::string& path, LogicalType type) {
     VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
     ASSIGN_OR_RETURN(auto normalized_path, JsonPath::parse(path));
-    return std::make_unique<JsonExtractIterator>(std::move(source_iter), source_nullable, normalized_path, type);
+    auto* allocator = source_iter->allocator();
+    return std::make_unique<JsonExtractIterator>(std::move(source_iter), source_nullable, normalized_path, type,
+                                                 allocator);
 }
 
 } // namespace starrocks

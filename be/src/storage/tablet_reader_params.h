@@ -78,7 +78,6 @@ struct TabletReaderParams {
     RuntimeFilterPredicates runtime_filter_preds;
 
     RuntimeState* runtime_state = nullptr;
-    // TODO: wire allocator propagation from ChunkSource in a follow-up phase.
     memory::Allocator* allocator = memory::get_default_column_allocator();
 
     RuntimeProfile* profile = nullptr;

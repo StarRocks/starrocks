@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "base/memory/memory_allocator.h"
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "runtime/global_dict/types.h"
@@ -42,9 +43,10 @@ public:
     using ColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnPredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
-    ColumnPredicateRewriter(const ColumnIterators& column_iterators, const Schema& schema,
+    ColumnPredicateRewriter(memory::Allocator* allocator, const ColumnIterators& column_iterators, const Schema& schema,
                             std::vector<uint8_t>& need_rewrite, int column_size, SparseRange<>& scan_range)
-            : _column_iterators(column_iterators),
+            : _allocator(allocator),
+              _column_iterators(column_iterators),
               _schema(schema),
               _need_rewrite(need_rewrite),
               _column_size(column_size),
@@ -76,6 +78,7 @@ private:
     Status _load_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
                                   bool field_nullable);
 
+    memory::Allocator* _allocator;
     const ColumnIterators& _column_iterators;
     const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;

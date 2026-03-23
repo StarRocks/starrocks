@@ -18,6 +18,7 @@
 #include <orc/OrcFile.hh>
 
 #include "column/vectorized_fwd.h"
+#include "base/memory/memory_allocator.h"
 #include "common/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -57,6 +58,8 @@ public:
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader() = default;
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
     Status init(std::unique_ptr<orc::InputStream> input_stream, const OrcPredicates* orc_predicates = nullptr);
     Status init(std::unique_ptr<orc::Reader> reader, const OrcPredicates* orc_predicates = nullptr);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
@@ -206,6 +209,7 @@ private:
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
     bool _invalid_as_null = false;
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
     // Key is slot name formatted with case sensitive
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
     std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;

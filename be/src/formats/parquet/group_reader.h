@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -88,6 +89,7 @@ struct GroupReaderParam {
     RandomAccessFile* file = nullptr;
 
     const FileMetaData* file_metadata = nullptr;
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 
     bool case_sensitive = false;
 
