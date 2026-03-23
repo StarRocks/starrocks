@@ -129,6 +129,7 @@ import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.exprreuse.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.lazymaterialize.GlobalLateMaterializationRewriter;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
@@ -702,6 +703,7 @@ public class QueryOptimizer extends Optimizer {
 
         // Rewrite the jsonpath in META-SCAN
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForMetaScan());
+        scheduler.rewriteOnce(tree, rootTaskContext, VariantPathRewriteRule.createForMetaScan());
 
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
@@ -727,6 +729,7 @@ public class QueryOptimizer extends Optimizer {
 
         // =============================== Rules after the MV rewrite ===============================
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
+        scheduler.rewriteOnce(tree, rootTaskContext, VariantPathRewriteRule.createForOlapScan());
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMinMaxByMonotonicFunctionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
