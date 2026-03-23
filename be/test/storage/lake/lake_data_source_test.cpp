@@ -487,14 +487,10 @@ TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
 
 TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
     // Case 1: Non-PK table → skip warmup
-    {
-        ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr));
-    }
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr)); }
 
     // Case 2: nullptr metadata → skip warmup
-    {
-        ASSERT_OK(connector::warmup_pk_index_sst_files(nullptr, _tablet_mgr));
-    }
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(nullptr, _tablet_mgr)); }
 
     // Case 3: PK table with cloud-native persistent index but no SST files → skip
     {

@@ -16,9 +16,8 @@
 
 #include <vector>
 
-#include "base/testutil/sync_point.h"
-
 #include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
 #include "column/column_access_path.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
@@ -755,8 +754,7 @@ Status LakeDataSource::prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
-bool has_all_pk_columns_selected(const TabletSchema* tablet_schema,
-                                 const std::vector<SlotDescriptor*>& slots) {
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots) {
     if (tablet_schema == nullptr) {
         return false;
     }
@@ -802,14 +800,12 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
     }
 
     const auto& sstable_meta = metadata->sstable_meta();
-    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id
-            << " sst_count=" << sstable_meta.sstables_size();
+    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id << " sst_count=" << sstable_meta.sstables_size();
     for (const auto& sstable_pb : sstable_meta.sstables()) {
         std::string sst_path = tablet_mgr->sst_location(tablet_id, sstable_pb.filename());
         RandomAccessFileOptions opts;
         if (!sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info,
-                             KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
             opts.encryption_info = std::move(info);
         }
         ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, sst_path));
@@ -826,7 +822,6 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
 
     return Status::OK();
 }
-
 
 Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.

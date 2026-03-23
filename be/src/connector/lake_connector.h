@@ -35,8 +35,7 @@ namespace starrocks::connector {
 
 // Check if all PK columns are in the selected slots. Used by CACHE SELECT to
 // decide whether to warm up persistent index SST files.
-bool has_all_pk_columns_selected(const TabletSchema* tablet_schema,
-                                 const std::vector<SlotDescriptor*>& slots);
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots);
 
 // Warm up persistent index SST files for cloud-native PK tables.
 Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr);
