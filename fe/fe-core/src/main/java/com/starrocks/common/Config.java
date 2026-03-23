@@ -4328,7 +4328,7 @@ public class Config extends ConfigBase {
      * Tablet splitting and merging will make tablet size around this value.
      */
     @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
-    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
+    public static long tablet_reshard_target_size = 10L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.

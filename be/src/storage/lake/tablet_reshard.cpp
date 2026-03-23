@@ -300,6 +300,10 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
+    LOG(INFO) << "Start publish resharding tablet"
+              << ", resharding_tablet=" << resharding_tablet.DebugString() << ", txn_info=" << txn_info.DebugString()
+              << ", base_version=" << base_version << ", new_version=" << new_version;
+
     if (resharding_tablet.has_splitting_tablet_info()) {
         RETURN_IF_ERROR(handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
                                                 new_version, txn_info, tablet_metadatas, tablet_ranges));
@@ -321,6 +325,9 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
         }
     }
 
+    LOG(INFO) << "Finish publish resharding tablet"
+              << ", resharding_tablet=" << resharding_tablet.DebugString() << ", txn_info=" << txn_info.DebugString()
+              << ", base_version=" << base_version << ", new_version=" << new_version;
     return Status::OK();
 }
 
