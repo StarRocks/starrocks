@@ -76,7 +76,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -581,7 +581,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Expr whereExpr = null;
         if (whereClause != null) {
             Type type = BooleanType.BOOLEAN;
-            whereExpr = analyzeExpr(visitor, type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME,
+            whereExpr = analyzeExpr(visitor, type, CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME,
                     whereClause, slotDescByName);
             List<SlotRef> slots = Lists.newArrayList();
             whereExpr.collect(SlotRef.class, slots);
@@ -1069,8 +1069,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
-        if (columnNameToDefineExpr.containsKey(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME)) {
-            whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
+        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
+            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
     }

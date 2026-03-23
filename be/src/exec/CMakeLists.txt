@@ -28,6 +28,7 @@ set(EXEC_FILES
     empty_set_node.cpp
     exec_factory.cpp
     exec_node.cpp
+    pipeline_node.cpp
     exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
@@ -46,6 +47,7 @@ set(EXEC_FILES
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
     benchmark_scanner.cpp
+    cache_stats_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -323,6 +325,7 @@ set(EXEC_FILES
     pipeline/fetch_processor.cpp
     pipeline/fetch_sink_operator.cpp
     pipeline/fetch_source_operator.cpp
+    pipeline/lookup/tablet_adaptor.cpp
     pipeline/lookup_request.cpp
     pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp

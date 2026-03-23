@@ -63,13 +63,23 @@ public class GCPCloudCredential implements CloudCredential {
         return endpoint;
     }
 
+    private boolean hasServiceAccountCredentials() {
+        return !serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty()
+                && !serviceAccountPrivateKey.isEmpty();
+    }
+
+    private boolean hasAccessToken() {
+        return accessToken != null && !accessToken.isEmpty();
+    }
+
     private void tryGenerateHadoopConfiguration(Map<String, String> hadoopConfiguration) {
         if (!endpoint.isEmpty()) {
             hadoopConfiguration.put("fs.gs.endpoint", endpoint);
         }
         if (useComputeEngineServiceAccount) {
             hadoopConfiguration.put("fs.gs.auth.type", "COMPUTE_ENGINE");
-        } else {
+        } else if (hasServiceAccountCredentials()) {
+            hadoopConfiguration.put("fs.gs.auth.type", "SERVICE_ACCOUNT_JSON_KEYFILE");
             hadoopConfiguration.put("fs.gs.auth.service.account.email", serviceAccountEmail);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key.id", serviceAccountPrivateKeyId);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key", serviceAccountPrivateKey);
@@ -77,7 +87,7 @@ public class GCPCloudCredential implements CloudCredential {
         if (!impersonationServiceAccount.isEmpty()) {
             hadoopConfiguration.put("fs.gs.auth.impersonation.service.account", impersonationServiceAccount);
         }
-        if (accessToken != null && !accessToken.isEmpty()) {
+        if (hasAccessToken()) {
             hadoopConfiguration.put("fs.gs.auth.access.token.provider.impl",
                     ACCESS_TOKEN_PROVIDER_IMPL);
             hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, accessToken);
@@ -97,11 +107,10 @@ public class GCPCloudCredential implements CloudCredential {
         if (useComputeEngineServiceAccount) {
             return true;
         }
-        if (!serviceAccountEmail.isEmpty() && !serviceAccountPrivateKeyId.isEmpty()
-                && !serviceAccountPrivateKey.isEmpty()) {
+        if (hasServiceAccountCredentials()) {
             return true;
         }
-        if (accessToken != null && !accessToken.isEmpty()) {
+        if (hasAccessToken()) {
             return true;
         }
         return false;
@@ -134,7 +143,7 @@ public class GCPCloudCredential implements CloudCredential {
         gsFileStoreInfo.setEndpoint(endpoint);
 
         gsFileStoreInfo.setUseComputeEngineServiceAccount(useComputeEngineServiceAccount);
-        if (!useComputeEngineServiceAccount) {
+        if (hasServiceAccountCredentials()) {
             gsFileStoreInfo.setServiceAccountEmail(serviceAccountEmail);
             gsFileStoreInfo.setServiceAccountPrivateKeyId(serviceAccountPrivateKeyId);
             gsFileStoreInfo.setServiceAccountPrivateKey(serviceAccountPrivateKey);

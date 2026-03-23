@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
@@ -757,7 +758,7 @@ std::string SegmentIterator::ScanContext::to_string() const {
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, const SegmentReadOptions& options)
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
-          _opts(std::move(options)),
+          _opts(options),
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
@@ -904,7 +905,8 @@ Status SegmentIterator::_init_internal() {
     RETURN_IF_ERROR(_init_context());
 
     // reverse scan_range
-    if (!_opts.asc_hint) {
+    // when desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range
+    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
         _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
     }
 
@@ -1191,9 +1193,13 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
     factory_option.tablet_id = _opts.tablet_id;
     factory_option.segment_id = segment_id();
     factory_option.num_rows = _segment->num_rows();
+    factory_option.rss_id = _opts.rowset_id + segment_id();
+    factory_option.dynamic_rss_id = _opts.dynamic_rss_id_base + segment_id();
+    auto rowsetid = _opts.rowsetid.to_string();
+    factory_option.rowset_id = rowsetid;
 
     ASSIGN_OR_RETURN(auto iterator, VirtualColumnFactory::create_virtual_column_iterator(factory_option, col_name));
-    _column_iterators[cid].reset(std::move(iterator));
+    _column_iterators[cid].reset(iterator);
     RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
 
     return Status::OK();
@@ -2068,6 +2074,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                     offset += cur_size;
                     size -= cur_size;
                 }
+            }
+        }
+
+        // Warmup SST files for cloud-native PK index, executed once per tablet
+        if (_opts.lake_io_opts.sst_warmup_fn && _opts.lake_io_opts.sst_warmup_done) {
+            bool expected = false;
+            if (_opts.lake_io_opts.sst_warmup_done->compare_exchange_strong(expected, true)) {
+                RETURN_IF_ERROR(_opts.lake_io_opts.sst_warmup_fn());
             }
         }
 

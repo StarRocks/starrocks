@@ -45,8 +45,18 @@
 #include "common/util/thrift_util.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
+
+DeferOp<std::function<void()>> BufferControlBlock::defer_notify() {
+    return DeferOp<std::function<void()>>([query_ctx = _query_ctx, this]() {
+        if (auto ctx = query_ctx.lock()) {
+            this->_observable.notify_source_observers();
+            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        }
+    });
+}
 
 void GetResultBatchCtx::on_failure(const Status& status) {
     DCHECK(!status.ok()) << "status is ok, errmsg=" << status.message();
@@ -101,8 +111,7 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
           _packet_num(0),
-          _arrow_rows_limit(buffer_size * 4096),
-          _arrow_rows(0) {}
+          _arrow_rows_limit(buffer_size * 4096) {}
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();

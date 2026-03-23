@@ -504,6 +504,11 @@ class ClassAnalyzer {
 public:
     ClassAnalyzer() = default;
     ~ClassAnalyzer() = default;
+
+    // Strip generic type parameters from a JNI method signature.
+    // e.g. "(Ljava/util/List<java/lang/String>;)V" -> "(Ljava/util/List;)V"
+    static void strip_jni_generic_types(std::string* sign);
+
     Status has_method(jclass clazz, const std::string& method, bool* has);
     Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);

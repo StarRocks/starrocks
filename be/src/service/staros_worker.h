@@ -21,6 +21,7 @@
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -87,7 +88,7 @@ private:
         ShardInfo shard_info;
         std::shared_ptr<std::string> fs_cache_key;
 
-        ShardInfoDetails(const ShardInfo& info) : shard_info(info) {}
+        ShardInfoDetails(ShardInfo info) : shard_info(std::move(info)) {}
     };
 
     struct CacheValue {

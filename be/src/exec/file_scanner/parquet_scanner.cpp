@@ -34,12 +34,10 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
                                ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
-          _next_file(0),
+
           _curr_file_reader(nullptr),
-          _scanner_eof(false),
-          _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096),
-          _batch_start_idx(0),
-          _chunk_start_idx(0) {
+
+          _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096) {
     _file_format_str = "parquet";
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.state = state;
@@ -141,7 +139,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
             }
 
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
-            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), std::move(column));
+            column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
         }
         auto range = _scan_range.ranges.at(_next_file - 1);

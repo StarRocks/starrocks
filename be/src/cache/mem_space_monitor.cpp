@@ -16,6 +16,7 @@
 
 #include "base/concurrency/await.h"
 #include "base/gc/gc_helper.h"
+#include "base/statusor.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_cache_fwd.h"
 #include "common/thread/thread.h"

@@ -698,8 +698,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                                                                       max_bytes, std::move(callback), release_token));
 
     // Step 4: Submit subtasks
-    return submit_subtasks_from_groups(std::move(state_ptr), std::move(subtask_groups), force_base_compaction,
-                                       thread_pool, acquire_token, release_token);
+    return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
+                                       acquire_token, release_token);
 }
 
 std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::get_tablet_state(int64_t tablet_id,
@@ -1085,7 +1085,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                 if (subtask_op.has_output_rowset()) {
                     const auto& output = subtask_op.output_rowset();
                     auto* merged_output = merged_compaction->mutable_output_rowset();
-
+                    DCHECK_EQ(output.segment_metas_size(), output.segments_size());
                     // Add segments
                     for (int i = 0; i < output.segments_size(); i++) {
                         merged_output->add_segments(output.segments(i));
@@ -1099,9 +1099,14 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                         merged_output->add_segment_encryption_metas(output.segment_encryption_metas(i));
                     }
                     // Add segment_metas
+                    const int merged_segment_idx_base = merged_output->segment_metas_size();
                     for (int i = 0; i < output.segment_metas_size(); i++) {
-                        merged_output->add_segment_metas()->CopyFrom(output.segment_metas(i));
+                        auto* segment_meta = merged_output->add_segment_metas();
+                        segment_meta->CopyFrom(output.segment_metas(i));
+                        // Rebuild segment_idx in the merged rowset's local id space.
+                        segment_meta->set_segment_idx(merged_segment_idx_base + i);
                     }
+                    DCHECK_EQ(merged_output->segment_metas_size(), merged_output->segments_size());
 
                     total_num_rows += output.num_rows();
                     total_data_size += output.data_size();
@@ -1327,7 +1332,7 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
         return;
     }
 
-    auto compaction_task = compaction_task_or.value();
+    const auto& compaction_task = compaction_task_or.value();
 
     // Increment runs counter to track that this subtask has actually started execution.
     // This is important for list_tasks() to correctly display the profile for completed subtasks,
@@ -1393,7 +1398,7 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
         return Status::OK(); // Don't fail the entire compaction for SST compaction failure
     }
 
-    auto tablet = tablet_or.value();
+    const auto& tablet = tablet_or.value();
     const auto& metadata = tablet.metadata();
 
     // Check if this is a primary key table with cloud native persistent index
@@ -2060,7 +2065,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
         return;
     }
 
-    auto compaction_task = compaction_task_or.value();
+    const auto& compaction_task = compaction_task_or.value();
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
     // Execute compaction

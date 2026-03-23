@@ -216,6 +216,8 @@ CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 CONF_mInt64(lake_replication_slow_log_ms, "30000");
 // The buffer size used for reading remote data during lake replication
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
+// Maximum retry count for non-segment file copy during lake-to-lake replication
+CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -754,6 +756,19 @@ CONF_mInt32(retry_apply_timeout_second, "7200");
 // Update interval of tablet stat cache.
 CONF_mInt32(tablet_stat_cache_update_interval_second, "300");
 
+// Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
+// When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
+// significantly increase the overhead of get_tablet_stats RPC.
+// When disabled, the approximate num_dels field stored in rowset metadata is used,
+// which avoids remote I/O but may slightly overcount rows that are deleted but not yet compacted.
+CONF_mBool(lake_enable_accurate_pk_row_count, "true");
+
+// Threshold in milliseconds for logging slow tablet stat collection tasks.
+// When a single tablet stat task takes longer than this threshold, a warning log is emitted
+// with diagnostic info (tablet_id, version, rowset count, accurate_mode, elapsed time).
+// Default is 5 minutes (300000 ms).
+CONF_mInt64(lake_tablet_stat_slow_log_ms, "300000");
+
 // Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
@@ -1003,6 +1018,8 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
+// The number of threads for automatic partition thread pool. Queue size is 10x thread count.
+CONF_Int64(automatic_partition_thread_pool_thread_num, "1000");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -1328,6 +1345,8 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1360,6 +1379,15 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+// Maximum lifetime of a connection in the JDBC connection pool (ms).
+// Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes).
+CONF_Int64(jdbc_connection_max_lifetime_ms, "300000");
+// Keepalive interval for idle JDBC connections (ms).
+// Idle connections are tested at this interval to detect stale connections proactively.
+// Set to 0 to disable keepalive probing.
+// When enabled, must be >= 30000 and < jdbc_connection_max_lifetime_ms.
+// Invalid enabled values are silently disabled (reset to 0). Default: 30000 (30 seconds).
+CONF_Int64(jdbc_connection_keepalive_time_ms, "30000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
@@ -1594,6 +1622,8 @@ CONF_Int64(rocksdb_max_write_buffer_memory_bytes, "1073741824");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+// limit local exchange buffer size by dop * local_exchange_buffer_mem_limit_per_driver for union operators.
+CONF_mBool(local_exchange_buffer_mem_limit_by_consumer_dop, "true");
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 // mem limit for partition hash join probe side buffer
@@ -1670,6 +1700,10 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
+// If set to false, skip LIST and use approximate tablet size (base_size=0).
+CONF_mBool(allow_list_object_for_random_bucketing_on_cache_miss, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");

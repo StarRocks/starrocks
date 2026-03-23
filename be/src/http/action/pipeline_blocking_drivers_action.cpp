@@ -29,6 +29,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -112,7 +113,7 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
                         if (driver_info.is_fragment_cancelled) {
                             is_fragment_cancelled = true;
                         }
-                        status = std::move(driver_info.fragment_status);
+                        status = driver_info.fragment_status;
                     }
 
                     rapidjson::Document fragment_obj;

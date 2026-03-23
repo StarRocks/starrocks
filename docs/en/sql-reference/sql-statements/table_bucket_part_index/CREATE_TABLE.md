@@ -319,15 +319,25 @@ Data is sequenced in specified key columns and has different attributes for diff
 
 - AGGREGATE KEY: Identical content in key columns will be aggregated into value columns according to the specified aggregation type. It usually applies to business scenarios such as financial statements and multi-dimensional analysis.
 - UNIQUE KEY/PRIMARY KEY: Identical content in key columns will be replaced in value columns according to the import sequence. It can be applied to make addition, deletion, modification and query on key columns.
-- DUPLICATE KEY: Identical content in key columns, which also exists in StarRocks at the same time. It can be used to store detailed data or data with no aggregation attributes. 
+- DUPLICATE KEY: Identical content in key columns co-exists in StarRocks. It can be used to store detailed data or data with no aggregation attributes.
 
   :::note
   DUPLICATE KEY is the default type. Data will be sequenced according to key columns.
   :::
 
 :::note
-Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
+Value columns do not need to specify aggregation types when other key type is used to create tables with the exception of AGGREGATE KEY.
 :::
+
+### Range-based Distribution
+
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns. 
+
+The range-based distribution semantic is different from the default semantic in the following aspects:
+- If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
+- If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
+- If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
+- If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
 
 ## COMMENT
 
@@ -487,6 +497,10 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
   - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
+
+- Range-based distribution
+
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. For detailed information, see [Range-based distribution](#range-based-distribution).
 
 ## Rollup index
 
@@ -789,14 +803,37 @@ PROPERTIES (
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
-### Fast schema evolution
+### Fast Schema Evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+- `fast_schema_evolution`: Whether to enable Fast Schema Evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.
 
   :::note
-  - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
-  - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  - Fast Schema Evolution is supported for shared-nothing clusters since v3.2.0.
+  - Fast Schema Evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
   :::
+
+- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. The system will only modify FE metadata rather than tablet metadata located on S3, so it can always achieve second-level latency no matter how many partitions or tablets in the table. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
+
+  :::note
+  - Fast Schema Evolution v2 is supported from v4.1 onwards and only for **cloud-native tables** in shared-data clusters.
+  - Default behaviors:
+    - For new tables created in a v4.1 cluster, Fast Schema Evolution v2 is enabled by default.
+    - For existing tables from a cluster upgraded to v4.1, Fast Schema Evolution v2 is disabled by default. You can enable it by explicitly setting this property to `true` via [ALTER TABLE](ALTER_TABLE.md).
+  - Downgrade requirements:
+    - To downgrade a shared-data cluster from v4.1 to v4.0.5 or later, you can directly downgrade it following the standard downgrade procedures.
+    - Before downgrading a shared-data cluster from v4.1 to v3.x or patch versions earlier than v4.0.5, you must manually set `cloud_native_fast_schema_evolution_v2` to `false` for any tables that have enabled Fast Schema Evolution v2 via ALTER TABLE. You must wait until the asynchronous jobs become FINISHED. You can track the job status via SHOW ALTER.
+  :::
+
+You can inspect the schema change jobs via [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md).
+
+Example:
+
+```SQL
+-- List recent column/schema change jobs in the table
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+For cloud-native tables with Fast Schema Evolution v2 enabled, schema change jobs will typically appear as FINISHED, because the change is applied by updating FE metadata only.
 
 ### Forbid Base Compaction
 

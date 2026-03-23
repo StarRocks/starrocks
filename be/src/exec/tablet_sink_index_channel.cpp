@@ -33,6 +33,7 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
@@ -338,7 +339,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -351,7 +352,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -790,6 +791,17 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
     VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
             << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
 
+    // Force-release protobuf memory under the current (process) tracker context.
+    // _serialize_chunk() allocated protobuf memory inside SCOPED(nullptr), which falls back
+    // to process_mem_tracker via CurrentThread::mem_tracker(). But `add_chunk` is destroyed
+    // after the SCOPED ends (under instance_mem_tracker / query_pool hierarchy).
+    // Swap transfers ownership to a temporary destroyed here (under process_mem_tracker),
+    // preventing the protobuf deallocation from being incorrectly charged to query_pool.
+    // Note: clear_chunk() alone is insufficient — protobuf retains internal buffers until
+    // the Message object is destroyed.
+    PTabletWriterAddChunksRequest().Swap(&request);
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::_send_request::after_swap", &request);
+
     return Status::OK();
 }
 
@@ -818,7 +830,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
         _try_diagnose(error_text);
         return _err_st;
     }
@@ -839,7 +851,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             } else {
                 fail_info.__set_backendId(_node_id);
             }
-            _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+            _runtime_state->append_tablet_fail_infos(fail_info);
         }
 
         return _err_st;

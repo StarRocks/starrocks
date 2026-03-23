@@ -116,6 +116,11 @@ void PocoHttpClient::MakeRequestInternal(Aws::Http::HttpRequest& request,
             case Aws::Http::HttpMethod::HTTP_PATCH:
                 poco_request.setMethod(Poco::Net::HTTPRequest::HTTP_PATCH);
                 break;
+            default:
+                // TODO: Replace this fallback with explicit enum handling once the AWS dependency is upgraded
+                // to a version that defines HTTP_CONNECT, HTTP_OPTIONS, and HTTP_TRACE in Aws::Http::HttpMethod.
+                poco_request.setMethod(Aws::Http::HttpMethodMapper::GetNameForHttpMethod(request.GetMethod()));
+                break;
             }
 
             for (const auto& [header_name, header_value] : request.GetHeaders()) {

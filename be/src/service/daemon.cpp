@@ -74,10 +74,10 @@
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/mem_hook.h"
-#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "types/time_types.h"
 #include "util/global_metrics_registry.h"
@@ -235,6 +235,8 @@ void calculate_metrics(void* arg_this) {
     }
 }
 
+#ifndef __APPLE__
+
 struct JemallocStats {
     int64_t allocated = 0;
     int64_t active = 0;
@@ -246,11 +248,6 @@ struct JemallocStats {
 
 static void retrieve_jemalloc_stats(JemallocStats* stats) {
     // On macOS, jemalloc may define je_mallctl as mallctl via macro in jemalloc.h
-#ifdef __APPLE__
-#ifndef je_mallctl
-#define je_mallctl mallctl
-#endif
-#endif
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
@@ -277,7 +274,6 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
 }
 
-#ifndef __APPLE__
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
     auto* daemon = static_cast<Daemon*>(arg_this);

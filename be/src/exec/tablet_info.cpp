@@ -21,6 +21,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"

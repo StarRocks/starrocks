@@ -30,6 +30,9 @@ class CIDR;
 
 class BackendOptions {
 public:
+    BackendOptions(const BackendOptions&) = delete;
+    const BackendOptions& operator=(const BackendOptions&) = delete;
+
     static bool init(bool is_cn);
     static std::string get_localhost();
     static std::string get_local_ip();
@@ -53,9 +56,6 @@ private:
     static TBackend _backend;
     static bool _bind_ipv6;
     static bool _is_cn;
-
-    BackendOptions(const BackendOptions&) = delete;
-    const BackendOptions& operator=(const BackendOptions&) = delete;
 };
 
 } // namespace starrocks

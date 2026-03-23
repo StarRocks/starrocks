@@ -277,18 +277,20 @@ public class PseudoFrontend {
 
     private void waitForCatalogReady() throws FeStartException {
         int tryCount = 0;
-        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
+        while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 6000) {
             try {
                 tryCount++;
-                Thread.sleep(1000);
-                System.out.println("globalStateMgr is not ready, wait for 1 second");
+                Thread.sleep(100);
+                if (tryCount % 10 == 0) {
+                    LOG.warn("globalStateMgr is not ready, wait for 1 second");
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
 
         if (!GlobalStateMgr.getCurrentState().isReady()) {
-            System.err.println("globalStateMgr is not ready");
+            LOG.error("globalStateMgr is not ready");
             throw new FeStartException("fe start failed");
         }
     }

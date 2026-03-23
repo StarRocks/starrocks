@@ -1,0 +1,56 @@
+-- name: test_glm_native_with_global_dict
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+CREATE TABLE `allstring` (
+   id int(11) NULL COMMENT "",
+  `v1` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into allstring SELECT generate_series, generate_series % 10 FROM TABLE(generate_series(1,  1024));
+-- result:
+-- !result
+[UC]analyze full table allstring;
+-- result:
+test_db_73a672e0ae3342fa86c898afc512038d.allstring	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('v1', 'allstring')
+-- result:
+
+-- !result
+select * from allstring order by id limit 10;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+6	6
+7	7
+8	8
+9	9
+10	0
+-- !result
+select upper(v1) from allstring order by upper(id) limit 10;
+-- result:
+1
+0
+0
+0
+1
+2
+3
+4
+5
+6
+-- !result

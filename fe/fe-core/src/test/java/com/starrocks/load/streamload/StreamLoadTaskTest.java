@@ -95,8 +95,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
-        streamLoadTask.afterCommitted(txnState, txnOperated);
+        streamLoadTask.afterCommitted(txnState);
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
     }
 
@@ -110,7 +109,6 @@ public class StreamLoadTaskTest {
             }
         };
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
 
         TUniqueId labelId = new TUniqueId(2, 3);
         streamLoadTask.setTUniqueId(labelId);
@@ -118,7 +116,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         long ts = System.currentTimeMillis();
-        streamLoadTask.afterAborted(txnState, txnOperated, "");
+        streamLoadTask.afterAborted(txnState, "");
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
         Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
@@ -126,9 +124,8 @@ public class StreamLoadTaskTest {
     @Test
     public void testAfterVisible() {
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
         long ts = System.currentTimeMillis();
-        streamLoadTask.afterVisible(txnState, txnOperated);
+        streamLoadTask.afterVisible(txnState);
         Assertions.assertTrue(ts <= WarehouseIdleChecker.getLastFinishedJobTime(streamLoadTask.getCurrentWarehouseId()));
     }
 
@@ -216,8 +213,7 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
 
         TransactionState txnState = new TransactionState();
-        boolean txnOperated = true;
-        streamLoadTask.afterCommitted(txnState, txnOperated);
+        streamLoadTask.afterCommitted(txnState);
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
     }
 

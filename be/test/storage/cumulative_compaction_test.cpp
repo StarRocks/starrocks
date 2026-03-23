@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/schema.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"

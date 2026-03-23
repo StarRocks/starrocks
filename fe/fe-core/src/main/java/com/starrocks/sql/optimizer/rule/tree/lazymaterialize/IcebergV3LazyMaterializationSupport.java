@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree.lazymaterialize;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.type.IntegerType;
 
 import java.util.List;
@@ -79,6 +81,17 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
     }
 
     @Override
+    public Pair<Integer, ColumnDict> getGlobalDict(PhysicalScanOperator scan, ColumnRefOperator column) {
+        PhysicalIcebergScanOperator spec = (PhysicalIcebergScanOperator) scan;
+        for (Pair<Integer, ColumnDict> globalDict : spec.getGlobalDicts()) {
+            if (globalDict.first.equals(column.getId())) {
+                return globalDict;
+            }
+        }
+        return null;
+    }
+
+    @Override
     public OptExpression updateOutputColumns(OptExpression scan,
                                              Map<ColumnRefOperator, Column> newOutputs) {
         PhysicalIcebergScanOperator spec = (PhysicalIcebergScanOperator) scan.getOp();
@@ -86,6 +99,7 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
         // build a new optExpressions
         PhysicalIcebergScanOperator.Builder builder = PhysicalIcebergScanOperator.builder().withOperator(spec);
         builder.setColRefToColumnMetaMap(newOutputs);
+        builder.setEnableGlobalLateMaterialization(true);
 
         OptExpression result = OptExpression.builder().with(scan).setOp(builder.build()).build();
         LogicalProperty newProperty = new LogicalProperty(scan.getLogicalProperty());

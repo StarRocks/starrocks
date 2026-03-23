@@ -14,7 +14,15 @@
 
 #include "exec/pipeline/sink/sink_io_buffer.h"
 
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
+
+int SinkIOExecutor::submit(void* (*fn)(void*), void* args) {
+    bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
+    return ret ? 0 : -1;
+}
 
 int SinkIOBuffer::_process_chunk(bthread::TaskIterator<QueueItemPtr>& iter) {
     // Is it possible the mem_tracker in _state is invalid due to the whole object is in destructing?

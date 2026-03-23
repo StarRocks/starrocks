@@ -172,10 +172,24 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
+    public void logInsertTransactionState(TransactionState transactionState, WALApplier walApplier) {
+        allTransactionState.put(transactionState.getTransactionId(), transactionState);
+        apply(walApplier, transactionState);
+    }
+
+    @Mock
     public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
             allTransactionState.put(transactionState.getTransactionId(), transactionState);
         }
+    }
+
+    @Mock
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch, WALApplier walApplier) {
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            allTransactionState.put(transactionState.getTransactionId(), transactionState);
+        }
+        apply(walApplier, stateBatch);
     }
 
     @Mock

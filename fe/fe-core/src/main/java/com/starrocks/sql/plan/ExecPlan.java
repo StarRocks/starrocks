@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
@@ -53,11 +54,13 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private final List<PlanFragment> preExecutedFragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
     // splitProduceFragments and joinNodeMap is used for skew join
     private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
 
     private final Map<PhysicalHashJoinOperator, HashJoinNode> joinNodeMap = new HashMap<>();
+    private final Map<PhysicalScanOperator, ScanNode> scanNodeMap = new HashMap<>();
 
     private int planCount = 0;
 
@@ -124,6 +127,10 @@ public class ExecPlan {
         return fragments;
     }
 
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
+    }
+
     public PlanFragment getTopFragment() {
         return fragments.get(0);
     }
@@ -175,6 +182,10 @@ public class ExecPlan {
 
     public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
         return joinNodeMap;
+    }
+    
+    public Map<PhysicalScanOperator, ScanNode> getScanNodeMap() {
+        return scanNodeMap;
     }
 
     public OptExpression getPhysicalPlan() {

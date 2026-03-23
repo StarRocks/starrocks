@@ -25,6 +25,7 @@
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -169,8 +170,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         }
 
         // do prepare
-        split_morsel_queue->set_tablets(std::move(tablets));
-        split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+        split_morsel_queue->set_tablets(tablets);
+        split_morsel_queue->set_tablet_rowsets(tablet_rowsets);
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
         split_morsel_queue->set_tablet_schema(_tablet_schema);

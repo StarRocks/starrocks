@@ -767,6 +767,36 @@ TEST_F(VariantFunctionsTest, get_variant_double_shredded_typed_only_path) {
     ASSERT_DOUBLE_EQ(3.5, result.value()->get(0).get_double());
 }
 
+// Verifies numeric typed BIGINT exact-hit can be bulk-cast to DOUBLE.
+TEST_F(VariantFunctionsTest, get_variant_double_shredded_numeric_cast_from_bigint) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = BinaryColumn::create();
+    path_column->append("$.typed_only");
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_DOUBLE_EQ(777.0, result.value()->get(0).get_double());
+}
+
 // Verifies VARCHAR read returns SQL NULL when typed value is null on matched path.
 TEST_F(VariantFunctionsTest, get_variant_string_shredded_typed_null_no_fallback_to_remain) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -885,6 +915,48 @@ TEST_F(VariantFunctionsTest, variant_query_shredded_typed_only_path) {
     auto json_result = variant_result_to_json(result.value(), 0);
     ASSERT_TRUE(json_result.ok());
     ASSERT_EQ("777", json_result.value());
+}
+
+// Verifies exact typed TYPE_VARIANT path uses the same query semantics as the row path.
+TEST_F(VariantFunctionsTest, variant_query_shredded_exact_typed_variant_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"base":0})");
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    VariantRowValue typed0 = create_variant_from_json_text(R"({"x":1})");
+    VariantRowValue typed1 = create_variant_from_json_text(R"([2,3])");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_variant_column({typed0, typed1}, {0, 0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARIANT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_data = BinaryColumn::create();
+    path_data->append("$.typed_only");
+    auto const_path = ConstColumn::create(std::move(path_data), 2);
+    Columns columns{variant_column, const_path};
+
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_FALSE(result.value()->is_null(1));
+
+    auto row0 = variant_result_to_json(result.value(), 0);
+    ASSERT_TRUE(row0.ok());
+    ASSERT_EQ(R"({"x":1})", row0.value());
+
+    auto row1 = variant_result_to_json(result.value(), 1);
+    ASSERT_TRUE(row1.ok());
+    ASSERT_EQ(R"([2,3])", row1.value());
 }
 
 // Verifies const variant + const path combination uses row=0 correctly in shredded mode for all output rows.
@@ -1162,6 +1234,36 @@ TEST_F(VariantFunctionsTest, get_variant_int_typed_cast_fail_does_not_fallback_t
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(1, result.value()->size());
     ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies numeric typed DOUBLE exact-hit can be bulk-cast to BIGINT.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_numeric_cast_from_double) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_double_column({7.0}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_DOUBLE)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = BinaryColumn::create();
+    path_column->append("$.typed_only");
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(7, result.value()->get(0).get_int64());
 }
 
 // Verifies missing path and explicit JSON null are both surfaced as SQL NULL.

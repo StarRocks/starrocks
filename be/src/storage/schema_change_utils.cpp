@@ -33,7 +33,7 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& new_schema) {
     _schema_mapping.resize(new_schema->num_columns());
 }
 
-ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+ChunkChanger::ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                            std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type)
         : _base_schema(std::move(base_schema)),
           _base_table_column_names(base_table_column_names),

@@ -513,6 +513,10 @@ public class InsertAnalyzer {
                     // file table function table should use original column name because BE is case-sensitive when reading columns.
                     String origColumnName = oldCol.getName();
                     newCol.setName(origColumnName);
+                    // FileScanNode will set all slot nullable, it checks null in OlapTableSink if dest table column is not null.
+                    // Currently, the nullable property in files() table is always true.
+                    // So we keep the old column nullable property.
+                    newCol.setIsAllowNull(oldCol.isAllowNull());
                     newFileTableColumns.put(origColumnName, newCol);
                 }
 

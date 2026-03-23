@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "base/string/slice.h"
 #include "common/statusor.h"
@@ -251,6 +252,11 @@ public:
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
     virtual Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) {
         return Status::NotFound(path);
+    }
+
+    // Get file cache stats, return <cached_bytes, total_bytes>.
+    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset, int64_t size) {
+        return Status::NotSupported("FileSystem::get_cache_stats");
     }
 
     // Batch delete the given files.

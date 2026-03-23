@@ -39,7 +39,7 @@ public:
 private:
     std::string _path;
     int64_t _start_offset;
-    FILE* _fp;
+    FILE* _fp{nullptr};
 };
 
 } // end namespace starrocks

@@ -43,9 +43,9 @@ namespace starrocks {
         return Status::OK();                                                   \
     }
 
-class VariantConverter {
+class VariantRowConverter {
 public:
-    VariantConverter() = delete;
+    VariantRowConverter() = delete;
 
     static Status cast_to_bool(const VariantRowRef& row, ColumnBuilder<TYPE_BOOLEAN>& result);
 

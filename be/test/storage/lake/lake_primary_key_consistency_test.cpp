@@ -29,6 +29,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"

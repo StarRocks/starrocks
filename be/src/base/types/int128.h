@@ -26,6 +26,18 @@ namespace starrocks {
 using int128_t = __int128;
 using uint128_t = unsigned __int128;
 
+inline constexpr uint128_t abs_as_uint128(int128_t value) {
+    uint128_t abs_value = static_cast<uint128_t>(value);
+    if (value < 0) {
+        abs_value = ~abs_value + 1;
+    }
+    return abs_value;
+}
+
+inline constexpr int128_t abs(int128_t value) {
+    return static_cast<int128_t>(abs_as_uint128(value));
+}
+
 inline std::string int128_to_string(__int128 value) {
     return integer_to_string<__int128>(value);
 }

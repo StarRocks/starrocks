@@ -84,6 +84,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ModifyColumnCommentLog;
@@ -2156,7 +2157,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (!fastSchemaEvolution) {
             return createJob(schemaChangeData);
-        } else if (RunMode.isSharedNothingMode() || ((LakeTable) olapTable).isFastSchemaEvolutionV2()) {
+        } else if (RunMode.isSharedNothingMode() ||
+                (olapTable instanceof LakeTable && ((LakeTable) olapTable).isFastSchemaEvolutionV2()) ||
+                (olapTable instanceof LakeMaterializedView && ((LakeMaterializedView) olapTable).isFastSchemaEvolutionV2())) {
             updateCatalogForFastSchemaEvolution(schemaChangeData);
             return null;
         } else {
@@ -3286,7 +3289,10 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean enableFastSchemaEvolutionV2 = PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(
                 olapTable.getType(), properties, false);
         AlterJobV2 alterJob = null;
-        if (enableFastSchemaEvolutionV2 == ((LakeTable) olapTable).isFastSchemaEvolutionV2()) {
+        boolean isFastSchemaEvolutionV2 = olapTable instanceof LakeTable ?
+                ((LakeTable) olapTable).isFastSchemaEvolutionV2() :
+                ((LakeMaterializedView) olapTable).isFastSchemaEvolutionV2();
+        if (enableFastSchemaEvolutionV2 == isFastSchemaEvolutionV2) {
             LOG.info("Property [{}] for table [{}] is already {}, and nothing needs to do",
                     PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
                     olapTable.getName(), enableFastSchemaEvolutionV2);

@@ -121,6 +121,17 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
+// Maximum lifetime of a connection in the JDBC connection pool (ms).
+// Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes).
+CONF_Int64(jdbc_connection_max_lifetime_ms, "300000");
+
+// Keepalive interval for idle JDBC connections (ms).
+// Idle connections are tested at this interval to detect stale connections proactively.
+// Set to 0 to disable keepalive probing.
+// When enabled, must be >= 30000 and < jdbc_connection_max_lifetime_ms.
+// Invalid enabled values are silently disabled (reset to 0). Default: 30000 (30 seconds).
+CONF_Int64(jdbc_connection_keepalive_time_ms, "30000");
+
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 
@@ -166,6 +177,9 @@ CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+
+// limit local exchange buffer size by dop * local_exchange_buffer_mem_limit_per_driver for union operators.
+CONF_mBool(local_exchange_buffer_mem_limit_by_consumer_dop, "true");
 
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");

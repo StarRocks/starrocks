@@ -181,10 +181,22 @@ public class AlterJobMgr {
                 throw new DdlException(
                         "Do not support non-OLAP table [" + table.getName() + "] when drop materialized view");
             }
-            // check table state
             targetTable = (OlapTable) table;
+            // check table state
             if (targetTable.getState() != OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                if (stmt.isForceDrop()) {
+                    boolean foundMvRollupJob = materializedViewHandler.cancelRollupJobsForForceDrop(
+                            targetTable.getId(), stmt.getMvName(), "force drop materialized view");
+                    if (!foundMvRollupJob) {
+                        // Re-check state: it may have transitioned to NORMAL by another thread
+                        // (race with rollup job completion) before we could cancel.
+                        if (targetTable.getState() != OlapTableState.NORMAL) {
+                            throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                        }
+                    }
+                } else {
+                    throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+                }
             }
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
@@ -202,6 +214,9 @@ public class AlterJobMgr {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
+            if (targetTable.getState() != OlapTableState.NORMAL) {
+                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+            }
             // drop materialized view
             materializedViewHandler.processDropMaterializedView(stmt, db, targetTable);
         } finally {

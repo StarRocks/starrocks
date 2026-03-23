@@ -221,7 +221,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
     // build hive column names index.
     // if there are 64 columns in hive meta, but actually there are 63 columns in orc file
     // then we will read invalid column id.
-    size_t read_column_size = std::min(hive_column_names->size(), orc_root_type->getSubtypeCount());
+    size_t read_column_size =
+            std::min(hive_column_names->size(), static_cast<size_t>(orc_root_type->getSubtypeCount()));
 
     for (size_t i = 0; i < read_column_size; i++) {
         const orc::Type* orc_sub_type = orc_root_type->getSubtype(i);

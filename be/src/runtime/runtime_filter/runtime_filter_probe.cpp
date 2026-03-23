@@ -27,9 +27,12 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
+
+RuntimeFilterProbeDescriptor::RuntimeFilterProbeDescriptor() = default;
 
 Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
                                           RuntimeState* state) {

@@ -879,10 +879,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         UInt32Column* col_offsets = col_map->offsets_column_raw_ptr();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
+#ifndef __APPLE__
         auto* keys_column = col_map->keys_column_raw_ptr();
         auto* values_column = col_map->values_column_raw_ptr();
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
+#endif
         for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;

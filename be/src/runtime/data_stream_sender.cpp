@@ -368,11 +368,9 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
-          _current_channel_idx(0),
+
           _part_type(sink.output_partition.type),
-          _profile(nullptr),
-          _serialize_chunk_timer(nullptr),
-          _bytes_sent_counter(nullptr),
+
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
           _enable_exchange_pass_through(enable_exchange_pass_through),
@@ -607,7 +605,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+Status DataStreamSender::close(RuntimeState* state, const Status& exec_status) {
     RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors

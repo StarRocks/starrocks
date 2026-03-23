@@ -13,32 +13,32 @@ ARG ARTIFACT_SOURCE=image
 ARG WITH_DEBUG_INFO=false
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
-FROM ${ARTIFACTIMAGE} as artifacts-from-image
+FROM ${ARTIFACTIMAGE} AS artifacts-from-image
 
 # create a docker build stage that copy locally build artifacts
-FROM busybox:latest as artifacts-from-local
+FROM busybox:latest AS artifacts-from-local
 ARG LOCAL_REPO_PATH
 
 COPY ${LOCAL_REPO_PATH}/output/fe /release/fe_artifacts/fe
 COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
 
 
-FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+FROM artifacts-from-${ARTIFACT_SOURCE} AS artifacts
 ARG WITH_DEBUG_INFO
 
 RUN if [ "$WITH_DEBUG_INFO" = "false" ]; then rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo; fi
 
-FROM ubuntu:22.04 as dependencies-installed
+FROM ubuntu:24.04 AS dependencies-installed
 ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat locales tini && \
+        openjdk-17-jdk python3 python-is-python3 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat-traditional locales tini && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
         rm -rf /var/lib/apt/lists/*
-RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc ; ARCH=`uname -m` && cd /lib/jvm && \
+RUN echo "export PATH=/usr/lib/linux-tools/linux-tools-6.8.0-106:$PATH" >> /etc/bash.bashrc ; ARCH=`uname -m` && cd /lib/jvm && \
     if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
 ENV JAVA_HOME=/lib/jvm/java-17-openjdk
 

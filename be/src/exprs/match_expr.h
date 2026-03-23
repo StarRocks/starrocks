@@ -16,14 +16,14 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 
 class MatchExpr final : public Expr {
 public:
     MatchExpr(const TExprNode& node) : Expr(node) {}
-    ~MatchExpr() override {}
+    ~MatchExpr() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MatchExpr(*this)); }
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;

@@ -43,19 +43,22 @@
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
-#include "common/config.h"
-#include "common/configbase.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -67,6 +70,7 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -100,6 +104,7 @@
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
@@ -114,6 +119,10 @@
 #endif
 
 namespace starrocks {
+
+int64_t GlobalEnv::process_mem_limit() const {
+    return _process_mem_tracker->limit();
+}
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -388,12 +397,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
+    int automatic_partition_thread_num = config::automatic_partition_thread_pool_thread_num;
+    int automatic_partition_queue_size = automatic_partition_thread_num * 10;
     RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
                             .set_min_threads(0)
-                            .set_max_threads(1000)
-                            .set_max_queue_size(1000)
+                            .set_max_threads(automatic_partition_thread_num)
+                            .set_max_queue_size(automatic_partition_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
+    REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -658,6 +670,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_pk_index_memtable_flush_thread_pool));
 #endif
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_metadata_fetch_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
 
@@ -746,6 +765,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_metadata_fetch_thread_pool) {
+        start = MonotonicMillis();
+        _lake_metadata_fetch_thread_pool->shutdown();
+        component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
     if (_parallel_compact_mgr) {
@@ -957,6 +982,7 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
+    _lake_metadata_fetch_thread_pool.reset();
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();

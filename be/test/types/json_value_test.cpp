@@ -162,13 +162,14 @@ TEST_P(JsonConvertTestFixture, ConvertFromSimdjson) {
     ondemand::object obj = doc.get_object();
 
     auto maybe_json = JsonValue::from_simdjson(&obj);
-    ASSERT_TRUE(maybe_json.ok());
+    ASSERT_TRUE(maybe_json.ok()) << maybe_json.status().code_as_string() << ": " << maybe_json.status().message();
     ASSERT_EQ(input, maybe_json.value().to_string_uncheck());
 }
 
 INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
                          ::testing::Values(std::make_tuple(R"({"a": 1})"), std::make_tuple(R"({"a": null})"),
-                                           std::make_tuple(R"({"a": ""})"), std::make_tuple(R"({"a": [1, 2, 3]})"),
+                                           std::make_tuple(R"({"a": ""})"), std::make_tuple(R"({"a": "x"})"),
+                                           std::make_tuple(R"({"a": [1, 2, 3]})"),
                                            std::make_tuple(R"({"a": {"b": 1}})"),
                                            std::make_tuple(R"({"a": 18446744073709551615})"),
                                            std::make_tuple(R"({"a": {"": ""}})"), std::make_tuple(R"({"a": []})")));

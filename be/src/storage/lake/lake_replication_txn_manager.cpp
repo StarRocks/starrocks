@@ -16,6 +16,7 @@
 
 #include "agent/master_info.h"
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -244,7 +245,18 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     MonotonicStopWatch watch;
     watch.start();
     size_t total_file_size = 0;
+
     for (const auto& pair : filename_map) {
+        // Fast cancel: check if the transaction has been aborted
+        if (txn_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Lake replication task cancelled, transaction is aborted"
+                         << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
+                         << ", min_active_txn_id: " << get_master_info().min_active_txn_id
+                         << ", copied files: " << files_to_delete.size() << "/" << filename_map.size();
+            return Status::Aborted("Lake replication cancelled, transaction is aborted");
+        }
+        TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_lake_remote_storage::before_copy", nullptr);
+
         const auto& src_file_name = pair.first;
         auto src_file_location = join_path(src_data_dir, src_file_name);
         auto it = file_locations.find(src_file_location);
@@ -281,17 +293,14 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                           << ", final size: " << final_file_size;
             }
         } else {
-            // For non-segment files (.del, .sst, .delvec, .cols), use streaming copy with encryption support.
-            // These files are typically small, so streaming copy is efficient and avoids an extra
-            // remote IO call to get file size (which would increase object storage IOPS cost).
+            // For non-segment files (.del, .sst, .delvec, .cols), copy with size verification and retry.
             WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             if (config::enable_transparent_data_encryption) {
-                // Apply encryption info from filename_map to ensure file content matches metadata
                 opts.encryption_info = pair.second.second.info;
             }
-            ASSIGN_OR_RETURN(final_file_size, fs::copy_file(src_file_location, shared_src_fs, target_file_location,
-                                                            nullptr, opts, 1024 * 1024));
-            // Track this file for cleanup on failure, similar to how segment files are tracked via file_converters
+            int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
+            ASSIGN_OR_RETURN(final_file_size, copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
+                                                                               target_file_location, opts, max_retry));
             files_to_delete.push_back(target_file_location);
         }
         total_file_size += final_file_size;
@@ -312,8 +321,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s, txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id;
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s"
+              << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     // Update segment sizes in tablet_metadata if there are any changes
     if (!segment_size_changes.empty()) {
@@ -343,11 +352,52 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     return Status::OK();
 }
 
+StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
+        const std::string& src_file_location, const std::shared_ptr<FileSystem>& shared_src_fs,
+        const std::string& target_file_location, const WritableFileOptions& opts, int max_retry) {
+    ASSIGN_OR_RETURN(auto expected_size, shared_src_fs->get_file_size(src_file_location));
+
+    const size_t buff_size = std::max<size_t>(
+            std::min<size_t>(expected_size, config::lake_replication_read_buffer_size), 1 * 1024 * 1024);
+
+    max_retry = std::max(1, max_retry);
+    Status copy_status;
+    size_t final_file_size = 0;
+    for (int retry = 0; retry < max_retry; ++retry) {
+        auto res = fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, opts, buff_size);
+        if (!res.ok()) {
+            copy_status = res.status();
+            LOG(WARNING) << "Failed to copy file " << src_file_location << " to " << target_file_location
+                         << ", retry=" << retry << ", error: " << copy_status;
+            continue;
+        }
+        final_file_size = *res;
+        TEST_SYNC_POINT_CALLBACK("lake_replication_non_segment_copy_size", &final_file_size);
+        if (static_cast<int64_t>(final_file_size) == static_cast<int64_t>(expected_size)) {
+            return final_file_size;
+        }
+        copy_status = Status::Corruption(fmt::format("File size mismatch after copy: expected={}, actual={}, src={}",
+                                                     expected_size, final_file_size, src_file_location));
+        LOG(WARNING) << copy_status.message() << ", retry=" << retry;
+    }
+    return copy_status;
+}
+
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
         int64_t src_tablet_id, int64_t version, const std::string& meta_dir,
         const std::shared_ptr<FileSystem>& shared_src_fs) {
     LOG(INFO) << "Lake replicate storage task, building source tablet meta for tablet: " << src_tablet_id
               << ", version: " << version << ", meta_dir: " << meta_dir;
+
+#ifdef BE_TEST
+    TabletMetadataPtr injected_meta = nullptr;
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                             static_cast<void*>(&injected_meta));
+    if (injected_meta != nullptr) {
+        return injected_meta;
+    }
+#endif
+
     auto src_metadata_file_name = tablet_metadata_filename(src_tablet_id, version);
     auto src_tablet_meta_path = join_path(meta_dir, src_metadata_file_name);
     auto src_tablet_meta_or = _tablet_manager->get_tablet_metadata(src_tablet_meta_path, false, 0, shared_src_fs);

@@ -316,6 +316,19 @@ int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) con
     return -1;
 }
 
+std::optional<std::string> HiveTableDescriptor::get_column_default_value(const SlotDescriptor* slot) const {
+    for (const auto& column : _columns) {
+        if (column.column_name != slot->col_name()) {
+            continue;
+        }
+        if (column.__isset.default_value) {
+            return column.default_value;
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 IcebergMetadataTableDescriptor::IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _hive_column_names = tdesc.hdfsTable.hive_column_names;
@@ -530,7 +543,8 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_SNAPSHOTS_TABLE:
         case TTableType::ICEBERG_MANIFESTS_TABLE:
         case TTableType::ICEBERG_FILES_TABLE:
-        case TTableType::ICEBERG_PARTITIONS_TABLE: {
+        case TTableType::ICEBERG_PARTITIONS_TABLE:
+        case TTableType::ICEBERG_PROPERTIES_TABLE: {
             desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
             break;
         }

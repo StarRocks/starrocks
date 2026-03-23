@@ -20,7 +20,7 @@
 #include "exec/analytor.h"
 #include "exec/chunks_sorter.h"
 #include "exec/partition/chunks_partitioner.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class RuntimeFilterBuildDescriptor;

@@ -385,7 +385,7 @@ inline size_t TabletMeta::version_count() const {
 
 inline size_t TabletMeta::segment_count() const {
     size_t num_segments = 0;
-    for (auto rowset_meta : _rs_metas) {
+    for (const auto& rowset_meta : _rs_metas) {
         num_segments += rowset_meta->num_segments();
     }
     return num_segments;

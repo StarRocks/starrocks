@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <map>
 #include <unordered_map>
+#include <utility>
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "gen_cpp/AgentService_types.h"
@@ -128,8 +129,8 @@ private:
 // automatically in the destructor
 class BinlogFileReadHolder {
 public:
-    BinlogFileReadHolder(std::shared_ptr<std::atomic<int64_t>> _reader_count, BinlogFileMetaPBPtr file_meta)
-            : _reader_count(_reader_count), _file_meta(file_meta) {
+    BinlogFileReadHolder(const std::shared_ptr<std::atomic<int64_t>>& _reader_count, BinlogFileMetaPBPtr file_meta)
+            : _reader_count(_reader_count), _file_meta(std::move(file_meta)) {
         _reader_count->fetch_add(1);
     }
 
@@ -148,7 +149,7 @@ using BinlogFileReadHolderPtr = std::shared_ptr<BinlogFileReadHolder>;
 // reference count about how many readers are using it
 class BinlogFile {
 public:
-    BinlogFile(BinlogFileMetaPBPtr file_meta) : _file_meta(file_meta) {
+    BinlogFile(BinlogFileMetaPBPtr file_meta) : _file_meta(std::move(file_meta)) {
         _reader_count = std::make_shared<std::atomic<int64_t>>();
     }
 

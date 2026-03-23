@@ -32,7 +32,7 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
 class TableFunctionTableSinkOperator final : public Operator {
 public:
     TableFunctionTableSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
-                                   const int32_t driver_sequence, const string& path, const string& file_format,
+                                   const int32_t driver_sequence, string path, string file_format,
                                    const TCompressionType::type& compression_type,
                                    const std::vector<ExprContext*>& output_exprs,
                                    const std::vector<ExprContext*>& partition_exprs,
@@ -40,8 +40,8 @@ public:
                                    const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
                                    std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, false, driver_sequence),
-              _path(path),
-              _file_format(file_format),
+              _path(std::move(path)),
+              _file_format(std::move(file_format)),
               _compression_type(compression_type),
               _output_exprs(output_exprs),
               _partition_exprs(partition_exprs),

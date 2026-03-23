@@ -373,11 +373,11 @@ inline Status HeapMergeIterator::fill(size_t child) {
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
         if (need_rssid_rowids) {
-            _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(),
-                                       _schema.sort_descs(), merge_condition, std::move(rssid_rowids)});
+            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
+                          merge_condition, std::move(rssid_rowids));
         } else {
-            _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(),
-                                       _schema.sort_descs(), merge_condition});
+            _heap.emplace(chunk, child, _schema.num_key_fields(), _schema.sort_key_idxes(), _schema.sort_descs(),
+                          merge_condition);
         }
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
@@ -497,6 +497,10 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         RowSourceMask mask = _mask_buffer->current();
         uint16_t child = mask.get_source_num();
         auto& min_chunk = _chunks[child];
+        if (min_chunk._chunk == nullptr) {
+            return Status::InternalError(strings::Substitute(
+                    "Mask buffer expects more rows from child $0, but child iterator is exhausted", child));
+        }
         DCHECK_GT(min_chunk.remaining_rows(), 0);
 
         size_t offset = min_chunk.compared_row();
@@ -584,8 +588,10 @@ inline Status MaskMergeIterator::fill(size_t child) {
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);
+        _chunks[child]._chunk = nullptr;
     } else {
         close_child(child);
+        _chunks[child]._chunk = nullptr;
         return st;
     }
     return Status::OK();

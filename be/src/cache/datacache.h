@@ -14,15 +14,17 @@
 
 #pragma once
 
+#include <vector>
+
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "common/status.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
 class Status;
-class StorePath;
 class RemoteCacheEngine;
 class DiskCacheOptions;
 class GlobalEnv;

@@ -38,10 +38,18 @@ import static java.lang.Math.max;
 
 public class PostgresSchemaResolver extends JDBCSchemaResolver {
 
+    public PostgresSchemaResolver() {
+        this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
+    }
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
-        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null,
-                new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, defaultTableTypes);
+    }
+
+    @Override
+    public ResultSet getTables(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, tblName, defaultTableTypes);
     }
 
     @Override
@@ -57,12 +65,21 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            String comment = "";
+            // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
+            try {
+                if (columnSet.getString("REMARKS") != null) {
+                    comment = columnSet.getString("REMARKS");
+                }
+            } catch (SQLException ignored) { }
+
             String columnName = columnSet.getString("COLUMN_NAME");
             if (!columnName.equals(columnName.toLowerCase())) {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
-                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;
     }

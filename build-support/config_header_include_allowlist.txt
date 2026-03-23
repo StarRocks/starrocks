@@ -3,6 +3,3 @@
 
 src/common/config.cpp
 src/http/action/update_config_action.cpp
-src/runtime/exec_env.cpp
-src/service/staros_worker.cpp
-src/util/llm_query_service.cpp

@@ -27,6 +27,7 @@
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
@@ -860,7 +861,7 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet == nullptr) {
         LOG(INFO) << "Fail to get tablet_id=" << tablet_id << " schema hash=" << schema_hash;
-        error_msgs->push_back("failed to get tablet");
+        error_msgs->emplace_back("failed to get tablet");
         return STARROCKS_TASK_REQUEST_ERROR;
     }
 

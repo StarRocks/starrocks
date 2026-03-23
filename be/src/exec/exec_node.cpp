@@ -70,15 +70,8 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _tuple_ids(tnode.row_tuples),
           _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
-          _debug_phase(TExecNodePhase::INVALID),
-          _debug_action(TDebugAction::WAIT),
-          _limit(tnode.limit),
-          _num_rows_returned(0),
-          _rows_returned_counter(nullptr),
-          _rows_returned_rate(nullptr),
-          _memory_used_counter(nullptr),
-          _runtime_state(nullptr),
-          _is_closed(false) {
+
+          _limit(tnode.limit) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
@@ -186,8 +179,8 @@ Status ExecNode::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    _mem_tracker.reset(new MemTracker(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
-                                      _runtime_profile->name(), nullptr));
+    _mem_tracker = std::make_shared<MemTracker>(_runtime_profile.get(), std::make_tuple(true, false, false), "", -1,
+                                                _runtime_profile->name(), nullptr);
     RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, _runtime_profile.get()));
 
@@ -373,6 +366,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);
 }
@@ -380,7 +374,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
 void ExecNode::init_runtime_profile(const std::string& name) {
     std::stringstream ss;
     ss << name << " (id=" << _id << ")";
-    _runtime_profile.reset(new RuntimeProfile(ss.str()));
+    _runtime_profile = std::make_shared<RuntimeProfile>(ss.str());
     _runtime_profile->set_metadata(_id);
 }
 

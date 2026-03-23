@@ -22,11 +22,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -139,12 +141,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     @Override
-    protected void updateCatalog(Database db, LakeTable table, boolean isReplay) {
+    protected void updateCatalog(Database db, OlapTable table, boolean isReplay) {
         updateCatalogUnprotected(db, table, isReplay);
     }
 
     @Override
-    protected void prepareForPersist(Database db, LakeTable table) {
+    protected void prepareForPersist(Database db, OlapTable table) {
         if (disableFastSchemaEvolutionV2) {
             return;
         }
@@ -163,10 +165,10 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.historySchema = historySchemaBuilder.build();
     }
 
-    private void updateCatalogUnprotected(Database db, LakeTable table, boolean isReplay) {
+    private void updateCatalogUnprotected(Database db, OlapTable table, boolean isReplay) {
         if (disableFastSchemaEvolutionV2) {
             // only update the property, no need to update schema which is actually not changed
-            table.setFastSchemaEvolutionV2(false);
+            setFastSchemaEvolutionV2(table, false);
             LOG.info("Schema change job finish to disable {}, job_id: {}, table: {}",
                     PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, getJobId(), table.getName());
             return;
@@ -203,6 +205,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
         // If modified columns are already done, inactive related mv
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, droppedOrModifiedColumns);
+    }
+
+    private void setFastSchemaEvolutionV2(OlapTable table, boolean enabled) {
+        if (table instanceof LakeTable) {
+            ((LakeTable) table).setFastSchemaEvolutionV2(enabled);
+        } else if (table instanceof LakeMaterializedView) {
+            ((LakeMaterializedView) table).setFastSchemaEvolutionV2(enabled);
+        }
     }
 
     @Override

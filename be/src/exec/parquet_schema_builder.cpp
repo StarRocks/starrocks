@@ -16,6 +16,7 @@
 
 #include "fmt/format.h"
 #include "gutil/casts.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

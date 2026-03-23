@@ -23,7 +23,7 @@
 #include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_staros_worker_fwd.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"

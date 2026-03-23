@@ -98,10 +98,10 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -937,8 +937,8 @@ public class StarRocksAssert {
 
     public String getMVName(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (stmt instanceof CreateMaterializedViewStmt) {
-            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+        if (stmt instanceof CreateSyncMVStmt) {
+            CreateSyncMVStmt createMaterializedViewStmt = (CreateSyncMVStmt) stmt;
             return createMaterializedViewStmt.getMVName();
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
@@ -955,8 +955,8 @@ public class StarRocksAssert {
                                                 boolean isOnlySingleReplica,
                                                 boolean isRefresh) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (stmt instanceof CreateMaterializedViewStmt) {
-            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+        if (stmt instanceof CreateSyncMVStmt) {
+            CreateSyncMVStmt createMaterializedViewStmt = (CreateSyncMVStmt) stmt;
             if (isOnlySingleReplica) {
                 createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }

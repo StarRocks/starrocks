@@ -104,7 +104,7 @@ void BrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
     _stub_map.erase(endpoint);
 }
 
-BrpcStubCache::StubPool::StubPool() : _idx(-1) {
+BrpcStubCache::StubPool::StubPool() {
     _stubs.reserve(config::brpc_max_connections_per_server);
 }
 

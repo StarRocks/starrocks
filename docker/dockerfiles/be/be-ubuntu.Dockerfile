@@ -24,19 +24,19 @@ ARG MINIMAL=false
 
 
 ARG ARTIFACTIMAGE=starrocks/artifacts-ubuntu:latest
-FROM ${ARTIFACTIMAGE} as artifacts-from-image
+FROM ${ARTIFACTIMAGE} AS artifacts-from-image
 
 # create a docker build stage that copy locally build artifacts
-FROM busybox:latest as artifacts-from-local
+FROM busybox:latest AS artifacts-from-local
 ARG LOCAL_REPO_PATH
 COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
 
 
-FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+FROM artifacts-from-${ARTIFACT_SOURCE} AS artifacts
 RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 
-FROM ubuntu:22.04 AS base_image
+FROM ubuntu:24.04 AS base_image
 ARG STARROCKS_ROOT=/opt/starrocks
 ARG USER
 ARG RUN_AS_USER
@@ -57,11 +57,30 @@ ENV JAVA_HOME=/lib/jvm/java-17-openjdk
 
 WORKDIR $STARROCKS_ROOT
 
-RUN groupadd --gid 1000 $GROUP && \
-    if [ "$USER" != "root" ]; then \
-        useradd --no-create-home --uid 1000 --gid 1000 --shell /usr/sbin/nologin $USER; \
+# Ubuntu 24.04 has a builtin id ubuntu (uid=1000,gid=1000), need to rename to $USER:$GROUP
+# Why can't create a fresh new account with a new id?
+# A: compatibility reason, previous versions run with uid=1000, if running with a different uid in a later docker image,
+#    local files on PVC may not be able to access any more after upgrade.
+RUN if getent group 1000 >/dev/null 2>&1; then \
+        gname=`getent group 1000 | cut -d: -f1` && \
+        if [ "$gname" != "$GROUP" ]; then \
+            groupmod -n "$GROUP" "$gname"; \
+        fi ; \
+    else \
+        groupadd --gid 1000 "$GROUP"; \
     fi && \
-    chown -R $USER:$GROUP $STARROCKS_ROOT
+    if [ "$USER" != "root" ]; then \
+        if id 1000 >/dev/null 2>&1; then \
+            username=`id -un 1000` && \
+            if [ "$username" != "$USER" ]; then \
+                usermod -l "$USER" "$username"; \
+            fi && \
+            usermod -g "$GROUP" "$USER"; \
+        else \
+            useradd --no-create-home --uid 1000 --gid "$GROUP" --shell /usr/sbin/nologin "$USER"; \
+        fi ; \
+    fi && \
+    chown -R "$USER":"$GROUP" "$STARROCKS_ROOT"
 
 USER $USER
 

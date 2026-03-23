@@ -46,12 +46,12 @@ public:
     DataSketchesHll& operator=(const DataSketchesHll& other) = delete;
 
     DataSketchesHll(DataSketchesHll&& other) noexcept
-            : _memory_usage(std::move(other._memory_usage)),
+            : _memory_usage(other._memory_usage),
               _sketch_union(std::move(other._sketch_union)),
               _tgt_type(other._tgt_type) {}
     DataSketchesHll& operator=(DataSketchesHll&& other) noexcept {
         if (this != &other) {
-            this->_memory_usage = std::move(other._memory_usage);
+            this->_memory_usage = other._memory_usage;
             this->_sketch_union = std::move(other._sketch_union);
             this->_tgt_type = other._tgt_type;
         }

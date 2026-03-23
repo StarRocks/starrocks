@@ -49,9 +49,12 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
+#include "storage/options.h"
 #include "storage/rocksdb_status_adapter.h"
+#include "storage/store_path.h"
 
 using rocksdb::DB;
 using rocksdb::DBOptions;
@@ -69,7 +72,7 @@ const std::string META_POSTFIX = "/meta"; // NOLINT
 const std::string SECOND_POSTFIX = "_secondary";
 const size_t PREFIX_LENGTH = 4;
 
-KVStore::KVStore(std::string root_path) : _root_path(std::move(root_path)), _db(nullptr) {}
+KVStore::KVStore(std::string root_path) : _root_path(std::move(root_path)) {}
 
 KVStore::~KVStore() {
     for (auto& handle : _handles) {

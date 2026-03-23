@@ -59,6 +59,7 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.BenchmarkScanNode;
 import com.starrocks.planner.BinlogScanNode;
+import com.starrocks.planner.CacheStatsScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DecodeNode;
@@ -167,6 +168,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
@@ -946,6 +948,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
@@ -1050,7 +1053,7 @@ public class PlanFragmentBuilder {
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
             scanNode.setUsePkIndex(node.isUsePkIndex());
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             fragment.setQueryGlobalDicts(node.getGlobalDicts());
@@ -1123,7 +1126,7 @@ public class PlanFragmentBuilder {
             }
             tupleDescriptor.computeMemLayout();
 
-            context.getScanNodes().add(scanNode);
+            registerScanNode(scan, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
@@ -1145,6 +1148,11 @@ public class PlanFragmentBuilder {
                 }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
+        }
+
+        private void registerScanNode(PhysicalScanOperator scanOperator, ScanNode scanNode, ExecPlan context) {
+            context.getScanNodes().add(scanNode);
+            context.getScanNodeMap().put(scanOperator, scanNode);
         }
 
         private void prepareCommonExpr(HDFSScanNodePredicates scanNodePredicates,
@@ -1242,7 +1250,7 @@ public class PlanFragmentBuilder {
             hudiScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(hudiScanNode);
+            registerScanNode(node, hudiScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), hudiScanNode, DataPartition.RANDOM);
@@ -1287,7 +1295,7 @@ public class PlanFragmentBuilder {
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(hdfsScanNode);
+            registerScanNode(node, hdfsScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), hdfsScanNode, DataPartition.RANDOM);
@@ -1330,7 +1338,7 @@ public class PlanFragmentBuilder {
             fileTableScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(fileTableScanNode);
+            registerScanNode(node, fileTableScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), fileTableScanNode, DataPartition.RANDOM);
@@ -1386,7 +1394,7 @@ public class PlanFragmentBuilder {
             deltaLakeScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(deltaLakeScanNode);
+            registerScanNode(node, deltaLakeScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), deltaLakeScanNode, DataPartition.RANDOM);
@@ -1433,7 +1441,7 @@ public class PlanFragmentBuilder {
             paimonScanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(paimonScanNode);
+            registerScanNode(node, paimonScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
@@ -1483,7 +1491,7 @@ public class PlanFragmentBuilder {
             odpsScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(odpsScanNode);
+            registerScanNode(node, odpsScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
@@ -1526,7 +1534,7 @@ public class PlanFragmentBuilder {
             kuduScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(kuduScanNode);
+            registerScanNode(node, kuduScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), kuduScanNode, DataPartition.RANDOM);
@@ -1578,6 +1586,12 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            // Iceberg table scan slots are always nullable because the source data
+            // is not governed by StarRocks NOT NULL constraints and may contain nulls.
+            for (SlotDescriptor slotDescriptor : tupleDescriptor.getSlots()) {
+                slotDescriptor.setIsNullable(true);
+            }
+
             // partition id generator
             PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
 
@@ -1598,6 +1612,7 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            icebergScanNode.setColumnAccessPaths(node.getColumnAccessPaths());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
             try {
@@ -1641,9 +1656,10 @@ public class PlanFragmentBuilder {
 
             icebergScanNode.setLimit(node.getLimit());
             icebergScanNode.setDataCacheOptions(node.getDataCacheOptions());
+            icebergScanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(icebergScanNode);
+            registerScanNode(node, icebergScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
@@ -1716,7 +1732,7 @@ public class PlanFragmentBuilder {
             metadataScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(metadataScanNode);
+            registerScanNode(node, metadataScanNode, context);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), metadataScanNode, DataPartition.RANDOM);
@@ -1929,7 +1945,7 @@ public class PlanFragmentBuilder {
                 scanNode.setLogLimit(Config.max_per_node_grep_log_limit);
             }
 
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), scanNode,
                     scanNode.isBeSchemaTable() ? DataPartition.RANDOM : DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
@@ -1975,7 +1991,7 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
 
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
@@ -2022,7 +2038,7 @@ public class PlanFragmentBuilder {
             }
             scanNode.setShardScanRanges(scanNode.computeShardLocations(node.getSelectedIndex()));
 
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
@@ -2063,7 +2079,7 @@ public class PlanFragmentBuilder {
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
@@ -2099,7 +2115,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             scanNode.setupScanRangeLocations();
 
-            context.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, context);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
@@ -4195,7 +4211,6 @@ public class PlanFragmentBuilder {
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
             tupleDescriptor.computeMemLayout();
-
             context.getScanNodes().add(binlogScanNode);
             PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), binlogScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
@@ -4276,7 +4291,7 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 
-            execPlan.getScanNodes().add(scanNode);
+            registerScanNode(node, scanNode, execPlan);
             PlanFragment fragment =
                     new PlanFragment(execPlan.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             execPlan.getFragments().add(fragment);
@@ -4334,6 +4349,55 @@ public class PlanFragmentBuilder {
             splitConsumeFragment.addChild(splitProduceFragment);
             context.getFragments().add(splitConsumeFragment);
             return splitConsumeFragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalCacheStatsScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalCacheStatsScanOperator scan = (PhysicalCacheStatsScanOperator) optExpression.getOp();
+
+            OlapTable olapTable = (OlapTable) scan.getTable();
+            context.getDescTbl().addReferencedTable(olapTable);
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(olapTable);
+
+            Map<Integer, String> columnIdToNames = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor = context.getDescTbl()
+                        .addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(entry.getKey().getType());
+                context.getColRefToExpr().put(entry.getKey(),
+                        new SlotRef(entry.getKey().getName(), slotDescriptor));
+
+                columnIdToNames.put(entry.getKey().getId(), entry.getValue().getName());
+            }
+            tupleDescriptor.computeMemLayout();
+
+            CacheStatsScanNode scanNode = new CacheStatsScanNode(
+                    context.getNextNodeId(),
+                    tupleDescriptor,
+                    olapTable,
+                    columnIdToNames,
+                    scan.getSelectPartitionNames(),
+                    scan.getSelectedTabletIds());
+
+            ComputeResource computeResource = ConnectContext.get() != null ?
+                    ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+            scanNode.computeRangeLocations(computeResource);
+            // scanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(scanNode, true);
+
+            context.getScanNodes().add(scanNode);
+
+            PlanFragment fragment = new PlanFragment(
+                    context.getNextFragmentId(),
+                    scanNode,
+                    DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
         }
 
         @Override
@@ -4476,23 +4540,26 @@ public class PlanFragmentBuilder {
                     lookupNode.getDescs(), lookupNode.getRowPosDescs(), computeResource);
             currentExecGroup.add(fetchNode);
             childFragment.setPlanRoot(fetchNode);
-            childFragment.addChild(lookUpFragment);
-            lookUpFragment.setQueryGlobalDicts(childFragment.getQueryGlobalDicts());
-            lookUpFragment.setQueryGlobalDictExprs(childFragment.getQueryGlobalDictExprs());
             context.getFragments().remove(childFragment);
             context.getFragments().remove(lookUpFragment);
-            context.getFragments().add(lookUpFragment);
+            context.getPreExecutedFragments().add(lookUpFragment);
             context.getFragments().add(childFragment);
             return childFragment;
         }
 
-        private RowPositionDescriptor buildRowPositionDescriptor(Table table,
+        private RowPositionDescriptor buildRowPositionDescriptor(Table table, int scanNodeId,
                                                                  SlotId sourceNodeSlot,
                                                                  List<SlotId> fetchRefSlots,
                                                                  List<SlotId> lookupRefSlots) {
             if (table instanceof IcebergTable) {
                 return new RowPositionDescriptor(
-                        RowPositionDescriptor.Type.ICEBERG_V3, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
+                        RowPositionDescriptor.Type.ICEBERG_V3, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
+            } else if (table.isOlapTableOrMaterializedView()) {
+                return new RowPositionDescriptor(
+                        RowPositionDescriptor.Type.OLAP_SCAN, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
+            } else if (table.isCloudNativeTableOrMaterializedView()) {
+                return new RowPositionDescriptor(
+                        RowPositionDescriptor.Type.LAKE_SCAN, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
             }
             return null;
         }
@@ -4501,7 +4568,8 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalLookUp(OptExpression optExpression, ExecPlan context) {
             PhysicalLookUpOperator lookUpOperator = (PhysicalLookUpOperator) optExpression.getOp();
 
-            Map<ColumnRefOperator, Table> rowIdToTable = lookUpOperator.getRowIdToTable();
+            Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator =
+                    lookUpOperator.getRowIdToScanOperator();
             Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToFetchRefColumns =
                     lookUpOperator.getRowIdToFetchRefColumns();
             Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToLookUpRefColumns =
@@ -4510,11 +4578,11 @@ public class PlanFragmentBuilder {
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = lookUpOperator.getColumnRefOperatorColumnMap();
 
             List<TupleDescriptor> tupleDescriptors = Lists.newArrayList();
-            List<Table> tables = Lists.newArrayList();
             Map<TupleId, RowPositionDescriptor> rowPositionDescriptorMap = new HashMap<>();
             for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry : rowIdToLazyColumns.entrySet()) {
-                Preconditions.checkState(rowIdToTable.containsKey(entry.getKey()));
-                Table table = rowIdToTable.get(entry.getKey());
+                Preconditions.checkState(rowIdToScanOperator.containsKey(entry.getKey()));
+                PhysicalScanOperator scanOperator = rowIdToScanOperator.get(entry.getKey());
+                Table table = scanOperator.getTable();
                 Set<ColumnRefOperator> lazyColumns = entry.getValue();
 
                 TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -4545,21 +4613,20 @@ public class PlanFragmentBuilder {
                 List<SlotId> lookupRefSlotIds = lookupRefColumns.stream()
                         .map(columnRefOperator -> new SlotId(columnRefOperator.getId())).collect(Collectors.toList());
 
+                int scanNodeId = context.getScanNodeMap().get(scanOperator).getId().asInt();
                 RowPositionDescriptor rowPositionDescriptor = buildRowPositionDescriptor(
-                        table, new SlotId(entry.getKey().getId()), fetchRefSlotIds, lookupRefSlotIds);
+                        table, scanNodeId, new SlotId(entry.getKey().getId()), fetchRefSlotIds, lookupRefSlotIds);
                 rowPositionDescriptorMap.put(tupleDescriptor.getId(), rowPositionDescriptor);
 
                 tupleDescriptor.computeMemLayout();
-                tables.add(table);
                 tupleDescriptors.add(tupleDescriptor);
-
             }
 
             LookUpNode lookUpNode = new LookUpNode(context.getNextNodeId(), tupleDescriptors, rowPositionDescriptorMap);
             PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), lookUpNode, DataPartition.RANDOM);
             fragment.setPlanRoot(lookUpNode);
             fragment.setSink(new NoopSink());
-            context.getFragments().add(fragment);
+            fragment.setQueryGlobalDicts(lookUpOperator.getGlobalDicts());
             return fragment;
         }
     }

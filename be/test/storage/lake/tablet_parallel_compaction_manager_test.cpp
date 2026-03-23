@@ -3895,7 +3895,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     out0->add_segments("s0.dat");
     out0->add_segment_size(1000);
     out0->add_segment_encryption_metas("enc0");
-    out0->add_segment_metas();
+    out0->add_segment_metas()->set_segment_idx(0);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
@@ -3908,6 +3908,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     out1->set_data_size(2000);
     out1->add_segments("s1.dat");
     out1->add_segment_size(2000);
+    out1->add_segment_metas()->set_segment_idx(0);
     op1->add_ssts();
     op1->add_sst_ranges();
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
@@ -3921,9 +3922,66 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     EXPECT_EQ(300, merged.output_rowset().num_rows());
     EXPECT_EQ(3000, merged.output_rowset().data_size());
     EXPECT_EQ(2, merged.output_rowset().segments_size());
-    EXPECT_EQ(1, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
+    EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
     EXPECT_EQ(1, merged.ssts_size());
     EXPECT_EQ(1, merged.sst_ranges_size());
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset_segment_meta_size_mismatch) {
+    int64_t tablet_id = 10056;
+    int64_t txn_id = 20056;
+    int64_t version = 2;
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->total_subtasks_created = 2;
+    state->large_rowset_split_groups[0] = {0, 1};
+    state->expected_large_rowset_split_counts[0] = 2;
+
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    auto* op0 = ctx0->txn_log->mutable_op_compaction();
+    op0->add_input_rowsets(0);
+    auto* out0 = op0->mutable_output_rowset();
+    out0->set_num_rows(100);
+    out0->set_data_size(1000);
+    out0->add_segments("s0.dat");
+    out0->add_segment_size(1000);
+    out0->add_segment_metas()->set_segment_idx(0);
+
+    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx1->subtask_id = 1;
+    ctx1->txn_log = std::make_unique<TxnLogPB>();
+    auto* op1 = ctx1->txn_log->mutable_op_compaction();
+    op1->add_input_rowsets(0);
+    auto* out1 = op1->mutable_output_rowset();
+    out1->set_num_rows(200);
+    out1->set_data_size(2000);
+    out1->add_segments("s1.dat");
+    out1->add_segment_size(2000);
+    // Invalid subtask output: missing segment metadata for the segment above.
+
+    state->completed_subtasks.emplace_back(std::move(ctx0));
+    state->completed_subtasks.emplace_back(std::move(ctx1));
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+#if DCHECK_IS_ON()
+    ASSERT_DEATH(
+            {
+                auto result = _manager->get_merged_txn_log(tablet_id, txn_id);
+                (void)result;
+            },
+            "segment_metas_size");
+#else
+    GTEST_SKIP() << "DCHECK is disabled";
+#endif
+
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -4251,6 +4309,8 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op0->mutable_output_rowset()->add_segments("out_seg_1.dat");
     op0->mutable_output_rowset()->add_segment_size(2000000000L);
     op0->mutable_output_rowset()->add_segment_size(2000000000L);
+    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
+    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     ASSERT_FALSE(closure.is_finished());
@@ -4267,6 +4327,8 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op1->mutable_output_rowset()->add_segments("out_seg_3.dat");
     op1->mutable_output_rowset()->add_segment_size(2000000000L);
     op1->mutable_output_rowset()->add_segment_size(2000000000L);
+    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
+    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
     ASSERT_TRUE(closure.is_finished());
@@ -4284,6 +4346,11 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     EXPECT_EQ(1000, merged.output_rowset().num_rows());         // 500+500
     EXPECT_EQ(8000000000L, merged.output_rowset().data_size()); // 4G+4G
     EXPECT_EQ(4, merged.output_rowset().segments_size());       // 2+2
+    EXPECT_EQ(4, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
+    EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
+    EXPECT_EQ(2, merged.output_rowset().segment_metas(2).segment_idx());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas(3).segment_idx());
     EXPECT_TRUE(merged.output_rowset().overlapped());           // merged output is overlapped
 
     _manager->cleanup_tablet(tablet_id, txn_id);

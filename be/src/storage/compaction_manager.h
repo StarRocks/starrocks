@@ -36,6 +36,10 @@ class StorageEngine;
 class CompactionManager {
 public:
     CompactionManager();
+    CompactionManager(const CompactionManager& compaction_manager) = delete;
+    CompactionManager(CompactionManager&& compaction_manager) = delete;
+    CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
+    CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
     ~CompactionManager() = default;
 
@@ -131,11 +135,6 @@ public:
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
 private:
-    CompactionManager(const CompactionManager& compaction_manager) = delete;
-    CompactionManager(CompactionManager&& compaction_manager) = delete;
-    CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
-    CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
-
     void _dispatch_worker();
     bool _check_precondition(const CompactionCandidate& candidate);
     bool _check_compaction_disabled(const CompactionCandidate& candidate);

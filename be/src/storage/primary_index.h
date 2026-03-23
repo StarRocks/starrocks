@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
@@ -168,7 +169,7 @@ public:
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
-        _status = st;
+        _status = std::move(st);
     }
 
     // Return the pointer of specific position of slice array.

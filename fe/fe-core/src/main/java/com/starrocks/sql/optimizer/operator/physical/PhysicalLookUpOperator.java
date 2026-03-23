@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,8 @@ import java.util.Set;
 
 public class PhysicalLookUpOperator extends PhysicalOperator {
     // key is a virtual column ref, used to distinguish different table
-    // row id column ref -> Table
-    Map<ColumnRefOperator, Table> rowIdToTable;
+    // row id column ref -> scan operator
+    Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator;
     // row id column ref -> ref columns
     // we can use multi columns to describe row position, value is order-sensitive
     // @TODO: maybe we can use Expr? but I can't see any benifits
@@ -44,21 +45,23 @@ public class PhysicalLookUpOperator extends PhysicalOperator {
     // lazy fetched column -> Column
     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap;
 
-    public PhysicalLookUpOperator(Map<ColumnRefOperator, Table> rowIdToTable,
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+
+    public PhysicalLookUpOperator(Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator,
                                  Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToFetchRefColumns,
                                  Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToLookUpRefColumns,
                                  Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns,
                                  Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         super(OperatorType.PHYSICAL_LOOKUP);
-        this.rowIdToTable = rowIdToTable;
+        this.rowIdToScanOperator = rowIdToScanOperator;
         this.rowIdToFetchRefColumns = rowIdToFetchRefColumns;
         this.rowIdToLookUpRefColumns = rowIdToLookUpRefColumns;
         this.rowIdToLazyColumns = rowIdToLazyColumns;
         this.columnRefOperatorColumnMap = columnRefOperatorColumnMap;
     }
 
-    public Map<ColumnRefOperator, Table> getRowIdToTable() {
-        return rowIdToTable;
+    public Map<ColumnRefOperator, PhysicalScanOperator> getRowIdToScanOperator() {
+        return rowIdToScanOperator;
     }
 
     public Map<ColumnRefOperator, List<ColumnRefOperator>> getRowIdToFetchRefColumns() {
@@ -75,6 +78,14 @@ public class PhysicalLookUpOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, Column> getColumnRefOperatorColumnMap() {
         return columnRefOperatorColumnMap;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
     }
 
     @Override
@@ -105,10 +116,10 @@ public class PhysicalLookUpOperator extends PhysicalOperator {
             return false;
         }
         PhysicalLookUpOperator that = (PhysicalLookUpOperator) o;
-        return Objects.equals(rowIdToTable, that.rowIdToTable)
+        return Objects.equals(rowIdToScanOperator, that.rowIdToScanOperator)
                 && Objects.equals(rowIdToFetchRefColumns, that.rowIdToFetchRefColumns)
                 && Objects.equals(rowIdToLookUpRefColumns, that.rowIdToLookUpRefColumns)
-                && Objects.equals(rowIdToLazyColumns, rowIdToLazyColumns)
+                && Objects.equals(rowIdToLazyColumns, that.rowIdToLazyColumns)
                 && Objects.equals(columnRefOperatorColumnMap, that.columnRefOperatorColumnMap);
     }
 

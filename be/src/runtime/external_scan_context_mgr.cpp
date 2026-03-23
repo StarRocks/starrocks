@@ -43,6 +43,7 @@
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
+#include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/starrocks_metrics.h"

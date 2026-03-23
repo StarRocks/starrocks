@@ -16,6 +16,7 @@
 
 #include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
+#include <runtime/mem_pool.h>
 #include <runtime/runtime_state.h>
 
 #include <coroutine>

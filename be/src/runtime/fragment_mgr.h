@@ -127,7 +127,7 @@ private:
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
 
     // Cancel thread
-    bool _stop;
+    bool _stop{false};
     std::thread _cancel_thread;
     // every job is a pool
     std::unique_ptr<ThreadPool> _thread_pool;

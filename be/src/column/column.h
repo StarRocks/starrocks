@@ -68,7 +68,7 @@ public:
     static const int EQUALS_NULL = -1;
     static const int EQUALS_TRUE = 1;
 
-    virtual ~Column() = default;
+    ~Column() override = default;
 
     // If true means this is a null literal column
     virtual bool only_null() const { return false; }

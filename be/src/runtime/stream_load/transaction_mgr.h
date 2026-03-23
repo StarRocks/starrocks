@@ -21,7 +21,10 @@
 #include "base/uid_util.h" // for std::hash for UniqueId
 #include "common/thread/thread.h"
 #include "fmt/format.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "stream_load_context.h"
 
 namespace starrocks {
@@ -89,9 +92,10 @@ public:
         return ids;
     }
 
-    Status create_channel_context(ExecEnv* exec_env, const string& label, int channel_id, const string& db_name,
-                                  const string& table_name, TFileFormatType::type format, StreamLoadContext*& ctx,
-                                  const TUniqueId& load_id, long txn_id) {
+    Status create_channel_context(ExecEnv* exec_env, const std::string& label, int channel_id,
+                                  const std::string& db_name, const std::string& table_name,
+                                  TFileFormatType::type format, StreamLoadContext*& ctx, const TUniqueId& load_id,
+                                  long txn_id) {
         auto pipe = std::make_shared<StreamLoadPipe>(true);
         RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
         ctx = new StreamLoadContext(exec_env, load_id);
@@ -119,7 +123,8 @@ public:
         return Status::OK();
     }
 
-    Status put_channel_context(const string& label, const string& table_name, int channel_id, StreamLoadContext* ctx) {
+    Status put_channel_context(const std::string& label, const std::string& table_name, int channel_id,
+                               StreamLoadContext* ctx) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it == std::end(_channel_stream_map)) {
@@ -144,7 +149,7 @@ public:
         return Status::OK();
     }
 
-    StreamLoadContext* get_channel_context(const string& label, const string& table_name, int channel_id) {
+    StreamLoadContext* get_channel_context(const std::string& label, const std::string& table_name, int channel_id) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it == std::end(_channel_stream_map)) {
@@ -166,8 +171,8 @@ public:
     }
 
     void remove_channel_context(StreamLoadContext* ctx) {
-        const string& label = ctx->label;
-        const string& table_name = ctx->table;
+        const std::string& label = ctx->label;
+        const std::string& table_name = ctx->table;
         int channel_id = ctx->channel_id;
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
@@ -195,7 +200,7 @@ public:
         }
     };
 
-    Status finish_body_sink(const string& label, const string& table_name, int channel_id) {
+    Status finish_body_sink(const std::string& label, const std::string& table_name, int channel_id) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _channel_stream_map.find(label);
         if (it != std::end(_channel_stream_map)) {

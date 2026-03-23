@@ -396,6 +396,7 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnableQueryCache(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
         ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+        ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)

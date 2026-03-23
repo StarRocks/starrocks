@@ -332,7 +332,7 @@ public:
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+        auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -358,7 +358,7 @@ public:
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
-        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+        auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -430,10 +430,7 @@ public:
             return to_status(fs_st.status());
         }
         auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat e) {
-            DirEntry entry{.name = e.name,
-                           .mtime = std::move(e.mtime),
-                           .size = std::move(e.size),
-                           .is_dir = std::move(e.is_dir)};
+            DirEntry entry{.name = e.name, .mtime = e.mtime, .size = e.size, .is_dir = e.is_dir};
             return cb(entry);
         });
         return to_status(st);
@@ -528,7 +525,7 @@ public:
     }
 
     StatusOr<SpaceInfo> space(const std::string& path) override {
-        const Status status = is_directory(path).status();
+        Status status = is_directory(path).status();
         if (!status.ok()) {
             return status;
         }
@@ -593,6 +590,20 @@ public:
             return to_status(fs_st.status());
         }
         return to_status((*fs_st)->drop_cache(pair.first, offset, size));
+    }
+
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto cache_stats_or = (*fs_st)->get_cache_stats(pair.first, offset, size);
+        if (!cache_stats_or.ok()) {
+            return to_status(cache_stats_or.status());
+        }
+        return std::make_pair((*cache_stats_or).cached_bytes, (*cache_stats_or).total_bytes);
     }
 
     Status delete_files(std::span<const std::string> paths) override {

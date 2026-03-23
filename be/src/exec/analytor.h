@@ -25,6 +25,7 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
@@ -105,11 +106,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     };
 
 public:
-    ~Analytor() override {
-        if (_state != nullptr) {
-            close(_state);
-        }
-    }
+    ~Analytor() override;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
              bool use_hash_based_partition);
 

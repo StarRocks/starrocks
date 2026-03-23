@@ -23,6 +23,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"

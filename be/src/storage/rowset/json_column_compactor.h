@@ -21,7 +21,7 @@ namespace starrocks {
 class FlatJsonColumnCompactor final : public FlatJsonColumnWriter {
 public:
     FlatJsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                            std::unique_ptr<ScalarColumnWriter> json_writer)
+                            std::unique_ptr<ObjectColumnWriter> json_writer)
             : FlatJsonColumnWriter(opts, std::move(type_info), wfile, std::move(json_writer)) {}
 
     Status append(const Column& column) override;
@@ -39,7 +39,7 @@ private:
 class JsonColumnCompactor final : public ColumnWriter {
 public:
     JsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                        std::unique_ptr<ScalarColumnWriter> json_writer)
+                        std::unique_ptr<ObjectColumnWriter> json_writer)
             : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
               _json_meta(opts.meta),
               _json_writer(std::move(json_writer)) {}
@@ -67,11 +67,8 @@ public:
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
 
 private:
-    void _flat_column(Columns& json_datas);
-
-private:
     ColumnMetaPB* _json_meta;
-    std::unique_ptr<ScalarColumnWriter> _json_writer;
+    std::unique_ptr<ObjectColumnWriter> _json_writer;
     bool _is_global_dict_valid = true;
 };
 } // namespace starrocks

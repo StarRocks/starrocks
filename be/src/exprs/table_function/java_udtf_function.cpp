@@ -164,6 +164,15 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     });
     env->PushLocalFrame(num_cols * num_rows + 16);
 
+    // Boundary check: method_desc must have at least num_cols + 1 elements
+    // (index 0 is return type, indices 1..num_cols are parameter types)
+    if (stateUDTF->method_process()->method_desc.size() < num_cols + 1) {
+        state->set_status(
+                Status::InternalError(fmt::format("method_desc size mismatch: need at least {}, got {}", num_cols + 1,
+                                                  stateUDTF->method_process()->method_desc.size())));
+        return {};
+    }
+
     for (int i = 0; i < num_rows; ++i) {
         DeferOp defer = DeferOp([&]() {
             for (int j = 0; j < num_cols; ++j) {

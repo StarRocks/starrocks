@@ -20,6 +20,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
@@ -138,7 +139,7 @@ void NormalExecutionGroup::submit_active_drivers() {
 }
 
 void NormalExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
-    _pipelines.emplace_back(std::move(pipeline));
+    _pipelines.emplace_back(pipeline);
     _num_pipelines = _pipelines.size();
 }
 
@@ -199,7 +200,7 @@ void ColocateExecutionGroup::submit_active_drivers() {
 }
 
 void ColocateExecutionGroup::add_pipeline(PipelineRawPtr pipeline) {
-    _pipelines.emplace_back(std::move(pipeline));
+    _pipelines.emplace_back(pipeline);
     _num_pipelines = _pipelines.size();
 }
 

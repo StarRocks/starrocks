@@ -769,6 +769,14 @@ message PLookUpResponse {
     repeated PColumn columns = 2;
 }
 
+message PLookUpCloseRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+}
+
+message PLookUpCloseResponse {
+    optional StatusPB status = 1;
+}
 
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
@@ -821,4 +829,5 @@ service PInternalService {
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
     rpc lookup(PLookUpRequest) returns (PLookUpResponse);
+    rpc lookup_close(PLookUpCloseRequest) returns (PLookUpCloseResponse);
 };

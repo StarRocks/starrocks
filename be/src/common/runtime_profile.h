@@ -332,7 +332,7 @@ public:
         // Stores an event in sequence with the given label and the
         // current time (relative to the first time start() was called) as
         // the timestamp.
-        void mark_event(const std::string& label) { _events.push_back(make_pair(label, _sw.elapsed_time())); }
+        void mark_event(const std::string& label) { _events.emplace_back(label, _sw.elapsed_time()); }
 
         int64_t elapsed_time() { return _sw.elapsed_time(); }
 
@@ -564,7 +564,7 @@ private:
 
     RuntimeProfile* get_child_unlock(const std::string& name);
 
-    RuntimeProfile* _parent;
+    RuntimeProfile* _parent{nullptr};
 
     // Pool for allocated counters. Usually owned by the creator of this
     // object, but occasionally allocated in the constructor.
@@ -574,7 +574,7 @@ private:
     std::string _name;
 
     // user-supplied, uninterpreted metadata.
-    int64_t _metadata;
+    int64_t _metadata{-1};
 
     /// True if this profile is an average derived from other profiles.
     /// All counters in this profile must be of unit AveragedCounter.
@@ -622,7 +622,7 @@ private:
     Counter _counter_total_time;
     // Time spent in just in this profile (i.e. not the children) as a fraction
     // of the total time in the entire profile tree.
-    double _local_time_percent;
+    double _local_time_percent{0};
 
     // Protects _version
     mutable std::mutex _version_lock;

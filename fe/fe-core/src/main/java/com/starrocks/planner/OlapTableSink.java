@@ -859,6 +859,12 @@ public class OlapTableSink extends DataSink {
                 throw new StarRocksException("different distribute types in two different partitions, type1="
                         + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
             }
+            List<String> selectedDistColumns = getDistColumns(selectedDistInfo, table);
+            List<String> currentDistColumns = getDistColumns(distInfo, table);
+            if (!selectedDistColumns.equals(currentDistColumns)) {
+                throw new StarRocksException("different distribute columns in two different partitions, columns1="
+                        + selectedDistColumns + ", columns2=" + currentDistColumns);
+            }
         }
         return selectedDistInfo;
     }

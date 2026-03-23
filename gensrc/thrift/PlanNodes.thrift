@@ -89,6 +89,7 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
+  LAKE_CACHE_STATS_SCAN_NODE
 }
 
 // phases of an execution node
@@ -439,6 +440,9 @@ struct THdfsScanRange {
     // mapping transformed bucket id, used to schedule scan range
     36: optional i32 bucket_id;
 
+    // Iceberg v3 row lineage: first row id of the data file, used to compute _row_id
+    // as first_row_id + row_position for non-compacted files.
+    // The _last_updated_sequence_number fallback value is passed via the extended_columns map.
     37: optional i64 first_row_id;
 }
 
@@ -660,6 +664,8 @@ struct TOlapScanNode {
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
+
+  56: optional bool enable_global_late_materialization
 }
 
 struct TJDBCScanNode {
@@ -708,6 +714,8 @@ struct TLakeScanNode {
   45: optional bool enable_gin_filter
 
   46: optional i32 next_uniq_id
+
+  56: optional bool enable_global_late_materialization
 }
 
 struct TEqJoinCondition {
@@ -1290,6 +1298,11 @@ struct THdfsScanNode {
 
     // describe distribution of local exchange
     25: optional list<Partitions.TBucketProperty> bucket_properties;
+
+    26: optional bool enable_global_late_materialization
+    27: optional i64 scan_node_id
+
+    28: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TProjectNode {
@@ -1348,10 +1361,25 @@ const string BINLOG_TIMESTAMP_COLUMN_NAME = "_binlog_timestamp";
 // virtual column names
 const string TABLET_ID_COLUMN_NAME = "_tablet_id_";
 const string SEGMENT_ID_COLUMN_NAME = "_segment_id_";
+const string RSS_ID_COLUMN_NAME = "_rss_id_";
+const string SOURCE_ID_COLUMN_NAME = "_source_id_";
 const string ROW_ID_COLUMN_NAME = "_row_id_";
+const string ROWSET_ID_COLUMN_NAME = "_rowset_id_";
+const string DYNAMIC_RSS_ID_COLUMN_NAME = "_dynamic_rssid_";
+
+const string CACHE_STATS_TABLET_ID_COLUMN_NAME = "tablet_id";
+const string CACHE_STATS_CACHED_BYTES_COLUMN_NAME = "cached_bytes";
+const string CACHE_STATS_TOTAL_BYTES_COLUMN_NAME = "total_bytes";
 
 struct TBinlogScanNode {
   1: optional Types.TTupleId tuple_id
+}
+
+struct TCacheStatsScanNode {
+    1: optional Types.TTupleId tuple_id
+    2: optional map<i32, string> id_to_names
+    3: optional i64 table_id
+    4: optional string table_name
 }
 
 // Union of all stream source nodes, distinguished by type
@@ -1500,6 +1528,8 @@ struct TPlanNode {
   83: optional TLookUpNode look_up_node;
   // Scan node for benchmark
   84: optional TBenchmarkScanNode benchmark_scan_node;
+
+  85: optional TCacheStatsScanNode cache_stats_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

@@ -121,9 +121,14 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                 .map(TvrTableSnapshotInfo::getTvrSnapshot)
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
-            logger.info("No base table has changed, skip the refresh for materialized view: {}",
-                    mv.getName());
-            return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+            if (mvRefreshParams.isNonTentativeForce()) {
+                logger.info("No base table has changed, but force refresh is requested, " +
+                        "proceed with refresh for materialized view: {}", mv.getName());
+            } else {
+                logger.info("No base table has changed, skip the refresh for materialized view: {}",
+                        mv.getName());
+                return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+            }
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {

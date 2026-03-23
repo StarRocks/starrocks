@@ -30,6 +30,7 @@
 #include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
@@ -140,7 +141,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
+        _query_ctx->set_runtime_profile_report_interval(
+                std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
 
     bool enable_query_trace = false;
@@ -486,6 +488,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto* exch_node : exch_nodes) {
         int num_senders = FindWithDefault(params.per_exch_num_senders, exch_node->id(), 0);
         down_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
+    }
+
+    std::vector<ExecNode*> lookup_nodes;
+    plan->collect_nodes(TPlanNodeType::LOOKUP_NODE, &lookup_nodes);
+    for (auto* lookup_node : lookup_nodes) {
+        int num_senders = FindWithDefault(params.per_look_up_num_fetchers, lookup_node->id(), 0);
+        down_cast<LookUpNode*>(lookup_node)->set_num_fetchers(num_senders);
     }
 
     // set scan ranges

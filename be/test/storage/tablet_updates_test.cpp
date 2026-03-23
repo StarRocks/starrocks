@@ -23,6 +23,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"

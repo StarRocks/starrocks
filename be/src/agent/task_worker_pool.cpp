@@ -825,7 +825,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
 
-        request.__set_resource_usage(std::move(resource_usage));
+        request.__set_resource_usage(resource_usage);
         TMasterResult result;
         status = report_task(request, &result);
 

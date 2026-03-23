@@ -166,12 +166,12 @@ void Schema::append(const FieldPtr& field) {
     _num_keys += field->is_key();
     if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
-            _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index->emplace(field->name(), _fields.size() - 1);
     } else {
         if (_name_to_index_append_buffer == nullptr) {
-            _name_to_index_append_buffer.reset(new std::unordered_map<std::string_view, size_t>());
+            _name_to_index_append_buffer = std::make_shared<std::unordered_map<std::string_view, size_t>>();
         }
         _name_to_index_append_buffer->emplace(field->name(), _fields.size() - 1);
     }
@@ -278,7 +278,7 @@ void Schema::set_field_by_name(FieldPtr field, const std::string& name) {
 }
 
 void Schema::_build_index_map(const Fields& fields) {
-    _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
+    _name_to_index = std::make_shared<std::unordered_map<std::string_view, size_t>>();
     for (size_t i = 0; i < fields.size(); i++) {
         _name_to_index->emplace(fields[i]->name(), i);
     }

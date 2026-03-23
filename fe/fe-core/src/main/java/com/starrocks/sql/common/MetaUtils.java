@@ -27,8 +27,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableOperation;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -38,8 +40,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -148,13 +151,13 @@ public class MetaUtils {
     }
 
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
-        CreateMaterializedViewStmt stmt;
+        CreateSyncMVStmt stmt;
 
         try {
             List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
-            stmt = (CreateMaterializedViewStmt) stmts.get(originStmt.idx);
+            stmt = (CreateSyncMVStmt) stmts.get(originStmt.idx);
             stmt.setIsReplay(true);
-            return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
+            return CreateSyncMVStmtAnalyzer.parseDefineExprWithoutAnalyze(stmt, originStmt.originStmt);
         } catch (Exception e) {
             LOG.warn("error happens when parsing create materialized view stmt [{}] use new parser",
                     originStmt, e);
@@ -285,6 +288,37 @@ public class MetaUtils {
         return columns;
     }
 
+    /**
+     * Resolves the colocate columns for a range distribution table.
+     * Colocate columns must be a prefix of the sort key (range distribution columns).
+     *
+     * @param olapTable the table
+     * @param colocateColumnNames the explicitly specified colocate column names,
+     *                            or null for default (all sort key columns)
+     * @return the resolved colocate columns
+     * @throws DdlException if colocateColumnNames is not a valid prefix of sort key
+     */
+    public static List<Column> getRangeColocateColumns(OlapTable olapTable,
+                                                        List<String> colocateColumnNames) throws DdlException {
+        List<Column> sortKeyColumns = getRangeDistributionColumns(olapTable);
+        if (colocateColumnNames == null) {
+            return sortKeyColumns;
+        }
+        List<Column> result = new ArrayList<>();
+        for (int i = 0; i < colocateColumnNames.size(); i++) {
+            if (i >= sortKeyColumns.size()
+                    || !sortKeyColumns.get(i).getName()
+                        .equalsIgnoreCase(colocateColumnNames.get(i))) {
+                throw new DdlException(
+                        "Colocate columns must be a prefix of sort key columns. Sort key: "
+                        + sortKeyColumns.stream().map(Column::getName)
+                            .collect(Collectors.joining(",")));
+            }
+            result.add(sortKeyColumns.get(i));
+        }
+        return result;
+    }
+
     public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
         return getRangeDistributionColumns(olapTable).stream().map(Column::getName).collect(Collectors.toList());
     }
@@ -371,8 +405,15 @@ public class MetaUtils {
         return columnIds;
     }
 
+    /**
+     * Convert partition column to SQL representation for SHOW CREATE TABLE etc.
+     * Only internal expression partition columns (__generated_partition_column_*) are expanded to
+     * their expression form; user-defined generated columns retain their column names to preserve
+     * DDL round-trippability.
+     */
     public static String getPartitionColumnToSql(Column column) {
-        if (column.isGeneratedColumn()) {
+        if (column.isGeneratedColumn()
+                && column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
             return column.generatedColumnExprToString();
         } else {
             return "`" + column.getName() + "`";

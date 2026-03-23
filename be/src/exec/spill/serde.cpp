@@ -108,7 +108,7 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         SCOPED_TIMER(_parent->metrics().serialize_timer);
         size_t ALIGNED_SIZE = 1;
         if (aligned) {
-            ALIGNED_SIZE = AlignedBuffer::PAGE_SIZE;
+            ALIGNED_SIZE = AlignedBuffer::kPageSize;
         }
         ctx.serialize_buffer.clear();
         const auto& columns = chunk->columns();

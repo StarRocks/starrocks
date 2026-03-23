@@ -41,7 +41,7 @@ inline StatusOr<std::unique_ptr<lucene::analysis::Analyzer>> get_analyzer(Invert
     }
 }
 
-inline Status tokenize_text(InvertedIndexParserType parser_type, std::string search_str,
+inline Status tokenize_text(InvertedIndexParserType parser_type, const std::string& search_str,
                             std::vector<std::wstring>& result) {
     ASSIGN_OR_RETURN(auto analyzer, get_analyzer(parser_type));
     std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);

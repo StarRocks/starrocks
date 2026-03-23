@@ -30,7 +30,7 @@ class MetadataCache {
 public:
     explicit MetadataCache(size_t capacity);
 
-    ~MetadataCache() {}
+    ~MetadataCache() = default;
 
     DISALLOW_COPY_AND_MOVE(MetadataCache);
 

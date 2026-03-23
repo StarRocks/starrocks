@@ -93,6 +93,7 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
         connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;

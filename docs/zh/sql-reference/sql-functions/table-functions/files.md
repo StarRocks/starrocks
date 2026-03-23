@@ -47,7 +47,7 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
 您可以指定路径或文件。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载名为 `20210411` 的数据文件。
 
-您还可以使用通配符 `?`、`*`、`[]`、`{}` 或 `^` 指定多个数据文件的保存路径。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 或 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载所有分区或仅 `202104` 分区的数据文件。
+您还可以使用通配符 `?`、`*`、`[]` 或 `^` 指定多个数据文件的保存路径。例如，您可以将此参数指定为 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 或 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"`，以从 HDFS 服务器上的路径 `/user/data/tablename` 加载所有分区或仅 `202104` 分区的数据文件。
 
 :::note
 
@@ -168,7 +168,7 @@ CSV 格式示例：
 "format"="csv",
 "csv.column_separator"="\\t",
 "csv.enclose"='"',
-"csv.skip_header"="1",
+"csv.skip_header"="1",  -- 仅用于导入
 "csv.escape"="\\"
 ```
 
@@ -193,7 +193,7 @@ CSV 格式示例：
 
 ###### `csv.skip_header`
 
-指定要跳过的 CSV 格式数据中的标题行数。类型：`INTEGER`。默认值：`0`。
+指定要跳过的 CSV 格式数据中的标题行数。类型：`INTEGER`。默认值：`0`。此属性仅支持数据导入。
 
 在某些 CSV 格式的数据文件中，若干标题行用于定义元数据，如列名和列数据类型。通过设置 `skip_header` 参数，您可以使 StarRocks 跳过这些标题行。例如，如果您将此参数设置为 `1`，StarRocks 在数据导入期间会跳过数据文件的第一行。
 

@@ -21,6 +21,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"

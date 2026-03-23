@@ -48,6 +48,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -149,6 +150,15 @@ public class TabletInvertedIndex implements MemoryTrackable {
         markTabletForceDelete(tablet.getId(), tablet.getBackendIds());
     }
 
+    /**
+     * Batch mark tablets for force delete.
+     */
+    public void markTabletsForceDelete(Collection<Tablet> tablets) {
+        for (Tablet tablet : tablets) {
+            markTabletForceDelete(tablet);
+        }
+    }
+
     public void eraseTabletForceDelete(long tabletId, long backendId) {
         forceDeleteTablets.computeIfPresent(tabletId, (id, backendSets) -> {
             backendSets.remove(backendId);
@@ -162,21 +172,43 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
         mutationLock.lock();
         try {
-            CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
-            if (replicas != null) {
-                for (Replica replica : replicas) {
-                    Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
-                    if (tabletIds != null) {
-                        tabletIds.remove(tabletId);
-                    }
-                }
-            }
-            tabletMetaMap.remove(tabletId);
-
-            LOG.debug("delete tablet: {}", tabletId);
+            deleteTabletUnlocked(tabletId);
         } finally {
             mutationLock.unlock();
         }
+    }
+
+    /**
+     * Batch delete tablets with a single lock acquisition, reducing lock contention
+     * compared to calling deleteTablet() in a loop.
+     */
+    public void deleteTablets(Collection<Long> tabletIds) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        mutationLock.lock();
+        try {
+            for (long tabletId : tabletIds) {
+                deleteTabletUnlocked(tabletId);
+            }
+        } finally {
+            mutationLock.unlock();
+        }
+    }
+
+    private void deleteTabletUnlocked(long tabletId) {
+        CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
+        if (replicas != null) {
+            for (Replica replica : replicas) {
+                Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
+                if (tabletIds != null) {
+                    tabletIds.remove(tabletId);
+                }
+            }
+        }
+        tabletMetaMap.remove(tabletId);
+
+        LOG.debug("delete tablet: {}", tabletId);
     }
 
     // Only for test

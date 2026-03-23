@@ -3,13 +3,18 @@ displayed_sidebar: docs
 sidebar_label: 集群快照
 keywords: ['备份', '恢复', '存算分离', '快照']
 ---
-
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'
 import ClusterSnapshotTerm from '../_assets/commonMarkdown/cluster_snapshot_term.mdx'
+import ClusterSnapshotTermCRDR from '../_assets/commonMarkdown/cluster_snapshot_term_crdr.mdx'
+import ClusterSnapshotSyntaxParam from '../_assets/commonMarkdown/cluster_snapshot_syntax_param.mdx'
+import ClusterSnapshotPurge from '../_assets/commonMarkdown/cluster_snapshot_purge.mdx'
 import ManualCreateDropClusterSnapshot from '../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
 import ClusterSnapshotWarning from '../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
+import ClusterSnapshotCrossRegionRecover from '../_assets/commonMarkdown/cluster_snapshot_cross_region_recover.mdx'
+import ClusterSnapshotAfterRecover from '../_assets/commonMarkdown/cluster_snapshot_after_recover.mdx'
+import ClusterSnapshotAppendix from '../_assets/commonMarkdown/cluster_snapshot_appendix.mdx'
 
 # 集群快照
 
@@ -45,22 +50,15 @@ import ClusterSnapshotWarning from '../_assets/commonMarkdown/cluster_snapshot_w
 
   从快照中恢复集群。
 
+<ClusterSnapshotTermCRDR />
+
 ## 自动化集群快照
 
 自动化集群快照默认是禁用的。
 
 使用以下语句启用此功能：
 
-语法：
-
-```SQL
-ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
-[STORAGE VOLUME <storage_volume_name>]
-```
-
-参数：
-
-`storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。有关创建存储卷的详细信息，请参阅 [CREATE STORAGE VOLUME](../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
+<ClusterSnapshotSyntaxParam />
 
 每次 FE 在完成元数据检查点后创建新的元数据镜像时，它会自动创建一个快照。快照的名称由系统生成，格式为 `automated_cluster_snapshot_{timestamp}`。
 
@@ -76,7 +74,7 @@ FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化
 ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
-一旦禁用自动化集群快照，系统将自动清除历史快照。
+<ClusterSnapshotPurge />
 
 <ManualCreateDropClusterSnapshot />
 
@@ -127,7 +125,7 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 按照以下步骤使用集群快照恢复集群。
 
-1. **（可选）** 如果存储集群快照的存储位置（存储卷）已更改，必须将原始存储路径下的所有文件复制到新路径。为此，您必须修改 Leader FE 节点的 `fe/conf` 目录下的配置文件 **cluster_snapshot.yaml**。有关 **cluster_snapshot.yaml** 的模板，请参见[附录](#appendix)。
+<ClusterSnapshotCrossRegionRecover />
 
 2. 启动 Leader FE 节点。
 
@@ -149,74 +147,11 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 如果您在步骤 1 中修改了 **cluster_snapshot.yaml**，节点和存储卷将根据文件中的信息在新集群中重新配置。
 
-## 附录
+<ClusterSnapshotAfterRecover />
 
-**cluster_snapshot.yaml** 模板：
+<ClusterSnapshotAppendix />
 
-```Yaml
-# 要下载以进行恢复的集群快照的信息。
-cluster_snapshot:
-    # 快照的 URI。
-    # 示例 1: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
-    # 示例 2: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
-    cluster_snapshot_path: <cluster_snapshot_uri>
-    # 存储快照的存储卷名称。您必须在 `storage_volumes` 部分中定义它。
-    # 注意：它必须与原始集群中的相同。
-    storage_volume_name: my_s3_volume
+## 限制
 
-# [可选] 要恢复快照的新集群的节点信息。
-# 如果未指定此部分，恢复后的新集群仅具有 Leader FE 节点。
-# CN 节点保留原始集群的信息。
-# 注意：不要在此部分中包含 Leader FE 节点。
-
-frontends:
-    # FE 主机。
-  - host: xxx.xx.xx.x1
-    # FE edit_log_port。
-    edit_log_port: 9010
-    # FE 节点类型。有效值：`follower`（默认）和 `observer`。
-    type: follower
-  - host: xxx.xx.xx.x2
-    edit_log_port: 9010
-    type: observer
-
-compute_nodes:
-    # CN 主机。
-  - host: xxx.xx.xx.x3
-    # CN heartbeat_service_port。
-    heartbeat_service_port: 9050
-  - host: xxx.xx.xx.x4
-    heartbeat_service_port: 9050
-
-# 新集群中存储卷的信息。用于恢复克隆的快照。
-# 注意：存储卷的名称必须与原始集群中的相同。
-storage_volumes:
-  # S3 兼容存储卷的示例。
-  - name: my_s3_volume
-    type: S3
-    location: s3://defaultbucket/test/
-    comment: my s3 volume
-    properties:
-      - key: aws.s3.region
-        value: us-west-2
-      - key: aws.s3.endpoint
-        value: https://s3.us-west-2.amazonaws.com
-      - key: aws.s3.access_key
-        value: xxxxxxxxxx
-      - key: aws.s3.secret_key
-        value: yyyyyyyyyy
-  # HDFS 存储卷的示例。
-  - name: my_hdfs_volume
-    type: HDFS
-    location: hdfs://127.0.0.1:9000/sr/test/
-    comment: my hdfs volume
-    properties:
-      - key: hadoop.security.authentication
-        value: simple
-      - key: username
-        value: starrocks
-```
-
-:::note
-有关 AWS 认证信息的更多信息，请参阅 [配置 AWS 认证信息](../integrations/authenticate_to_aws_resources.md)。
-:::
+- 目前不支持待机模式。Primary 集群和 Secondary 集群不能同时在线，否则无法保证 Secondary 集群的正常运行。
+- 目前仅能保留一个自动集群快照。

@@ -13,6 +13,7 @@ ALTER TABLE Modifies an existing table, including:
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
+- [Modify the tablet size](#modify-the-tablet-size)
 - [Modify columns (add/delete columns, change column order, and modify column comment)](#modify-columns-adddelete-columns-change-column-order-modify-column-comment)
 - [Create/delete rollup](#modify-rollup)
 - [Create/delete index](#modify-indexes)
@@ -440,7 +441,53 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
 
   ```SQL
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
-  ``
+  ```
+
+### Modify the tablet size
+
+StarRocks supports splitting and merging tablets from v4.1 onwards, allowing dynamic management of tablet size, thus an adaptive mechanism for handling data skew.
+
+Syntax for SPLIT:
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+Syntax for MERGE:
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+Parameter:
+
+- `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 1 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
+
+  - A tablet will be split if both the following conditions are met:
+    - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
+    - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+  - A tablet will be merged if both the following conditions are met:
+    - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
+    - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
 ### Modify columns (add/delete columns, change column order, modify column comment)
 
@@ -1347,6 +1394,53 @@ Drop persistent index on tablets `100` and `101` for Primary Key table `db1.test
 
 ```sql
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
+```
+
+### SPLIT or MERGE tablets
+
+- Split all tablets that meet the conditions in the table to a target size of 1 GB (Default).
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- Split all tablets that meet the conditions in a partition.
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- Split specific tablets by ID.
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- Merge all tablets that meet the conditions in the table to a target size of 2 GB.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- Merge all tablets that meet the conditions in specific partitions.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- Merge specific tablets by ID.
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
 ```
 
 ## References

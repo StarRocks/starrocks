@@ -21,7 +21,7 @@ namespace starrocks {
 
 class ReplicationTxnManager {
 public:
-    explicit ReplicationTxnManager() {}
+    explicit ReplicationTxnManager() = default;
 
     Status init(const std::vector<starrocks::DataDir*>& data_dirs);
 

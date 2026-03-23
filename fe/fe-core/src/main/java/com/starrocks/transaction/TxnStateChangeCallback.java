@@ -63,7 +63,7 @@ public interface TxnStateChangeCallback {
      *
      * @param txnState
      */
-    void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+    void afterCommitted(TransactionState txnState) throws StarRocksException;
 
     void replayOnCommitted(TransactionState txnState);
 
@@ -74,18 +74,18 @@ public interface TxnStateChangeCallback {
      * @param txnStatusChangeReason maybe null
      * @return
      */
-    void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException;
 
     void replayOnAborted(TransactionState txnState);
 
-    void afterVisible(TransactionState txnState, boolean txnOperated);
+    void afterVisible(TransactionState txnState);
 
     void replayOnVisible(TransactionState txnState);
 
     void beforePrepared(TransactionState txnState) throws TransactionException;
 
-    void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+    void afterPrepared(TransactionState txnState) throws StarRocksException;
 
     void replayOnPrepared(TransactionState txnState);
 }

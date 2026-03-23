@@ -30,6 +30,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/client_cache.h"
 #include "storage/lake/tablet.h"

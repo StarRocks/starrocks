@@ -20,7 +20,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-public class GlobalLateMaterializationTest extends ConnectorPlanTestBase {
+public class GlobalLateMaterializationIcebergTest extends ConnectorPlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {

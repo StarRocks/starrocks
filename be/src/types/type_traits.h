@@ -203,6 +203,10 @@ struct CppTypeTraits<TYPE_JSON> {
     using CppType = Slice;
 };
 template <>
+struct CppTypeTraits<TYPE_VARIANT> {
+    using CppType = Slice;
+};
+template <>
 struct CppTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
 };

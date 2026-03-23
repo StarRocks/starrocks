@@ -41,4 +41,11 @@ public class ParseUtilTest {
         assertThat(exception.getMessage(),
                 containsString("Invalid var: 'tru'. Expected values should be 1, 0, on, off, true, or false (case insensitive)"));
     }
+
+    @Test
+    public void testBackquoteEscapesInnerBackticks() {
+        Assertions.assertEquals("`a``b`", ParseUtil.backquote("a`b"));
+        Assertions.assertEquals("```ab```", ParseUtil.backquote("`ab`"));
+        Assertions.assertEquals("`ab`", ParseUtil.backquote("ab"));
+    }
 }

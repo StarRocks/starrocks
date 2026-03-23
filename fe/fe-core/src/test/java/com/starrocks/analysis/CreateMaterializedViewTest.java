@@ -67,7 +67,7 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
@@ -593,7 +593,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql = "create materialized view mv1\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+        Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
     }
 
     @Test
@@ -1514,7 +1514,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+            Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -2016,7 +2016,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
@@ -2064,7 +2064,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         Assertions.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
         });
 
         currentState.getColocateTableIndex().clear();
@@ -2115,10 +2115,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
 
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
@@ -2978,8 +2978,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     .useDatabase("test_mv_different_db");
             String sql = "create materialized view test.test_mv_use_different_tbl " +
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
             Assertions.assertEquals(stmt.getDBName(), "test");
             Assertions.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
             currentState.getLocalMetastore().createMaterializedView(stmt);
@@ -3009,8 +3009,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Assertions.assertThrows(AnalysisException.class, () -> {
                 String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
                         "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-                CreateMaterializedViewStmt stmt =
-                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                CreateSyncMVStmt stmt =
+                        (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                                 newStarRocksAssert.getCtx());
 
             });

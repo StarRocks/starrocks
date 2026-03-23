@@ -75,6 +75,7 @@ public:
     }
 
     Status next_batch(const SparseRange<>& range, Column* dst) override {
+        RETURN_IF(dst->is_nullable(), Status::NotSupported("RowIdColumnIterator does not support nullable column"));
         SparseRangeIterator<> iter = range.new_iterator();
         size_t to_read = range.span_size();
         while (to_read > 0) {
@@ -94,7 +95,15 @@ public:
     }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: fetch_values_by_rowid");
+        RETURN_IF(values->is_nullable(), Status::NotSupported("RowIdColumnIterator does not support nullable column"));
+        Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(values)->get_data();
+        size_t prev_size = v.size();
+        v.resize(prev_size + size);
+        auto* data = v.data() + prev_size;
+        for (size_t i = 0; i < size; i++) {
+            data[i] = rowids[i];
+        }
+        return Status::OK();
     }
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
