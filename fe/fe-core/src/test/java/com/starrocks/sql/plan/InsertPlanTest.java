@@ -40,15 +40,19 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.hadoop.HadoopFileIO;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -56,6 +60,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -66,6 +71,15 @@ public class InsertPlanTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        starRocksAssert.withTable("CREATE TABLE iceberg_shuffle_src (\n" +
+                "  id INT,\n" +
+                "  dt DATE,\n" +
+                "  ts DATETIME,\n" +
+                "  data VARCHAR(20)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
     }
 
     @Test
@@ -929,99 +943,16 @@ public class InsertPlanTest extends PlanTestBase {
 
     @Test
     public void testInsertIcebergWithGlobalShuffle() throws Exception {
-        String createIcebergCatalogStmt = "create external catalog iceberg_catalog_shuffle properties (\"type\"=\"iceberg\", " +
-                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
-        starRocksAssert.withCatalog(createIcebergCatalogStmt);
-        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
-
-        Table nativeTable = new BaseTable(null, null);
-
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec identitySpec = PartitionSpec.builderFor(icebergSchema).identity("k1").build();
         Column k1 = new Column("k1", IntegerType.INT);
         Column k2 = new Column("k2", IntegerType.INT);
-        IcebergTable.Builder builder = IcebergTable.builder();
-        builder.setCatalogName("iceberg_catalog_shuffle");
-        builder.setCatalogDBName("iceberg_db");
-        builder.setCatalogTableName("iceberg_table");
-        builder.setSrTableName("iceberg_table");
-        builder.setFullSchema(Lists.newArrayList(k1, k2));
-        builder.setNativeTable(nativeTable);
-        IcebergTable icebergTable = builder.build();
-
-        new Expectations(icebergTable) {
-            {
-                icebergTable.getUUID();
-                result = 12345566;
-                minTimes = 0;
-
-                icebergTable.isUnPartitioned();
-                result = false;
-                minTimes = 0;
-
-                icebergTable.getPartitionColumns();
-                result = Arrays.asList(k1);
-
-                icebergTable.partitionColumnIndexes();
-                result = Arrays.asList(0);
-            }
-        };
-
-        new Expectations(nativeTable) {
-            {
-                nativeTable.sortOrder();
-                result = SortOrder.unsorted();
-                minTimes = 0;
-
-                nativeTable.location();
-                result = "hdfs://fake_location";
-                minTimes = 0;
-
-                nativeTable.properties();
-                result = new HashMap<String, String>();
-                minTimes = 0;
-
-                nativeTable.io();
-                result = new HadoopFileIO();
-                minTimes = 0;
-
-                nativeTable.spec();
-                result = PartitionSpec.unpartitioned();
-            }
-        };
-
-        new Expectations(metadata) {
-            {
-                metadata.getDb((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db");
-                result = new Database(12345566, "iceberg_db");
-                minTimes = 0;
-
-                metadata.getTable((ConnectContext) any, "iceberg_catalog_shuffle", "iceberg_db", "iceberg_table");
-                result = icebergTable;
-                minTimes = 0;
-            }
-        };
-
-        new MockUp<SessionVariable>() {
-            @Mock
-            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
-                return ConnectorSinkShuffleMode.FORCE;
-            }
-        };
-
-        new MockUp<MetaUtils>() {
-            @Mock
-            public Database getDatabase(String catalogName, String tableName) {
-                return new Database(12345566, "iceberg_db");
-            }
-
-            @Mock
-            public com.starrocks.catalog.Table getSessionAwareTable(
-                    ConnectContext context, Database database, TableName tableName) {
-                return icebergTable;
-            }
-        };
-
-        String actualRes = getInsertExecPlan(
-                "explain insert into iceberg_catalog_shuffle.iceberg_db.iceberg_table select 1, 2 from t0");
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_shuffle", "iceberg_table", 12345566, icebergSchema, identitySpec,
+                Lists.newArrayList(k1, k2), Lists.newArrayList(k1), Arrays.asList(0), "select 1, 2 from t0");
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:6: k1 | 7: k2\n" +
                 "  PARTITION: HASH_PARTITIONED: 6: k1\n" +
@@ -1055,6 +986,218 @@ public class InsertPlanTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=9.0\n";
         Assertions.assertEquals(expected, actualRes);
+        Assertions.assertFalse(actualRes.contains(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX),
+                "Identity partition should shuffle on source column, but got:\n" + actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec bucketSpec = PartitionSpec.builderFor(icebergSchema).bucket("k1", 10).build();
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform", "iceberg_transform_table", 12345567, icebergSchema, bucketSpec,
+                Lists.newArrayList(k1, k2), Lists.newArrayList(k1), Arrays.asList(0), "select v1, v2 from t0");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_bucket");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleYearTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec yearSpec = PartitionSpec.builderFor(icebergSchema).year("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_year", "iceberg_year_table", 12345568, icebergSchema, yearSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_year");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleMonthTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec monthSpec = PartitionSpec.builderFor(icebergSchema).month("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_month", "iceberg_month_table", 12345569, icebergSchema, monthSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_month");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleDayTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.DateType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec daySpec = PartitionSpec.builderFor(icebergSchema).day("ts").build();
+        Column ts = new Column("ts", DateType.DATE);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_day", "iceberg_day_table", 12345570, icebergSchema, daySpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select dt, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_day");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleHourTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "ts", Types.TimestampType.withoutZone()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec hourSpec = PartitionSpec.builderFor(icebergSchema).hour("ts").build();
+        Column ts = new Column("ts", DateType.DATETIME);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_hour", "iceberg_hour_table", 12345571, icebergSchema, hourSpec,
+                Lists.newArrayList(ts, k2), Lists.newArrayList(ts), Arrays.asList(0),
+                "select ts, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_hour");
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffleTruncateTransformPartition() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "data", Types.StringType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec truncateSpec = PartitionSpec.builderFor(icebergSchema).truncate("data", 5).build();
+        Column data = new Column("data", StringType.STRING);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_transform_truncate", "iceberg_truncate_table", 12345572, icebergSchema, truncateSpec,
+                Lists.newArrayList(data, k2), Lists.newArrayList(data), Arrays.asList(0),
+                "select data, id from iceberg_shuffle_src");
+        assertHashPartitionedByExpression(actualRes, "__iceberg_transform_truncate");
+    }
+
+    private String getIcebergInsertExecPlanWithGlobalShuffle(String catalogName, String tableName, long tableId,
+                                                             Schema icebergSchema, PartitionSpec partitionSpec,
+                                                             List<Column> fullSchema, List<Column> partitionColumns,
+                                                             List<Integer> partitionColumnIndexes, String selectSql)
+            throws Exception {
+        String createIcebergCatalogStmt = String.format(
+                "create external catalog %s properties (\"type\"=\"iceberg\", " +
+                        "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")",
+                catalogName);
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName(catalogName);
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName(tableName);
+        builder.setSrTableName(tableName);
+        builder.setFullSchema(fullSchema);
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = tableId;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                icebergTable.partitionColumnIndexes();
+                result = partitionColumnIndexes;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+
+                nativeTable.io();
+                result = new HadoopFileIO();
+                minTimes = 0;
+
+                nativeTable.spec();
+                result = partitionSpec;
+                minTimes = 0;
+
+                nativeTable.schema();
+                result = icebergSchema;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, catalogName, "iceberg_db");
+                result = new Database(tableId, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable((ConnectContext) any, catalogName, "iceberg_db", tableName);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return ConnectorSinkShuffleMode.FORCE;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Database getDatabase(String currentCatalogName, String dbName) {
+                return new Database(tableId, "iceberg_db");
+            }
+
+            @Mock
+            public com.starrocks.catalog.Table getSessionAwareTable(
+                    ConnectContext context, Database database, TableName currentTableName) {
+                return icebergTable;
+            }
+        };
+
+        return getInsertExecPlan(String.format(
+                "explain insert into %s.iceberg_db.%s %s", catalogName, tableName, selectSql));
+    }
+
+    private void assertHashPartitionedByExpression(String actualRes, String expectedExpr) {
+        Assertions.assertTrue(actualRes.contains(expectedExpr),
+                "Expected shuffle expression " + expectedExpr + " but got:\n" + actualRes);
+        Pattern distributionPattern = Pattern.compile(
+                "HASH_PARTITIONED:[^\\n]*" + Pattern.quote(expectedExpr));
+        Assertions.assertTrue(distributionPattern.matcher(actualRes).find(),
+                "Expected HASH_PARTITIONED on " + expectedExpr + " but got:\n" + actualRes);
     }
 
     @Test
