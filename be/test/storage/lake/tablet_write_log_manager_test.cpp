@@ -401,8 +401,8 @@ TEST_F(TabletWriteLogManagerTest, test_large_sst_values) {
     auto mgr = TabletWriteLogManager::instance();
     // Test with large SST byte values (multi-GB)
     int64_t large_bytes = 10LL * 1024 * 1024 * 1024; // 10 GB
-    mgr->add_compaction_log(1, 100, 30, 10, 20, 100, 5000, 80, 4000, 10, 3, 80, "base", 10000, 20000, 100,
-                            large_bytes, 50, large_bytes / 2);
+    mgr->add_compaction_log(1, 100, 30, 10, 20, 100, 5000, 80, 4000, 10, 3, 80, "base", 10000, 20000, 100, large_bytes,
+                            50, large_bytes / 2);
 
     auto logs = mgr->get_logs();
     ASSERT_EQ(1, logs.size());

@@ -299,10 +299,10 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_compaction_without_sst_all_null) 
     EXPECT_TRUE(chunk->get_column_by_index(14)->is_null(0));
 
     // All SST columns should be NULL when values are 0
-    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0));  // SST_INPUT_FILES
-    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0));  // SST_INPUT_BYTES
-    EXPECT_TRUE(chunk->get_column_by_index(19)->is_null(0));  // SST_OUTPUT_FILES
-    EXPECT_TRUE(chunk->get_column_by_index(20)->is_null(0));  // SST_OUTPUT_BYTES
+    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0)); // SST_INPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0)); // SST_INPUT_BYTES
+    EXPECT_TRUE(chunk->get_column_by_index(19)->is_null(0)); // SST_OUTPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(20)->is_null(0)); // SST_OUTPUT_BYTES
 }
 
 TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_column_values_exact) {
@@ -331,14 +331,14 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_column_values_exact) {
     ASSERT_EQ(1, chunk->num_rows());
 
     // Verify exact SST values
-    EXPECT_EQ(7, chunk->get_column_by_index(17)->get(0).get_int32());      // SST_INPUT_FILES
-    EXPECT_EQ(71680, chunk->get_column_by_index(18)->get(0).get_int64());  // SST_INPUT_BYTES
-    EXPECT_EQ(3, chunk->get_column_by_index(19)->get(0).get_int32());      // SST_OUTPUT_FILES
-    EXPECT_EQ(30720, chunk->get_column_by_index(20)->get(0).get_int64());  // SST_OUTPUT_BYTES
+    EXPECT_EQ(7, chunk->get_column_by_index(17)->get(0).get_int32());     // SST_INPUT_FILES
+    EXPECT_EQ(71680, chunk->get_column_by_index(18)->get(0).get_int64()); // SST_INPUT_BYTES
+    EXPECT_EQ(3, chunk->get_column_by_index(19)->get(0).get_int32());     // SST_OUTPUT_FILES
+    EXPECT_EQ(30720, chunk->get_column_by_index(20)->get(0).get_int64()); // SST_OUTPUT_BYTES
 
     // Also verify table_id and partition_id columns
-    EXPECT_EQ(11, chunk->get_column_by_index(5)->get(0).get_int64());  // TABLE_ID
-    EXPECT_EQ(21, chunk->get_column_by_index(6)->get(0).get_int64());  // PARTITION_ID
+    EXPECT_EQ(11, chunk->get_column_by_index(5)->get(0).get_int64()); // TABLE_ID
+    EXPECT_EQ(21, chunk->get_column_by_index(6)->get(0).get_int64()); // PARTITION_ID
 }
 
 TEST_F(SchemaBeTabletWriteLogScannerTest, test_load_with_sst_output_only) {
@@ -355,8 +355,8 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_load_with_sst_output_only) {
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
     // Load with SST output (eager PK index build) but no input
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "eager_pk_load", 1686000000000, 1686000010000,
-                      4, 32768);
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "eager_pk_load", 1686000000000, 1686000010000, 4,
+                      32768);
 
     EXPECT_OK(scanner.init(&params, &pool));
     EXPECT_OK(scanner.start(&state));
