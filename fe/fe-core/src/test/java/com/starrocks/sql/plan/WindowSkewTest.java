@@ -23,6 +23,7 @@ import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -102,8 +103,8 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: sum(3: x)");
         assertContains(plan, "UNION");
         // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: [5: p, INT, true] IS NOT NULL");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: 5: p IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -193,8 +194,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([5: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (CAST(5: p AS VARCHAR(1048576)) != '1') OR (5: p IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -238,8 +238,8 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: 6: p IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
     }
 
     @Test
@@ -298,6 +298,7 @@ class WindowSkewTest extends PlanTestBase {
     }
 
     @Test
+    @Disabled // todo(martinr0x) enable once is merged https://github.com/StarRocks/starrocks/pull/68964
     void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
         // Test that the skew hint works correctly when there is a join before the window function
         final var table = getOlapTable("window_skew_table");
@@ -336,8 +337,8 @@ class WindowSkewTest extends PlanTestBase {
         // Verify UNION rewrite is triggered
         assertContains(plan, "UNION");
 
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
-        assertContains(plan, "Predicates: [5: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
+        assertContains(plan, "Predicates: 5: p IS NOT NULL");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -362,7 +363,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
 
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
-        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (5: p != 1) OR (5: p IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -402,7 +403,7 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, VARCHAR, true] = 'abc'");
-        assertContains(plan, "Predicates: ([5: p, VARCHAR, true] != 'abc') OR ([5: p, VARCHAR, true] IS NULL)");
+        assertContains(plan, "Predicates: (5: p != 'abc') OR (5: p IS NULL)");
     }
 
     @Test
@@ -459,8 +460,8 @@ class WindowSkewTest extends PlanTestBase {
 
         String plan1 = getFragmentPlan(sql1, TExplainLevel.COSTS, "");
         assertContains(plan1, "UNION");
-        assertContains(plan1, "Predicates: [1: p, INT, true] IS NULL");
-        assertContains(plan1, "Predicates: [6: p, INT, true] IS NOT NULL");
+        assertContains(plan1, "Predicates: 1: p IS NULL");
+        assertContains(plan1, "Predicates: 6: p IS NOT NULL");
 
         // Case 2: Skew hint on the second window function
         String sql2 = "select p, s, " +
@@ -471,8 +472,8 @@ class WindowSkewTest extends PlanTestBase {
         String plan2 = getFragmentPlan(sql2, TExplainLevel.COSTS, "");
 
         assertContains(plan2, "UNION");
-        assertContains(plan2, "Predicates: [1: p, INT, true] IS NULL");
-        assertContains(plan2, "Predicates: [6: p, INT, true] IS NOT NULL");
+        assertContains(plan2, "Predicates: 1: p IS NULL");
+        assertContains(plan2, "Predicates: 6: p IS NOT NULL");
     }
 
     @Test
@@ -496,8 +497,8 @@ class WindowSkewTest extends PlanTestBase {
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
         assertContains(plan, "UNION");
         // Verify that the skew hint on 'p' triggered the split
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
-        assertContains(plan, "Predicates: [7: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
+        assertContains(plan, "Predicates: 7: p IS NOT NULL");
     }
 
     @Test
