@@ -23,6 +23,7 @@ set(EXEC_FILES
         ./connector/benchmark_connector_test.cpp
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
+        ./connector/hive_connector_dpp_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
