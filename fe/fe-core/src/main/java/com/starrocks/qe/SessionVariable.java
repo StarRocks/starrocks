@@ -1059,6 +1059,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSH_DOWN_DISTINCT = "cbo_push_down_distinct";
 
+    public static final String ENABLE_MULTI_CAST_FILTER_PUSH_DOWN = "enable_multi_cast_filter_push_down";
+
     public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
@@ -2217,6 +2219,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int globalLateMaterializeMaxFetchOps = 4;
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
     private int globalLateMaterializeMaxLimit = 4096;
+
+    @VarAttr(name = ENABLE_MULTI_CAST_FILTER_PUSH_DOWN)
+    private boolean enableMultiCastFilterPushDown = true;
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
@@ -5849,6 +5854,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBackPressureThrottleTimeUpperBound(long value) {
         this.backPressureThrottleTimeUpperBound = value;
+    }
+
+    public void setEnableMultiCastFilterPushDown(boolean enableMultiCastFilterPushDown) {
+        this.enableMultiCastFilterPushDown = enableMultiCastFilterPushDown;
+    }
+
+    public boolean isEnableMultiCastFilterPushDown() {
+        return enableMultiCastFilterPushDown;
     }
 
     public boolean isEnableDataCacheSharing() {

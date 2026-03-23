@@ -41,6 +41,7 @@ include "Types.thrift"
 include "Descriptors.thrift"
 include "Partitions.thrift"
 include "PlanNodes.thrift"
+include "RuntimeFilter.thrift"
 
 enum TDataSinkType {
     DATA_STREAM_SINK,
@@ -147,6 +148,12 @@ struct TDataStreamSink {
 
   // Specify limit on output columns
   7: optional i64 limit;
+
+  // Per-consumer conjuncts for MultiCast filter push-down
+  8: optional list<Exprs.TExpr> conjuncts
+
+  // Per-consumer runtime filters for MultiCast RF push-down
+  9: optional list<RuntimeFilter.TRuntimeFilterDescription> runtime_filters
 }
 
 struct TMultiCastDataStreamSink {

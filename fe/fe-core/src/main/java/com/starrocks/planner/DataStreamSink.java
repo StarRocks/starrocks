@@ -34,12 +34,16 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDataStreamSink;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Data sink that forwards data to an exchange node.
@@ -57,6 +61,12 @@ public class DataStreamSink extends DataSink {
 
     // Specify the limit on output columns, used on MultiCastSink
     private long limit;
+
+    // Per-consumer conjuncts for MultiCast filter push-down
+    private List<Expr> conjuncts;
+
+    // Per-consumer runtime filters for MultiCast RF push-down
+    private List<RuntimeFilterDescription> runtimeFilters;
 
     public DataStreamSink(PlanNodeId exchNodeId) {
         this.exchNodeId = exchNodeId;
@@ -91,6 +101,18 @@ public class DataStreamSink extends DataSink {
 
     public void setLimit(long limit) { this.limit = limit; }
 
+    public void setConjuncts(List<Expr> conjuncts) {
+        this.conjuncts = conjuncts;
+    }
+
+    public void setRuntimeFilters(List<RuntimeFilterDescription> runtimeFilters) {
+        this.runtimeFilters = runtimeFilters;
+    }
+
+    public List<RuntimeFilterDescription> getRuntimeFilters() {
+        return runtimeFilters;
+    }
+
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();
@@ -98,6 +120,15 @@ public class DataStreamSink extends DataSink {
         strBuilder.append(prefix + "  EXCHANGE ID: " + exchNodeId + "\n");
         if (outputPartition != null) {
             strBuilder.append(prefix + "  " + outputPartition.getExplainString(explainLevel));
+        }
+        if (conjuncts != null && !conjuncts.isEmpty()) {
+            strBuilder.append(prefix + "  CONJUNCTS: " +
+                    formatExprs(conjuncts, explainLevel) + "\n");
+        }
+        if (runtimeFilters != null && !runtimeFilters.isEmpty()) {
+            strBuilder.append(prefix + "  RUNTIME FILTERS: " +
+                    runtimeFilters.stream().map(rf -> "RF" + rf.getFilterId())
+                            .collect(Collectors.joining(", ")) + "\n");
         }
         return strBuilder.toString();
     }
@@ -110,7 +141,34 @@ public class DataStreamSink extends DataSink {
                     append(outputPartition.getExplainString(TExplainLevel.VERBOSE));
         }
         strBuilder.append(prefix).append("OutPut Exchange Id: ").append(exchNodeId).append("\n");
+        if (conjuncts != null && !conjuncts.isEmpty()) {
+            strBuilder.append(prefix).append("Conjuncts: ").
+                    append(formatExprs(conjuncts, TExplainLevel.VERBOSE)).append("\n");
+        }
+        if (runtimeFilters != null && !runtimeFilters.isEmpty()) {
+            strBuilder.append(prefix).append("RuntimeFilters: ").
+                    append(runtimeFilters.stream().map(rf -> "RF" + rf.getFilterId())
+                            .collect(Collectors.joining(", "))).append("\n");
+        }
         return strBuilder.toString();
+    }
+
+    private static String formatExprs(List<? extends Expr> exprs, TExplainLevel level) {
+        if (exprs == null) {
+            return "";
+        }
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < exprs.size(); ++i) {
+            if (i > 0) {
+                output.append(", ");
+            }
+            if (level.equals(TExplainLevel.NORMAL)) {
+                output.append(ExprToSql.toSql(exprs.get(i)));
+            } else {
+                output.append(ExprToSql.explain(exprs.get(i)));
+            }
+        }
+        return output.toString();
     }
 
     @Override
@@ -125,6 +183,13 @@ public class DataStreamSink extends DataSink {
         }
         if (limit != -1) {
             tStreamSink.setLimit(limit);
+        }
+        if (conjuncts != null && !conjuncts.isEmpty()) {
+            tStreamSink.setConjuncts(ExprToThrift.treesToThrift(conjuncts));
+        }
+        if (runtimeFilters != null && !runtimeFilters.isEmpty()) {
+            tStreamSink.setRuntime_filters(
+                    runtimeFilters.stream().map(RuntimeFilterDescription::toThrift).collect(Collectors.toList()));
         }
         result.setStream_sink(tStreamSink);
         return result;

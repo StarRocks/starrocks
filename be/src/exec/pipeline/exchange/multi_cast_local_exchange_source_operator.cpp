@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
 
+#include "exprs/chunk_predicate_evaluator.h"
+
 namespace starrocks::pipeline {
 
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
@@ -38,12 +40,58 @@ StatusOr<ChunkPtr> MultiCastLocalExchangeSourceOperator::pull_chunk(RuntimeState
     auto ret = _exchanger->pull_chunk(state, _mcast_consumer_index);
     if (ret.status().is_end_of_file()) {
         (void)set_finishing(state);
+        return ret;
     }
+    RETURN_IF_ERROR(ret.status());
+
+    bool has_conjuncts = !_conjunct_ctxs.empty();
+    auto* bloom_filters = runtime_bloom_filters();
+    bool has_rf = bloom_filters != nullptr && !bloom_filters->descriptors().empty();
+
+    if (has_conjuncts || has_rf) {
+        ChunkPtr& chunk = ret.value();
+        if (chunk == nullptr || chunk->num_rows() == 0) {
+            return ret;
+        }
+        // the chunk is shared across multicast consumers
+        auto owned = chunk->clone_unique();
+        if (has_conjuncts) {
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, owned.get()));
+        }
+        if (has_rf) {
+            eval_runtime_bloom_filters(owned.get());
+        }
+        return ChunkPtr(owned.release());
+    }
+
     return ret;
 }
 
 bool MultiCastLocalExchangeSourceOperator::has_output() const {
     return _exchanger->can_pull_chunk(_mcast_consumer_index);
+}
+
+Status MultiCastLocalExchangeSourceOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperatorFactory::prepare(state));
+    for (auto* ctx : _conjunct_ctxs) {
+        RETURN_IF_ERROR(ctx->prepare(state));
+        RETURN_IF_ERROR(ctx->open(state));
+    }
+    return Status::OK();
+}
+
+void MultiCastLocalExchangeSourceOperatorFactory::close(RuntimeState* state) {
+    for (auto* ctx : _conjunct_ctxs) {
+        ctx->close(state);
+    }
+    SourceOperatorFactory::close(state);
+}
+
+void MultiCastLocalExchangeSourceOperatorFactory::set_runtime_filter_collector(
+        RuntimeFilterProbeCollector* collector) {
+    auto rc_collector = std::make_shared<RefCountedRuntimeFilterProbeCollector>(
+            1, std::move(*collector));
+    _runtime_filter_collector = std::move(rc_collector);
 }
 
 } // namespace starrocks::pipeline

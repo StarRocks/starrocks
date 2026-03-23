@@ -92,6 +92,8 @@ public class ExchangeNode extends PlanNode {
     private List<Integer> receiveColumns;
 
     private boolean useParallelMerge = true;
+
+    private List<Expr> multiCastConjuncts;
     /**
      * Create ExchangeNode that consumes output of inputNode.
      * An ExchangeNode doesn't have an input node as a child, which is why we
@@ -167,6 +169,14 @@ public class ExchangeNode extends PlanNode {
 
     public boolean isUseParallelMerge() {
         return useParallelMerge;
+    }
+
+    public void setMultiCastConjuncts(List<Expr> conjuncts) {
+        this.multiCastConjuncts = conjuncts;
+    }
+
+    public List<Expr> getMultiCastConjuncts() {
+        return multiCastConjuncts;
     }
 
     @Override
