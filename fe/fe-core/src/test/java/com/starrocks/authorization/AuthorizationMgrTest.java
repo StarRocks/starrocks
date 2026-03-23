@@ -161,10 +161,10 @@ public class AuthorizationMgrTest {
 
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
         sql = "grant ALTER on materialized view db3.mv1 to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkTableAction(
@@ -180,10 +180,10 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
         sql = "revoke ALTER on materialized view db3.mv1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
@@ -198,7 +198,7 @@ public class AuthorizationMgrTest {
         sql = "grant select, insert, delete on table db.tbl1 to test_user with grant option";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assertions.assertTrue(grantStmt.isWithGrantOption());
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkTableAction(
@@ -216,7 +216,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
@@ -234,7 +234,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "revoke ALL on table db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -253,7 +253,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "grant alter on view db.view1 to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkAnyActionOnOrInDb(
@@ -266,7 +266,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         sql = "revoke ALL on view db.view1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
@@ -315,7 +315,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_1,
@@ -327,7 +327,7 @@ public class AuthorizationMgrTest {
         sql = "revoke select on db.tbl1 from test_user";
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, ctx);
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
@@ -721,7 +721,7 @@ public class AuthorizationMgrTest {
         for (List<String> sqlPair : sqls) {
             setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
             GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(0), ctx);
-            manager.grant(grantStmt);
+            manager.grant(grantStmt, ctx);
             setCurrentUserAndRoles(ctx, testUser);
             ;
             Authorizer.checkTableAction(
@@ -729,7 +729,7 @@ public class AuthorizationMgrTest {
 
             setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
             RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(1), ctx);
-            manager.revoke(revokeStmt);
+            manager.revoke(revokeStmt, ctx);
             setCurrentUserAndRoles(ctx, testUser);
             ;
             Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
@@ -743,7 +743,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT create table ON ALL DATABASES TO test_user", ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -753,7 +753,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE create table ON ALL DATABASES FROM test_user", ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         ;
@@ -768,7 +768,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT IMPERSONATE ON ALL USERS TO test_user", ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
@@ -776,7 +776,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE IMPERSONATE ON ALL USERS FROM test_user", ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class,
@@ -794,7 +794,7 @@ public class AuthorizationMgrTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT IMPERSONATE ON USER root, test_user TO test_user", ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
@@ -802,7 +802,7 @@ public class AuthorizationMgrTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE IMPERSONATE ON USER root FROM test_user", ctx);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         setCurrentUserAndRoles(ctx, testUser);
         Assertions.assertThrows(AccessDeniedException.class,
@@ -819,7 +819,7 @@ public class AuthorizationMgrTest {
         ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
         String sql = "grant select on db.tbl1 to user_with_table_priv";
         GrantPrivilegeStmt grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.grant(grantTableStmt);
+        manager.grant(grantTableStmt, ctx);
         UserIdentity userWithTablePriv = UserIdentity.createAnalyzedUserIdentWithIp("user_with_table_priv", "%");
 
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -827,7 +827,7 @@ public class AuthorizationMgrTest {
         ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createUserStmt);
         sql = "grant drop on DATABASE db to user_with_db_priv";
         grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        manager.grant(grantTableStmt);
+        manager.grant(grantTableStmt, ctx);
         UserIdentity userWithDbPriv = UserIdentity.createAnalyzedUserIdentWithIp("user_with_db_priv", "%");
 
 
@@ -1624,7 +1624,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         String grantSql = "grant REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
-        manager.grant(grantStmt);
+        manager.grant(grantStmt, ctx);
 
         // verify REFRESH privilege
         setCurrentUserAndRoles(ctx, testUser);
@@ -1634,7 +1634,7 @@ public class AuthorizationMgrTest {
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         String revokeSql = "revoke REFRESH on table " + DB_NAME + "." + TABLE_NAME_1 + " from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
-        manager.revoke(revokeStmt);
+        manager.revoke(revokeStmt, ctx);
 
         // verify no REFRESH privilege
         setCurrentUserAndRoles(ctx, testUser);
@@ -1812,7 +1812,7 @@ public class AuthorizationMgrTest {
 
         String sql = "GRANT OPERATE ON SYSTEM TO USER user_for_system";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.grant(grantStmt);
+        masterManager.grant(grantStmt, ctx);
 
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getImageWriter());

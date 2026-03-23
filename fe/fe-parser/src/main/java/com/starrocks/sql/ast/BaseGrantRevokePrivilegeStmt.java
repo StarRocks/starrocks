@@ -15,14 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PEntryObject;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-
-import static com.starrocks.common.util.Util.normalizeNames;
 
 public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected GrantRevokeClause clause;
@@ -33,19 +28,6 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     protected String objectTypeUnResolved;
     protected List<String> privilegeTypeUnResolved;
 
-    // the following fields is set by analyzer, for new RBAC privilege framework
-    private ObjectType objectType;
-    private List<PrivilegeType> privilegeTypes;
-    private List<PEntryObject> objectList;
-
-    public BaseGrantRevokePrivilegeStmt(
-            List<String> privilegeTypeUnResolved,
-            String objectTypeUnResolved,
-            GrantRevokeClause clause,
-            GrantRevokePrivilegeObjects objects) {
-        this(privilegeTypeUnResolved, objectTypeUnResolved, clause, objects, NodePosition.ZERO);
-    }
-
     public BaseGrantRevokePrivilegeStmt(
             List<String> privilegeTypeUnResolved,
             String objectTypeUnResolved,
@@ -55,7 +37,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         this.privilegeTypeUnResolved = privilegeTypeUnResolved;
         this.objectTypeUnResolved = objectTypeUnResolved;
         this.clause = clause;
-        this.objectsUnResolved = normalizeNames(objectTypeUnResolved, objectsUnResolved);
+        this.objectsUnResolved = objectsUnResolved;
         this.role = clause.getRoleName();
     }
 
@@ -110,32 +92,8 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privilegeTypeUnResolved;
     }
 
-    public ObjectType getObjectType() {
-        return objectType;
-    }
-
-    public void setObjectType(ObjectType objectType) {
-        this.objectType = objectType;
-    }
-
-    public List<PrivilegeType> getPrivilegeTypes() {
-        return privilegeTypes;
-    }
-
-    public void setPrivilegeTypes(List<PrivilegeType> privilegeTypes) {
-        this.privilegeTypes = privilegeTypes;
-    }
-
-    public List<PEntryObject> getObjectList() {
-        return objectList;
-    }
-
-    public void setObjectList(List<PEntryObject> objectList) {
-        this.objectList = objectList;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitGrantRevokePrivilegeStatement(this, context);
+        return visitor.visitGrantRevokePrivilegeStatement(this, context);
     }
 }

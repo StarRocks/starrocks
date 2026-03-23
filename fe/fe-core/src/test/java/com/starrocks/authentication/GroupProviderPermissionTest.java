@@ -123,7 +123,7 @@ public class GroupProviderPermissionTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO ROLE security_role",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
 
         // Grant the role to security_user
         authorizationMgr.grantRole(new com.starrocks.sql.ast.GrantRoleStmt(
@@ -530,7 +530,7 @@ public class GroupProviderPermissionTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO USER security_user",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
 
         // Verify user has SECURITY privilege
         Assertions.assertDoesNotThrow(() -> {
@@ -541,7 +541,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM USER security_user",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Verify user no longer has SECURITY privilege
         Assertions.assertThrows(AccessDeniedException.class, () -> {
@@ -581,7 +581,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM ROLE security_role",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Verify user no longer has SECURITY privilege
         Assertions.assertThrows(AccessDeniedException.class, () -> {
@@ -621,7 +621,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM ROLE security_role",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Verify user no longer has SECURITY privilege
         Assertions.assertThrows(AccessDeniedException.class, () -> {
@@ -647,7 +647,7 @@ public class GroupProviderPermissionTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO USER comprehensive_user",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
         
         // Update ConnectContext with the user identity
         testUserCtx.setCurrentUserIdentity(new UserIdentity("comprehensive_user", "%"));
@@ -680,7 +680,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM USER comprehensive_user",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Test all Group Provider operations should fail after revoke
         for (String sql : operations) {
@@ -704,7 +704,7 @@ public class GroupProviderPermissionTest {
         
         // This should not throw an exception, but should be handled gracefully
         Assertions.assertDoesNotThrow(() -> {
-            authorizationMgr.revoke(revokeStmt);
+            authorizationMgr.revoke(revokeStmt, new ConnectContext());
         }, "Revoking non-existent privilege should be handled gracefully");
 
         // Verify user still doesn't have SECURITY privilege
@@ -731,7 +731,7 @@ public class GroupProviderPermissionTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT SECURITY ON SYSTEM TO USER type_test_user",
                 new ConnectContext());
-        authorizationMgr.grant(grantStmt);
+        authorizationMgr.grant(grantStmt, new ConnectContext());
         
         // Update ConnectContext with the user identity
         testUserCtx.setCurrentUserIdentity(new UserIdentity("type_test_user", "%"));
@@ -756,7 +756,7 @@ public class GroupProviderPermissionTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE SECURITY ON SYSTEM FROM USER type_test_user",
                 new ConnectContext());
-        authorizationMgr.revoke(revokeStmt);
+        authorizationMgr.revoke(revokeStmt, new ConnectContext());
 
         // Test all Group Provider types should fail after revoke
         for (String type : providerTypes) {
