@@ -851,9 +851,9 @@ public class ShowExecutorSimpleTest {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", VarcharType.VARCHAR);
-                Column columnYear = new Column("year", IntegerType.INT);
-                Column columnDt = new Column("dt", IntegerType.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR, true);
+                Column columnYear = new Column("year", IntegerType.INT, true);
+                Column columnDt = new Column("dt", IntegerType.INT, true);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -906,9 +906,9 @@ public class ShowExecutorSimpleTest {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", VarcharType.VARCHAR);
-                Column columnYear = new Column("year", IntegerType.INT);
-                Column columnDt = new Column("dt", IntegerType.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR, true);
+                Column columnYear = new Column("year", IntegerType.INT, true);
+                Column columnDt = new Column("dt", IntegerType.INT, true);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
