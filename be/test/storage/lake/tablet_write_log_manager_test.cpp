@@ -263,4 +263,167 @@ TEST_F(TabletWriteLogManagerTest, test_empty_buffer) {
     EXPECT_EQ(0, mgr->size());
 }
 
+TEST_F(TabletWriteLogManagerTest, test_entry_default_values) {
+    TabletWriteLogEntry entry;
+    EXPECT_EQ(0, entry.begin_time);
+    EXPECT_EQ(0, entry.finish_time);
+    EXPECT_EQ(0, entry.backend_id);
+    EXPECT_EQ(0, entry.txn_id);
+    EXPECT_EQ(0, entry.tablet_id);
+    EXPECT_EQ(0, entry.table_id);
+    EXPECT_EQ(0, entry.partition_id);
+    EXPECT_EQ(LogType::LOAD, entry.log_type);
+    EXPECT_EQ(0, entry.input_rows);
+    EXPECT_EQ(0, entry.input_bytes);
+    EXPECT_EQ(0, entry.output_rows);
+    EXPECT_EQ(0, entry.output_bytes);
+    EXPECT_EQ(0, entry.input_segments);
+    EXPECT_EQ(0, entry.output_segments);
+    EXPECT_TRUE(entry.label.empty());
+    EXPECT_EQ(0, entry.compaction_score);
+    EXPECT_TRUE(entry.compaction_type.empty());
+    EXPECT_EQ(0, entry.sst_input_files);
+    EXPECT_EQ(0, entry.sst_input_bytes);
+    EXPECT_EQ(0, entry.sst_output_files);
+    EXPECT_EQ(0, entry.sst_output_bytes);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_publish_log_fields_zeroed) {
+    auto mgr = TabletWriteLogManager::instance();
+    mgr->add_publish_log(1, 100, 30, 10, 20, 5000, 6000, 5, 40960);
+
+    auto logs = mgr->get_logs();
+    ASSERT_EQ(1, logs.size());
+    auto& log = logs[0];
+    // Publish logs should have zero values for data fields
+    EXPECT_EQ(0, log.input_rows);
+    EXPECT_EQ(0, log.input_bytes);
+    EXPECT_EQ(0, log.output_rows);
+    EXPECT_EQ(0, log.output_bytes);
+    EXPECT_EQ(0, log.input_segments);
+    EXPECT_EQ(0, log.output_segments);
+    EXPECT_TRUE(log.label.empty());
+    EXPECT_EQ(0, log.compaction_score);
+    EXPECT_TRUE(log.compaction_type.empty());
+    EXPECT_EQ(0, log.sst_input_files);
+    EXPECT_EQ(0, log.sst_input_bytes);
+    // But SST output should be set
+    EXPECT_EQ(5, log.sst_output_files);
+    EXPECT_EQ(40960, log.sst_output_bytes);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_load_log_sst_input_always_zero) {
+    auto mgr = TabletWriteLogManager::instance();
+    // Load logs should always have sst_input = 0 regardless of params
+    mgr->add_load_log(1, 100, 200, 300, 400, 10, 1000, 10, 2000, 5, "label1", 10000, 20000, 3, 12288);
+
+    auto logs = mgr->get_logs();
+    ASSERT_EQ(1, logs.size());
+    auto& log = logs[0];
+    EXPECT_EQ(0, log.sst_input_files);
+    EXPECT_EQ(0, log.sst_input_bytes);
+    EXPECT_EQ(3, log.sst_output_files);
+    EXPECT_EQ(12288, log.sst_output_bytes);
+    // Load-specific fields
+    EXPECT_EQ("label1", log.label);
+    EXPECT_EQ(0, log.compaction_score);
+    EXPECT_TRUE(log.compaction_type.empty());
+    EXPECT_EQ(0, log.input_segments);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_compaction_log_all_fields) {
+    auto mgr = TabletWriteLogManager::instance();
+    mgr->add_compaction_log(2, 300, 40, 15, 25, 500, 50000, 400, 40000, 20, 8, 95, "cumulative", 100000, 200000, 10,
+                            102400, 5, 51200);
+
+    auto logs = mgr->get_logs();
+    ASSERT_EQ(1, logs.size());
+    auto& log = logs[0];
+    EXPECT_EQ(2, log.backend_id);
+    EXPECT_EQ(300, log.txn_id);
+    EXPECT_EQ(40, log.tablet_id);
+    EXPECT_EQ(15, log.table_id);
+    EXPECT_EQ(25, log.partition_id);
+    EXPECT_EQ(LogType::COMPACTION, log.log_type);
+    EXPECT_EQ(500, log.input_rows);
+    EXPECT_EQ(50000, log.input_bytes);
+    EXPECT_EQ(400, log.output_rows);
+    EXPECT_EQ(40000, log.output_bytes);
+    EXPECT_EQ(20, log.input_segments);
+    EXPECT_EQ(8, log.output_segments);
+    EXPECT_EQ(95, log.compaction_score);
+    EXPECT_EQ("cumulative", log.compaction_type);
+    EXPECT_TRUE(log.label.empty());
+    EXPECT_EQ(100000, log.begin_time);
+    EXPECT_EQ(200000, log.finish_time);
+    EXPECT_EQ(10, log.sst_input_files);
+    EXPECT_EQ(102400, log.sst_input_bytes);
+    EXPECT_EQ(5, log.sst_output_files);
+    EXPECT_EQ(51200, log.sst_output_bytes);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_filter_negative_values_match_all) {
+    auto mgr = TabletWriteLogManager::instance();
+    mgr->add_load_log(1, 1, 30, 10, 20, 10, 1000, 10, 2000, 5, "l1", 10000, 20000);
+    mgr->add_compaction_log(1, 2, 31, 11, 21, 10, 1000, 10, 2000, 5, 5, 100, "base", 30000, 40000);
+    mgr->add_publish_log(1, 3, 32, 12, 22, 50000, 60000, 3, 12288);
+
+    // Default filters (-1) should return all logs
+    auto logs = mgr->get_logs(-1, -1, -1, -1, 0, 0);
+    ASSERT_EQ(3, logs.size());
+
+    // Filter with table_id=0 should also return all (0 is not > 0)
+    logs = mgr->get_logs(0, 0, 0, 0, 0, 0);
+    ASSERT_EQ(3, logs.size());
+}
+
+TEST_F(TabletWriteLogManagerTest, test_cleanup_preserves_newer_logs) {
+    auto mgr = TabletWriteLogManager::instance();
+    mgr->add_load_log(1, 1, 30, 10, 20, 10, 1000, 10, 2000, 5, "l1", 10000, 10000);
+    mgr->add_compaction_log(1, 2, 31, 11, 21, 10, 1000, 10, 2000, 5, 5, 100, "base", 20000, 20000);
+    mgr->add_publish_log(1, 3, 32, 12, 22, 30000, 30000, 3, 12288);
+
+    // Cleanup logs with finish_time < 25000 (removes first two)
+    mgr->cleanup_old_logs(25000);
+    ASSERT_EQ(1, mgr->size());
+    auto logs = mgr->get_logs();
+    EXPECT_EQ(3, logs[0].txn_id);
+    EXPECT_EQ(LogType::PUBLISH, logs[0].log_type);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_singleton_instance) {
+    auto* mgr1 = TabletWriteLogManager::instance();
+    auto* mgr2 = TabletWriteLogManager::instance();
+    EXPECT_EQ(mgr1, mgr2);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_large_sst_values) {
+    auto mgr = TabletWriteLogManager::instance();
+    // Test with large SST byte values (multi-GB)
+    int64_t large_bytes = 10LL * 1024 * 1024 * 1024; // 10 GB
+    mgr->add_compaction_log(1, 100, 30, 10, 20, 100, 5000, 80, 4000, 10, 3, 80, "base", 10000, 20000, 100,
+                            large_bytes, 50, large_bytes / 2);
+
+    auto logs = mgr->get_logs();
+    ASSERT_EQ(1, logs.size());
+    EXPECT_EQ(100, logs[0].sst_input_files);
+    EXPECT_EQ(large_bytes, logs[0].sst_input_bytes);
+    EXPECT_EQ(50, logs[0].sst_output_files);
+    EXPECT_EQ(large_bytes / 2, logs[0].sst_output_bytes);
+}
+
+TEST_F(TabletWriteLogManagerTest, test_time_range_filter_both_bounds) {
+    auto mgr = TabletWriteLogManager::instance();
+    mgr->add_load_log(1, 1, 30, 10, 20, 10, 1000, 10, 2000, 5, "l1", 10000, 10000);
+    mgr->add_load_log(1, 2, 30, 10, 20, 10, 1000, 10, 2000, 5, "l2", 20000, 20000);
+    mgr->add_load_log(1, 3, 30, 10, 20, 10, 1000, 10, 2000, 5, "l3", 30000, 30000);
+    mgr->add_load_log(1, 4, 30, 10, 20, 10, 1000, 10, 2000, 5, "l4", 40000, 40000);
+
+    // Both start and end time filter
+    auto logs = mgr->get_logs(0, 0, 0, 0, 20000, 30000);
+    ASSERT_EQ(2, logs.size());
+    EXPECT_EQ(2, logs[0].txn_id);
+    EXPECT_EQ(3, logs[1].txn_id);
+}
+
 } // namespace starrocks::lake
