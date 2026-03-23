@@ -427,11 +427,87 @@ public class InsertAnalyzer {
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+<<<<<<< HEAD
             // get target column names
             List<String> targetColumnNames = insertStmt.getTargetColumnNames();
             if (targetColumnNames == null) {
                 targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
                         .map(Column::getName).collect(Collectors.toList());
+=======
+            Locker locker = new Locker(session.getQueryId());
+            locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
+            try {
+                // get target column names
+                List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+                if (targetColumnNames == null) {
+                    targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                            .map(Column::getName).collect(Collectors.toList());
+                }
+
+                // get select column names, null if it is not slot ref column
+                List<String> selectColumnNames = Lists.newArrayList();
+                List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+                for (SelectListItem item : listItems) {
+                    if (item.isStar()) {
+                        selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
+                                .collect(Collectors.toList()));
+                        continue;
+                    }
+
+                    Expr expr = item.getExpr();
+                    if (expr instanceof SlotRef) {
+                        selectColumnNames.add(((SlotRef) expr).getColumnName());
+                        continue;
+                    }
+
+                    selectColumnNames.add(null);
+                }
+
+                if (targetColumnNames.size() != selectColumnNames.size()) {
+                    return;
+                }
+
+                // update files table schema according to target table schema
+                Map<String, Column> targetTableColumns = targetTable.getNameToColumn();
+                Map<String, Column> newFileTableColumns = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+                newFileTableColumns.putAll(fileTable.getNameToColumn());
+                for (int i = 0; i < selectColumnNames.size(); ++i) {
+                    String selectColumnName = selectColumnNames.get(i);
+                    // if select column is a field of struct and the name is 'struct_name.field_name',
+                    // it will be not in newFileTableColumns.
+                    if (selectColumnName == null || !newFileTableColumns.containsKey(selectColumnName)) {
+                        continue;
+                    }
+
+                    String targetColumnName = targetColumnNames.get(i);
+                    if (!targetTableColumns.containsKey(targetColumnName)) {
+                        continue;
+                    }
+
+                    Column oldCol = newFileTableColumns.get(selectColumnName);
+                    Column newCol = targetTableColumns.get(targetColumnName).deepCopy();
+                    // bad case: complex types may fail to convert in scanner.
+                    // such as parquet json -> array<varchar>
+                    if (oldCol.getType().isComplexType() || newCol.getType().isComplexType()) {
+                        continue;
+                    }
+
+                    // file table function table should use original column name because BE is case-sensitive when reading columns.
+                    String origColumnName = oldCol.getName();
+                    newCol.setName(origColumnName);
+                    // FileScanNode will set all slot nullable, it checks null in OlapTableSink if dest table column is not null.
+                    // Currently, the nullable property in files() table is always true.
+                    // So we keep the old column nullable property.
+                    newCol.setIsAllowNull(oldCol.isAllowNull());
+                    newFileTableColumns.put(origColumnName, newCol);
+                }
+
+                List<Column> newFileTableSchema = fileTable.getFullSchema().stream()
+                        .map(col -> newFileTableColumns.get(col.getName())).collect(Collectors.toList());
+                fileTable.setNewFullSchema(newFileTableSchema);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
+>>>>>>> 4c9172a699 ([BugFix] Fix NOT NULL constraint incorrectly pushed down to FILES() schema (#70621))
             }
 
             // get select column names, null if it is not slot ref column
