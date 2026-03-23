@@ -288,7 +288,8 @@ public abstract class ScanNode extends PlanNode {
     protected void setConnectorCatalogType(TPlanNode msg) {
         Table table = desc.getTable();
         if (table != null) {
-            TConnectorScanNode connectorScanNode = new TConnectorScanNode();
+            TConnectorScanNode connectorScanNode = msg.isSetConnector_scan_node()
+                    ? msg.getConnector_scan_node() : new TConnectorScanNode();
             connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
             msg.setConnector_scan_node(connectorScanNode);
         }

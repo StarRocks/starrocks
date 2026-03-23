@@ -19,7 +19,16 @@ namespace starrocks {
 CatalogScanMetrics::CatalogScanMetrics(MetricRegistry* registry) : _registry(registry) {}
 
 CatalogScanMetrics::SingleCatalogMetrics* CatalogScanMetrics::_get_or_create_metrics(const std::string& catalog_type) {
-    std::lock_guard<std::mutex> lock(_mutex);
+    {
+        std::shared_lock lock(_mutex);
+        auto it = _metrics_map.find(catalog_type);
+        if (it != _metrics_map.end()) {
+            return it->second.get();
+        }
+    }
+
+    std::unique_lock lock(_mutex);
+    // Double-check after acquiring exclusive lock.
     auto it = _metrics_map.find(catalog_type);
     if (it != _metrics_map.end()) {
         return it->second.get();

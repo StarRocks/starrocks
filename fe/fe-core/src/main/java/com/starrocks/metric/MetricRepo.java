@@ -287,11 +287,16 @@ public final class MetricRepo {
     public static Histogram HISTO_QUERY_LATENCY;
 
     // Per-catalog-type query latency histograms
-    private static final Map<String, Histogram> HISTO_CATALOG_QUERY_LATENCY_MAP = new ConcurrentHashMap<>();
+    private static final Map<String, HistogramMetric> HISTO_CATALOG_QUERY_LATENCY_MAP = new ConcurrentHashMap<>();
 
-    public static Histogram getOrCreateCatalogQueryLatencyHistogram(String catalogType) {
-        return HISTO_CATALOG_QUERY_LATENCY_MAP.computeIfAbsent(catalogType, k ->
-                METRIC_REGISTER.histogram(MetricRegistry.name("catalog_query", "latency", "ms", catalogType)));
+    public static HistogramMetric getOrCreateCatalogQueryLatencyHistogram(String catalogType) {
+        return HISTO_CATALOG_QUERY_LATENCY_MAP.computeIfAbsent(catalogType, k -> {
+            HistogramMetric histogram = new HistogramMetric("catalog_query_latency_ms");
+            histogram.addLabel(new MetricLabel("catalog_type", catalogType));
+            METRIC_REGISTER.register(
+                    MetricRegistry.name("catalog_query", "latency", "ms", catalogType), histogram);
+            return histogram;
+        });
     }
 
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;

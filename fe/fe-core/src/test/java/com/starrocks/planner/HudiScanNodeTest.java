@@ -84,6 +84,7 @@ public class HudiScanNodeTest {
         }};
     }
 
+    @Test
     public void testToThriftSetsConnectorCatalogType(@Mocked GlobalStateMgr globalStateMgr,
                                                      @Mocked CatalogConnector connector,
                                                      @Mocked HudiTable table) {

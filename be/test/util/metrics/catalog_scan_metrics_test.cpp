@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+#include <vector>
+
 #include "base/metrics.h"
 
 namespace starrocks {
@@ -104,6 +107,60 @@ TEST_F(CatalogScanMetricsTest, MultipleCatalogTypes) {
     auto* jdbc_bytes = _registry->get_metric("catalog_query_scan_bytes", jdbc_labels);
     ASSERT_NE(nullptr, jdbc_bytes);
     ASSERT_EQ("300", jdbc_bytes->to_string());
+}
+
+// Verify that concurrent updates from multiple threads produce the correct total,
+// and that _get_or_create_metrics handles concurrent first-creation safely (shared_mutex
+// double-check pattern: one thread wins the unique_lock and creates the entry, the other
+// finds it on the double-check and returns without recreating it).
+TEST_F(CatalogScanMetricsTest, ConcurrentUpdatesAreThreadSafe) {
+    constexpr int num_threads = 8;
+    constexpr int increments_per_thread = 100;
+
+    std::vector<std::thread> threads;
+    threads.reserve(num_threads);
+    for (int i = 0; i < num_threads; ++i) {
+        threads.emplace_back([this]() {
+            for (int j = 0; j < increments_per_thread; ++j) {
+                // All threads race to create "concurrent_type" on the first call,
+                // exercising the double-check path in _get_or_create_metrics.
+                _metrics->update_scan_bytes("concurrent_type", 1);
+                _metrics->update_scan_rows("concurrent_type", 1);
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    const int64_t expected = num_threads * increments_per_thread;
+    MetricLabels labels;
+    labels.add("catalog_type", "concurrent_type");
+
+    auto* bytes = _registry->get_metric("catalog_query_scan_bytes", labels);
+    ASSERT_NE(nullptr, bytes);
+    ASSERT_EQ(std::to_string(expected), bytes->to_string());
+
+    auto* rows = _registry->get_metric("catalog_query_scan_rows", labels);
+    ASSERT_NE(nullptr, rows);
+    ASSERT_EQ(std::to_string(expected), rows->to_string());
+}
+
+// Verify that the fast read-path (shared_lock hit) works correctly after the metric
+// is already created: subsequent calls should find the entry without acquiring unique_lock.
+TEST_F(CatalogScanMetricsTest, SubsequentCallsUseSharedLockFastPath) {
+    // First call: creates the entry (unique_lock path).
+    _metrics->update_scan_bytes("fastpath_type", 10);
+    // Remaining calls: all hit the shared_lock fast path.
+    for (int i = 0; i < 50; ++i) {
+        _metrics->update_scan_bytes("fastpath_type", 1);
+    }
+
+    MetricLabels labels;
+    labels.add("catalog_type", "fastpath_type");
+    auto* bytes = _registry->get_metric("catalog_query_scan_bytes", labels);
+    ASSERT_NE(nullptr, bytes);
+    ASSERT_EQ("60", bytes->to_string());
 }
 
 } // namespace starrocks

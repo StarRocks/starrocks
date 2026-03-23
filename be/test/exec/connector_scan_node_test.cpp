@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "exec/exec_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
@@ -399,6 +400,205 @@ TEST_F(ConnectorScanNodeTest, test_catalog_type_empty_without_fe_value) {
     auto tnode = create_tplan_node_hive();
     auto scan_node = std::make_shared<starrocks::ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);
     ASSERT_TRUE(scan_node->catalog_type().empty());
+}
+
+// ExecFactory tests: verify make_connector_scan_node correctly copies catalog_type
+// and each scan node case routes to the right connector.
+
+// HDFS_SCAN_NODE with pre-set catalog_type: covers make_connector_scan_node copy path
+// (exec_factory.cpp lines 163, 167) and the HDFS case (line 275).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_hdfs_preserves_catalog_type) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::HDFS_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::HIVE;
+    csn.__set_catalog_type("hive");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("hive", scan->catalog_type());
+}
+
+// LAKE_SCAN_NODE without catalog_type: BE should default to "default"
+// (exec_factory.cpp lines 311-314).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_lake_defaults_to_default_catalog_type) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    // No connector_scan_node set — BE must default catalog_type to "default".
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
+}
+
+// LAKE_SCAN_NODE with pre-set catalog_type from FE: BE must not overwrite it.
+// (exec_factory.cpp line 311, 312 branch not taken since catalog_type already set).
+TEST_F(ConnectorScanNodeTest, test_exec_factory_lake_preserves_catalog_type_when_fe_sets_it) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::LAKE;
+    csn.__set_catalog_type("default");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
+}
+
+// JDBC_SCAN_NODE: covers exec_factory.cpp line 305.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_jdbc_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::JDBC_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::JDBC;
+    csn.__set_catalog_type("jdbc");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("jdbc", scan->catalog_type());
+}
+
+// ES_HTTP_SCAN_NODE: covers exec_factory.cpp line 293.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_es_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::ES_HTTP_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::ES;
+    csn.__set_catalog_type("elasticsearch");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("elasticsearch", scan->catalog_type());
+}
+
+// MYSQL_SCAN_NODE: covers exec_factory.cpp line 281.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_mysql_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::MYSQL_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::MYSQL;
+    csn.__set_catalog_type("mysql");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("mysql", scan->catalog_type());
+}
+
+// BENCHMARK_SCAN_NODE: covers exec_factory.cpp line 287.
+TEST_F(ConnectorScanNodeTest, test_exec_factory_benchmark_scan_node) {
+    auto runtime_state = create_runtime_state();
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    auto* descs = create_table_desc(runtime_state.get(), types);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::BENCHMARK_SCAN_NODE);
+    std::vector<TTupleId> tuple_ids{0};
+    tnode.__set_row_tuples(tuple_ids);
+    tnode.__set_limit(-1);
+    TConnectorScanNode csn;
+    csn.connector_name = connector::Connector::BENCHMARK;
+    csn.__set_catalog_type("default");
+    tnode.__set_connector_scan_node(csn);
+
+    TPlan plan;
+    plan.nodes.push_back(tnode);
+
+    ExecNode* root = nullptr;
+    ASSERT_OK(ExecFactory::create_tree(runtime_state.get(), runtime_state->obj_pool(), plan, *descs, &root));
+    ASSERT_NE(nullptr, root);
+    auto* scan = static_cast<ConnectorScanNode*>(root);
+    ASSERT_EQ("default", scan->catalog_type());
 }
 
 } // namespace starrocks

@@ -200,7 +200,7 @@ public class DeltaLakeScanNodeTest {
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
         scanNode.setScanOptimizeOption(new ScanOptimizeOption());
         TPlanNode node = new TPlanNode();
         scanNode.toThrift(node);

@@ -309,6 +309,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::LAKE_SCAN_NODE: {
         TPlanNode new_node = tnode;
         new_node.connector_scan_node = make_connector_scan_node(tnode, connector::Connector::LAKE);
+        if (!new_node.connector_scan_node.__isset.catalog_type) {
+            new_node.connector_scan_node.__set_catalog_type("default");
+        }
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }

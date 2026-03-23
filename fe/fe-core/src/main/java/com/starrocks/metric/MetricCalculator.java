@@ -217,7 +217,13 @@ public class MetricCalculator extends TimerTask {
         for (Map.Entry<String, LongCounterMetric> entry : counterGroup.getMetrics().entrySet()) {
             String catalogType = entry.getKey();
             long currentValue = entry.getValue().getValue();
-            long lastValue = lastCounters.getOrDefault(catalogType, 0L);
+            if (!lastCounters.containsKey(catalogType)) {
+                // First time seeing this catalog type — seed baseline to avoid an initial spike.
+                lastCounters.put(catalogType, currentValue);
+                gaugeGroup.getMetric(catalogType).setValue(0.0);
+                continue;
+            }
+            long lastValue = lastCounters.get(catalogType);
             double rate = (double) (currentValue - lastValue) / interval;
             gaugeGroup.getMetric(catalogType).setValue(rate < 0 ? 0.0 : rate);
             lastCounters.put(catalogType, currentValue);

@@ -745,21 +745,30 @@ public class StmtExecutor {
         }
     }
 
+    /**
+     * Infer catalog type from the session's current catalog.
+     * Used as a fallback for per-catalog-type metrics when the exec plan is unavailable
+     * (e.g. query failed during analysis/planning).
+     */
+    private Set<String> catalogTypeFromSession() {
+        String currentCatalog = context.getCurrentCatalog();
+        if (currentCatalog == null || CatalogMgr.isInternalCatalog(currentCatalog)) {
+            return Collections.singleton("default");
+        }
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(currentCatalog);
+        if (catalog != null) {
+            return Collections.singleton(catalog.getType().toLowerCase());
+        }
+        return Collections.singleton("default");
+    }
+
     private Set<String> extractCatalogTypes(ExecPlan execPlan) {
         if (execPlan == null) {
             return Collections.emptySet();
         }
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         if (scanNodes == null || scanNodes.isEmpty()) {
-            String currentCatalog = context.getCurrentCatalog();
-            if (currentCatalog == null || CatalogMgr.isInternalCatalog(currentCatalog)) {
-                return Collections.singleton("default");
-            }
-            Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(currentCatalog);
-            if (catalog != null) {
-                return Collections.singleton(catalog.getType().toLowerCase());
-            }
-            return Collections.singleton("default");
+            return catalogTypeFromSession();
         }
         Set<String> types = new HashSet<>();
         for (ScanNode scanNode : scanNodes) {
@@ -835,13 +844,18 @@ public class StmtExecutor {
                     }
                 }
             }
+        // When analysis/planning fails, no exec plan is available to extract catalog types from scan nodes.
+        // Fall back to the session's current catalog so that per-catalog-type error metrics
+        // (e.g. catalog_query_analysis_err) are still recorded in auditAfterExec().
         } catch (SemanticException e) {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
+            catalogTypesInvolved = catalogTypeFromSession();
             throw new AnalysisException(e.getMessage(), e);
         } catch (StarRocksPlannerException e) {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
+            catalogTypesInvolved = catalogTypeFromSession();
             if (e.getType().equals(ErrorType.USER_ERROR)) {
                 throw e;
             } else {
@@ -850,6 +864,7 @@ public class StmtExecutor {
             }
         } catch (Exception e) {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
+            catalogTypesInvolved = catalogTypeFromSession();
             throw e;
         }
         lastExecPlan = execPlan;
