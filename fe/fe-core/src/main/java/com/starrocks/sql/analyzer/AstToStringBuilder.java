@@ -547,13 +547,17 @@ public class AstToStringBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
-        if (defaultValue == null) {
-            sb.append(" DEFAULT NULL");
+        if (!column.isAllowNull()) {
+            sb.append(" NOT NULL");
         } else {
-            sb.append(" DEFAULT \"")
-                    .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
-                    .append("\"");
+            String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
+            if (defaultValue == null) {
+                sb.append(" DEFAULT NULL");
+            } else {
+                sb.append(" DEFAULT \"")
+                        .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\"");
+            }
         }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {

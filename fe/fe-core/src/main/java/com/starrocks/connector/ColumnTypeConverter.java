@@ -594,14 +594,13 @@ public class ColumnTypeConverter {
         }
     }
 
-    public static List<Column> fromPaimonSchemas(List<DataField> fields, List<String> primaryKeys) {
+    public static List<Column> fromPaimonSchemas(List<DataField> fields) {
         List<Column> columns = new ArrayList<>(fields.size());
         for (DataField field : fields) {
             String fieldName = field.name();
             org.apache.paimon.types.DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
-            column.setIsKey(primaryKeys.contains(fieldName));
+            Column column = new Column(fieldName, fieldType, type.isNullable(), field.description());
             columns.add(column);
         }
         return columns;
