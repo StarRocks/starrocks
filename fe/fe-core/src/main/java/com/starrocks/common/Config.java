@@ -2627,6 +2627,17 @@ public class Config extends ConfigBase {
     public static long max_partition_number_per_table = 100000;
 
     /**
+     * Maximum time in milliseconds to wait for an alter job in FINISHED_REWRITING state to
+     * complete before auto partition creation gives up. This applies when auto partition
+     * creation tries to cancel a conflicting schema change but the job is in FINISHED_REWRITING
+     * state (Lake table specific), which means the data rewriting is done and the job will
+     * complete naturally. The actual wait time is capped by min(this value, requestTimeout/2).
+     * Set to 0 to disable waiting (auto partition creation will fail immediately).
+     */
+    @ConfField(mutable = true)
+    public static long auto_partition_wait_alter_finish_timeout_ms = 5000;
+
+    /**
      * Used to limit num of partition for load open partition number
      */
     @ConfField(mutable = true)
