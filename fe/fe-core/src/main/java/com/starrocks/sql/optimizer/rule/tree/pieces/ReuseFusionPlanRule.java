@@ -509,6 +509,14 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 if (aggStateIf != null && argTypes[0].isDecimalV3()) {
                     aggStateIf = rectifyAggregationFunctionForDecimal(aggFunc.functionName(), child.getType());
                 }
+                // If the found aggStateIf has a polymorphic intermediate type (e.g., ANY_STRUCT for array_agg_if),
+                // create a properly resolved AggStateIf using the already-analyzed aggFunc, which has concrete types.
+                // Otherwise, SplitAggregateRule would use the polymorphic ANY_STRUCT as the intermediate column type,
+                // causing getTypeSize() to throw when deriving statistics.
+                if (aggStateIf instanceof AggregateFunction &&
+                        ((AggregateFunction) aggStateIf).getIntermediateTypeOrReturnType().isPseudoType()) {
+                    aggStateIf = AggStateIf.of((AggregateFunction) aggFunc).orElse((AggStateIf) aggStateIf);
+                }
 
                 if (aggStateIf == null) {
                     return fallbackAggIfBuilder.apply(call);
