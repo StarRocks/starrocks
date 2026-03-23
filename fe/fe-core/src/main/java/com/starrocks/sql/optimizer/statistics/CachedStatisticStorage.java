@@ -229,6 +229,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
@@ -343,6 +346,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
                         columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -379,6 +385,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
                     columnStatistics.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
@@ -532,6 +541,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
                 realResult = result.get();
@@ -564,6 +576,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<Histogram>>> result =
                     connectorHistogramCache.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Map<ConnectorTableColumnKey, Optional<Histogram>> realResult = result.get();
 
