@@ -66,7 +66,7 @@ public class ExportCheckerTest {
         Assertions.assertTrue(cancelled);
 
         be.setAlive(true);
-        be.setDecommissioned(true);
+        be.setIsDecommissioned(true);
 
         be.setLastStartTime(1001L);
 
