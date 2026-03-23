@@ -124,19 +124,19 @@ Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::Fu
 
     if (RE2::FullMatch(pattern_str, LIKE_ENDS_WITH_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_ends_with_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_STARTS_WITH_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_starts_with_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_EQUALS_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_equals_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_SUBSTRING_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
@@ -188,16 +188,16 @@ Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::F
     // characters. In any of these conditions, we can search for the pattern more
     // efficiently by using our own string match functions rather than regex matching.
     if (RE2::FullMatch(pattern_str, EQUALS_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_equals_fn;
     } else if (RE2::FullMatch(pattern_str, STARTS_WITH_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_starts_with_fn;
     } else if (RE2::FullMatch(pattern_str, ENDS_WITH_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_ends_with_fn;
     } else if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_substring_fn;
     } else {
         RETURN_IF_ERROR(compile_with_hyperscan_or_re2<false>(pattern_str, state, context, pattern));

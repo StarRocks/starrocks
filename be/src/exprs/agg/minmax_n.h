@@ -338,7 +338,7 @@ public:
         }
 
         // Create a temporary column to hold the array elements
-        auto temp_column = InputColumnType::create();
+        auto temp_column = InputColumnType::create(ctx->allocator());
         for (const auto& value : values) {
             if constexpr (IsSlice<CppType>) {
                 temp_column->append(value);

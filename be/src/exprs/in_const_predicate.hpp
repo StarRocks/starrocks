@@ -78,6 +78,7 @@ public:
               _eq_null(other._eq_null),
               _array_size(other._array_size),
               _array_buffer(other._array_buffer),
+              _allocator(other._allocator),
               _hash_set(other._hash_set),
               _string_values(other._string_values) {}
 
@@ -114,6 +115,7 @@ public:
 
     Status prepare(RuntimeState* state, ExprContext* context) override {
         RETURN_IF_ERROR(Expr::prepare(state, context));
+        _allocator = context->allocator();
 
         if (_is_prepare) {
             return Status::OK();
@@ -334,8 +336,7 @@ public:
     }
 
     ColumnPtr get_all_values() const {
-        MutableColumnPtr values =
-                ColumnHelper::create_column(memory::get_default_column_allocator(), TypeDescriptor{Type}, true);
+        MutableColumnPtr values = ColumnHelper::create_column(_allocator, TypeDescriptor{Type}, true);
         if constexpr (isSliceLT<Type>) {
             for (auto v : _hash_set) {
                 // v -> SliceWithHash
@@ -426,6 +427,7 @@ private:
     bool _eq_null = false;
     int _array_size = 0;
     std::vector<uint8_t> _array_buffer;
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
 
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free

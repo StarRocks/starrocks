@@ -2182,25 +2182,26 @@ public:
                             context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
                     // todo: fix LambdaFunction's isConst()
                     if (state != nullptr) {
-                        return is_nullable_target ? _process_with_hash_table<true>(state, target_data_column,
-                                                                                   target_null_data, is_const_target)
-                                                  : _process_with_hash_table<false>(state, target_data_column,
-                                                                                    target_null_data, is_const_target);
+                        return is_nullable_target
+                                       ? _process_with_hash_table<true>(context->allocator(), state, target_data_column,
+                                                                        target_null_data, is_const_target)
+                                       : _process_with_hash_table<false>(context->allocator(), state, target_data_column,
+                                                                         target_null_data, is_const_target);
                     }
                 }
             }
 
             if (is_nullable_array && is_nullable_target) {
-                return _process_generic<true, true>(array_data_column, target_data_column, array_null_data,
+                return _process_generic<true, true>(context->allocator(), array_data_column, target_data_column, array_null_data,
                                                     target_null_data, is_const_array, is_const_target);
             } else if (is_nullable_array && !is_nullable_target) {
-                return _process_generic<true, false>(array_data_column, target_data_column, array_null_data,
+                return _process_generic<true, false>(context->allocator(), array_data_column, target_data_column, array_null_data,
                                                      target_null_data, is_const_array, is_const_target);
             } else if (!is_nullable_array && is_nullable_target) {
-                return _process_generic<false, true>(array_data_column, target_data_column, array_null_data,
+                return _process_generic<false, true>(context->allocator(), array_data_column, target_data_column, array_null_data,
                                                      target_null_data, is_const_array, is_const_target);
             } else {
-                return _process_generic<false, false>(array_data_column, target_data_column, array_null_data,
+                return _process_generic<false, false>(context->allocator(), array_data_column, target_data_column, array_null_data,
                                                       target_null_data, is_const_array, is_const_target);
             }
         };
@@ -2258,12 +2259,13 @@ private:
     }
 
     template <bool NullableTarget>
-    static ColumnPtr _process_with_hash_table(ArrayContainsState* state, const ColumnPtr& targets,
+    static ColumnPtr _process_with_hash_table(memory::Allocator* allocator, ArrayContainsState* state,
+                                              const ColumnPtr& targets,
                                               const NullColumn::ValueType* targets_null_data, bool is_const_target) {
         DCHECK(!targets->is_constant() && !targets->is_nullable()) << "targets should be real data column";
 
         size_t num_rows = targets->size();
-        auto result_column = ReturnType::create();
+        auto result_column = ReturnType::create(allocator);
         // if target is const column, we only compute once
         result_column->resize(is_const_target ? 1 : num_rows);
         size_t result_size = result_column->size();
@@ -2290,7 +2292,7 @@ private:
     }
 
     template <bool NullableArray, bool NullableTarget>
-    static ColumnPtr _process_generic(const ColumnPtr& arrays, const ColumnPtr& targets,
+    static ColumnPtr _process_generic(memory::Allocator* allocator, const ColumnPtr& arrays, const ColumnPtr& targets,
                                       const NullColumn::ValueType* arrays_null_data,
                                       const NullColumn::ValueType* targets_null_data, bool is_const_array,
                                       bool is_const_target) {
@@ -2313,7 +2315,7 @@ private:
 
         // if both two columns are constant, we only compute the first row once
         size_t num_rows = (is_const_array && is_const_target) ? 1 : std::max(arrays->size(), targets->size());
-        auto result_column = ReturnType::create();
+        auto result_column = ReturnType::create(allocator);
         result_column->resize(num_rows);
         auto* result_data = result_column->get_data().data();
 

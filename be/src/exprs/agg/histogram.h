@@ -102,12 +102,6 @@ struct Bucket {
 
 template <LogicalType LT>
 struct HistogramState {
-    HistogramState() {
-        auto data = RunTimeColumnType<LT>::create(memory::get_default_column_allocator());
-        column = NullableColumn::create(memory::get_default_column_allocator(), std::move(data),
-                                        NullColumn::create(memory::get_default_column_allocator()));
-    }
-
     ColumnPtr column;
 };
 
@@ -116,6 +110,13 @@ class HistogramAggregationFunction final
         : public AggregateFunctionBatchHelper<HistogramState<LT>, HistogramAggregationFunction<LT, T>> {
 public:
     using ColumnType = RunTimeColumnType<LT>;
+
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        auto* state = new (ptr) HistogramState<LT>;
+        auto data = RunTimeColumnType<LT>::create(ctx->allocator());
+        state->column =
+                NullableColumn::create(ctx->allocator(), std::move(data), NullColumn::create(ctx->allocator()));
+    }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

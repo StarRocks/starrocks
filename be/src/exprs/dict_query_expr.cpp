@@ -68,7 +68,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     }
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, key_chunk->num_rows());
+    ChunkPtr value_chunk = ChunkHelper::new_chunk(context->allocator(), _value_schema, key_chunk->num_rows());
     value_chunk->set_slot_id_to_index(_value_slot_id, 0);
 
     Status status = _table_reader->multi_get(*key_chunk, {_dict_query_expr.value_field}, found, *value_chunk);

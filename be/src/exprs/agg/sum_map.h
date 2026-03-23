@@ -41,7 +41,7 @@ struct SumMapAggregateFunctionState : public AggregateFunctionEmptyState {
 
     MyHashMap hash_map;
     // Use column to store the summed values
-    typename ValueResultColumnType::MutablePtr value_result_column = ValueResultColumnType::create();
+    typename ValueResultColumnType::MutablePtr value_result_column;
     // Track null keys separately
     bool has_null_key = false;
     size_t null_key_value_idx = 0;
@@ -141,6 +141,11 @@ public:
     using ValueCppType = RunTimeCppType<VT>;
     using ValueResultColumnType = RunTimeColumnType<SumResultLT<VT>>;
     using ValueResultCppType = RunTimeCppType<SumResultLT<VT>>;
+
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        new (ptr) SumMapAggregateFunctionState<KT, VT, MyHashMap>;
+        this->data(ptr).value_result_column = ValueResultColumnType::create(ctx->allocator());
+    }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
