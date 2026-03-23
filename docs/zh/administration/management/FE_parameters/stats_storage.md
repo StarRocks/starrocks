@@ -497,7 +497,7 @@ sidebar_label: "统计报告和存储"
 
 ### `tablet_reshard_target_size`
 
-- 默认值: 1073741824 (1 GB)
+- 默认值: 10737418240 (10 GB)
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
