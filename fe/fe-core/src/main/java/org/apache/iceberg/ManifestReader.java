@@ -20,7 +20,6 @@
 package org.apache.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.avro.AvroIterable;
@@ -48,6 +47,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
@@ -282,20 +282,23 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
 
     // when the identifier field ids is null, it will copy all metrics.
     private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
+        boolean shouldCacheDataFiles =
+                dataFileCache != null && content == FileType.DATA_FILES && dataFileCache.getIfPresent(file.location()) != null;
+        boolean shouldCacheDeleteFiles =
+                deleteFileCache != null && content == FileType.DELETE_FILES &&
+                        deleteFileCache.getIfPresent(file.location()) != null;
+        if (!shouldCacheDataFiles && !shouldCacheDeleteFiles) {
+            return entries;
+        }
+
         Set<DataFile> tmpDataFiles = Sets.newHashSet();
         Set<DeleteFile> tmpDeleteFiles = Sets.newHashSet();
-        if (dataFileCache != null && content == FileType.DATA_FILES) {
+        if (shouldCacheDataFiles) {
+            final Set<Integer> requestedColumnIds =
+                    identifierFieldIds != null && !identifierFieldIds.isEmpty() ? identifierFieldIds : null;
             entries = CloseableIterable.transform(entries,
                     entry -> {
-                        // Could not use the getIfpresent result Set to add items, because here is thread-unsafe.
-                        // Be careful to not corrupt the cache.
-                        Set<DataFile> keyExisted = dataFileCache.getIfPresent(file.location());
-                        if (keyExisted != null && entry.isLive()) {
-                            Set<Integer> requestedColumnIds = null;
-                            if (identifierFieldIds != null && !identifierFieldIds.isEmpty()) {
-                                requestedColumnIds = identifierFieldIds;
-                            }
-
+                        if (entry.isLive()) {
                             DataFile dataFile = (DataFile) entry.file();
                             DataFile copiedDataFile = dataFileCacheWithMetrics ?
                                     dataFile.copyWithStats(requestedColumnIds) :
@@ -304,13 +307,12 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                         }
                         return entry;
                     });
-                }
-                
-        if (content == FileType.DELETE_FILES && deleteFileCache != null) {
+        }
+
+        if (shouldCacheDeleteFiles) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
-                        Set<DeleteFile> keyExisted = deleteFileCache.getIfPresent(file.location());
-                        if (keyExisted != null && entry.isLive()) {
+                        if (entry.isLive()) {
                             tmpDeleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
                         }
                         return entry;
@@ -318,21 +320,47 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
 
         final CloseableIterable<ManifestEntry<F>> transformedEntries = entries;
+        final AtomicBoolean fullyConsumed = new AtomicBoolean(false);
         return new CloseableIterable<ManifestEntry<F>>() {
             @Override
             public CloseableIterator<ManifestEntry<F>> iterator() {
-                return transformedEntries.iterator();
+                CloseableIterator<ManifestEntry<F>> iterator = transformedEntries.iterator();
+                return new CloseableIterator<ManifestEntry<F>>() {
+                    @Override
+                    public boolean hasNext() {
+                        boolean hasNext = iterator.hasNext();
+                        if (!hasNext) {
+                            fullyConsumed.set(true);
+                        }
+                        return hasNext;
+                    }
+
+                    @Override
+                    public ManifestEntry<F> next() {
+                        return iterator.next();
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        iterator.close();
+                    }
+                };
             }
-        
+
             @Override
             public void close() throws IOException {
-                if (!tmpDataFiles.isEmpty()) {
-                    dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
+                try {
+                    if (fullyConsumed.get()) {
+                        if (!tmpDataFiles.isEmpty()) {
+                            dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
+                        }
+                        if (!tmpDeleteFiles.isEmpty()) {
+                            deleteFileCache.put(file.location(), tmpDeleteFiles); // to recalculate the weight
+                        }
+                    }
+                } finally {
+                    transformedEntries.close();
                 }
-                if (!tmpDeleteFiles.isEmpty()) {
-                    deleteFileCache.put(file.location(), tmpDeleteFiles); // to recalculate the weight
-                }
-                transformedEntries.close();
             }
         };
     }
