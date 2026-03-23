@@ -175,6 +175,7 @@ public class HiveMetastoreOperations {
         }
 
         HiveStorageFormat.check(properties);
+        Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
 
         List<String> partitionColNames;
         if (partitionColumns.isEmpty()) {
@@ -204,6 +205,7 @@ public class HiveMetastoreOperations {
                 .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, PARQUET.name())))
+                .setSerdeProperties(serdeProps)
                 .setCreateTime(System.currentTimeMillis())
                 .setComment(stmt.getComment())
                 .setHiveTableType(tableType);
