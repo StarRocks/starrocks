@@ -15,6 +15,7 @@
 #include "exprs/encryption_functions.h"
 
 #include <optional>
+#include <vector>
 
 #include "base/crypto/aes_util.h"
 #include "base/crypto/md5.h"
@@ -514,6 +515,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::vector<char> encoded_buf;
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -525,22 +527,20 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
         if (src_value.size == 0) {
             result.append_null();
             continue;
-        } else if (src_value.size > limit) {
+        } else if (limit >= 0 && src_value.size > static_cast<size_t>(limit)) {
             std::stringstream ss;
             ss << "to_base64 not supported length > " << limit;
             throw std::runtime_error(ss.str());
         }
 
-        int cipher_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
-        char p[cipher_len];
-
-        int len = base64_encode2((unsigned char*)src_value.data, src_value.size, (unsigned char*)p);
-        if (len < 0) {
-            result.append_null();
-            continue;
+        size_t encoded_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
+        if (encoded_buf.size() < encoded_len) {
+            encoded_buf.resize(encoded_len);
         }
 
-        result.append(Slice(p, len));
+        encoded_len = base64_encode2(reinterpret_cast<const unsigned char*>(src_value.data), src_value.size,
+                                     reinterpret_cast<unsigned char*>(encoded_buf.data()));
+        result.append(Slice(encoded_buf.data(), encoded_len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
