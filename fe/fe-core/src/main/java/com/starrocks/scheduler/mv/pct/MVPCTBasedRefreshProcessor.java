@@ -167,7 +167,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire planner meta lock within %d ms when preparing refresh plan",
+                    db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);

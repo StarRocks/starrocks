@@ -74,9 +74,13 @@ public class MVPCTMetaRepairer {
             Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
             mv.setInactiveAndReason(
                     MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
-            throw new DmlException(String.format("Table %s is recreated and needed to be repaired, but it is not supported " +
-                            "by MVPCTMetaRepairer: %s, set mv %s inactive",
-                    nonSupportedTable.first.getName(), nonSupportedTable.second, mv.getName()));
+            throw new DmlException(String.format("Materialized view %s.%s set inactive: base table '%s' " +
+                            "(catalog=%s, db=%s) was recreated but its table type is not supported for automatic meta repair. " +
+                            "Only Hive tables support automatic repair. Please manually refresh the MV.",
+                    db.getFullName(), mv.getName(),
+                    nonSupportedTable.first.getName(),
+                    nonSupportedTable.second.getCatalogName(),
+                    nonSupportedTable.second.getDbName()));
         }
         final MVPCTMetaRepairer repairer = new MVPCTMetaRepairer(db, mv);
         for (Pair<Table, BaseTableInfo> pair : toRepairTables) {
@@ -197,7 +201,9 @@ public class MVPCTMetaRepairer {
         // acquire db write lock to modify meta of mv
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
-            throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
+            throw new DmlException("Materialized view %s.%s meta repair failed: " +
+                    "failed to acquire write lock on database %s, it may no longer exist",
+                    db.getFullName(), mv.getName(), db.getFullName());
         }
         try {
             MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames);
