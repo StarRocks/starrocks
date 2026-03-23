@@ -574,6 +574,7 @@ typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::A
     if (UNLIKELY(count == 0)) {
         return end();
     }
+    check_not_intersects(&value);
     size_t required_capacity = size() + count;
     if (required_capacity > capacity()) {
         size_t new_cap = empty() ? count : std::max(capacity() * 2, required_capacity);

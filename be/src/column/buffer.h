@@ -38,9 +38,21 @@ public:
 
     Buffer() = delete;
     explicit Buffer(memory::Allocator* allocator) : _allocator(allocator) {}
-    Buffer(memory::Allocator* allocator, size_t count) : _allocator(allocator) { this->resize(count); }
+    Buffer(memory::Allocator* allocator, size_t count) : _allocator(allocator) {
+        try {
+            this->resize(count);
+        } catch (...) {
+            RawBuffer<T, padding>::release(this->_allocator);
+            throw;
+        }
+    }
     Buffer(memory::Allocator* allocator, size_t count, const T& value) : _allocator(allocator) {
-        this->assign(count, value);
+        try {
+            this->assign(count, value);
+        } catch (...) {
+            RawBuffer<T, padding>::release(this->_allocator);
+            throw;
+        }
     }
     Buffer(Buffer&&) noexcept;
     Buffer& operator=(Buffer&&) noexcept;
