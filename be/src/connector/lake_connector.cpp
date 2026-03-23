@@ -17,9 +17,11 @@
 #include <vector>
 
 #include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
 #include "column/column_access_path.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
@@ -28,6 +30,8 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
+#include "fs/fs.h"
+#include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
@@ -421,6 +425,18 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+
+    // Setup SST warmup callback for CACHE SELECT on PK tables
+    if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
+        has_all_pk_columns_selected(_tablet_schema.get(), *_slots)) {
+        auto metadata = _tablet.metadata();
+        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _params.lake_io_opts.sst_warmup_done = std::make_shared<std::atomic<bool>>(false);
+        _params.lake_io_opts.sst_warmup_fn = [metadata, tablet_mgr]() -> Status {
+            return warmup_pk_index_sst_files(metadata.get(), tablet_mgr);
+        };
+    }
+
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
 
     if (_split_context != nullptr) {
@@ -733,6 +749,75 @@ Status LakeDataSource::prune_schema_by_access_paths(Schema* schema) {
         auto new_field = std::make_shared<Field>(*field);
         schema->set_field_by_name(new_field, root);
         RETURN_IF_ERROR(prune_field_by_access_paths(new_field.get(), path.get()));
+    }
+
+    return Status::OK();
+}
+
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots) {
+    if (tablet_schema == nullptr) {
+        return false;
+    }
+    if (tablet_schema->keys_type() != KeysType::PRIMARY_KEYS) {
+        return false;
+    }
+    size_t num_key_columns = tablet_schema->num_key_columns();
+    if (num_key_columns == 0) {
+        return false;
+    }
+    std::unordered_set<std::string_view> slot_names;
+    slot_names.reserve(slots.size());
+    for (const auto* slot : slots) {
+        slot_names.emplace(slot->col_name());
+    }
+    for (size_t i = 0; i < num_key_columns; i++) {
+        if (!slot_names.contains(tablet_schema->column(i).name())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr) {
+    if (metadata == nullptr) {
+        return Status::OK();
+    }
+
+    // Check if the table is a PK table with cloud-native persistent index
+    if (!metadata->enable_persistent_index() ||
+        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return Status::OK();
+    }
+
+    if (!metadata->has_sstable_meta() || metadata->sstable_meta().sstables_size() == 0) {
+        return Status::OK();
+    }
+
+    int64_t tablet_id = metadata->id();
+    size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
+    if (buf_size <= 0) {
+        buf_size = 1048576; // 1MB
+    }
+
+    const auto& sstable_meta = metadata->sstable_meta();
+    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id << " sst_count=" << sstable_meta.sstables_size();
+    for (const auto& sstable_pb : sstable_meta.sstables()) {
+        std::string sst_path = tablet_mgr->sst_location(tablet_id, sstable_pb.filename());
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, sst_path));
+        int64_t file_size = sstable_pb.filesize();
+        if (file_size <= 0) {
+            ASSIGN_OR_RETURN(file_size, rf->get_size());
+        }
+        for (int64_t offset = 0; offset < file_size;) {
+            int64_t cur_size = std::min(static_cast<int64_t>(buf_size), file_size - offset);
+            RETURN_IF_ERROR(rf->touch_cache(offset, cur_size));
+            offset += cur_size;
+        }
     }
 
     return Status::OK();

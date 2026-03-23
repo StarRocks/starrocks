@@ -376,4 +376,225 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     ASSERT_EQ(schema_id, tablet_schema->id());
 }
 
+TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
+    // Build a PK tablet schema: c0 (key), c1 (key), c2 (value)
+    TabletSchemaPB pk_schema_pb;
+    pk_schema_pb.set_id(next_id());
+    pk_schema_pb.set_num_short_key_columns(2);
+    pk_schema_pb.set_keys_type(PRIMARY_KEYS);
+    pk_schema_pb.set_num_rows_per_row_block(65535);
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c0");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c1");
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(false);
+    }
+    {
+        auto* c = pk_schema_pb.add_column();
+        c->set_unique_id(next_id());
+        c->set_name("c2");
+        c->set_type("INT");
+        c->set_is_key(false);
+        c->set_is_nullable(false);
+    }
+    auto pk_tablet_schema = TabletSchema::create(pk_schema_pb);
+
+    auto runtime_state = create_runtime_state();
+    TSlotDescriptorBuilder slot_desc_builder;
+
+    // Case 1: Select all PK columns (c0, c1) → true
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 2: Select only one PK column (c0) → false (c1 missing)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 3: Select only value column (c2) → false
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_FALSE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 4: Select all columns (c0, c1, c2) → true (superset of PK)
+    {
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple_builder;
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(false).build());
+        tuple_builder.add_slot(
+                slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c2").column_pos(2).nullable(false).build());
+        tuple_builder.build(&builder);
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), builder.desc_tbl(), &desc_tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(0);
+        ASSERT_TRUE(connector::has_all_pk_columns_selected(pk_tablet_schema.get(), tuple_desc->slots()));
+    }
+
+    // Case 5: DUP_KEYS table → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(_tablet_schema.get(), {}));
+
+    // Case 6: nullptr schema → false
+    ASSERT_FALSE(connector::has_all_pk_columns_selected(nullptr, {}));
+}
+
+TEST_F(LakeDataSourceTest, test_warmup_pk_index_sst_files) {
+    // Case 1: Non-PK table → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(_tablet_metadata.get(), _tablet_mgr)); }
+
+    // Case 2: nullptr metadata → skip warmup
+    { ASSERT_OK(connector::warmup_pk_index_sst_files(nullptr, _tablet_mgr)); }
+
+    // Case 3: PK table with cloud-native persistent index but no SST files → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 4: PK table with LOCAL persistent index → skip
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy.sst");
+        sst->set_filesize(100);
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 5: PK table with cloud-native persistent index and SST file that exists
+    {
+        // Create a fake SST file on disk
+        std::string sst_filename = "test_warmup.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(4096, 'x');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        sst->set_filesize(4096);
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 6: SST file exists but filesize not set in pb → fallback to get_size()
+    {
+        std::string sst_filename = "test_warmup_nosize.sst";
+        std::string sst_path = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_filename);
+        {
+            ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(sst_path));
+            std::string sst_content(2048, 'y');
+            ASSERT_OK(wf->append(sst_content));
+            ASSERT_OK(wf->close());
+        }
+
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename(sst_filename);
+        // filesize not set (defaults to 0), should fallback to get_size()
+
+        ASSERT_OK(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr));
+    }
+
+    // Case 7: SST file does not exist → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("nonexistent.sst");
+        sst->set_filesize(100);
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
+
+    // Case 8: SST with invalid encryption_meta → should return error
+    {
+        TabletMetadata pk_metadata;
+        pk_metadata.set_id(_tablet_metadata->id());
+        pk_metadata.set_version(1);
+        pk_metadata.set_enable_persistent_index(true);
+        pk_metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* sst_meta = pk_metadata.mutable_sstable_meta();
+        auto* sst = sst_meta->add_sstables();
+        sst->set_filename("dummy_enc.sst");
+        sst->set_filesize(1024);
+        sst->set_encryption_meta("invalid_encryption_meta");
+
+        ASSERT_FALSE(connector::warmup_pk_index_sst_files(&pk_metadata, _tablet_mgr).ok());
+    }
+}
+
 } // namespace starrocks::lake
