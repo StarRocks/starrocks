@@ -87,10 +87,8 @@ void MultiCastLocalExchangeSourceOperatorFactory::close(RuntimeState* state) {
     SourceOperatorFactory::close(state);
 }
 
-void MultiCastLocalExchangeSourceOperatorFactory::set_runtime_filter_collector(
-        RuntimeFilterProbeCollector* collector) {
-    auto rc_collector = std::make_shared<RefCountedRuntimeFilterProbeCollector>(
-            1, std::move(*collector));
+void MultiCastLocalExchangeSourceOperatorFactory::set_runtime_filter_collector(RuntimeFilterProbeCollector* collector) {
+    auto rc_collector = std::make_shared<RefCountedRuntimeFilterProbeCollector>(1, std::move(*collector));
     _runtime_filter_collector = std::move(rc_collector);
 }
 

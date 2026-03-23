@@ -46,6 +46,7 @@
 #ifndef __APPLE__
 #include "connector/iceberg_chunk_sink.h"
 #endif
+#include "common/system/backend_options.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
@@ -72,17 +73,16 @@
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "formats/csv/csv_file_writer.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_filter_cache.h"
-#include "common/system/backend_options.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/dictionary_cache_sink.h"
+#include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
+#include "runtime/runtime_filter_cache.h"
 #ifndef __APPLE__
 #include "runtime/iceberg_table_sink.h"
 #endif

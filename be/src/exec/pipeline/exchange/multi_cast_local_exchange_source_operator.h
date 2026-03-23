@@ -69,9 +69,8 @@ public:
     void set_runtime_filter_collector(RuntimeFilterProbeCollector* collector);
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                                      _mcast_consumer_index, _exchanger,
-                                                                      _conjunct_ctxs);
+        return std::make_shared<MultiCastLocalExchangeSourceOperator>(
+                this, _id, _plan_node_id, driver_sequence, _mcast_consumer_index, _exchanger, _conjunct_ctxs);
     }
 
 private:
