@@ -42,6 +42,7 @@ set(COLUMN_TEST_FILES
     variant_merger_test.cpp
     variant_builder_test.cpp
     variant_encoder_test.cpp
+    buffer_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
