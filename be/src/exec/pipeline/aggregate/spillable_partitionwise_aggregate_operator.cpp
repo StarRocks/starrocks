@@ -88,6 +88,7 @@ void SpillablePartitionWiseAggregateSinkOperator::close(RuntimeState* state) {
 Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    _agg_op->aggregator()->set_sink_allocator(_allocator);
     RETURN_IF_ERROR(_agg_op->prepare(state));
     RETURN_IF_ERROR(_agg_op->prepare_local_state(state));
 
@@ -372,6 +373,7 @@ OperatorPtr SpillablePartitionWiseAggregateSinkOperatorFactory::create(int32_t d
 
 Status SpillablePartitionWiseAggregateSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _non_pw_agg->aggregator()->set_source_allocator(_allocator);
     RETURN_IF_ERROR(_non_pw_agg->prepare(state));
     RETURN_IF_ERROR(_pw_agg->prepare(state));
     return Status::OK();

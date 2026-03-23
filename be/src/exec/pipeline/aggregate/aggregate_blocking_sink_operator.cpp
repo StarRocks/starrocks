@@ -30,6 +30,7 @@ namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _aggregator->set_sink_allocator(_allocator);
     _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }

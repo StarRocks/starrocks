@@ -587,8 +587,9 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    MutableColumns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
-    MutableColumns _create_group_by_columns(size_t num_rows) const;
+    MutableColumns _create_agg_result_columns(size_t num_rows, bool use_intermediate,
+                                              memory::Allocator* allocator = nullptr);
+    MutableColumns _create_group_by_columns(size_t num_rows, memory::Allocator* allocator = nullptr) const;
 
     void _serialize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);
     void _finalize_to_chunk(ConstAggDataPtr __restrict state, MutableColumns& agg_result_columns);

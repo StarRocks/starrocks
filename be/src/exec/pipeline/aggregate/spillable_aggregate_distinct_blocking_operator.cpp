@@ -77,6 +77,7 @@ void SpillableAggregateDistinctBlockingSinkOperator::close(RuntimeState* state) 
 
 Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare(state));
+    _aggregator->set_sink_allocator(_allocator);
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare_local_state(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
@@ -182,6 +183,7 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
 
 Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSourceOperator::prepare(state));
+    _stream_aggregator->set_source_allocator(_allocator);
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
     _accumulator.set_max_size(state->chunk_size());

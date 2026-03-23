@@ -107,6 +107,7 @@ void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare(state));
+    _aggregator->set_sink_allocator(_allocator);
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare_local_state(state));
 
     DCHECK(!_aggregator->is_none_group_by_exprs());
