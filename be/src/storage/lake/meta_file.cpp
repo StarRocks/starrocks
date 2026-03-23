@@ -320,8 +320,22 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
 }
 
 void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction) {
-    // remove compacted sst
+    // Collect output SST filenames. Parallel compaction's "full contain" optimization
+    // may reuse input SST files as output (only changing fileset_id). Skip those files
+    // to avoid the same file appearing in both sstable_meta and orphan_files, which
+    // would cause vacuum to delete a still-referenced SST file.
+    std::unordered_set<std::string> output_sst_filenames;
+    if (op_compaction.has_output_sstable()) {
+        output_sst_filenames.insert(op_compaction.output_sstable().filename());
+    }
+    for (const auto& output_sstable : op_compaction.output_sstables()) {
+        output_sst_filenames.insert(output_sstable.filename());
+    }
+
     for (auto& input_sstable : op_compaction.input_sstables()) {
+        if (output_sst_filenames.contains(input_sstable.filename())) {
+            continue;
+        }
         FileMetaPB file_meta;
         file_meta.set_name(input_sstable.filename());
         file_meta.set_size(input_sstable.filesize());
@@ -846,7 +860,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
             if (i >= first_segment_metas_size) {
                 _pending_rowset_data.rowset_pb.add_segment_metas();
             }
-            _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(get_segment_idx(rowset_pb, i));
+            _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(
+                    _pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
     } else {
         // Merge segments

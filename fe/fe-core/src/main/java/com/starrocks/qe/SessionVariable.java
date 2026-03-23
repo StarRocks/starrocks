@@ -1062,6 +1062,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
 
+    /**
+     * When true, EXPLAIN output may include extended sections (e.g. query queue info at COSTS/VERBOSE level).
+     * Extensible for future explain-related features. Default false to preserve original explain output.
+     */
+    public static final String ENABLE_EXTENDED_EXPLAIN = "enable_extended_explain";
+
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
@@ -1236,6 +1242,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
     private boolean colorExplainOutput = true;
+
+    // When true, EXPLAIN may include extended sections (e.g. query queue info). Extensible for other features.
+    @VariableMgr.VarAttr(name = ENABLE_EXTENDED_EXPLAIN)
+    private boolean enableExtendedExplain = false;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -2217,6 +2227,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSplitTopNAggLimit() {
         return splitTopNAggLimit;
+    }
+
+    public void setEnableSplitTopNAgg(boolean enableSplitTopNAgg) {
+        this.enableSplitTopNAgg = enableSplitTopNAgg;
     }
 
     public void setEnableDistinctAggOverWindow(boolean value) {
@@ -3642,6 +3656,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getColorExplainOutput() {
         return colorExplainOutput;
+    }
+
+    public boolean isEnableExtendedExplain() {
+        return enableExtendedExplain;
+    }
+
+    public void setEnableExtendedExplain(boolean enableExtendedExplain) {
+        this.enableExtendedExplain = enableExtendedExplain;
     }
 
     public boolean isEnableLoadProfile() {
@@ -5932,6 +5954,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            tResult.setError_for_division_by_zero(true);
         }
 
         tResult.setEnable_spill(enableSpill);

@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -47,6 +48,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
@@ -539,6 +541,11 @@ public class RedirectStatus {
             return visitDDLStatement(statement, context);
         }
 
+        @Override
+        public RedirectStatus visitAlterTaskStatement(AlterTaskStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
         // ---------------------------------------- Partition Statement ----------------------------------------------------
 
         @Override
@@ -738,6 +745,15 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, Void context) {
+            if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            } else {
+                return RedirectStatus.NO_FORWARD;
+            }
+        }
+
+        @Override
+        public RedirectStatus visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
             if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
                 return RedirectStatus.FORWARD_NO_SYNC;
             } else {

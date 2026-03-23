@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.utframe.StarRocksAssert;
@@ -83,6 +84,77 @@ public class LeaderOpExecutorMockTest {
             executor.execute();
 
             Assertions.assertEquals(1, connectContext.getTxnId());
+        }
+    }
+
+    @Test
+    public void testFetchLeaderMaxJournalId_success() throws Exception {
+        TMasterOpResult result = new TMasterOpResult();
+        result.setMaxJournalId(200L);
+
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftMock =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(result);
+
+            long journalId = LeaderOpExecutor.fetchLeaderMaxJournalId(connectContext);
+            Assertions.assertEquals(200L, journalId);
+        }
+    }
+
+    @Test
+    public void testFetchLeaderMaxJournalId_leaderAddrNull() throws Exception {
+        try (MockedStatic<GlobalStateMgr> gsmMock = Mockito.mockStatic(GlobalStateMgr.class)) {
+            GlobalStateMgr mockGsm = Mockito.mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+            gsmMock.when(GlobalStateMgr::getCurrentState).thenReturn(mockGsm);
+            Mockito.when(mockGsm.getNodeMgr()).thenReturn(mockNodeMgr);
+            Mockito.when(mockNodeMgr.getLeaderIpAndRpcPort()).thenReturn(null);
+
+            long journalId = LeaderOpExecutor.fetchLeaderMaxJournalId(connectContext);
+            Assertions.assertEquals(-1L, journalId);
+        }
+    }
+
+    @Test
+    public void testFetchLeaderMaxJournalId_resultWithoutMaxJournalId() throws Exception {
+        TMasterOpResult result = new TMasterOpResult();
+
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftMock =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(result);
+
+            long journalId = LeaderOpExecutor.fetchLeaderMaxJournalId(connectContext);
+            Assertions.assertEquals(-1L, journalId);
+        }
+    }
+
+    @Test
+    public void testFetchLeaderMaxJournalId_rpcException() throws Exception {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftMock =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenThrow(new RuntimeException("RPC failed"));
+
+            long journalId = LeaderOpExecutor.fetchLeaderMaxJournalId(connectContext);
+            Assertions.assertEquals(-1L, journalId);
+        }
+    }
+
+    @Test
+    public void testFetchLeaderMaxJournalId_nullResult() throws Exception {
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftMock =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(
+                    Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(null);
+
+            long journalId = LeaderOpExecutor.fetchLeaderMaxJournalId(connectContext);
+            Assertions.assertEquals(-1L, journalId);
         }
     }
 }

@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "common/statusor.h"
 #include "fs/credential/cloud_configuration_factory.h"
@@ -319,7 +320,14 @@ public:
 
     // Given the path to a remote file, delete the file's cache on the local file system, if any.
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
-    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
+    virtual Status drop_local_cache(const std::string& path, int64_t offset = 0, int64_t size = -1) {
+        return Status::NotFound(path);
+    }
+
+    // Get file cache stats, return <cached_bytes, total_bytes>.
+    virtual StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset, int64_t size) {
+        return Status::NotSupported("FileSystem::get_cache_stats");
+    }
 
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message

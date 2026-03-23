@@ -47,6 +47,10 @@ TEST_F(MemTrackerTest, label_type_convert) {
     }
     ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::QUERY), "");
     ASSERT_EQ(MemTracker::label_to_type("not_exist_label"), MemTrackerType::NO_SET);
+
+    // Verify builtin_inverted_index is registered
+    ASSERT_EQ(MemTracker::type_to_label(MemTrackerType::BUILTIN_INVERTED_INDEX), "builtin_inverted_index");
+    ASSERT_EQ(MemTracker::label_to_type("builtin_inverted_index"), MemTrackerType::BUILTIN_INVERTED_INDEX);
 }
 
 TEST_F(MemTrackerTest, get_snapshot) {

@@ -263,7 +263,10 @@
                                 "data_source/catalog/iceberg/iceberg_timetravel",
                                 "data_source/catalog/iceberg/iceberg_meta_table",
                                 "data_source/catalog/iceberg/iceberg_rest_s3",
-                                "data_source/catalog/iceberg/iceberg_rest_security"
+                                "data_source/catalog/iceberg/iceberg_rest_security",
+                                "data_source/catalog/iceberg/DDL",
+                                "data_source/catalog/iceberg/DML",
+                                "data_source/catalog/iceberg/procedures"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -471,7 +474,20 @@
                         "id": "administration/management/configuration"
                     },
                     "items": [
-                        "administration/management/FE_configuration",
+                        {
+                            "type": "category",
+                            "label": "FE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/FE_configuration"
+                            },
+                            "items": [
+                                "administration/management/FE_parameters/log_server_meta",
+                                "administration/management/FE_parameters/user_query_loading",
+                                "administration/management/FE_parameters/stats_storage",
+                                "administration/management/FE_parameters/shared_lake_other"
+                            ]
+                        },
                         "administration/management/BE_configuration"
                 ]
                 },
@@ -509,6 +525,7 @@
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
                         "administration/management/graceful_exit",
+                        "administration/management/extensions",
                         {
                             "type": "category",
                             "label": "Resource management",

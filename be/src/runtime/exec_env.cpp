@@ -227,6 +227,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _bitmap_index_mem_tracker = regist_tracker(MemTrackerType::BITMAP_INDEX, -1, column_metadata_mem_tracker());
     _bloom_filter_index_mem_tracker =
             regist_tracker(MemTrackerType::BLOOM_FILTER_INDEX, -1, column_metadata_mem_tracker());
+    _builtin_inverted_index_mem_tracker =
+            regist_tracker(MemTrackerType::BUILTIN_INVERTED_INDEX, -1, column_metadata_mem_tracker());
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(MemTrackerType::COMPACTION, compaction_mem_limit, process_mem_tracker());
@@ -355,12 +357,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
+    int automatic_partition_thread_num = config::automatic_partition_thread_pool_thread_num;
+    int automatic_partition_queue_size = automatic_partition_thread_num * 10;
     RETURN_IF_ERROR(ThreadPoolBuilder("automatic_partition") // automatic partition pool
                             .set_min_threads(0)
-                            .set_max_threads(1000)
-                            .set_max_queue_size(1000)
+                            .set_max_threads(automatic_partition_thread_num)
+                            .set_max_queue_size(automatic_partition_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
+    REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -625,6 +630,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_pk_index_memtable_flush_thread_pool));
 #endif
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_metadata_fetch_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
 
@@ -713,6 +725,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_metadata_fetch_thread_pool) {
+        start = MonotonicMillis();
+        _lake_metadata_fetch_thread_pool->shutdown();
+        component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
     if (_parallel_compact_mgr) {
@@ -924,6 +942,7 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
+    _lake_metadata_fetch_thread_pool.reset();
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();

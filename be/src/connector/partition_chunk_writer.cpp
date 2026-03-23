@@ -15,7 +15,6 @@
 #include "connector/partition_chunk_writer.h"
 
 #include "column/chunk.h"
-#include "common/status.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/sink_memory_manager.h"
@@ -31,6 +30,8 @@
 #include "util/time.h"
 
 namespace starrocks::connector {
+
+DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
 
 PartitionChunkWriter::PartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                            const std::shared_ptr<PartitionChunkWriterContext>& ctx)
@@ -52,6 +53,9 @@ Status PartitionChunkWriter::create_file_writer_if_needed() {
         _file_writer = std::move(new_writer_and_stream.writer);
         _out_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(_file_writer->init());
+
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
+                                   { return Status::InternalError("Create file writer failed due to fail point"); });
         _io_poller->enqueue(_out_stream);
     }
     return Status::OK();
@@ -62,7 +66,7 @@ Status PartitionChunkWriter::commit_file() {
         return Status::OK();
     }
     SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
-    auto result = _file_writer->commit();
+    auto result = _file_writer->close();
     _commit_callback(result.set_extra_data(_commit_extra_data));
     _file_writer = nullptr;
     VLOG(3) << "commit to remote file, filename: " << _out_stream->filename()
@@ -378,7 +382,7 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
 }
 
 bool SpillPartitionChunkWriter::_mem_insufficent() {
-    // Return false because we will triger spill by sink memory manager.
+    // Return false because we will trigger spill by sink memory manager.
     return false;
 }
 

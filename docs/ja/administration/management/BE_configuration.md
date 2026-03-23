@@ -596,6 +596,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 各クエリの交換ノードの受信側の最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
 - 導入バージョン: -
 
+##### exec_state_report_max_threads
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: スレッド
+- 可変: はい
+- 説明: exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が通常優先度の実行状態レポート（フラグメント完了やエラーステータスなど）を BE から FE へ非同期で RPC 送信するために使用されます。起動時の実際のプールサイズは `max(1, exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）のプールに対して `update_max_threads` が呼び出されます。プールのタスクキューサイズは 1000 固定です。高並行クエリ実行時に実行状態レポートが遅延または消失する場合は値を増やしてください。対応する高優先度プールは `priority_exec_state_report_max_threads` で制御します。
+- 導入バージョン: v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_capacity
 
 - デフォルト: 16384
@@ -901,6 +910,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
 - 導入バージョン: -
 
+##### priority_exec_state_report_max_threads
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: スレッド
+- 可変: はい
+- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が高優先度の実行状態レポート（緊急なフラグメント失敗など）を BE から FE へ非同期で RPC 送信するために使用されます。通常のプールとは異なり、このプールのタスクキューはサイズ無制限です。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）の優先度プールに対して `update_max_threads` が呼び出されます。通常プールは `exec_state_report_max_threads` で制御します。
+- 導入バージョン: v4.1.0, v4.0.8, v3.5.15
+
 ##### query_cache_capacity
 
 - デフォルト: 536870912
@@ -1010,6 +1028,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: Lake テーブル（ストレージとコンピューティングの分離モード）へのデータロード時に並列 MemTable Finalize を有効にするかどうかを指定します。有効にすると、MemTable の Finalize 操作（ソート/集計）が書き込みスレッドからフラッシュスレッドに移動され、前の MemTable が並列で Finalize およびフラッシュされている間、書き込みスレッドは新しい MemTable へのデータ挿入を継続できます。これにより、CPU 集約型の Finalize 操作と I/O 集約型のフラッシュ操作をオーバーラップさせることで、ロードスループットを大幅に向上させることができます。注意: 自動インクリメント列を埋める必要がある場合、自動インクリメント ID の割り当ては MemTable がフラッシュに送信される前に完了する必要があるため、この最適化は自動的に無効になります。
 - 導入バージョン: -
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: random bucketing のサイズ判定で Lake metadata がキャッシュミスした際に、object-storage LIST フォールバックを許可するかを制御します。`true` の場合は metadata ファイル LIST にフォールバックして base size を計算します（従来動作、推定がより正確）。`false` の場合は LIST をスキップして `base_size = 0` を使用し、LIST object リクエストを削減しますが、推定精度低下により immutable 判定がやや遅れる可能性があります。
+- 導入バージョン: 4.1.0, 4.0.7, 3.5.15 
 
 ##### enable_stream_load_verbose_log
 
@@ -1359,6 +1386,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: はい
 - 説明: スキーマ変更のために使用されるスレッドの数。
+- 導入バージョン: -
+
+##### automatic_partition_thread_pool_thread_num
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: ロード時の自動パーティション作成に使用する自動パーティションスレッドプールのスレッド数。プールのキューサイズはスレッド数の 10 倍に自動設定されます。
 - 導入バージョン: -
 
 ##### avro_ignore_union_type_tag
@@ -2309,6 +2345,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: タブレット統計キャッシュが更新される時間間隔。
 - 導入バージョン: -
 
+##### lake_enable_accurate_pk_row_count
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
+- 導入バージョン: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- デフォルト: 300000
+- タイプ: Int64
+- 単位: Milliseconds
+- 可変: はい
+- 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
+- 導入バージョン: -
+
+##### lake_metadata_fetch_thread_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
+- 導入バージョン: -
+
 ##### transaction_apply_worker_count
 
 - デフォルト: 0
@@ -2428,6 +2491,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 共有データ
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大 Segment ファイル数。リビルドが必要なファイル数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、リプレイが必要な Segment 数を削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。
+- 導入バージョン: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- デフォルト: 10000000
+- タイプ: Long
+- 単位: 行
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。
+- 導入バージョン: -
+
 ##### download_buffer_size
 
 - デフォルト: 4194304
@@ -2506,7 +2587,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。
+- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。`datacache_unified_instance_enable` が `false` の場合のみ有効です。
 - 導入バージョン: v3.1
 
 ##### starlet_use_star_cache
@@ -2664,6 +2745,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
 - 導入バージョン: v3.3.0
 
+##### datacache_unified_instance_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: 共有データクラスタで、internal catalog と external catalog のデータキャッシュを統一された Data Cache インスタンスで管理するかどうか。
+- 導入バージョン: v3.4.0
+
 ##### jdbc_connection_idle_timeout_ms
 
 - デフォルト: 600000
@@ -2689,6 +2779,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: いいえ
 - 説明: JDBC 接続プール内の最小アイドル接続数。
+- 導入バージョン: -
+
+##### jdbc_connection_max_lifetime_ms
+
+- デフォルト: 300000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBC接続プール内の接続の最大有効期間。古い接続を防ぐため、このタイムアウトの前に接続はリサイクルされます。許可される最小値は30000（30秒）です。
+- 導入バージョン: -
+
+##### jdbc_connection_keepalive_time_ms
+
+- デフォルト: 30000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: アイドル状態のJDBC接続のキープアライブ間隔。アイドル状態の接続は、古い接続をプロアクティブに検出するために、この間隔でテストされます。0に設定するとキープアライブプロービングを無効にします。有効な場合、>= 30000かつ`jdbc_connection_max_lifetime_ms`より小さい必要があります。無効な有効値はサイレントに無効化されます（0にリセット）。
 - 導入バージョン: -
 
 ##### lake_clear_corrupted_cache_data

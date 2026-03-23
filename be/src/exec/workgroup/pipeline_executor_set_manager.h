@@ -60,6 +60,8 @@ public:
 
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
+    void change_exec_state_report_max_threads(int max_threads);
+    void change_priority_exec_state_report_max_threads(int max_threads);
 
     using ExecutorsConsumer = std::function<void(PipelineExecutorSet&)>;
     void for_each_executors(const ExecutorsConsumer& consumer) const;

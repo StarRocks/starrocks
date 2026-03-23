@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -60,16 +61,20 @@ public class ColocateGroupSchema implements Writable {
     private int bucketsNum;
     @SerializedName("rn")
     private short replicationNum;
+    @SerializedName("dt")
+    private DistributionInfoType distributionType = DistributionInfoType.HASH;
 
     private ColocateGroupSchema() {
 
     }
 
-    public ColocateGroupSchema(GroupId groupId, List<Column> distributionCols, int bucketsNum, short replicationNum) {
+    public ColocateGroupSchema(GroupId groupId, List<Column> distributionCols, int bucketsNum,
+                                short replicationNum, DistributionInfoType distributionType) {
         this.groupId = groupId;
         this.distributionColTypes = distributionCols.stream().map(c -> c.getType()).collect(Collectors.toList());
         this.bucketsNum = bucketsNum;
         this.replicationNum = replicationNum;
+        this.distributionType = distributionType;
     }
 
     public GroupId getGroupId() {
@@ -88,13 +93,35 @@ public class ColocateGroupSchema implements Writable {
         return distributionColTypes;
     }
 
+    public DistributionInfoType getDistributionType() {
+        return distributionType;
+    }
+
+    public boolean isRangeColocate() {
+        return distributionType == DistributionInfoType.RANGE;
+    }
+
+    /**
+     * Returns the number of colocate columns (sort key prefix length) for range colocate groups,
+     * or the number of hash distribution columns for hash colocate groups.
+     */
+    public int getColocateColumnCount() {
+        return distributionColTypes.size();
+    }
+
     public void checkColocateSchema(OlapTable tbl) throws DdlException {
-        checkDistribution(tbl.getIdToColumn(), tbl.getDefaultDistributionInfo());
+        checkDistribution(tbl, tbl.getDefaultDistributionInfo());
         checkReplicationNum(tbl.getPartitionInfo());
     }
 
-    public void checkDistribution(Map<ColumnId, Column> idToColumn, DistributionInfo distributionInfo)
+    public void checkDistribution(OlapTable table, DistributionInfo distributionInfo)
             throws DdlException {
+        // check distribution type consistency
+        if (distributionInfo.getType() != distributionType) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_TYPE,
+                    groupId.toString(), distributionType.name(), distributionInfo.getType().name());
+        }
+
         if (distributionInfo instanceof HashDistributionInfo) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             // buckets num
@@ -108,6 +135,7 @@ public class ColocateGroupSchema implements Writable {
                         distributionColTypes.size(), groupId.toString(), info.toString());
             }
             // distribution col type
+            Map<ColumnId, Column> idToColumn = table.getIdToColumn();
             List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                     idToColumn, distributionInfo.getDistributionColumns());
             for (int i = 0; i < distributionColTypes.size(); i++) {
@@ -115,6 +143,24 @@ public class ColocateGroupSchema implements Writable {
                 if (!targetColType.equals(distributionColumns.get(i).getType())) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
                             groupId.toString(), distributionColumns.get(i).getName(), targetColType, info.toString());
+                }
+            }
+        } else if (distributionInfo instanceof RangeDistributionInfo) {
+            // For range distribution colocate, the colocate columns are the sort key prefix.
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+            // colocate column count
+            if (sortKeyColumns.size() < distributionColTypes.size()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_SIZE,
+                        distributionColTypes.size(), groupId.toString(),
+                        "sort key columns: " + sortKeyColumns.size());
+            }
+            // colocate column type
+            for (int i = 0; i < distributionColTypes.size(); i++) {
+                Type expectedType = distributionColTypes.get(i);
+                if (!expectedType.equals(sortKeyColumns.get(i).getType())) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE,
+                            groupId.toString(), sortKeyColumns.get(i).getName(),
+                            expectedType, "sort key prefix");
                 }
             }
         }

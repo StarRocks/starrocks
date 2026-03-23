@@ -144,7 +144,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
+                            ConnectContext context = new ConnectContext();
+                            context.setOnlyReadIcebergCache(true);
+                            Table nativeTable = getTable(context, key.dbName, key.tableName);
                             IcebergTable icebergTable =
                                     IcebergTable.builder()
                                             .setCatalogDBName(key.dbName)
@@ -245,8 +247,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
         try {
-            TABLE_LOAD_CONTEXT.set(connectContext);
-            return tables.get(icebergTableName);
+            if (shouldOnlyReadCache(connectContext)) {
+                Table cachedTable = tables.getIfPresent(icebergTableName);
+                return cachedTable != null ? cachedTable : delegate.getTable(connectContext, dbName, tableName);
+            } else {
+                TABLE_LOAD_CONTEXT.set(connectContext);
+                return tables.get(icebergTableName);
+            }
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
@@ -499,7 +506,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
                 icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
-
+        scanContext.setOnlyReadCache(shouldOnlyReadCache(scanContext.getConnectContext()));
         return delegate.getTableScan(table, scanContext);
     }
 
@@ -519,6 +526,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private Caffeine<Object, Object> newCacheBuilderWithMaximumSize(long expiresAfterWriteSec, long refreshInterval,
                                                                     long maximumSize) {
         return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
+    }
+
+    // We still allow reads from caches, but skip populating or refreshing them when this flag is set.
+    private boolean shouldOnlyReadCache(ConnectContext context) {
+        return context != null && context.isOnlyReadIcebergCache();
     }
 
     public static class IcebergTableName {

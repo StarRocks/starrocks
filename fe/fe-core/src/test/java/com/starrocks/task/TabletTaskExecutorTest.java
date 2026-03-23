@@ -71,11 +71,6 @@ public class TabletTaskExecutorTest {
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
-
-            @Mock
-            public boolean isLeaderTransferred() {
-                return false;
-            }
         };
 
         // Create a timed-out CountDownLatch (count > 0 indicates unfinished tasks)
@@ -130,11 +125,6 @@ public class TabletTaskExecutorTest {
             @Mock
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
-            }
-
-            @Mock
-            public boolean isLeaderTransferred() {
-                return false;
             }
         };
 
@@ -202,11 +192,6 @@ public class TabletTaskExecutorTest {
             public NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
-
-            @Mock
-            public boolean isLeaderTransferred() {
-                return false;
-            }
         };
 
         // Create CountDownLatch with multiple unfinished tasks
@@ -241,11 +226,6 @@ public class TabletTaskExecutorTest {
             @Mock
             public GlobalStateMgr getCurrentState() {
                 return globalStateMgr;
-            }
-
-            @Mock
-            public boolean isLeaderTransferred() {
-                return false;
             }
         };
 

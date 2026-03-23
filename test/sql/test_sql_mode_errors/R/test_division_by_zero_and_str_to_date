@@ -1,0 +1,129 @@
+-- name: test_division_by_zero_and_str_to_date
+set sql_mode = 'ERROR_FOR_DIVISION_BY_ZERO';
+-- result:
+-- !result
+select 1/0;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+select 1%0;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+select 1.0/0.0;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+select NULL/0;
+-- result:
+None
+-- !result
+create table t_div (k1 int, k2 int) duplicate key(k1) distributed by hash(k1) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_div values (1, 1), (2, 0), (3, 1);
+-- result:
+-- !result
+select k1/k2 from t_div order by k1;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+select k1%k2 from t_div order by k1;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+drop table if exists t_div;
+-- result:
+-- !result
+create table t_div_src (k1 int, k2 int)properties('replication_num' = '1');
+-- result:
+-- !result
+create table t_div_dst (k1 int, k2 double)properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_div_src values (1, 1), (2, 0), (3, 1);
+-- result:
+-- !result
+insert into t_div_dst select k1, k1/k2 as k2 from t_div_src;
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+drop table if exists t_div_src;
+-- result:
+-- !result
+drop table if exists t_div_dst;
+-- result:
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select 1/0;
+-- result:
+None
+-- !result
+select 1%0;
+-- result:
+None
+-- !result
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+select str_to_date('invalid', '%Y-%m-%d');
+-- result:
+[REGEX].*Fail to parse date.*
+-- !result
+select str2date('invalid', '%Y-%m-%d');
+-- result:
+[REGEX].*Fail to parse date.*
+-- !result
+select str_to_date(NULL, '%Y-%m-%d');
+-- result:
+None
+-- !result
+create table t_str_date (c1 varchar(100), c2 varchar(100)) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_str_date values ('valid', '%Y-%m-%d'), ('invalid', '%Y-%m-%d'), ('2024-01-01', '%Y-%m-%d');
+-- result:
+-- !result
+select str_to_date(c1, c2) from t_str_date order by c1;
+-- result:
+[REGEX].*Fail to parse date.*
+-- !result
+select str2date(c1, c2) from t_str_date order by c1;
+-- result:
+[REGEX].*Fail to parse date.*
+-- !result
+drop table if exists t_str_date;
+-- result:
+-- !result
+create table t_str_date_src (c1 varchar(100), c2 varchar(100)) properties('replication_num' = '1');
+-- result:
+-- !result
+create table t_str_date_dst (c1 datetime) duplicate key(c1)  properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t_str_date_src values ('valid', '%Y-%m-%d'), ('invalid', '%Y-%m-%d'), ('2024-01-01', '%Y-%m-%d');
+-- result:
+-- !result
+insert into t_str_date_dst select str_to_date(c1, c2) from t_str_date_src;
+-- result:
+[REGEX].*Fail to parse date.*
+-- !result
+drop table if exists t_str_date_src;
+-- result:
+-- !result
+drop table if exists t_str_date_dst;
+-- result:
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select str_to_date('invalid', '%Y-%m-%d');
+-- result:
+None
+-- !result
+select str2date('invalid', '%Y-%m-%d');
+-- result:
+None
+-- !result

@@ -108,7 +108,7 @@ TEST_F(CSVFileWriterTest, TestWriteIntergers) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -149,7 +149,7 @@ TEST_F(CSVFileWriterTest, TestWriteBoolean) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -190,7 +190,7 @@ TEST_F(CSVFileWriterTest, TestWriteFloat) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -231,7 +231,7 @@ TEST_F(CSVFileWriterTest, TestWriteDouble) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -281,7 +281,7 @@ TEST_F(CSVFileWriterTest, TestWriteDate) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -331,7 +331,7 @@ TEST_F(CSVFileWriterTest, TestWriteDatetime) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -374,7 +374,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -440,7 +440,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayInt) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -497,7 +497,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayBigInt) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 2);
 
@@ -559,7 +559,7 @@ TEST_F(CSVFileWriterTest, TestWriteArrayWithNull) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 2);
 
@@ -627,7 +627,7 @@ TEST_F(CSVFileWriterTest, TestWriteHiveArray) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -721,7 +721,7 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 2);
 
@@ -823,7 +823,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
     }
 
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -852,7 +852,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderOnly) {
     ASSERT_OK(writer->init());
 
     // Commit without writing any data
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -882,7 +882,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithSpecialChars) {
                                                      std::move(column_evaluators), writer_options, []() {});
     ASSERT_OK(writer->init());
 
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -913,7 +913,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderWithCustomDelimiter) {
                                                      std::move(column_evaluators), writer_options, []() {});
     ASSERT_OK(writer->init());
 
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -943,7 +943,7 @@ TEST_F(CSVFileWriterTest, TestWriteHeaderEscapeCustomDelimiter) {
                                                      std::move(column_evaluators), writer_options, []() {});
     ASSERT_OK(writer->init());
 
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -979,7 +979,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
     }
 
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
 
     std::string content;
@@ -1044,11 +1044,11 @@ TEST_F(CSVFileWriterTest, TestWriteIntegersWithGzipCompression) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
-    // Note: writer->commit() already calls finalize() on CompressedOutputStream
+    // Note: writer->close() already calls finalize() on CompressedOutputStream
     // which internally closes the async stream, so we don't call async_stream->close() here
 
     // verify correctness - read compressed data and decompress
@@ -1098,11 +1098,11 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
-    // Note: writer->commit() already calls finalize() which closes the async stream
+    // Note: writer->close() already calls finalize() which closes the async stream
 
     // verify correctness
     std::string compressed_content;
@@ -1156,11 +1156,11 @@ TEST_F(CSVFileWriterTest, TestWriteLargeDataWithGzipCompression) {
         total_rows += rows_per_chunk;
     }
 
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, total_rows);
 
-    // Note: writer->commit() already calls finalize() which closes the async stream
+    // Note: writer->close() already calls finalize() which closes the async stream
 
     // Verify compressed file size is smaller than expected uncompressed size
     std::string compressed_content;
@@ -1220,7 +1220,7 @@ TEST_F(CSVFileWriterTest, TestCompressionRatio) {
         chunk->append_column(std::move(data_column), chunk->num_columns());
 
         ASSERT_OK(writer->write(chunk.get()));
-        ASSERT_OK(writer->commit().io_status);
+        ASSERT_OK(writer->close().io_status);
     }
 
     // Read and verify compressed file
@@ -1268,11 +1268,11 @@ TEST_F(CSVFileWriterTest, TestFactoryWithGzipCompression) {
 
     ASSERT_OK(writer_and_stream.writer->init());
     ASSERT_OK(writer_and_stream.writer->write(chunk.get()));
-    auto result = writer_and_stream.writer->commit();
+    auto result = writer_and_stream.writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 2);
 
-    // Note: writer->commit() already calls finalize() which closes the stream
+    // Note: writer->close() already calls finalize() which closes the stream
 
     // Verify compressed output
     std::string compressed_content;
@@ -1318,11 +1318,11 @@ TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
     }
 
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 2);
 
-    // Note: writer->commit() already calls finalize() which closes the async stream
+    // Note: writer->close() already calls finalize() which closes the async stream
 
     // Verify custom delimiters are preserved after compression
     std::string compressed_content;

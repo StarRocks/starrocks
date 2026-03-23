@@ -764,6 +764,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Exchange 算子中，单个查询在接收端的 Buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
 - 引入版本：-
 
+##### exec_state_report_max_threads
+
+- 默认值：2
+- 类型：Int
+- 单位：Threads
+- 是否动态：是
+- 描述：exec-state-report 线程池的最大线程数。该线程池由 `ExecStateReporter` 用于将普通优先级的执行状态报告（如 Fragment 完成状态、错误状态等）从 BE 异步地通过 RPC 上报给 FE。启动时实际使用的线程数为 `max(1, exec_state_report_max_threads)`。运行时修改此配置会触发对所有 Executor Set（共享和独占）中线程池调用 `update_max_threads`。该线程池的任务队列大小固定为 1000，当所有线程繁忙且队列已满时，新的上报任务将被静默丢弃。高优先级线程池由 `priority_exec_state_report_max_threads` 控制。若在高并发查询场景下观察到执行状态上报延迟或丢失，可适当增大此值。
+- 引入版本：v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_capacity
 
 - 默认值：16384
@@ -1088,6 +1097,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述: 设置用于 shared-data（cloud-native / lake）模式下 PK 索引并行获取操作的 "cloud_native_pk_index_get" 线程池的最大队列大小（待处理任务数量）。该池的实际线程数由 `pk_index_parallel_get_threadpool_max_threads` 控制；此设置仅限制可排队等待执行的任务数量。非常大的默认值（2^20）实际上使队列近似无界；降低此值可以防止排队任务导致的内存过度增长，但在队列已满时可能导致任务提交阻塞或失败。应根据工作负载并发性和内存约束与 `pk_index_parallel_get_threadpool_max_threads` 一起调优。
 - 引入版本: -
 
+##### priority_exec_state_report_max_threads
+
+- 默认值：2
+- 类型：Int
+- 单位：Threads
+- 是否动态：是
+- 描述：高优先级 exec-state-report 线程池的最大线程数。该线程池由 `ExecStateReporter` 用于将高优先级执行状态报告（如紧急 Fragment 失败）从 BE 异步地通过 RPC 上报给 FE。与普通线程池不同，该线程池的任务队列无上限。启动时实际使用的线程数为 `max(1, priority_exec_state_report_max_threads)`。运行时修改此配置会触发对所有 Executor Set（共享和独占）中优先级线程池调用 `update_max_threads`。普通线程池由 `exec_state_report_max_threads` 控制。
+- 引入版本：v4.1.0, v4.0.8, v3.5.15
+
 ##### query_cache_capacity
 
 - 默认值：536870912
@@ -1240,6 +1258,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否在存算分离（Lake）表导入数据时启用并行 MemTable Finalize。启用后，MemTable 的 Finalize 操作（排序/聚合）将从写入线程移至 Flush 线程执行，使写入线程可以继续向新的 MemTable 插入数据，同时前一个 MemTable 正在并行进行 Finalize 和 Flush。这可以通过重叠 CPU 密集型的 Finalize 操作与 I/O 密集型的 Flush 操作来显著提高导入吞吐量。注意：当需要填充自增列时，此优化会自动禁用，因为自增 ID 的分配必须在 MemTable 提交 Flush 之前完成。
 - 引入版本：-
+
+##### allow_list_object_for_random_bucketing_on_cache_miss
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 random bucketing 大小检查在 Lake metadata 缓存未命中时是否允许回退到对象存储 LIST。`true` 表示回退到 LIST 元数据文件计算 base size（历史行为、估算更准确）；`false` 表示跳过 LIST，直接使用 `base_size = 0`，可减少 LIST object 请求，但因大小估算精度下降，可能使 immutable 标记稍晚触发。
+- 引入版本：4.1.0, 4.0.7, 3.5.15
 
 ##### enable_stream_load_verbose_log
 
@@ -1704,6 +1731,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
+- 引入版本：-
+
+##### automatic_partition_thread_pool_thread_num
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自动分区线程池的线程数。队列长度自动设置为线程数的 10 倍。
 - 引入版本：-
 
 ##### create_tablet_worker_count
@@ -2773,6 +2809,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Tablet Stat Cache 的更新间隔。
 - 引入版本：-
 
+##### lake_enable_accurate_pk_row_count
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为存算分离（Lake）主键表 tablet 使用精确行数统计。开启后会读取每个 rowset 在对象存储中的 delete vector 来扣减删除行，统计更准确，但会显著增加 `get_tablet_stats` RPC 的开销；关闭后使用 rowset 元数据中的近似 `num_dels`，可避免远端 I/O，但对“已删除但尚未 compaction”的行可能略有高估。
+- 引入版本：-
+
+##### lake_tablet_stat_slow_log_ms
+
+- 默认值：300000
+- 类型：Int64
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Tablet 统计采集慢日志阈值（毫秒）。单次 tablet 统计任务耗时超过该阈值时，会输出告警日志，附带 `tablet_id`、版本、rowset 数、是否精确模式和耗时等诊断信息。
+- 引入版本：-
+
+##### lake_metadata_fetch_thread_count
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
+- 引入版本：-
+
 ##### tablet_writer_open_rpc_timeout_sec
 
 - 默认值：300
@@ -2919,6 +2982,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 存算分离
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大 Segment 文件数。若需要重建的文件数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以减少需要重放的 Segment 数量。设置为 `0` 则禁用此提前刷盘策略。
+- 引入版本：-
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- 默认值：10000000
+- 类型：Long
+- 单位：行
+- 是否动态：是
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
+- 引入版本：-
+
 ##### download_buffer_size
 
 - 默认值：4194304
@@ -3006,7 +3087,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。
+- 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
 
 ##### starlet_use_star_cache
@@ -3119,6 +3200,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Data Cache 自动扩缩容时的最小有效容量。当需要调整的目标容量小于该值时，系统会直接将缓存空间调整为 `0`，以避免缓存空间过小导致频繁填充和淘汰带来负优化。
 - 引入版本：v3.3.0
 
+##### datacache_unified_instance_enable
+
+- 默认值：true
+- 类型：Bool
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，是否使用统一的 data cache 实例管理 internal catalog 和 external catalog 的数据缓存。
+- 引入版本：v3.4.0
+
 ##### disk_high_level
 
 - 默认值：90
@@ -3190,6 +3280,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述：JDBC 连接池中最少的空闲连接数量。
 - 引入版本：-
+
+##### jdbc_connection_max_lifetime_ms
+
+- 默认值: 300000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: JDBC 连接池中连接的最大生命周期。连接在此超时前会被回收，以防止出现陈旧连接。允许的最小值为 30000 (30 秒)。
+- 引入版本: -
+
+##### jdbc_connection_keepalive_time_ms
+
+- 默认值: 30000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: 空闲 JDBC 连接的保活间隔。空闲连接会在此间隔进行测试，以主动检测陈旧连接。设置为 0 可禁用保活探测。启用时，必须 >= 30000 且小于 `jdbc_connection_max_lifetime_ms`。无效的启用值将被静默禁用（重置为 0）。
+- 引入版本: -
 
 ##### lake_clear_corrupted_cache_data
 

@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg.procedure;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -51,7 +52,7 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() > 2) {
             throw new StarRocksConnectorException(
                     "invalid args. only support `older_than` and `retain_last` in the expire snapshot operation");
@@ -88,5 +89,6 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
             expireSnapshots = expireSnapshots.retainLast(retainLast);
         }
         expireSnapshots.commit();
+        return null;
     }
 }

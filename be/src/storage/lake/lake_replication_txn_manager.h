@@ -23,6 +23,7 @@
 
 namespace starrocks {
 struct FileEncryptionPair;
+struct WritableFileOptions;
 class TabletMetadataPB;
 class FileSystem;
 } // namespace starrocks
@@ -48,6 +49,16 @@ public:
     StatusOr<TabletMetadataPtr> build_source_tablet_meta(int64_t src_tablet_id, int64_t version,
                                                          const std::string& meta_dir,
                                                          const std::shared_ptr<FileSystem>& shared_src_fs);
+
+    // Try to build source tablet meta with fallback for legacy path formats from older StarRocks versions.
+    // If the metadata is not found with the current path format, it will try legacy formats in order:
+    // - Current format: db{db_id}/{table_id}/{partition_id}/meta
+    // - Legacy format without db_id: {table_id}/{partition_id}/meta
+    // - Very old format without db_id and partition_id: {table_id}/meta
+    // If successful with a legacy format, src_meta_dir and src_data_dir will be updated to the working paths.
+    StatusOr<TabletMetadataPtr> try_build_source_tablet_meta_with_fallback(
+            int64_t src_tablet_id, int64_t version, int64_t src_db_id, TTransactionId txn_id, std::string& src_meta_dir,
+            std::string& src_data_dir, const std::shared_ptr<FileSystem>& shared_src_fs);
 
     // Helper function to build existed filename UUIDs map from target tablet metadata
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
@@ -79,11 +90,35 @@ public:
     Status update_tablet_metadata_segment_sizes(const std::shared_ptr<TabletMetadataPB>& tablet_metadata,
                                                 const std::unordered_map<std::string, size_t>& segment_size_changes);
 
+    // Copy a non-segment file (e.g. .del, .sst, .delvec, .cols) with size verification and retry.
+    // Gets source file size first, then copies with retry on failure or size mismatch.
+    // Returns the actual file size after a successful copy.
+    static StatusOr<size_t> copy_non_segment_file_with_retry(const std::string& src_file_location,
+                                                             const std::shared_ptr<FileSystem>& shared_src_fs,
+                                                             const std::string& target_file_location,
+                                                             const WritableFileOptions& opts, int max_retry);
+
 private:
     TabletManager* _tablet_manager;
 #ifdef USE_STAROS
+    // Used for non-S3 storage types to construct relative paths
+    // S3 storage type uses full path provided by FE instead
     std::unique_ptr<RemoteStarletLocationProvider> _remote_location_provider;
 #endif
 };
+
+#ifdef USE_STAROS
+// Helper function to convert S3 full path to starlet URI
+// Only used for S3 storage type (which supports partitioned prefix feature)
+std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id);
+#endif
+
+// Helper function to remove the last path component before the final directory name (meta/data)
+// Example: staros://123/bucket/path/56970/63453/meta -> staros://123/bucket/path/56970/meta
+std::string remove_last_path_component(const std::string& path);
+
+// Helper function to remove db{db_id}/ component from path
+// Example: staros://123/bucket/path/db56764/56970/63453/meta -> staros://123/bucket/path/56970/63453/meta
+std::string remove_db_id_component(const std::string& path, int64_t db_id);
 
 } // namespace starrocks::lake

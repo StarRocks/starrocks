@@ -94,6 +94,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(segment_flush_duration_us);
     REGISTER_STARROCKS_METRIC(segment_flush_io_time_us);
     REGISTER_STARROCKS_METRIC(segment_flush_bytes_total);
+    REGISTER_STARROCKS_METRIC(segment_file_not_found_total);
 
     REGISTER_STARROCKS_METRIC(update_rowset_commit_request_total);
     REGISTER_STARROCKS_METRIC(update_rowset_commit_request_failed);
@@ -115,6 +116,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
 
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
@@ -268,6 +271,9 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
     REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
     REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,

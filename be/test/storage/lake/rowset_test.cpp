@@ -1120,4 +1120,98 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_parallel_with_ski
     ASSERT_NE(segments[2], nullptr);
 }
 
+// ================================================================================
+// Tests for Rowset segment range mode (large rowset split compaction)
+// ================================================================================
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_basic) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [0, 2) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(0, rowset->segment_range_start());
+    EXPECT_EQ(2, rowset->segment_range_end());
+    EXPECT_EQ(2, rowset->num_segments()); // Only 2 segments in range
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_middle_range) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [1, 3) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(1, rowset->segment_range_start());
+    EXPECT_EQ(3, rowset->segment_range_end());
+    EXPECT_EQ(2, rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_single_segment) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [1, 2) - single segment
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(1, rowset->segment_range_start());
+    EXPECT_EQ(2, rowset->segment_range_end());
+    EXPECT_EQ(1, rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_load_segments) {
+    create_rowsets_for_testing();
+
+    // Create rowset with segment range [0, 2) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    // Load segments with fill_data_cache = false
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(false));
+    ASSERT_EQ(2, segments.size()); // Only 2 segments loaded
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_vs_normal_mode) {
+    create_rowsets_for_testing();
+
+    // Normal mode: all 3 segments
+    auto normal_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    EXPECT_FALSE(normal_rowset->is_segment_range_mode());
+    EXPECT_EQ(3, normal_rowset->num_segments());
+
+    // Segment range mode: 2 segments [0, 2)
+    auto range_rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                       2 /* segment_end */);
+    EXPECT_TRUE(range_rowset->is_segment_range_mode());
+    EXPECT_EQ(2, range_rowset->num_segments());
+
+    // Compaction segment limit mode: 1 segment
+    auto limit_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    EXPECT_FALSE(limit_rowset->is_segment_range_mode());
+    EXPECT_TRUE(limit_rowset->partial_segments_compaction());
+    EXPECT_EQ(1, limit_rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_segment_ids) {
+    create_rowsets_for_testing();
+
+    // Create rowset with segment range [1, 3) - segments 1 and 2
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(false));
+    ASSERT_EQ(2, segments.size());
+
+    // Verify segment IDs are correctly set (should be 1 and 2, not 0 and 1)
+    // The segment ID is stored in the segment's metadata
+    EXPECT_EQ(1, segments[0]->id());
+    EXPECT_EQ(2, segments[1]->id());
+}
+
 } // namespace starrocks::lake

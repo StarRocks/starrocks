@@ -69,6 +69,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -377,7 +378,7 @@ public class MetadataMgr {
         }
     }
 
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -392,7 +393,7 @@ public class MetadataMgr {
                 throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
             }
 
-            connectorMetadata.get().alterTable(context, stmt);
+            return connectorMetadata.get().alterTable(context, stmt);
         } else {
             throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
@@ -632,6 +633,11 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return getBasicTable(context, catalogName, dbName, tblName, false);
+    }
+
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                    boolean fetchExternalMetadata) {
         if (catalogName == null) {
             return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
@@ -640,7 +646,11 @@ public class MetadataMgr {
             return getTable(context, catalogName, dbName, tblName);
         }
 
-        // for external catalog, do not reach external metadata service
+        // for external catalog, optionally reach external metadata service
+        if (fetchExternalMetadata) {
+            return getTable(context, catalogName, dbName, tblName);
+        }
+
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(
                         metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))

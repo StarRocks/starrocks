@@ -195,6 +195,8 @@ public:
 
     static StatusOr<bool> file_exist(const std::string& full_path);
 
+    const OlapReaderStatistics& stats() const { return _stats; }
+
 private:
     // Load segment state
     Status _do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params);

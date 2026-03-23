@@ -144,8 +144,8 @@ Status CSVFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult CSVFileWriter::commit() {
-    FileWriter::CommitResult result{
+FileWriter::CommitResult CSVFileWriter::close() {
+    CommitResult result{
             .io_status = Status::OK(), .format = CSV, .location = _location, .rollback_action = _rollback_action};
 
     // Ensure header is written even if no data was written
@@ -239,8 +239,8 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
                                                   std::move(column_evaluators), _parsed_options, rollback_action);
     cleanup_on_failure.cancel(); // Prevent cleanup on success
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

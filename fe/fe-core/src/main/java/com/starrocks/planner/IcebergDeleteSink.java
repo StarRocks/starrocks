@@ -180,4 +180,8 @@ public class IcebergDeleteSink extends DataSink {
     public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
         return sinkExtraInfo;
     }
+
+    public boolean isUnpartitionedTable() {
+        return !icebergTable.isPartitioned();
+    }
 }

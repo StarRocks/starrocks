@@ -678,6 +678,17 @@ public:
             return Status::IOError(fmt::format("fail to get space info of path {}: {}", path, e.what()));
         }
     }
+
+    // Directly return size as both cached and total for local file system.
+    StatusOr<std::pair<size_t, size_t>> get_cache_stats(const std::string& path, int64_t offset,
+                                                        int64_t size) override {
+        (void)offset;
+        if (size < 0) {
+            ASSIGN_OR_RETURN(auto file_size, get_file_size(path));
+            return std::make_pair(static_cast<size_t>(file_size), static_cast<size_t>(file_size));
+        }
+        return std::make_pair(static_cast<size_t>(size), static_cast<size_t>(size));
+    }
 };
 
 // Default Posix FileSystem

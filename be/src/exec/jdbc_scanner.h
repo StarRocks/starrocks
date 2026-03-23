@@ -124,5 +124,10 @@ private:
 
     static const int32_t DEFAULT_JDBC_CONNECTION_POOL_SIZE = 8;
     static const int32_t MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS = 10000;
+
+    static constexpr int64_t MINIMUM_MAX_LIFETIME_MS = 30000;
+    static constexpr int64_t DEFAULT_MAX_LIFETIME_MS = 300000;
+    static constexpr int64_t MINIMUM_KEEPALIVE_TIME_MS = 30000;
+    static constexpr int64_t KEEPALIVE_DISABLED = 0;
 };
 } // namespace starrocks

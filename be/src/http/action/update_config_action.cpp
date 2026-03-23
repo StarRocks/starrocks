@@ -239,6 +239,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                                             config::transaction_publish_version_thread_pool_num_min));
         });
+        _config_callback.emplace("lake_metadata_fetch_thread_count", [&]() -> Status {
+            if (_exec_env->lake_metadata_fetch_thread_pool() != nullptr) {
+                return _exec_env->lake_metadata_fetch_thread_pool()->update_max_threads(
+                        std::max(1, config::lake_metadata_fetch_thread_count));
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
@@ -383,6 +390,19 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
                     config::load_channel_rpc_thread_pool_num);
         });
+        _config_callback.emplace("exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_exec_state_report_max_threads(
+                    config::exec_state_report_max_threads);
+            return Status::OK();
+        });
+        _config_callback.emplace("priority_exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set priority_exec_state_report_max_threads:"
+                      << config::priority_exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_priority_exec_state_report_max_threads(
+                    config::priority_exec_state_report_max_threads);
+            return Status::OK();
+        });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);
             LOG(INFO) << "set max delta writer thread num: " << max_delta_writer_thread_num;
@@ -417,13 +437,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 
 #ifdef USE_STAROS
-#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                             \
-    _config_callback.emplace(#BE_CONFIG, [value]() {                                                 \
-        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, value).empty()) { \
-            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                  \
-            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");     \
-        }                                                                                            \
-        return Status::OK();                                                                         \
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \
+    _config_callback.emplace(#BE_CONFIG, [&]() {                                                   \
+        auto val = std::to_string(config::BE_CONFIG);                                              \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, val).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");   \
+        }                                                                                          \
+        return Status::OK();                                                                       \
     });
 
         UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);

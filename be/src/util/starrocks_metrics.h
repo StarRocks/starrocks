@@ -268,6 +268,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(segment_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(segment_flush_io_time_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(segment_flush_bytes_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(segment_file_not_found_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_failed, MetricUnit::REQUESTS);
@@ -289,6 +290,8 @@ public:
     METRIC_DEFINE_INT_COUNTER(primary_key_table_error_state_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_duration_ms, MetricUnit::MILLISECONDS);
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(pk_index_sst_read_error_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(pk_index_sst_write_error_total, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -375,6 +378,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
@@ -405,6 +409,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(clone);
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
+    METRICS_DEFINE_THREAD_POOL(automatic_partition);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 
@@ -417,6 +422,9 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_disk_quota_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_disk_used_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_meta_used_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_bytes, MetricUnit::BYTES);
 
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;

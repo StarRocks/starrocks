@@ -133,7 +133,9 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionSpec;
@@ -150,13 +152,18 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -957,6 +964,96 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkV3RowLineageAutoMaintenance() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_lineage", 3);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableV3, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        String partitionPath = mockedNativeTableV3.location() + "/data/data_bucket=0/";
+        long initialNextRowId = ((BaseTable) mockedNativeTableV3).operations().current().nextRowId();
+        String firstPath = partitionPath + "c1.parquet";
+        long firstRecordCount = 10;
+        TSinkCommitInfo firstCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile firstDataFile = new TIcebergDataFile();
+        firstDataFile.setPath(firstPath);
+        firstDataFile.setFormat("parquet");
+        firstDataFile.setRecord_count(firstRecordCount);
+        firstDataFile.setFile_size_in_bytes(1024);
+        firstDataFile.setPartition_path(partitionPath);
+        firstDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        firstDataFile.setPartition_null_fingerprint("0");
+        firstCommitInfo.setIs_overwrite(false);
+        firstCommitInfo.setIceberg_data_file(firstDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(firstCommitInfo), null);
+        mockedNativeTableV3.refresh();
+
+        Snapshot firstSnapshot = mockedNativeTableV3.currentSnapshot();
+        Assertions.assertNotNull(firstSnapshot);
+        Assertions.assertNotNull(firstSnapshot.firstRowId());
+        Assertions.assertEquals(initialNextRowId, firstSnapshot.firstRowId().longValue());
+        Assertions.assertEquals(initialNextRowId + firstRecordCount,
+                ((BaseTable) mockedNativeTableV3).operations().current().nextRowId());
+        ManifestFile firstManifest = firstSnapshot.dataManifests(mockedNativeTableV3.io()).get(0);
+        Assertions.assertNotNull(firstManifest.firstRowId());
+        Assertions.assertEquals(initialNextRowId, firstManifest.firstRowId().longValue());
+
+        List<FileScanTask> firstFileScanTasks = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles());
+        Assertions.assertEquals(1, firstFileScanTasks.size());
+        DataFile firstCommittedFile = firstFileScanTasks.get(0).file();
+        Assertions.assertNotNull(firstCommittedFile.firstRowId());
+        Assertions.assertEquals(initialNextRowId, firstCommittedFile.firstRowId().longValue());
+        Assertions.assertNotNull(firstCommittedFile.dataSequenceNumber());
+        Assertions.assertEquals(firstSnapshot.sequenceNumber(), firstCommittedFile.dataSequenceNumber().longValue());
+
+        long secondStartRowId = ((BaseTable) mockedNativeTableV3).operations().current().nextRowId();
+        String secondPath = partitionPath + "c2.parquet";
+        long secondRecordCount = 15;
+        TSinkCommitInfo secondCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile secondDataFile = new TIcebergDataFile();
+        secondDataFile.setPath(secondPath);
+        secondDataFile.setFormat("parquet");
+        secondDataFile.setRecord_count(secondRecordCount);
+        secondDataFile.setFile_size_in_bytes(2048);
+        secondDataFile.setPartition_path(partitionPath);
+        secondDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        secondDataFile.setPartition_null_fingerprint("0");
+        secondCommitInfo.setIs_overwrite(false);
+        secondCommitInfo.setIceberg_data_file(secondDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(secondCommitInfo), null);
+        mockedNativeTableV3.refresh();
+
+        Snapshot secondSnapshot = mockedNativeTableV3.currentSnapshot();
+        Assertions.assertNotNull(secondSnapshot);
+        Assertions.assertNotNull(secondSnapshot.firstRowId());
+        Assertions.assertEquals(secondStartRowId, secondSnapshot.firstRowId().longValue());
+        Assertions.assertEquals(secondStartRowId + secondRecordCount,
+                ((BaseTable) mockedNativeTableV3).operations().current().nextRowId());
+
+        List<FileScanTask> secondFileScanTasks = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles());
+        Assertions.assertEquals(2, secondFileScanTasks.size());
+        Map<String, Long> firstRowIdByPath = new HashMap<>();
+        for (FileScanTask task : secondFileScanTasks) {
+            firstRowIdByPath.put(task.file().path().toString(), task.file().firstRowId());
+        }
+        Assertions.assertEquals(initialNextRowId, firstRowIdByPath.get(firstPath).longValue());
+        Assertions.assertEquals(secondStartRowId, firstRowIdByPath.get(secondPath).longValue());
+    }
+
+    @Test
     public void testFinishSink3() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -1610,8 +1707,95 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
         Assertions.assertEquals(2, partitions.size());
-        // partition's modified time should not be -1 even if snapshot has been expired
-        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
+        // When snapshot has been expired, last_updated_at can be null and modifiedTime will be -1.
+        // version (stats fingerprint) must be non-negative for DefaultTraits version comparison path.
+        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getVersion() == -1));
+    }
+
+    @Test
+    public void testExpiredSnapshotPartitionsHaveDistinctVersions() {
+        // FILE_B_1: k2=2, recordCount=3, fileSize=20
+        // FILE_B_2: k2=3, recordCount=4, fileSize=20
+        // Append each to separate snapshots, then expire both.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        Map<String, Partition> partitionMap = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Assertions.assertEquals(2, partitionMap.size());
+        Partition p1 = partitionMap.get("k2=2");
+        Partition p2 = partitionMap.get("k2=3");
+        Assertions.assertNotNull(p1);
+        Assertions.assertNotNull(p2);
+        // Both versions must be >= 0 (valid for DefaultTraits comparison)
+        Assertions.assertTrue(p1.getVersion() >= 0,
+                "Expired snapshot partition k2=2 must have non-negative version, got: " + p1.getVersion());
+        Assertions.assertTrue(p2.getVersion() >= 0,
+                "Expired snapshot partition k2=3 must have non-negative version, got: " + p2.getVersion());
+        // Partitions with different stats (different recordCount) must have distinct versions
+        Assertions.assertNotEquals(p1.getVersion(), p2.getVersion(),
+                "Partitions with different record counts should have distinct version fingerprints");
+    }
+
+    @Test
+    public void testExpiredSnapshotVersionStableWhenUnrelatedPartitionChanges() {
+        // Append FILE_B_1 (k2=2, recordCount=3) and expire that snapshot.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        // Capture the version of k2=2 when its snapshot is expired.
+        Map<String, Partition> partitionMapBefore = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Partition p1Before = partitionMapBefore.get("k2=2");
+        Assertions.assertNotNull(p1Before);
+        long versionBefore = p1Before.getVersion();
+        Assertions.assertTrue(versionBefore >= 0,
+                "Expired snapshot partition must have non-negative version, got: " + versionBefore);
+
+        // Now write to a different partition (k2=3) — this creates a new non-expired snapshot for the table.
+        // FILE_B_2: k2=3, recordCount=4, fileSize=20
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        // Capture version of k2=2 again — its stats are unchanged, so the fingerprint must be stable.
+        Map<String, Partition> partitionMapAfter = icebergHiveCatalog.getPartitions(icebergTable, -1, null);
+        Partition p1After = partitionMapAfter.get("k2=2");
+        Assertions.assertNotNull(p1After);
+        long versionAfter = p1After.getVersion();
+
+        // Core regression test: writing to k2=3 must NOT change k2=2's version.
+        Assertions.assertEquals(versionBefore, versionAfter,
+                "Writing to an unrelated partition (k2=3) must not change the version of k2=2's expired-snapshot fingerprint");
     }
 
     @Test
@@ -2983,5 +3167,78 @@ public class IcebergMetadataTest extends TableTestBase {
         // Verify a new snapshot was created after metadata delete
         org.apache.iceberg.Snapshot latestSnapshot = mockedNativeTableB.currentSnapshot();
         Assertions.assertNotNull(latestSnapshot, "Latest snapshot should exist after metadata delete");
+    }
+
+    @Test
+    public void testSplitFileScanTaskCoalescesPositionDeleteTasks() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DeleteFile deleteFile = Mockito.mock(DeleteFile.class);
+        Mockito.when(deleteFile.content()).thenReturn(FileContent.POSITION_DELETES);
+        Mockito.when(task.deletes()).thenReturn(List.of(deleteFile));
+        Mockito.when(task.start()).thenReturn(0L);
+        Mockito.when(task.length()).thenReturn(180L);
+
+        FileScanTask splitTask1 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask1.start()).thenReturn(0L);
+        Mockito.when(splitTask1.length()).thenReturn(64L);
+
+        FileScanTask splitTask2 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask2.start()).thenReturn(64L);
+        Mockito.when(splitTask2.length()).thenReturn(64L);
+
+        FileScanTask splitTask3 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask3.start()).thenReturn(128L);
+        Mockito.when(splitTask3.length()).thenReturn(52L);
+
+        Mockito.when(task.split(128L)).thenReturn(List.of(splitTask1, splitTask2, splitTask3));
+
+        Method splitMethod = IcebergMetadata.class.getDeclaredMethod("splitFileScanTask",
+                FileScanTask.class, long.class);
+        splitMethod.setAccessible(true);
+
+        CloseableIterable<FileScanTask> iterable =
+                (CloseableIterable<FileScanTask>) splitMethod.invoke(metadata, task, 128L);
+        List<FileScanTask> actualTasks = Lists.newArrayList(iterable);
+
+        Assertions.assertEquals(2, actualTasks.size());
+        Assertions.assertEquals(0L, actualTasks.get(0).start());
+        Assertions.assertEquals(128L, actualTasks.get(0).length());
+        Assertions.assertEquals(128L, actualTasks.get(1).start());
+        Assertions.assertEquals(52L, actualTasks.get(1).length());
+        Assertions.assertSame(task.deletes(), actualTasks.get(0).deletes());
+        Assertions.assertSame(task.deletes(), actualTasks.get(1).deletes());
+    }
+
+    @Test
+    public void testSplitFileScanTaskUsesTableScanUtilForNonPositionDeleteTasks() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DeleteFile deleteFile = Mockito.mock(DeleteFile.class);
+        Mockito.when(deleteFile.content()).thenReturn(FileContent.EQUALITY_DELETES);
+        Mockito.when(task.deletes()).thenReturn(List.of(deleteFile));
+
+        CloseableIterable<FileScanTask> expectedIterable = CloseableIterable.withNoopClose(List.of(task));
+        Method splitMethod = IcebergMetadata.class.getDeclaredMethod("splitFileScanTask",
+                FileScanTask.class, long.class);
+        splitMethod.setAccessible(true);
+
+        try (MockedStatic<TableScanUtil> tableScanUtilMock = Mockito.mockStatic(TableScanUtil.class)) {
+            tableScanUtilMock.when(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)))
+                    .thenReturn(expectedIterable);
+
+            CloseableIterable<FileScanTask> actualIterable =
+                    (CloseableIterable<FileScanTask>) splitMethod.invoke(metadata, task, 128L);
+
+            Assertions.assertSame(expectedIterable, actualIterable);
+            tableScanUtilMock.verify(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)),
+                    Mockito.times(1));
+        }
     }
 }

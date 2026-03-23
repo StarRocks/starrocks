@@ -54,6 +54,7 @@ import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
@@ -118,6 +119,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        MetricRepo.COUNTER_PUBLISH_VERSION_DAEMON_LOOP.increase(1L);
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
@@ -374,6 +376,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         transactionState.getTransactionId(), exception.getMessage());
                 return;
             }
+        } else {
+            // All publish tasks finished; the transaction was logically ready to finish as soon as the last
+            // publish task completed. Use publishVersionFinishTime so that publishCanFinishLatencyMs is not
+            // inflated by the daemon loop interval (which would happen if we used System.currentTimeMillis()).
+            transactionState.setReadyToFinishTimeIfUnset(transactionState.getPublishVersionFinishTime());
         }
 
         if (shouldFinishTxn) {
@@ -545,6 +552,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     txnState.updatePublishTaskFinishTime();
+                    // For lake transactions there is no quorum check; the transaction is ready to finish
+                    // as soon as the publish task succeeds. Set readyToFinishTime here so that
+                    // publishCanFinishLatencyMs and publishAckLatencyMs are recorded correctly.
+                    txnState.setReadyToFinishTimeIfUnset();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
@@ -832,6 +843,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     states.forEach(TransactionState::updatePublishTaskFinishTime);
+                    // For lake transactions there is no quorum check; the transaction is ready to finish
+                    // as soon as the publish task succeeds. Set readyToFinishTime here so that
+                    // publishCanFinishLatencyMs and publishAckLatencyMs are recorded correctly.
+                    states.forEach(TransactionState::setReadyToFinishTimeIfUnset);
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);

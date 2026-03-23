@@ -63,6 +63,7 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -867,5 +868,86 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 parseAndAnalyzeStmt(alterSql3));
         Assertions.assertTrue(exception3.getMessage().contains("ArithmeticExpr' is not supported"),
                 exception3.getMessage());
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_agg_sort_key");
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnUniq() throws Exception {
+        createTable("CREATE TABLE test.sc_uniq_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 VARCHAR(1024)\n"
+                + ") UNIQUE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_uniq_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
+    }
+
+    private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
+
+        // Add a key column with positional clause (AFTER k2)
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new1 int key after k2");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3));
+
+        // Add another key column at the default (last key) position
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new2 int key default '0'");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        Assertions.assertEquals("k_new2", tbl.getBaseSchema().get(5).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3, 5));
+    }
+
+
+    private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = tbl.getBaseSchema();
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
+    }
+
+    private void executeAlterAndWaitDone(String sql) throws Exception {
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(sql);
+        DDLStmtExecutor.execute(alterStmt, connectContext);
+        jobSize++;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        waitAlterJobDone(alterJobs);
     }
 }

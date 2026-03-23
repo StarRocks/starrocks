@@ -222,7 +222,7 @@ public class ListPartitionDescTest {
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
-            PartitionDescAnalyzer.analyzeListPartitionDesc(listSinglePartitionDesc, columnDefList, null);
+            PartitionDescAnalyzer.analyzeListPartitionDesc(listSinglePartitionDesc, columnDefList, null, null);
         });
     }
 

@@ -121,7 +121,7 @@ public class IcebergApiConverter {
                 .setResourceName(toResourceName(catalogName, "iceberg"))
                 .setCatalogDBName(remoteDbName)
                 .setCatalogTableName(remoteTableName)
-                .setComment(nativeTbl.properties().getOrDefault("common", ""))
+                .setComment(nativeTbl.properties().getOrDefault("comment", ""))
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl.schema(), nativeTbl))
                 .setIcebergProperties(toIcebergProps(
@@ -322,6 +322,13 @@ public class IcebergApiConverter {
                 boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
                 if (!hasRowId) {
                     Column column = new Column(IcebergTable.ROW_ID, IntegerType.BIGINT, true);
+                    column.setIsHidden(true);
+                    fullSchema.add(column);
+                }
+                boolean hasLastUpdatedSequenceNumber = fullSchema.stream()
+                        .anyMatch(column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER));
+                if (!hasLastUpdatedSequenceNumber) {
+                    Column column = new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, IntegerType.BIGINT, true);
                     column.setIsHidden(true);
                     fullSchema.add(column);
                 }

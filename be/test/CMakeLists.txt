@@ -66,6 +66,7 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+        ./exec/workgroup/pipeline_executor_set_manager_test.cpp
         ./exec/workgroup/work_group_manager_test.cpp
         ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
@@ -113,6 +114,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
+        ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
@@ -262,6 +264,7 @@ set(EXEC_FILES
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/parquet_variant_test.cpp
         ./formats/parquet/parquet_pos_reader_test.cpp
+        ./formats/parquet/iceberg_row_id_reader_test.cpp
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/disk_range_test.cpp

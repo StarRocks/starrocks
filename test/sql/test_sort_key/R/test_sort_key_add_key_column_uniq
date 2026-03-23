@@ -1,0 +1,166 @@
+-- name: test_sort_key_add_key_column_uniq
+create database test_uniq_add_key_sort_${uuid0};
+-- result:
+-- !result
+use test_uniq_add_key_sort_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `uniq_t` (
+    `k1` int NOT NULL,
+    `k2` int NOT NULL,
+    `v1` bigint,
+    `v2` bigint
+)
+UNIQUE KEY(k1, k2)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+ORDER BY(k2, k1)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into uniq_t values (1, 3, 10, 20), (2, 1, 30, 40), (3, 2, 50, 60);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	3	10	20
+2	1	30	40
+3	2	50	60
+-- !result
+alter table uniq_t add column k3 int key default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	3	0	10	20
+2	1	0	30	40
+3	2	0	50	60
+-- !result
+insert into uniq_t values (4, 4, 70, 80, 1);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	3	0	10	20
+2	1	0	30	40
+3	2	0	50	60
+4	4	70	80	1
+-- !result
+alter table uniq_t add column k4 int key default '0' after k1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	10	20
+2	0	1	0	30	40
+3	0	2	0	50	60
+4	0	4	70	80	1
+-- !result
+insert into uniq_t values (5, 2, 90, 100, 1, 2);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	10	20
+2	0	1	0	30	40
+3	0	2	0	50	60
+4	0	4	70	80	1
+5	2	90	100	1	2
+-- !result
+alter table uniq_t add column k5 int key default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	10	20
+2	0	1	0	0	30	40
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+-- !result
+insert into uniq_t values (6, 3, 110, 120, 1, 2, 3);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	10	20
+2	0	1	0	0	30	40
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+-- !result
+alter table uniq_t order by (k1, k4, k5, k2, k3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	10	20
+2	0	1	0	0	30	40
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+-- !result
+insert into uniq_t values (7, 1, 130, 140, 1, 2, 3);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	10	20
+2	0	1	0	0	30	40
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+7	1	130	140	1	2	3
+-- !result
+alter table uniq_t add column k6 int key default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	0	10	20
+2	0	1	0	0	0	30	40
+3	0	2	0	0	0	50	60
+4	0	4	70	0	0	80	1
+5	2	90	100	0	0	1	2
+6	3	110	120	1	0	2	3
+7	1	130	140	1	0	2	3
+-- !result
+insert into uniq_t values (8, 2, 4, 1, 2, 4, 150, 160);
+-- result:
+-- !result
+select * from uniq_t order by k1;
+-- result:
+1	0	3	0	0	0	10	20
+2	0	1	0	0	0	30	40
+3	0	2	0	0	0	50	60
+4	0	4	70	0	0	80	1
+5	2	90	100	0	0	1	2
+6	3	110	120	1	0	2	3
+7	1	130	140	1	0	2	3
+8	2	4	1	2	4	150	160
+-- !result
+drop database test_uniq_add_key_sort_${uuid0} force;
+-- result:
+-- !result

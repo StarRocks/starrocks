@@ -33,7 +33,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
 import com.starrocks.proto.TxnInfoPB;
@@ -83,6 +82,24 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
+    /**
+     * Gets the table as OlapTable. LakeTableAlterMetaJobBase supports both LakeTable and LakeMaterializedView,
+     * which are subclasses of OlapTable. Returns null if the table does not exist or is not an OlapTable.
+     */
+    private OlapTable getOlapTable(String dbName, String tableName) {
+        com.starrocks.catalog.Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbName, tableName);
+        return table instanceof OlapTable ? (OlapTable) table : null;
+    }
+
+    private OlapTable getOlapTable(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        com.starrocks.catalog.Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        return table instanceof OlapTable ? (OlapTable) table : null;
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
@@ -94,7 +111,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        OlapTable table = getOlapTable(db.getFullName(), tableName);
         if (table == null) {
             throw new AlterCancelException("table does not exist, tableName:" + tableName);
         }
@@ -128,7 +145,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected abstract TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
                                                                 MaterializedIndex index, long nodeId, Set<Long> tablets);
 
-    protected abstract void updateCatalog(Database db, LakeTable table, boolean isReplay);
+    protected abstract void updateCatalog(Database db, OlapTable table, boolean isReplay);
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
@@ -149,7 +166,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = getOlapTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
@@ -201,7 +218,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = getOlapTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             LOG.warn("table does not exist, tableId:" + tableId);
@@ -233,7 +250,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = getOlapTable(db.getId(), tableId);
         if (table == null) {
             // table has been dropped
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
@@ -301,7 +318,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         physicalPartitionIndexMap.put(physicalPartitionId, indexId, index);
     }
 
-    public void updatePartitionTabletMeta(Database db, LakeTable table, Partition partition) throws DdlException {
+    public void updatePartitionTabletMeta(Database db, OlapTable table, Partition partition) throws DdlException {
         Collection<PhysicalPartition> physicalPartitions;
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
@@ -406,7 +423,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    void updateNextVersion(@NotNull LakeTable table) {
+    void updateNextVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
             long commitVersion = commitVersionMap.get(physicalPartition.getId());
@@ -418,7 +435,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    void updateVisibleVersion(@NotNull LakeTable table) {
+    void updateVisibleVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
             long commitVersion = commitVersionMap.get(physicalPartitionId);
@@ -450,7 +467,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
-            LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+            OlapTable table = getOlapTable(db.getId(), tableId);
             if (table != null) {
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -514,7 +531,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             return;
         }
 
-        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        OlapTable table = getOlapTable(db.getId(), tableId);
         if (table == null) {
             return;
         }
@@ -555,7 +572,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
-    private void handleMVRepair(Database db, LakeTable table) {
+    private void handleMVRepair(Database db, OlapTable table) {
         if (table.getRelatedMaterializedViews().isEmpty()) {
             return;
         }

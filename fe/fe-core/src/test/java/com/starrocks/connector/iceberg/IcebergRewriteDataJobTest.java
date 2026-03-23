@@ -124,7 +124,9 @@ public class IcebergRewriteDataJobTest {
         IcebergScanNode scanNode = mock(IcebergScanNode.class);
         Deencapsulation.setField(job, "scanNodes", Collections.singletonList(scanNode));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> job.execute());
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> {
+            job.execute();
+        });
         assertEquals("Must call prepare() before execute()", ex.getMessage());
     }
 

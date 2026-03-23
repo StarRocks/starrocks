@@ -51,6 +51,7 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.EnumSet;
@@ -62,6 +63,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
@@ -89,6 +91,7 @@ public abstract class MVPCTRefreshPartitioner {
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPartitioner.class);
     private final Logger logger;
 
     protected final MvTaskRunContext mvContext;
@@ -565,6 +568,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
      * - its base table is not supported refresh by partition.
      * - its base table has updated.
+     * - its base table has deleted partitions.
      */
     public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                           MaterializedView mv,
@@ -575,6 +579,10 @@ public abstract class MVPCTRefreshPartitioner {
                 return true;
             }
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+                return true;
+            }
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
                 return true;
             }
         }

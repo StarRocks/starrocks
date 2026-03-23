@@ -32,6 +32,8 @@ public:
 
     ~AggStateCombinator() = default;
 
+    bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
+
     // get the agg state desc
     const AggStateDesc* get_agg_state_desc() const { return &_agg_state_desc; }
 
