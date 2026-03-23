@@ -859,7 +859,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSERT_TRUE(builder.update_num_del_stat(segid_to_add_dels).ok());
 
     // Seal pending rowset
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(110, final_rowset.id());
@@ -910,7 +910,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     op_write2.add_dels("d3.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(500, final_rowset.id());
@@ -965,7 +965,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     op_write2.add_dels("d2.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     ASSERT_EQ(3, final_rowset.segments_size());

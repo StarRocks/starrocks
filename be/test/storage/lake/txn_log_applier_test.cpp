@@ -81,6 +81,18 @@ std::shared_ptr<TxnLogPB> make_op_write_log(int64_t tablet_id, int64_t txn_id, i
     return log;
 }
 
+// Create an op_write txn log with bundle file offsets (bundled data files)
+std::shared_ptr<TxnLogPB> make_op_write_log_with_bundle(int64_t tablet_id, int64_t txn_id, int64_t num_rows,
+                                                        int64_t data_size, const std::vector<std::string>& segments,
+                                                        const std::vector<int64_t>& bundle_offsets) {
+    auto log = make_op_write_log(tablet_id, txn_id, num_rows, data_size, segments);
+    auto* rowset = log->mutable_op_write()->mutable_rowset();
+    for (auto offset : bundle_offsets) {
+        rowset->add_bundle_file_offsets(offset);
+    }
+    return log;
+}
+
 // Build a Tablet instance (minimal requirements for non-primary key path)
 bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
     auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
@@ -366,6 +378,105 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
     EXPECT_EQ(200, meta->rowsets(0).num_rows());
     EXPECT_EQ(4096, meta->rowsets(0).data_size());
     EXPECT_EQ(15u, meta->next_rowset_id());
+}
+
+// Test that bundle_file_offsets from multiple TxnLogs are correctly merged into the combined rowset.
+// This verifies multi-statement transaction support for file bundling.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10010);
+    auto meta = build_non_pk_metadata(10010);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    // Simulate two statements in a multi-statement transaction, each with bundled segments
+    TxnLogVector logs;
+    logs.push_back(make_op_write_log_with_bundle(10010, 10, 5, 100, {"seg_a"}, {0}));
+    logs.push_back(make_op_write_log_with_bundle(10010, 11, 7, 140, {"seg_b"}, {1024}));
+    logs.push_back(make_op_write_log_with_bundle(10010, 12, 3, 60, {"seg_c"}, {2048}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(15, rs.num_rows());
+    EXPECT_EQ(300, rs.data_size());
+    EXPECT_EQ(3, rs.segments_size());
+
+    // Verify bundle_file_offsets are preserved with 1:1 correspondence
+    ASSERT_EQ(3, rs.bundle_file_offsets_size());
+    EXPECT_EQ(0, rs.bundle_file_offsets(0));
+    EXPECT_EQ(1024, rs.bundle_file_offsets(1));
+    EXPECT_EQ(2048, rs.bundle_file_offsets(2));
+}
+
+// Test that when no TxnLogs have bundle_file_offsets, the merged rowset also has none.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10011);
+    auto meta = build_non_pk_metadata(10011);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    logs.push_back(make_op_write_log(10011, 10, 5, 100, {"seg_a"}));
+    logs.push_back(make_op_write_log(10011, 11, 7, 140, {"seg_b"}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    EXPECT_EQ(2, rs.segments_size());
+    EXPECT_EQ(0, rs.bundle_file_offsets_size());
+}
+
+// Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
+// data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
+    auto meta = build_non_pk_metadata(10012);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    // First log has bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"seg_a"}, {0}));
+    // Second log does NOT have bundle offsets
+    logs.push_back(make_op_write_log(10012, 11, 7, 140, {"seg_b"}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+}
+
+// Test reverse order: first TxnLog has no offsets, second has offsets.
+// This must also be detected as inconsistent and return error.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
+    auto meta = build_non_pk_metadata(10013);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    // First log does NOT have bundle offsets
+    logs.push_back(make_op_write_log(10013, 10, 5, 100, {"seg_a", "seg_b"}));
+    // Second log has bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"seg_c"}, {0}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+}
+
+// Test that a single TxnLog with mismatched offset/segment count returns error.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchReturnsError) {
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10014);
+    auto meta = build_non_pk_metadata(10014);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    TxnLogVector logs;
+    // 2 segments but only 1 offset → mismatch within single TxnLog
+    logs.push_back(make_op_write_log_with_bundle(10014, 10, 5, 100, {"seg_a", "seg_b"}, {0}));
+
+    Status st = applier->apply(logs);
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+    EXPECT_NE(std::string::npos, st.to_string().find("mismatch"));
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {

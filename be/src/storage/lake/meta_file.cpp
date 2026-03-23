@@ -14,6 +14,8 @@
 
 #include "meta_file.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <memory>
 
@@ -891,6 +893,11 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
             // Remap segment_idx to the merged rowset's local segment id space.
             segment_meta->set_segment_idx(_pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
+        // Merge bundle_file_offsets for bundled data files.
+        // Must maintain 1:1 correspondence with segments.
+        for (int i = 0; i < rowset_pb.bundle_file_offsets_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_bundle_file_offsets(rowset_pb.bundle_file_offsets(i));
+        }
     }
 
     // Merge replace_segments
@@ -911,9 +918,9 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
 }
 
-void MetaFileBuilder::set_final_rowset() {
+Status MetaFileBuilder::set_final_rowset() {
     if (_pending_rowset_data.rowset_pb.segments_size() == 0 && _pending_rowset_data.dels.empty()) {
-        return; // Nothing to do
+        return Status::OK(); // Nothing to do
     }
 
     auto rowset = _tablet_meta->add_rowsets();
@@ -924,6 +931,17 @@ void MetaFileBuilder::set_final_rowset() {
     LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
             << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
             << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    // Validate bundle_file_offsets 1:1 correspondence with segments before applying replace_segments.
+    // During batch apply of multiple opwrites, some may have offsets and some may not, leading to
+    // inconsistent counts. This is an error that must abort publish to prevent data corruption —
+    // silently clearing offsets would leave bundled segment paths without positional info.
+    if (rowset->bundle_file_offsets_size() > 0 && rowset->bundle_file_offsets_size() != rowset->segments_size()) {
+        return Status::InternalError(
+                fmt::format("bundle_file_offsets count mismatch in merged rowset for tablet {}: "
+                            "offsets={} segments={}. Aborting publish to prevent data corruption.",
+                            _tablet.id(), rowset->bundle_file_offsets_size(), rowset->segments_size()));
+    }
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
@@ -972,6 +990,8 @@ void MetaFileBuilder::set_final_rowset() {
 
     // Clear pending cache
     _pending_rowset_data = PendingRowsetData{};
+
+    return Status::OK();
 }
 
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
