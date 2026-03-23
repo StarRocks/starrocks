@@ -136,7 +136,7 @@ public class AnalyticAnalyzer {
         }
 
 
-        if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
+        if (AnalyticExpr.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(analyticExpr.getSkewHint())) {
             if (analyticExpr.getSkewColumn() == null) {
                 throw new SemanticException("Window skew column must be specified when using explicit skew hint");
             }

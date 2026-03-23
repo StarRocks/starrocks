@@ -98,6 +98,7 @@ public class AnalyticExpr extends Expr {
     private static final String HINT_SORT = "sort";
     private static final String HINT_HASH = "hash";
     private static final String HINT_SKEW = "skewed";
+    public static final String HINT_ANALYTIC_SKEW_EXPLICIT = "skew";
 
     public static String LEAD = "LEAD";
     public static String LAG = "LAG";
@@ -145,7 +146,7 @@ public class AnalyticExpr extends Expr {
                 } else if (HINT_SKEW.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.isSkewed = true;
-                } else if (HintNode.HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
+                } else if (HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.skewColumn = skewColumn;
                     this.skewValues = skewValues;
@@ -177,7 +178,7 @@ public class AnalyticExpr extends Expr {
         useHashBasedPartition = other.useHashBasedPartition;
         isSkewed = other.isSkewed;
         skewColumn = (other.skewColumn != null ? other.skewColumn.clone() : null);
-        skewValues = ExprUtils.cloneList(other.skewValues);
+        skewValues = Expr.cloneList(other.skewValues);
         sqlString = other.sqlString;
         setChildren();
     }
@@ -498,7 +499,7 @@ public class AnalyticExpr extends Expr {
         // all children information is contained in the group of fnCall, partitionExprs, orderByElements and window,
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
-        return Objects.hash(type,opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
+        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
                 useHashBasedPartition, isSkewed, skewColumn, skewValues);
     }
 }
