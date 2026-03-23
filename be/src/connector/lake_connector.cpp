@@ -1133,8 +1133,7 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
     }
 
     const auto& sstable_meta = metadata->sstable_meta();
-    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id
-            << " sst_count=" << sstable_meta.sstables_size();
+    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id << " sst_count=" << sstable_meta.sstables_size();
     for (const auto& sstable_pb : sstable_meta.sstables()) {
         std::string sst_path = tablet_mgr->sst_location(tablet_id, sstable_pb.filename());
         RandomAccessFileOptions opts;
