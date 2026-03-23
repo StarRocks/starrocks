@@ -537,7 +537,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `tablet_reshard_target_size`
 
-- デフォルト：1073741824 (1 GB)
+- デフォルト：10737418240 (10 GB)
 - タイプ：Int
 - 単位：Bytes
 - 変更可能：Yes

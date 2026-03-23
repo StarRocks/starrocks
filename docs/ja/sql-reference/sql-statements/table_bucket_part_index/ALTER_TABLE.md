@@ -479,7 +479,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 パラメータ：
 
-- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：1 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
+- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：10 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
 
   - SPLIT が実行される条件：
     - Tablet のサイズが `tablet_reshard_target_size` を**上回る**こと。
@@ -1399,7 +1399,7 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### Tablet の分割または結合
 
-- 表内にあるすべての条件を満たすタブレットを、1 GB (デフォルト) を目標サイズとして分割する。
+- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;

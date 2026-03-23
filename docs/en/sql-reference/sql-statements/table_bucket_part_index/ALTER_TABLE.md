@@ -477,7 +477,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 Parameter:
 
-- `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 1 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
+- `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 10 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
 
   - A tablet will be split if both the following conditions are met:
     - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
@@ -1398,7 +1398,7 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### SPLIT or MERGE tablets
 
-- Split all tablets that meet the conditions in the table to a target size of 1 GB (Default).
+- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
