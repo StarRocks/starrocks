@@ -19,6 +19,7 @@ ADD_BE_LIB(ColumnCore
         array_view_column.cpp
         map_column.cpp
         struct_column.cpp
+        raw_buffer.cpp
         column.cpp
         column_filter_range.cpp
         column_visitor.cpp
