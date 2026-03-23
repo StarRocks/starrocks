@@ -127,14 +127,22 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate = new RESTSessionCatalog();
             configureHadoopConf(delegate, conf);
             delegate.initialize(name, restCatalogProperties);
-            Object authManager = delegate.authManager();
-            if (authManager instanceof RefreshingAuthManager) {
-                ((RefreshingAuthManager) authManager).keepRefreshed(true);
-            }
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
             throw new StarRocksConnectorException("Failed to load rest catalog",
                     new RuntimeException("Failed to load rest catalog, exception: " + re.getMessage(), re));
+        }
+        try {
+            java.lang.reflect.Field authManagerField =
+                    delegate.getClass().getDeclaredField("authManager");
+            authManagerField.setAccessible(true);
+            Object authMgr = authManagerField.get(delegate);
+            if (authMgr instanceof RefreshingAuthManager) {
+                this.refreshingAuthManager = (RefreshingAuthManager) authMgr;
+                this.refreshingAuthManager.keepRefreshed(true);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            LOG.warn("Failed to start OAuth2 token refresh scheduler", e);
         }
     }
 
