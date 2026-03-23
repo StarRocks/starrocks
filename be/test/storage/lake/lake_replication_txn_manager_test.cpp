@@ -806,7 +806,7 @@ protected:
 TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure) {
     // SyncPoint makes new_fs_starlet return nullptr by setting an error status
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
         *fs_st = absl::InternalError("Mock: failed to get shard filesystem");
     });
 
@@ -822,7 +822,7 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_fs_creation_failure)
 TEST_F(LakeReplicationRemoteStorageTest, test_no_full_path_fs_creation_failure) {
     // SyncPoint makes new_fs_starlet return nullptr by setting an error status
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
         *fs_st = absl::InternalError("Mock: failed to get shard filesystem");
     });
 
@@ -840,8 +840,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_has_full_path_meta_build_failure) 
 
     // SyncPoint makes new_fs_starlet return a valid (but mock) filesystem
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto request = build_request(true /* with_full_path */);
@@ -861,8 +861,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_full_path_meta_build_failure) {
 
     // SyncPoint makes new_fs_starlet return a valid (but mock) filesystem
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto request = build_request(false /* with_full_path */);

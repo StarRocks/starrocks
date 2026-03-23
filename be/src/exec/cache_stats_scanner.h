@@ -37,8 +37,13 @@ public:
     Status get_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
 private:
+    Status _collect_cache_stats(ChunkPtr* chunk);
+    Status _get_tablet_cache_stats(int64_t* cached_bytes, int64_t* total_bytes);
+
+    const TupleDescriptor* _tuple_desc;
     int64_t _tablet_id = 0;
     int64_t _version = 0;
+    bool _is_finished = false;
 };
 
 } // namespace starrocks
