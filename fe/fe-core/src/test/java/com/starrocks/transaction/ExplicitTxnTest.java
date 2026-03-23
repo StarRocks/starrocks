@@ -538,4 +538,166 @@ public class ExplicitTxnTest {
         Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
         Assertions.assertEquals("database 0 is not found", context.getState().getErrorMessage());
     }
+
+    @Test
+    public void testCommitWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // commitStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99999);
+
+        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testRollbackWithLostTransactionState() {
+        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
+        // rollbackStmt should report an error instead of silently succeeding.
+        ConnectContext context = new ConnectContext();
+        context.setTxnId(99998);
+
+        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertTrue(context.getState().isError());
+        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
+    }
+
+    @Test
+    public void testBeginWithLostTransactionState() {
+        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
+        // beginStmt should reset and create a new transaction instead of NPE.
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(900, 901);
+        context.setExecutionId(queryId);
+
+        // Simulate stale txnId without matching explicitTxnState
+        context.setTxnId(88888);
+
+        // BEGIN should recover by creating a new transaction
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
+        Assertions.assertFalse(context.getState().isError());
+        Assertions.assertNotEquals(88888, context.getTxnId());
+        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testCleanupClearsExplicitTxnState() {
+        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(950, 951);
+        context.setExecutionId(queryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
+        long txnId = context.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+        Assertions.assertNotNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+
+        // Simulate connection disconnect
+        context.cleanup();
+
+        // Verify explicitTxnState was cleaned up
+        Assertions.assertNull(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupExplicitTxnState() {
+        // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        // Create a transaction state with a very short timeout (already expired)
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
+        TransactionState transactionState = new TransactionState(transactionId, "timeout_test_label", null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+                1L); // 1ms timeout
+        transactionState.setPrepareTime(System.currentTimeMillis() - 10000); // Started 10 seconds ago
+
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(transactionState);
+        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the timed-out state was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(transactionId));
+    }
+
+    @Test
+    public void testAbortTimeoutTxnsCleanupOrphanedNullState() {
+        // Test that abortTimeoutTxns() also cleans up entries where transactionState is null
+        // (orphaned entries from lost state, e.g., after FE leader switch)
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        long orphanTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState orphanState = new ExplicitTxnState();
+        // transactionState is null by default - simulates orphaned entry
+        globalTransactionMgr.addTransactionState(orphanTxnId, orphanState);
+
+        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+
+        // Run timeout cleanup
+        globalTransactionMgr.abortTimeoutTxns();
+
+        // Verify the orphaned null-state entry was cleaned up
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
+    }
+
+    @Test
+    public void testBeginWithStaleExplicitTxnStateClearsEntry() {
+        // Test that beginStmt clears the stale map entry when explicitTxnState exists
+        // but transactionState is null
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(960, 961);
+        context.setExecutionId(queryId);
+
+        // Add a stale entry with null transactionState
+        long staleTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
+        ExplicitTxnState staleState = new ExplicitTxnState();
+        globalTransactionMgr.addTransactionState(staleTxnId, staleState);
+        context.setTxnId(staleTxnId);
+
+        // beginStmt should detect the lost state, clean up stale entry, and start fresh
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "stale_cleanup_label"));
+
+        // Stale entry should be removed from the map
+        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(staleTxnId));
+        // A new transaction should have been started
+        Assertions.assertNotEquals(0, context.getTxnId());
+        Assertions.assertNotEquals(staleTxnId, context.getTxnId());
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
 }
