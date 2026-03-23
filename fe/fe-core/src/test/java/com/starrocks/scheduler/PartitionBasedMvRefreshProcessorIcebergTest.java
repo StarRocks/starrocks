@@ -17,13 +17,17 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -31,6 +35,8 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -47,6 +53,16 @@ import java.util.stream.Collectors;
 @TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
+    private static boolean isRefreshExternalTableCall() {
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            if (PartitionBasedMvRefreshProcessor.class.getName().equals(element.getClassName())
+                    && "refreshExternalTable".equals(element.getMethodName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
@@ -58,6 +74,47 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
+    }
+
+    @Test
+    public void testRefreshExternalTablePreciseFallsBackToWholeTable() throws Exception {
+        String mvName = "iceberg_precise_mv";
+        boolean originalConfig = Config.enable_materialized_view_external_table_precise_refresh;
+        List<List<String>> calls = Lists.newArrayList();
+        List<Boolean> onlyCachedPartitions = Lists.newArrayList();
+        Config.enable_materialized_view_external_table_precise_refresh = true;
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                            "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"partition_refresh_number\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+
+            new MockUp<MetadataMgr>() {
+                @Mock
+                public void refreshTable(String catalogName, String srDbName, Table table,
+                                         List<String> partitionNames, boolean onlyCached) {
+                    if (table.isIcebergTable() && isRefreshExternalTableCall()) {
+                        calls.add(Lists.newArrayList(partitionNames));
+                        onlyCachedPartitions.add(onlyCached);
+                    }
+                }
+            };
+
+            starRocksAssert.refreshMvPartition("refresh materialized view " + mvName + " partition " +
+                    "start('2020-01-01') end('2020-01-03')");
+            Assertions.assertFalse(calls.isEmpty());
+            Assertions.assertTrue(calls.stream().allMatch(List::isEmpty));
+            Assertions.assertTrue(onlyCachedPartitions.stream().allMatch(value -> !value));
+        } finally {
+            Config.enable_materialized_view_external_table_precise_refresh = originalConfig;
+            starRocksAssert.dropMaterializedView(mvName);
+        }
     }
 
     @Test
