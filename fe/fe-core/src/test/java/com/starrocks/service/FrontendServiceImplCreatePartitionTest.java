@@ -811,6 +811,141 @@ public class FrontendServiceImplCreatePartitionTest {
         }
     }
 
+    /**
+     * Test that auto partition creation succeeds when schema change job is in FINISHED_REWRITING state.
+     * The cancel attempt will fail, but the code should wait for the job to complete (table state
+     * returns to NORMAL) and then proceed with partition creation.
+     */
+    @Test
+    public void testCreatePartitionWaitsForFinishedRewritingSchemaChange() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "test_table");
+
+        TransactionState txnState = new TransactionState();
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Long getAliveComputeNodeId(ComputeResource computeResource, long tabletId) {
+                return 50001L;
+            }
+
+            @Mock
+            public boolean isResourceAvailable(ComputeResource resource) {
+                return true;
+            }
+        };
+
+        // Mock cancel to throw (simulating FINISHED_REWRITING state where cancel fails)
+        new MockUp<com.starrocks.server.LocalMetastore>() {
+            @Mock
+            public void cancelAlter(com.starrocks.sql.ast.CancelAlterTableStmt stmt, String reason)
+                    throws com.starrocks.common.DdlException {
+                throw new com.starrocks.common.DdlException(
+                        "Job can not be cancelled. State: FINISHED_REWRITING");
+            }
+        };
+
+        // Mock SchemaChangeHandler to return a job in FINISHED_REWRITING state.
+        // Use a minimal stub that implements all abstract methods.
+        com.starrocks.alter.AlterJobV2 mockJob = new com.starrocks.alter.AlterJobV2(
+                com.starrocks.alter.AlterJobV2.JobType.SCHEMA_CHANGE) {
+            @Override
+            public com.starrocks.alter.AlterJobV2.JobState getJobState() {
+                return com.starrocks.alter.AlterJobV2.JobState.FINISHED_REWRITING;
+            }
+
+            @Override
+            public com.starrocks.alter.AlterJobV2 copyForPersist() {
+                return this;
+            }
+
+            @Override
+            public void replay(com.starrocks.alter.AlterJobV2 replayedJob) {
+            }
+
+            @Override
+            public java.util.Optional<Long> getTransactionId() {
+                return java.util.Optional.empty();
+            }
+
+            @Override
+            protected void runPendingJob() {
+            }
+
+            @Override
+            protected void runWaitingTxnJob() {
+            }
+
+            @Override
+            protected void runRunningJob() {
+            }
+
+            @Override
+            protected void runFinishedRewritingJob() {
+            }
+
+            @Override
+            protected boolean cancelImpl(String errMsg) {
+                return false;
+            }
+
+            @Override
+            protected void getInfo(java.util.List<java.util.List<Comparable>> infos) {
+            }
+        };
+        new MockUp<com.starrocks.alter.SchemaChangeHandler>() {
+            @Mock
+            public java.util.List<com.starrocks.alter.AlterJobV2> getUnfinishedAlterJobV2ByTableId(long tblId) {
+                return java.util.List.of(mockJob);
+            }
+        };
+
+        // Set table state to SCHEMA_CHANGE, then simulate it returning to NORMAL after a delay
+        // (as would happen when the FINISHED_REWRITING job completes)
+        OlapTable.OlapTableState originalState = table.getState();
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        // Schedule a task to set the table state back to NORMAL after 1 second,
+        // simulating the schema change job completing
+        java.util.concurrent.ScheduledExecutorService scheduler =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+        scheduler.schedule(() -> table.setState(OlapTable.OlapTableState.NORMAL),
+                1, TimeUnit.SECONDS);
+
+        try {
+            List<List<String>> partitionValues = Lists.newArrayList();
+            partitionValues.add(Lists.newArrayList("2025-08-01"));
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TCreatePartitionRequest request = new TCreatePartitionRequest();
+            request.setDb_id(db.getId());
+            request.setTable_id(table.getId());
+            request.setTxn_id(200L);
+            request.setPartition_values(partitionValues);
+            request.setTimeout_s(30);
+
+            TCreatePartitionResult result = impl.createPartition(request);
+
+            // The partition creation should succeed because the wait mechanism detects the
+            // FINISHED_REWRITING state and waits for the table to return to NORMAL
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(),
+                    "Partition creation should succeed after waiting for schema change to complete. " +
+                    "Actual error: " + (result.getStatus().getError_msgs() != null ?
+                            result.getStatus().getError_msgs() : "none"));
+        } finally {
+            table.setState(originalState);
+            scheduler.shutdownNow();
+        }
+    }
+
     private static void addYearlyPartition(OlapTable table, String name,
                                            int startYear, int endYear,
                                            long partitionId, long physicalPartitionId) throws Exception {
