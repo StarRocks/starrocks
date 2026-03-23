@@ -161,6 +161,8 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
     param->join_type = _join_type;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
+    param->build_allocator = _build_allocator;
+    param->probe_allocator = _probe_allocator;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->enable_late_materialization = _enable_late_materialization;

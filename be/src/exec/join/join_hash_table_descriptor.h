@@ -106,6 +106,7 @@ using AsofIndexBufferVariant =
 struct JoinHashTableItems {
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
+    memory::Allocator* build_allocator = memory::get_default_column_allocator();
     Columns key_columns;
     std::vector<HashTableSlotDescriptor> build_slots;
     std::vector<HashTableSlotDescriptor> probe_slots;
@@ -252,12 +253,24 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
     ColumnPtr asof_temporal_condition_column = nullptr;
+    memory::Allocator* allocator = memory::get_default_column_allocator();
 
-    HashTableProbeState()
-            : build_index_column(UInt32Column::create()),
-              probe_index_column(UInt32Column::create()),
+    static MutableColumnPtr create_uint32_column(memory::Allocator* allocator, const MutableColumnPtr& src) {
+        auto column = UInt32Column::create(allocator, src->size());
+        Buffer<uint32_t> indexes(src->size());
+        for (uint32_t i = 0; i < src->size(); ++i) {
+            indexes[i] = i;
+        }
+        column->append_selective(*src, indexes.data(), 0, src->size());
+        return column;
+    }
+
+    HashTableProbeState(memory::Allocator* allocator_ = memory::get_default_column_allocator())
+            : build_index_column(UInt32Column::create(allocator_)),
+              probe_index_column(UInt32Column::create(allocator_)),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
-              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()) {}
+              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
+              allocator(allocator_) {}
 
     struct ProbeCoroutine {
         struct ProbePromise {
@@ -291,14 +304,14 @@ struct HashTableProbeState {
               next(rhs.next),
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
-              probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
+              probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone(rhs.allocator)),
               key_columns(rhs.key_columns),
               build_index_column(rhs.build_index_column == nullptr
-                                         ? UInt32Column::create()->as_mutable_ptr() // to MutableColumnPtr
-                                         : rhs.build_index_column->clone()),
+                                         ? UInt32Column::create(rhs.allocator)->as_mutable_ptr() // to MutableColumnPtr
+                                         : create_uint32_column(rhs.allocator, rhs.build_index_column)),
               probe_index_column(rhs.probe_index_column == nullptr
-                                         ? UInt32Column::create()->as_mutable_ptr() // to MutableColumnPtr
-                                         : rhs.probe_index_column->clone()),
+                                         ? UInt32Column::create(rhs.allocator)->as_mutable_ptr() // to MutableColumnPtr
+                                         : create_uint32_column(rhs.allocator, rhs.probe_index_column)),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
               probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
               build_match_index(rhs.build_match_index),
@@ -314,7 +327,11 @@ struct HashTableProbeState {
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
               output_probe_column_timer(rhs.output_probe_column_timer),
-              probe_counter(rhs.probe_counter) {}
+              probe_counter(rhs.probe_counter),
+              asof_temporal_condition_column(rhs.asof_temporal_condition_column == nullptr
+                                                     ? nullptr
+                                                     : rhs.asof_temporal_condition_column->clone(rhs.allocator)),
+              allocator(rhs.allocator) {}
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -353,7 +370,6 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
-    // TODO: wire allocator propagation from HashJoiner in a follow-up phase.
     memory::Allocator* build_allocator = memory::get_default_column_allocator();
     memory::Allocator* probe_allocator = memory::get_default_column_allocator();
 };

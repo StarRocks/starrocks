@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/memory/malloc_allocator.h"
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
@@ -24,6 +25,7 @@
 #include "exec/join/join_hash_map_method.hpp"
 #include "exec/join/join_hash_table.h"
 #include "exec/join/join_key_constructor.h"
+#include "exec/join/join_key_constructor.hpp"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -1068,8 +1070,10 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, ProbeNullOutput) {
+    memory::MallocAllocator<false> probe_allocator;
     JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
+    table_items.build_allocator = &probe_allocator;
+    HashTableProbeState probe_state(&probe_allocator);
     table_items.probe_column_count = 3;
 
     TDescriptorTableBuilder row_desc_builder;
@@ -1093,6 +1097,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
+        ASSERT_EQ(chunk->mutable_columns()[i]->allocator(), &probe_allocator);
         auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
@@ -1102,8 +1107,10 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, BuildDefaultOutput) {
+    memory::MallocAllocator<false> build_allocator;
     JoinHashTableItems table_items;
-    HashTableProbeState probe_state;
+    table_items.build_allocator = &build_allocator;
+    HashTableProbeState probe_state(&build_allocator);
     table_items.build_column_count = 3;
 
     TDescriptorTableBuilder row_desc_builder;
@@ -1127,11 +1134,58 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     ASSERT_EQ(chunk->num_columns(), 3);
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
+        ASSERT_EQ(chunk->mutable_columns()[i]->allocator(), &build_allocator);
         auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->mutable_columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
         }
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, AllocatorPropagation) {
+    memory::MallocAllocator<false> build_allocator;
+    memory::MallocAllocator<false> probe_allocator;
+    memory::MallocAllocator<false> build_allocator_2;
+    memory::MallocAllocator<false> probe_allocator_2;
+
+    JoinHashTableItems table_items;
+    table_items.build_allocator = &build_allocator;
+    table_items.row_count = 8;
+
+    BuildKeyConstructorForSerializedFixedSize<LogicalType::TYPE_INT>::prepare(_runtime_state.get(), &table_items);
+    ASSERT_EQ(table_items.build_key_column->allocator(), &build_allocator);
+
+    HashTableProbeState probe_state(&probe_allocator);
+    ProbeKeyConstructorForSerializedFixedSize<LogicalType::TYPE_INT>::prepare(_runtime_state.get(), &probe_state);
+    ASSERT_EQ(probe_state.allocator, &probe_allocator);
+    ASSERT_EQ(probe_state.build_index_column->allocator(), &probe_allocator);
+    ASSERT_EQ(probe_state.probe_index_column->allocator(), &probe_allocator);
+    ASSERT_EQ(probe_state.probe_key_column->allocator(), &probe_allocator);
+
+    HashTableProbeState copied_probe_state(probe_state);
+    ASSERT_EQ(copied_probe_state.allocator, &probe_allocator);
+    ASSERT_EQ(copied_probe_state.build_index_column->allocator(), &probe_allocator);
+    ASSERT_EQ(copied_probe_state.probe_index_column->allocator(), &probe_allocator);
+    ASSERT_EQ(copied_probe_state.probe_key_column->allocator(), &probe_allocator);
+
+    HashTableParam param = create_table_param_int(TJoinOp::INNER_JOIN, 2);
+    param.build_allocator = &build_allocator;
+    param.probe_allocator = &probe_allocator;
+    JoinHashTable ht;
+    ht.create(param);
+
+    ASSERT_EQ(ht.table_items()->build_allocator, &build_allocator);
+    ASSERT_EQ(ht.get_build_chunk()->columns()[0]->allocator(), &build_allocator);
+    ASSERT_EQ(ht.get_key_columns()[0]->allocator(), &build_allocator);
+
+    param.build_allocator = &build_allocator_2;
+    param.probe_allocator = &probe_allocator_2;
+    ht.create(param);
+    ASSERT_EQ(ht.table_items()->build_allocator, &build_allocator_2);
+    ASSERT_EQ(ht.probe_state()->allocator, &probe_allocator_2);
+    ASSERT_EQ(ht.probe_state()->build_index_column->allocator(), &probe_allocator_2);
+    ASSERT_EQ(ht.probe_state()->probe_index_column->allocator(), &probe_allocator_2);
 }
 
 // NOLINTNEXTLINE
@@ -1290,6 +1344,9 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
+    memory::MallocAllocator<false> build_allocator;
+    memory::MallocAllocator<false> probe_allocator;
+
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
@@ -1301,6 +1358,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     param.probe_row_desc = probe_row_desc.get();
     param.build_row_desc = build_row_desc.get();
     param.join_keys.emplace_back(JoinKeyDesc{&_tinyint_type, false, nullptr});
+    param.build_allocator = &build_allocator;
+    param.probe_allocator = &probe_allocator;
 
     JoinHashTable ht;
 
@@ -1336,18 +1395,31 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
 
     // check
     ASSERT_EQ(result_chunk->columns().size(), 2);
-    auto* result_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
-    auto* result_data_column = down_cast<Int8Column*>(down_cast<NullableColumn*>(result_column)->data_column_raw_ptr());
-    auto* result_null_column =
-            down_cast<UInt8Column*>(down_cast<NullableColumn*>(result_column)->null_column_raw_ptr());
-    auto result_data = result_data_column->get_data();
-    auto result_null = result_null_column->get_data();
-    std::sort(result_data.begin(), result_data.end());
-    std::sort(result_null.begin(), result_null.end());
+    auto* result_probe_column = result_chunk->get_column_raw_ptr_by_slot_id(0);
+    auto* result_build_column = result_chunk->get_column_raw_ptr_by_slot_id(1);
+    auto* result_probe_data_column =
+            down_cast<Int8Column*>(down_cast<NullableColumn*>(result_probe_column)->data_column_raw_ptr());
+    auto* result_probe_null_column =
+            down_cast<UInt8Column*>(down_cast<NullableColumn*>(result_probe_column)->null_column_raw_ptr());
+    auto* result_build_data_column =
+            down_cast<Int8Column*>(down_cast<NullableColumn*>(result_build_column)->data_column_raw_ptr());
+    auto* result_build_null_column =
+            down_cast<UInt8Column*>(down_cast<NullableColumn*>(result_build_column)->null_column_raw_ptr());
+    ASSERT_EQ(result_build_column->allocator(), &build_allocator);
+    auto result_probe_data = result_probe_data_column->get_data();
+    auto result_probe_null = result_probe_null_column->get_data();
+    auto result_build_data = result_build_data_column->get_data();
+    auto result_build_null = result_build_null_column->get_data();
+    std::sort(result_probe_data.begin(), result_probe_data.end());
+    std::sort(result_probe_null.begin(), result_probe_null.end());
+    std::sort(result_build_data.begin(), result_build_data.end());
+    std::sort(result_build_null.begin(), result_build_null.end());
     Buffer<int8_t> check_data = {-5, 0, 3, 5};
     Buffer<uint8_t> check_null = {0, 0, 0, 0};
-    ASSERT_TRUE(result_data == check_data);
-    ASSERT_TRUE(result_null == check_null);
+    ASSERT_TRUE(result_probe_data == check_data);
+    ASSERT_TRUE(result_probe_null == check_null);
+    ASSERT_TRUE(result_build_data == check_data);
+    ASSERT_TRUE(result_build_null == check_null);
 }
 
 // NOLINTNEXTLINE

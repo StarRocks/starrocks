@@ -45,6 +45,7 @@ Status HashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
+    _join_builder->set_build_allocator(allocator());
     _partial_rf_merger->incr_builder();
 
     // For prober.
