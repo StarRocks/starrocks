@@ -283,34 +283,37 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             RETURN_IF_ERROR(convert_rowset_meta(*rowset_meta, request.transaction_id, op_write, &filename_map));
         }
 
-        // Handle delta column groups for non-PK tables.
-        // The .dcgs_snapshot file only exists when the source table uses partial update or generated columns.
-        // A NotFound error means the source has no DCGs (expected for most tables).
-        // Any other download failure (network, timeout) should be treated as a real error to prevent
-        // data inconsistency where rowsets are replicated but their DCG metadata is lost.
-        std::string remote_dcgs_snapshot_file_name = std::to_string(request.src_tablet_id) + ".dcgs_snapshot";
-        auto dcgs_snapshot_content_or = ReplicationUtils::download_remote_snapshot_file(
-                src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
-                src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
-                remote_dcgs_snapshot_file_name, config::download_low_speed_time);
-        if (dcgs_snapshot_content_or.ok()) {
-            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
-            RETURN_IF_ERROR(ProtobufFileWithHeader::load(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
+        // Handle delta column groups (DCGs) for non-PK tables.
+        // Skip .dcgs_snapshot download for incremental snapshots -- snapshot_incremental() never creates
+        // this file, so the download would always get NotFound. Only attempt download for full snapshots.
+        // Note: we cannot add a has_dcg flag to TSnapshotInfo or embed DCG in .hdr because cross-cluster
+        // replication must not depend on the source cluster upgrading its code version, so for full
+        // snapshots of tables without DCGs, the target still makes one NotFound request (acceptable since
+        // full replication is rare -- only initial sync or fallback).
+        if (!src_snapshot_info.incremental_snapshot) {
+            std::string remote_dcgs_snapshot_file_name = std::to_string(request.src_tablet_id) + ".dcgs_snapshot";
+            auto dcgs_snapshot_content_or = ReplicationUtils::download_remote_snapshot_file(
+                    src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                    src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                    remote_dcgs_snapshot_file_name, config::download_low_speed_time);
+            if (dcgs_snapshot_content_or.ok()) {
+                DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+                RETURN_IF_ERROR(ProtobufFileWithHeader::load(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
 
-            std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
-            for (const auto& rowset_meta : rowset_metas) {
-                rowset_id_to_seg_id[rowset_meta->rowset_id().to_string()] = rowset_meta->get_rowset_seg_id();
+                std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
+                for (const auto& rowset_meta : rowset_metas) {
+                    rowset_id_to_seg_id[rowset_meta->rowset_id().to_string()] = rowset_meta->get_rowset_seg_id();
+                }
+
+                RETURN_IF_ERROR(convert_dcg_meta_for_non_pk(
+                        dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
+                        txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+            } else if (!dcgs_snapshot_content_or.status().is_not_found()) {
+                LOG(WARNING) << "Failed to download dcgs_snapshot file: " << remote_dcgs_snapshot_file_name
+                             << ", status: " << dcgs_snapshot_content_or.status();
+                return dcgs_snapshot_content_or.status().clone_and_prepend("Failed to download dcgs_snapshot file: " +
+                                                                           remote_dcgs_snapshot_file_name);
             }
-
-            RETURN_IF_ERROR(convert_dcg_meta_for_non_pk(dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
-                                                        txn_log->mutable_op_replication()->mutable_dcg_meta(),
-                                                        &filename_map));
-        } else if (!dcgs_snapshot_content_or.status().is_not_found()) {
-            // NotFound means the source has no DCGs (expected for most tables).
-            LOG(WARNING) << "Failed to download dcgs_snapshot file: " << remote_dcgs_snapshot_file_name
-                         << ", status: " << dcgs_snapshot_content_or.status();
-            return dcgs_snapshot_content_or.status().clone_and_prepend("Failed to download dcgs_snapshot file: " +
-                                                                       remote_dcgs_snapshot_file_name);
         }
 
         // None-pk table always has tablet schema in tablet meta

@@ -547,9 +547,19 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         }
     }
 
-    std::stringstream dcg_snapshot_path;
-    dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
-    RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
+    // Only save .dcgs_snapshot when non-empty DCGs exist. The target side handles NotFound gracefully.
+    bool has_non_empty_dcgs = false;
+    for (int i = 0; i < dcg_snapshot_pb.dcg_lists_size(); i++) {
+        if (dcg_snapshot_pb.dcg_lists(i).dcgs_size() > 0) {
+            has_non_empty_dcgs = true;
+            break;
+        }
+    }
+    if (has_non_empty_dcgs) {
+        std::stringstream dcg_snapshot_path;
+        dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
+        RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
+    }
 
     // handle inverted index files
     std::vector<std::string> all_files;

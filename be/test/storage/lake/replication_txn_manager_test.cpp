@@ -481,6 +481,137 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     EXPECT_EQ(_src_version, status_or.value()->version());
 }
 
+// Verify incremental non-PK replication skips .dcgs_snapshot download (the file is never created
+// by snapshot_incremental, so downloading it would be a wasted HTTP round-trip).
+TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download) {
+    if (GetParam() == TKeysType::type::PRIMARY_KEYS) {
+        return;
+    }
+
+    // Create a full snapshot via remote_snapshot()
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_visible_version(_version);
+    remote_snapshot_request.__set_data_version(_version);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    remote_snapshot_request.__set_src_backends({TBackend()});
+
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
+    ASSERT_TRUE(status.ok()) << status;
+
+    // Place a .dcgs_snapshot file with real DCG data in the snapshot directory.
+    // With incremental_snapshot=true, this file should be completely ignored.
+    std::string dcg_file_path = remote_snapshot_info.snapshot_path + "/" + std::to_string(_src_tablet_id) + "/" +
+                                std::to_string(_schema_hash) + "/" + std::to_string(_src_tablet_id) + ".dcgs_snapshot";
+
+    DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+    dcg_snapshot_pb.add_tablet_id(_src_tablet_id);
+    dcg_snapshot_pb.add_rowset_id("dummy_rowset");
+    dcg_snapshot_pb.add_segment_id(0);
+    auto* dcg_list_pb = dcg_snapshot_pb.add_dcg_lists();
+    dcg_list_pb->add_versions(5);
+    auto* dcg_pb = dcg_list_pb->add_dcgs();
+    dcg_pb->add_column_files("dummy.cols");
+    auto* col_ids = dcg_pb->add_column_ids();
+    col_ids->add_column_ids(1);
+    ASSERT_TRUE(DeltaColumnGroupListHelper::save_snapshot(dcg_file_path, dcg_snapshot_pb).ok());
+
+    // Override incremental_snapshot to true
+    remote_snapshot_info.__set_incremental_snapshot(true);
+
+    // replicate_snapshot() should skip .dcgs_snapshot download for incremental snapshots
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_visible_version(_version);
+    replicate_snapshot_request.__set_data_version(_version);
+    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+
+    // Verify txn_log has no DCG metadata (the .dcgs_snapshot file was skipped)
+    auto txn_log_path = _tablet_manager->txn_log_location(_tablet_id, _transaction_id);
+    auto txn_log_or = _tablet_manager->get_txn_log(txn_log_path, false);
+    ASSERT_TRUE(txn_log_or.ok()) << txn_log_or.status();
+    EXPECT_FALSE(txn_log_or.value()->op_replication().has_dcg_meta())
+            << "Incremental replication should not load DCG metadata";
+}
+
+// Verify full snapshot skips creating .dcgs_snapshot file when all DCG lists are empty.
+TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_skips_empty_dcg_file) {
+    if (GetParam() == TKeysType::type::PRIMARY_KEYS) {
+        return;
+    }
+
+    // Create a full snapshot for a non-PK table without DCGs
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_visible_version(_version);
+    remote_snapshot_request.__set_data_version(_version);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    remote_snapshot_request.__set_src_backends({TBackend()});
+
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_FALSE(remote_snapshot_info.incremental_snapshot) << "data_version=1 should trigger full snapshot";
+
+    // Verify the .dcgs_snapshot file was NOT created (all DCG lists are empty)
+    std::string dcg_file_path = remote_snapshot_info.snapshot_path + "/" + std::to_string(_src_tablet_id) + "/" +
+                                std::to_string(_schema_hash) + "/" + std::to_string(_src_tablet_id) + ".dcgs_snapshot";
+    EXPECT_FALSE(fs::path_exist(dcg_file_path))
+            << "Empty .dcgs_snapshot file should not be created for tables without DCGs";
+
+    // Verify replicate_snapshot() still succeeds (handles NotFound gracefully)
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_visible_version(_version);
+    replicate_snapshot_request.__set_data_version(_version);
+    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+
+    status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
+    EXPECT_TRUE(status.ok()) << status;
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeReplicationTxnManagerTest, LakeReplicationTxnManagerTest,
                          testing::Values(TKeysType::type::AGG_KEYS, TKeysType::type::PRIMARY_KEYS));
 
