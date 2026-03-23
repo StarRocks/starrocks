@@ -17,28 +17,19 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
-=======
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> 30b65e4b8a ([BugFix] Fix infinite recursion in ReplaceColumnRefRewriter (#66974))
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StructField;
-import com.starrocks.type.StructType;
-import com.starrocks.type.VarcharType;
->>>>>>> 30b65e4b8a ([BugFix] Fix infinite recursion in ReplaceColumnRefRewriter (#66974))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -97,11 +88,11 @@ public class ReplaceColumnRefRewriterTest {
         // Reproduces StackOverflowError when lambda parameter is in operatorMap with isRecursively=true
         // Scenario: array_map(x -> named_struct('my_field', x.my_field), ...)
         ColumnRefOperator lambdaParam = createColumnRef(100, "x");
-        SubfieldOperator subfield = new SubfieldOperator(lambdaParam, VarcharType.VARCHAR,
+        SubfieldOperator subfield = new SubfieldOperator(lambdaParam, Type.VARCHAR,
                 Lists.newArrayList("my_field"));
 
         StructType structType = new StructType(Lists.newArrayList(
-                new StructField("my_field", VarcharType.VARCHAR)
+                new StructField("my_field", Type.VARCHAR)
         ));
         CallOperator namedStruct = new CallOperator(
                 FunctionSet.NAMED_STRUCT,
@@ -147,6 +138,6 @@ public class ReplaceColumnRefRewriterTest {
     }
 
     ColumnRefOperator createColumnRef(int id, String name) {
-        return new ColumnRefOperator(id, IntegerType.INT, name, false);
+        return new ColumnRefOperator(id, Type.INT, name, false);
     }
 }
