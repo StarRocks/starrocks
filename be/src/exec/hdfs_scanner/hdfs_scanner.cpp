@@ -204,6 +204,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
     ctx.timezone = _runtime_state->timezone();
     ctx.lake_schema = _scanner_params.lake_schema;
+    ctx.column_access_paths = _scanner_params.column_access_paths;
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;

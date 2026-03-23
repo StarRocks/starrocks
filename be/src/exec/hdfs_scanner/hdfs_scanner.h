@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "cache/cache_options.h"
+#include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
@@ -268,6 +269,7 @@ struct HdfsScannerParams {
     std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
 
     const TIcebergSchema* lake_schema = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
@@ -371,6 +373,7 @@ struct HdfsScannerContext {
     std::string timezone;
 
     const TIcebergSchema* lake_schema = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     HdfsScanStats* stats = nullptr;
 

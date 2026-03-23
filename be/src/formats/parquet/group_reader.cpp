@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 
 #include "agent/master_info.h"
@@ -25,6 +26,7 @@
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/variant_path_parser.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -48,6 +50,37 @@
 #include "utils.h"
 
 namespace starrocks::parquet {
+
+namespace {
+
+bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<VariantSegment>* segments,
+                                std::vector<std::string>* shredded_paths) {
+    if (!node->is_field() || node->path().empty()) {
+        return false;
+    }
+
+    segments->emplace_back(VariantSegment::make_object(node->path()));
+    if (node->children().empty()) {
+        VariantPath path(*segments);
+        auto shredded_path = path.to_shredded_path();
+        if (!shredded_path.has_value()) {
+            segments->pop_back();
+            return false;
+        }
+        shredded_paths->emplace_back(std::move(*shredded_path));
+        segments->pop_back();
+        return true;
+    }
+
+    bool valid = true;
+    for (const auto& child : node->children()) {
+        valid = collect_variant_leaf_paths(child.get(), segments, shredded_paths) && valid;
+    }
+    segments->pop_back();
+    return valid;
+}
+
+} // namespace
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
@@ -384,6 +417,43 @@ StatusOr<int64_t> GroupReader::_get_extended_bigint_value(SlotId slot_id) const 
     return node.int_literal.value;
 }
 
+VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(const std::string& column_name) const {
+    VariantShreddedReadHints hints;
+    if (_param.column_access_paths == nullptr || _param.column_access_paths->empty()) {
+        return hints;
+    }
+
+    std::unordered_set<std::string> unique_paths;
+    for (const auto& access_path : *_param.column_access_paths) {
+        if (access_path == nullptr || access_path->path() != column_name) {
+            continue;
+        }
+        if (access_path->children().empty()) {
+            hints.shredded_paths.clear();
+            return hints;
+        }
+
+        std::vector<VariantSegment> segments;
+        for (const auto& child : access_path->children()) {
+            size_t old_size = hints.shredded_paths.size();
+            if (!collect_variant_leaf_paths(child.get(), &segments, &hints.shredded_paths)) {
+                hints.shredded_paths.clear();
+                return hints;
+            }
+            for (size_t i = old_size; i < hints.shredded_paths.size(); ++i) {
+                if (!unique_paths.emplace(hints.shredded_paths[i]).second) {
+                    hints.shredded_paths[i].clear();
+                }
+            }
+        }
+    }
+
+    hints.shredded_paths.erase(std::remove_if(hints.shredded_paths.begin(), hints.shredded_paths.end(),
+                                              [](const std::string& path) { return path.empty(); }),
+                               hints.shredded_paths.end());
+    return hints;
+}
+
 Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     // ColumnReaderOptions is used by all column readers in one row group
@@ -469,7 +539,12 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
-        if (column.t_lake_schema_field == nullptr) {
+        if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
+            schema_node->type == ColumnType::STRUCT && column.t_lake_schema_field == nullptr) {
+            VariantShreddedReadHints hints = _get_variant_shredded_hints(column.slot_desc->col_name());
+            ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
+                                                                                              schema_node, hints));
+        } else if (column.t_lake_schema_field == nullptr) {
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
