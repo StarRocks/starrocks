@@ -23,11 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.DynamicPartitionScheduler;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
->>>>>>> 0ecba5fd93 ([BugFix] [MV] Fix precise external MV refresh fallback for Iceberg-like connectors (#70589))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
@@ -56,6 +52,16 @@ import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
+
+    private static boolean isRefreshExternalTableCall() {
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            if (PartitionBasedMvRefreshProcessor.class.getName().equals(element.getClassName())
+                    && "refreshExternalTable".equals(element.getMethodName())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -93,7 +99,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 @Mock
                 public void refreshTable(String catalogName, String srDbName, Table table,
                                          List<String> partitionNames, boolean onlyCached) {
-                    if (table.isIcebergTable()) {
+                    if (table.isIcebergTable() && isRefreshExternalTableCall()) {
                         calls.add(Lists.newArrayList(partitionNames));
                         onlyCachedPartitions.add(onlyCached);
                     }

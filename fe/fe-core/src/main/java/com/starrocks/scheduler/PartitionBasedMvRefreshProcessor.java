@@ -245,7 +245,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 refreshExternalTable(context, baseTableCandidatePartitions);
             }
 
-            if (!Config.enable_materialized_view_external_table_precise_refresh || retryNum > 1) {
+            if (shouldSyncPartitionsAfterExternalRefresh(retryNum)) {
                 try (Timer ignored = Tracers.watchScope("MVRefreshSyncPartitions")) {
                     // sync partitions between mv and base tables out of lock
                     // do it outside lock because it is a time-cost operation
@@ -447,7 +447,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // 0. Compute the base-table partitions to check for external table
         // The candidate partition info is used to refresh the external table
         Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions = Maps.newHashMap();
-        if (Config.enable_materialized_view_external_table_precise_refresh) {
+        if (isEnableExternalTablePreciseRefresh()) {
             try (Timer ignored = Tracers.watchScope("MVRefreshComputeCandidatePartitions")) {
                 if (!syncPartitions(context, false)) {
                     throw new DmlException(String.format("materialized view %s refresh task failed: sync partition failed",
@@ -670,6 +670,53 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return MvUtils.getRelatedMvs(ctx, 1, baseTables).size() > 1;
     }
 
+    private boolean isEnableExternalTablePreciseRefresh() {
+        if (!Config.enable_materialized_view_external_table_precise_refresh) {
+            return false;
+        }
+        for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+            Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
+            if (optTable.isEmpty()) {
+                continue;
+            }
+            Table table = optTable.get();
+            if (isRefreshableExternalBaseTable(table) && supportsPreciseExternalTableRefresh(table)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isRefreshableExternalBaseTable(Table table) {
+        return !(table.isNativeTableOrMaterializedView() || table.isView()
+                || MaterializedViewAnalyzer.isExternalTableFromResource(table));
+    }
+
+    private boolean supportsPreciseExternalTableRefresh(Table table) {
+        // Only connectors that actually consume partition names can safely keep the precise-refresh fast path.
+        return table.isHiveTable() || table.isHudiTable();
+    }
+
+    private boolean shouldSyncPartitionsAfterExternalRefresh(int retryNum) {
+        if (!isEnableExternalTablePreciseRefresh() || retryNum > 1) {
+            return true;
+        }
+
+        for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+            Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
+            if (optTable.isEmpty()) {
+                continue;
+            }
+            Table table = optTable.get();
+            // Iceberg/JDBC/Paimon/Delta/ODPS still refresh table-level metadata. If we skip syncPartitions here,
+            // later phases may continue using snapshotBaseTables collected before refreshExternalTable().
+            if (isRefreshableExternalBaseTable(table) && !supportsPreciseExternalTableRefresh(table)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
         if (this.mvContext.status == null) {
             return null;
@@ -789,14 +836,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // refresh old table
             Table table = optTable.get();
             // if table is native table or materialized view or connector view or external table, no need to refresh
-            if (table.isNativeTableOrMaterializedView() || table.isView()
-                    || MaterializedViewAnalyzer.isExternalTableFromResource(table)) {
+            if (!isRefreshableExternalBaseTable(table)) {
                 logger.debug("No need to refresh table:{} because it is native table or mv or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;
             }
             TableSnapshotInfo snapshotInfo = new TableSnapshotInfo(baseTableInfo, table);
-            Set<String> basePartitions = baseTableCandidatePartitions.get(snapshotInfo);
+            Set<String> basePartitions = supportsPreciseExternalTableRefresh(table)
+                    ? baseTableCandidatePartitions.get(snapshotInfo) : null;
             if (CollectionUtils.isNotEmpty(basePartitions)) {
                 // only refresh referenced partitions, to reduce metadata overhead
                 List<String> realPartitionNames = basePartitions.stream()
@@ -805,9 +852,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, realPartitionNames, false);
             } else {
-                // refresh the whole table, which may be costly in extreme case
+                // Hive/Hudi can keep refreshing cached partitions here. Other external connectors need a fuller
+                // invalidation so the next syncPartitions() can rebuild snapshotBaseTables from fresh metadata.
+                boolean onlyCachedPartitions = supportsPreciseExternalTableRefresh(table);
                 connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
+                        baseTableInfo.getDbName(), table, Lists.newArrayList(), onlyCachedPartitions);
             }
             // should clear query cache
             connectContext.getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
