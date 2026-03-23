@@ -16,6 +16,7 @@
 
 #include <unordered_map>
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
@@ -189,6 +190,8 @@ private:
     bool _use_partition_column_value_only = false;
     // only used in global late materialization
     int32_t _scan_range_id = -1;
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
+    bool _disable_column_access_path_hints = false;
 
     // ======================================
     // The following are profile metrics
