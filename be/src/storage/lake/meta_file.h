@@ -68,7 +68,7 @@ public:
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
                     const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
                     const std::vector<std::string>& del_encryption_metas);
-    void set_final_rowset();
+    Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
