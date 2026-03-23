@@ -500,4 +500,36 @@ public class MaterializedViewAnalyzerTest {
             Config.enable_range_distribution = oldEnableRangeDistribution;
         }
     }
+
+    @Test
+    public void testCreateMvOnIcebergTableWithPartitionEvolution() {
+        // Test creating MV on Iceberg table with partition evolution should fail
+        String mvName = "iceberg_evolution_mv";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('month', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Assertions.fail("Should fail because Iceberg table has partition evolution");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(
+                    "Do not support create materialized view when base iceberg table"));
+            Assertions.assertTrue(e.getMessage().contains("has done partition evolution"));
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergView() {
+        // Test creating MV on IcebergView should fail
+        String sql = "create materialized view mv_on_iceberg_view refresh manual as " +
+                "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
+        analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
+    }
 }
