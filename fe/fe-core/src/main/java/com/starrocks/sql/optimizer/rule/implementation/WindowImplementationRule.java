@@ -43,8 +43,6 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.getEnforceSortColumns(),
                 logical.isUseHashBasedPartition(),
                 logical.isSkewed(),
-                logical.getSkewColumn(),
-                logical.getSkewValues(),
                 logical.isInputIsBinary(),
                 logical.getLimit(),
                 logical.getPredicate(),
