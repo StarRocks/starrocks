@@ -537,7 +537,7 @@ This topic introduces the following types of FE configurations:
 
 ### `tablet_reshard_target_size`
 
-- Default: 1073741824 (1 GB)
+- Default: 10737418240 (10 GB)
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
