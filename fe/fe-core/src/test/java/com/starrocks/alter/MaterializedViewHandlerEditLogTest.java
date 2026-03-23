@@ -14,10 +14,12 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +30,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -39,18 +42,15 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -101,6 +101,7 @@ public class MaterializedViewHandlerEditLogTest {
         table = createHashOlapTable(dbId, tableId, indexId, TABLE_NAME, partitionId, physicalPartitionId, tabletId,
                 backendId, replicaId);
         db.registerTableUnlocked(table);
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
     }
 
     @AfterEach
@@ -134,15 +135,16 @@ public class MaterializedViewHandlerEditLogTest {
         EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
         EditLog spyEditLog = spy(originalEditLog);
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logAlterJob(any(AlterJobV2.class), any());
+                .when(spyEditLog).logAlterJob(any(AlterJobV2.class));
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         try {
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> handler.processCreateMaterializedView(stmt, db, table));
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-            Assertions.assertTrue(handler.getAlterJobsV2().isEmpty());
+            // Journal is written after in-memory updates; if log fails, state/job already reflect ROLLUP.
+            Assertions.assertEquals(OlapTable.OlapTableState.ROLLUP, table.getState());
+            Assertions.assertEquals(1, handler.getAlterJobsV2().size());
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
@@ -176,15 +178,15 @@ public class MaterializedViewHandlerEditLogTest {
         EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
         EditLog spyEditLog = spy(originalEditLog);
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logBatchAlterJob(any(BatchAlterJobPersistInfo.class), any());
+                .when(spyEditLog).logBatchAlterJob(any(BatchAlterJobPersistInfo.class));
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         try {
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> handler.processBatchAddRollup(alterClauses, db, table));
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
-            Assertions.assertTrue(handler.getAlterJobsV2().isEmpty());
+            Assertions.assertEquals(OlapTable.OlapTableState.ROLLUP, table.getState());
+            Assertions.assertEquals(1, handler.getAlterJobsV2().size());
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
@@ -223,7 +225,7 @@ public class MaterializedViewHandlerEditLogTest {
         Partition leaderPartition = table.getPartitions().iterator().next();
         long basePartitionId = leaderPartition.getId();
         long basePhysicalPartitionId = leaderPartition.getDefaultPhysicalPartition().getId();
-        long baseIndexId = table.getBaseIndexMetaId();
+        long baseIndexId = table.getBaseIndexId();
         long baseTabletId = leaderPartition.getDefaultPhysicalPartition().getIndex(baseIndexId).getTablets().get(0).getId();
         OlapTable followerTable = createHashOlapTable(db.getId(), table.getId(), baseIndexId, TABLE_NAME,
                 basePartitionId, basePhysicalPartitionId, baseTabletId, backendId, replicaId);
@@ -266,7 +268,8 @@ public class MaterializedViewHandlerEditLogTest {
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
-            Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+            // Drop in memory runs before journal; index is gone even when log fails.
+            Assertions.assertFalse(table.hasMaterializedIndex(rollupName));
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
@@ -305,7 +308,7 @@ public class MaterializedViewHandlerEditLogTest {
         Partition leaderPartition = table.getPartitions().iterator().next();
         long basePartitionId = leaderPartition.getId();
         long basePhysicalPartitionId = leaderPartition.getDefaultPhysicalPartition().getId();
-        long baseIndexId = table.getBaseIndexMetaId();
+        long baseIndexId = table.getBaseIndexId();
         long baseTabletId = leaderPartition.getDefaultPhysicalPartition().getIndex(baseIndexId).getTablets().get(0).getId();
         OlapTable followerTable = createHashOlapTable(db.getId(), table.getId(), baseIndexId, TABLE_NAME,
                 basePartitionId, basePhysicalPartitionId, baseTabletId, backendId, replicaId);
@@ -454,7 +457,7 @@ public class MaterializedViewHandlerEditLogTest {
         EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
         EditLog spyEditLog = spy(originalEditLog);
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logBatchDropRollup(any(BatchDropInfo.class), any());
+                .when(spyEditLog).logBatchDropRollup(any(BatchDropInfo.class));
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         try {
@@ -464,8 +467,8 @@ public class MaterializedViewHandlerEditLogTest {
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> handler.processBatchDropRollup(alterClauses, db, table));
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
-            Assertions.assertTrue(table.hasMaterializedIndex(rollupName1));
-            Assertions.assertTrue(table.hasMaterializedIndex(rollupName2));
+            Assertions.assertFalse(table.hasMaterializedIndex(rollupName1));
+            Assertions.assertFalse(table.hasMaterializedIndex(rollupName2));
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
@@ -493,10 +496,10 @@ public class MaterializedViewHandlerEditLogTest {
                                                  long partitionId, long physicalPartitionId, long tabletId,
                                                  long backendId, long replicaId) {
         List<Column> columns = new ArrayList<>();
-        Column col1 = new Column("k1", IntegerType.BIGINT);
+        Column col1 = new Column("k1", Type.BIGINT);
         col1.setIsKey(true);
         columns.add(col1);
-        columns.add(new Column("v1", IntegerType.BIGINT));
+        columns.add(new Column("v1", Type.BIGINT));
 
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
@@ -517,7 +520,7 @@ public class MaterializedViewHandlerEditLogTest {
                 partitionInfo, distributionInfo);
         olapTable.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1,
                 TStorageType.COLUMN, KeysType.DUP_KEYS);
-        olapTable.setBaseIndexMetaId(indexId);
+        olapTable.setBaseIndexId(indexId);
         olapTable.setDefaultDistributionInfo(distributionInfo);
         olapTable.addPartition(partition);
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
