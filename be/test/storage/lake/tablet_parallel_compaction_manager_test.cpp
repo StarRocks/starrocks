@@ -4352,7 +4352,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
     EXPECT_EQ(2, merged.output_rowset().segment_metas(2).segment_idx());
     EXPECT_EQ(3, merged.output_rowset().segment_metas(3).segment_idx());
-    EXPECT_TRUE(merged.output_rowset().overlapped());           // merged output is overlapped
+    EXPECT_TRUE(merged.output_rowset().overlapped()); // merged output is overlapped
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
