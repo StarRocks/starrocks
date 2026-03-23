@@ -34,6 +34,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -77,6 +80,10 @@ struct LakeIOOptions {
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
     bool cache_file_only = false; // only used for CACHE SELECT
+    // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
+    // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.
+    std::function<Status()> sst_warmup_fn;
+    std::shared_ptr<std::atomic<bool>> sst_warmup_done;
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };
