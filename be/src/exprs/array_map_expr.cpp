@@ -225,7 +225,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
             size_t num_rows = tmp_col->size();
-            column = ColumnHelper::align_return_type(std::move(column), type().children[0], num_rows, true);
+            column = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], num_rows, true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
