@@ -20,6 +20,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_index.h"
 
 namespace starrocks::lake {
@@ -587,6 +588,26 @@ TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_enabled_no_persisten
 
     // reset should not crash
     index.reset_publish_sst_stats();
+}
+
+// ============================================================
+// Tests for LakePersistentIndex publish SST stats getters
+// ============================================================
+
+class LakePersistentIndexSstStatsTest : public testing::Test {};
+
+TEST_F(LakePersistentIndexSstStatsTest, test_publish_sst_stats_default) {
+    // Create with nullptr tablet_mgr - safe for just testing stats getters
+    LakePersistentIndex index(nullptr, 0);
+
+    // Default values should be 0
+    EXPECT_EQ(0, index.publish_sst_flush_count());
+    EXPECT_EQ(0, index.publish_sst_flush_bytes());
+
+    // Reset should keep them at 0
+    index.reset_publish_sst_stats();
+    EXPECT_EQ(0, index.publish_sst_flush_count());
+    EXPECT_EQ(0, index.publish_sst_flush_bytes());
 }
 
 } // namespace starrocks::lake
