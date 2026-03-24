@@ -34,6 +34,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -1140,6 +1141,209 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(isNotNullStat.getHistogram());
         Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
         Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
+    }
+}
+
+
+    // -----------------------------------------------------------------------
+    // IS NULL / IS NOT NULL predicate statistics
+    // -----------------------------------------------------------------------
+
+    /**
+     * IS NULL / IS NOT NULL produce a boolean (0 or 1).
+     * visitIsNullPredicate derives the true/false row split from the input column's
+     * null fraction and embeds it as a two-entry MCV histogram.
+     *
+     * - nullsFraction=0.0  → only "0" (false) has rows  → NDV=1, MCV={"0": rowCount}
+     * - nullsFraction=0.3  → both values have rows       → NDV=2, MCV={"1": 30%, "0": 70%}
+     */
+    @Test
+    public void testIsNullPredicateStatistics() {
+        final double rowCount = 1_000_000;
+
+        // --- column with no NULLs ---
+        ColumnRefOperator col = new ColumnRefOperator(0, Type.BIGINT, "NONNULL", true);
+        ColumnStatistic colStat = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(999_999)
+                .setDistinctValuesCount(1_000_237)
+                .setNullsFraction(0)
+                .setAverageRowSize(8)
+                .build();
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        IsNullPredicateOperator isNull = new IsNullPredicateOperator(false, col);
+        ColumnStatistic isNullStat = ExpressionStatisticCalculator.calculate(isNull, statistics);
+        Assertions.assertFalse(isNullStat.isUnknown(), "IS NULL stat must not be unknown");
+        Assertions.assertEquals(0, isNullStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, isNullStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, isNullStat.getNullsFraction(), 0.001);
+        // nullsFraction=0 → only the false branch has rows → NDV=1
+        Assertions.assertEquals(1, isNullStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNullStat.getHistogram());
+        Assertions.assertEquals(1_000_000L, isNullStat.getHistogram().getMCV().get("0"));
+        Assertions.assertNull(isNullStat.getHistogram().getMCV().get("1"));
+
+        // --- column with 30 % NULLs → both branches have rows ---
+        ColumnRefOperator colPartial = new ColumnRefOperator(1, Type.BIGINT, "PARTIAL", true);
+        ColumnStatistic colPartialStat = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(999_999)
+                .setDistinctValuesCount(700_000)
+                .setNullsFraction(0.3)
+                .setAverageRowSize(8)
+                .build();
+        Statistics statsPartial = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(colPartial, colPartialStat)
+                .build();
+
+        IsNullPredicateOperator isNullPartial = new IsNullPredicateOperator(false, colPartial);
+        ColumnStatistic isNullPartialStat = ExpressionStatisticCalculator.calculate(isNullPartial, statsPartial);
+        Assertions.assertFalse(isNullPartialStat.isUnknown());
+        Assertions.assertEquals(2, isNullPartialStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNullPartialStat.getHistogram());
+        Assertions.assertEquals(300_000L, isNullPartialStat.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(700_000L, isNullPartialStat.getHistogram().getMCV().get("0"));
+
+        // IS NOT NULL must have the same shape (the result is still boolean)
+        IsNullPredicateOperator isNotNull = new IsNullPredicateOperator(true, colPartial);
+        ColumnStatistic isNotNullStat = ExpressionStatisticCalculator.calculate(isNotNull, statsPartial);
+        Assertions.assertFalse(isNotNullStat.isUnknown(), "IS NOT NULL stat must not be unknown");
+        Assertions.assertEquals(0, isNotNullStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, isNotNullStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(2, isNotNullStat.getDistinctValuesCount(), 0.001);
+    }
+
+    /**
+     * Regression test for the CASE WHEN → IF rewrite NDV-propagation bug.
+     *
+     * The SQL pattern is:
+     *   CASE WHEN `NONNULL` IS NULL THEN 1 ELSE 0 END
+     *
+     * SimplifiedPredicateRule rewrites this (single WHEN clause) to:
+     *   IF(NONNULL IS NULL, 1, 0)
+     *
+     * Because of that rewrite, visitCaseWhenOperator is never called;
+     * instead visitCall handles the IF CallOperator.
+     *
+     * Before the fix, visitIsNullPredicate returned ColumnStatistic.unknown(),
+     * which caused visitCall to fall back to deriveBasicColStats and propagate
+     * the input column's NDV (~1_000_237) instead of the correct value 2 ({0,1}).
+     *
+     * After the fix, IS NULL returns proper boolean stats (NDV=2), so the IF
+     * expression correctly reports NDV = NDV(then) + NDV(else) = 1 + 1 = 2.
+     */
+    @Test
+    public void testCaseWhenIsNullRewrittenToIfHasCorrectNdv() {
+        ColumnRefOperator col = new ColumnRefOperator(0, Type.BIGINT, "NONNULL", true);
+
+        ColumnStatistic colStat = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(999_999)
+                .setDistinctValuesCount(1_000_237)
+                .setNullsFraction(0)
+                .setAverageRowSize(8)
+                .build();
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1_000_000)
+                .addColumnStatistic(col, colStat)
+                .build();
+
+        // Condition: NONNULL IS NULL
+        IsNullPredicateOperator isNull = new IsNullPredicateOperator(false, col);
+
+        // THEN 1, ELSE 0  (as TINYINT constants, matching the rewriter output)
+        ConstantOperator then = ConstantOperator.createTinyInt((byte) 1);
+        ConstantOperator elseClause = ConstantOperator.createTinyInt((byte) 0);
+
+        // IF(NONNULL IS NULL, 1, 0)  – exactly what SimplifiedPredicateRule produces
+        CallOperator ifOp = new CallOperator(FunctionSet.IF, Type.TINYINT,
+                Lists.newArrayList(isNull, then, elseClause));
+
+        ColumnStatistic ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        // The result can only be 0 or 1 → NDV must be 2, not ~1_000_237
+        Assertions.assertFalse(ifStat.isUnknown(),
+                "IF(col IS NULL, 1, 0) statistics must not be unknown");
+        Assertions.assertEquals(2, ifStat.getDistinctValuesCount(), 0.001,
+                "NDV of IF(col IS NULL, 1, 0) must be 2 (values: {0,1}), not the input column's NDV");
+        Assertions.assertEquals(0, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, ifStat.getMaxValue(), 0.001);
+    }
+
+    /**
+     * Verifies that IF(col IS NULL, thenConst, elseConst) produces a synthetic Histogram
+     * whose MCV entries have row counts that exactly reflect the null/non-null split of the
+     * input column (Option B implementation).
+     *
+     * Scenario A – column has no NULLs (nullsFraction = 0.0):
+     *   all rows hit the ELSE branch ("0") → MCV = {"0": 1_000_000}
+     *
+     * Scenario B – column is 30 % NULL (nullsFraction = 0.3):
+     *   THEN branch ("1"): 300_000 rows
+     *   ELSE branch ("0"): 700_000 rows
+     *
+     * Scenario C – column is fully NULL (nullsFraction = 1.0):
+     *   all rows hit the THEN branch ("1") → MCV = {"1": 1_000_000}
+     */
+    @Test
+    public void testCaseWhenIsNullMcvPropagation() {
+        final double rowCount = 1_000_000;
+
+        // ---- helper: build Statistics for a given nullsFraction ----
+        java.util.function.Function<Double, Statistics> makeStats = nullFrac -> {
+            ColumnRefOperator col = new ColumnRefOperator(0, Type.BIGINT, "COL", true);
+            ColumnStatistic colStat = ColumnStatistic.builder()
+                    .setMinValue(0).setMaxValue(999_999)
+                    .setDistinctValuesCount(1_000_000)
+                    .setNullsFraction(nullFrac)
+                    .setAverageRowSize(8)
+                    .build();
+            return Statistics.builder()
+                    .setOutputRowCount(rowCount)
+                    .addColumnStatistic(col, colStat)
+                    .build();
+        };
+
+        // ---- helper: build IF(col IS NULL, 1, 0) for a given Statistics ----
+        java.util.function.Function<Statistics, ColumnStatistic> calcIfStat = stats -> {
+            ColumnRefOperator col = new ColumnRefOperator(0, Type.BIGINT, "COL", true);
+            IsNullPredicateOperator isNull = new IsNullPredicateOperator(false, col);
+            ConstantOperator then = ConstantOperator.createTinyInt((byte) 1);
+            ConstantOperator elseConst = ConstantOperator.createTinyInt((byte) 0);
+            CallOperator ifOp = new CallOperator(FunctionSet.IF, Type.TINYINT,
+                    Lists.newArrayList(isNull, then, elseConst));
+            return ExpressionStatisticCalculator.calculate(ifOp, stats);
+        };
+
+        // ---- Scenario A: nullsFraction = 0.0 ----
+        ColumnStatistic statA = calcIfStat.apply(makeStats.apply(0.0));
+        Assertions.assertNotNull(statA.getHistogram(), "Scenario A: histogram must be present");
+        java.util.Map<String, Long> mcvA = statA.getHistogram().getMCV();
+        Assertions.assertFalse(mcvA.containsKey("1"),
+                "Scenario A: THEN branch must not appear (0 null rows)");
+        Assertions.assertEquals(1_000_000L, mcvA.get("0"),
+                "Scenario A: all rows must be in the ELSE branch");
+
+        // ---- Scenario B: nullsFraction = 0.3 ----
+        ColumnStatistic statB = calcIfStat.apply(makeStats.apply(0.3));
+        Assertions.assertNotNull(statB.getHistogram(), "Scenario B: histogram must be present");
+        java.util.Map<String, Long> mcvB = statB.getHistogram().getMCV();
+        Assertions.assertEquals(300_000L, mcvB.get("1"),
+                "Scenario B: THEN branch must have 300_000 rows");
+        Assertions.assertEquals(700_000L, mcvB.get("0"),
+                "Scenario B: ELSE branch must have 700_000 rows");
+
+        // ---- Scenario C: nullsFraction = 1.0 ----
+        ColumnStatistic statC = calcIfStat.apply(makeStats.apply(1.0));
+        Assertions.assertNotNull(statC.getHistogram(), "Scenario C: histogram must be present");
+        java.util.Map<String, Long> mcvC = statC.getHistogram().getMCV();
+        Assertions.assertEquals(1_000_000L, mcvC.get("1"),
+                "Scenario C: all rows must be in the THEN branch");
+        Assertions.assertFalse(mcvC.containsKey("0"),
+                "Scenario C: ELSE branch must not appear (0 non-null rows)");
     }
 }
 

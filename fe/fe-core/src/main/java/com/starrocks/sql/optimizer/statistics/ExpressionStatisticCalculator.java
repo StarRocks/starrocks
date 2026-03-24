@@ -99,15 +99,26 @@ public class ExpressionStatisticCalculator {
                         operator.getType().getTypeSize(), 0);
             }
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
+            final var mcv = new Histogram(Collections.emptyList(),
+                    Collections.singletonMap(operator.toString(), (long) rowCount));
+
+            var builder = ColumnStatistic.builder() //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setDistinctValuesCount(1) //
+                    .setHistogram(mcv);
+
             if (value.isPresent()) {
-                return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
-                        operator.getType().getTypeSize(), 1);
+                builder.setMinValue(value.getAsDouble()) //
+                        .setMaxValue(value.getAsDouble());
             } else if (operator.getType().isStringType()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                        operator.toString().length(), 1);
+                builder.setMinValue(Double.NEGATIVE_INFINITY) //
+                        .setMaxValue(Double.POSITIVE_INFINITY);
             } else {
                 return ColumnStatistic.unknown();
             }
+
+            return builder.build();
         }
 
         @Override
@@ -717,14 +728,23 @@ public class ExpressionStatisticCalculator {
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.IF:
-                    distinctValues = childColumnStatisticList.get(1).getDistinctValuesCount() +
-                            childColumnStatisticList.get(2).getDistinctValuesCount();
-                    double minValue = Math.min(childColumnStatisticList.get(1).getMinValue(),
-                            childColumnStatisticList.get(2).getMinValue());
-                    double maxValue = Math.max(childColumnStatisticList.get(1).getMaxValue(),
-                            childColumnStatisticList.get(2).getMaxValue());
-                    return new ColumnStatistic(minValue, maxValue, 0,
-                            callOperator.getType().getTypeSize(), distinctValues);
+                    ColumnStatistic condStat = childColumnStatisticList.get(0);
+                    ColumnStatistic thenStat = childColumnStatisticList.get(1);
+                    ColumnStatistic elseStat = childColumnStatisticList.get(2);
+                    distinctValues = thenStat.getDistinctValuesCount() + elseStat.getDistinctValuesCount();
+                    double minValue = Math.min(thenStat.getMinValue(), elseStat.getMinValue());
+                    double maxValue = Math.max(thenStat.getMaxValue(), elseStat.getMaxValue());
+
+                    Histogram histogram = buildIfMcv(condStat, thenStat, elseStat);
+
+                    return ColumnStatistic.builder()
+                            .setMinValue(minValue)
+                            .setMaxValue(maxValue)
+                            .setNullsFraction(0)
+                            .setAverageRowSize(callOperator.getType().getTypeSize())
+                            .setDistinctValuesCount(distinctValues)
+                            .setHistogram(histogram)
+                            .build();
                 // use child column statistics for now
                 case FunctionSet.SUBSTRING:
                 case FunctionSet.REGEXP_REPLACE:
@@ -744,6 +764,37 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
+        }
+
+        private Histogram buildIfMcv(ColumnStatistic condStat,
+                                     ColumnStatistic thenStat,
+                                     ColumnStatistic elseStat) {
+            if (condStat.getHistogram() == null || thenStat.getHistogram() == null || elseStat.getHistogram() == null) {
+                return null;
+            }
+
+            final var conditionMcv = condStat.getHistogram().getMCV();
+            long trueRows = conditionMcv.getOrDefault("1", 0L);
+            long falseRows = conditionMcv.getOrDefault("0", 0L);
+
+            Map<String, Long> result = new HashMap<>();
+            scaleBranchMcv(thenStat.getHistogram().getMCV(), trueRows,  result);
+            scaleBranchMcv(elseStat.getHistogram().getMCV(), falseRows, result);
+
+            return result.isEmpty() ? null : new Histogram(Collections.emptyList(), result);
+        }
+
+        private void scaleBranchMcv(Map<String, Long> branchMcv, long branchRows,
+                                    Map<String, Long> target) {
+            if (branchRows <= 0) {
+                return;
+            }
+            for (final var entry : branchMcv.entrySet()) {
+                long scaled = Math.round((double) entry.getValue() * branchRows / rowCount);
+                if (scaled > 0) {
+                    target.merge(entry.getKey(), scaled, Long::sum);
+                }
+            }
         }
 
         private ColumnStatistic deriveBasicColStats(CallOperator call) {
