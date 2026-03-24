@@ -394,22 +394,19 @@ private:
     static OlapTuple _variant_tuple_to_olap_tuple(const VariantTuple& vt);
 
     // Test access to private methods
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_can_use_range_split_empty_rowsets);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_can_use_range_split_missing_segment_metas);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_can_use_range_split_with_segment_metas);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_can_use_range_split);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple_empty);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_range_split_groups);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_zero_num_rows);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple_null_value);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_basic);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_empty);
     FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_single_large);
     FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_is_large_rowset_next_compaction_offset);
     FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_merge_with_previous);
     FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_too_few_segments);
-    FRIEND_TEST(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds_proportional_data);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_range_split_groups_error_paths);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_range_split_vlog_paths);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split);
 
     TabletManager* _tablet_mgr;
 
