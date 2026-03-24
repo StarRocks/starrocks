@@ -26,7 +26,10 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.proc.ExternalSchemaProcNode;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -182,10 +185,10 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException, AnalysisException {
         List<DataField> fields = new ArrayList<>();
-        fields.add(new DataField(1, "col2", new IntType(true)));
-        fields.add(new DataField(2, "col3", new DoubleType(false)));
+        fields.add(new DataField(1, "col2", new IntType(false)));
+        fields.add(new DataField(2, "col3", new DoubleType(true)));
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -206,20 +209,27 @@ public class PaimonMetadataTest {
         assertEquals("db1", paimonTable.getCatalogDBName());
         assertEquals("tbl1", paimonTable.getCatalogTableName());
         assertEquals("CREATE TABLE `tbl1` (\n" +
-                        "  `col2` int(11) DEFAULT NULL,\n" +
+                        "  `col2` int(11) NOT NULL,\n" +
                         "  `col3` double DEFAULT NULL\n" +
                         ")\n" +
-                        "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"primary-key\" = \"col2\");",
+                        "PRIMARY KEY (`col2`)\n" +
+                        "PARTITION BY (col1);",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        org.junit.jupiter.api.Assertions.assertFalse(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.null", paimonTable.getUUID());
+
+        // Verify DESC shows primary key
+        ExternalSchemaProcNode descNode = new ExternalSchemaProcNode(paimonTable);
+        ProcResult descResult = descNode.fetchResult();
+        List<List<String>> rows = descResult.getRows();
+        assertEquals("true", rows.get(0).get(3));
+        assertEquals("false", rows.get(1).get(3));
     }
 
     @Test

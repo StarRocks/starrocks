@@ -17,11 +17,13 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ExternalSchemaProcNode implements ProcNodeInterface {
@@ -48,13 +50,16 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
 
         List<Column> schema = table.getFullSchema();
         List<String> partitionColumns = table.getPartitionColumnNames();
+        List<String> primaryKeyColumns = table.isPaimonTable()
+                ? ((PaimonTable) table).getPrimaryKeyColumnNames() : Collections.emptyList();
 
         for (Column column : schema) {
             String extraStr = partitionColumns.contains(column.getName()) ? PARTITION_KEY : "";
+            boolean isKey = column.isKey() || primaryKeyColumns.contains(column.getName());
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName(),
                     column.isAllowNull() ? "Yes" : "No",
-                    ((Boolean) column.isKey()).toString(),
+                    ((Boolean) isKey).toString(),
                     DEFAULT_STR,
                     extraStr,
                     column.getComment());

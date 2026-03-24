@@ -335,7 +335,7 @@ public class IcebergMetadataTest extends TableTestBase {
         new MockUp<Table>() {
             @Mock
             public List<Column> getFullSchema() {
-                return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+                return ImmutableList.of(new Column("c1", Type.INT, true), new Column("c2", STRING, true));
             }
 
             @Mock

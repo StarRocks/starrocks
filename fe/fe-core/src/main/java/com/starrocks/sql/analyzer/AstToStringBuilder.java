@@ -78,6 +78,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -2016,6 +2017,19 @@ public class AstToStringBuilder {
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
 
+        // Primary key
+        if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> primaryKeys = paimonTable.getPrimaryKeyColumnNames();
+            if (!primaryKeys.isEmpty()) {
+                createTableSql.append("\nPRIMARY KEY (");
+                createTableSql.append(primaryKeys.stream()
+                        .map(key -> "`" + key + "`")
+                        .collect(Collectors.joining(", ")));
+                createTableSql.append(")");
+            }
+        }
+
         // Partition column names
         List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
@@ -2117,7 +2131,11 @@ public class AstToStringBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        sb.append(" DEFAULT NULL");
+        if (!column.isAllowNull()) {
+            sb.append(" NOT NULL");
+        } else {
+            sb.append(" DEFAULT NULL");
+        }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
             sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
