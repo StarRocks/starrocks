@@ -6014,6 +6014,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
 
     // Create LCRM files on disk so _merge_subtask_lcrm_files can read them
+    std::vector<int64_t> lcrm_file_sizes(2);
     for (int i = 0; i < 2; i++) {
         std::string lcrm_name = fmt::format("lcrm_{}.dat", i);
         std::string lcrm_path = _tablet_mgr->lcrm_location(tablet_id, lcrm_name);
@@ -6024,6 +6025,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
         std::vector<uint64_t> dummy_rows(num_rows, static_cast<uint64_t>(i));
         CHECK_OK(builder.append(dummy_rows));
         CHECK_OK(builder.finalize());
+        auto fi = builder.file_info();
+        lcrm_file_sizes[i] = fi.size.has_value() ? fi.size.value() : 0;
     }
 
     // Complete subtask 0 with LCRM file
@@ -6043,7 +6046,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     // Set LCRM file
     auto* lcrm0 = op0->mutable_lcrm_file();
     lcrm0->set_name("lcrm_0.dat");
-    lcrm0->set_size(100);
+    lcrm0->set_size(lcrm_file_sizes[0]);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -6064,7 +6067,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     // Set LCRM file
     auto* lcrm1 = op1->mutable_lcrm_file();
     lcrm1->set_name("lcrm_1.dat");
-    lcrm1->set_size(200);
+    lcrm1->set_size(lcrm_file_sizes[1]);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -6416,6 +6419,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
 
     // Create LCRM files on disk so _merge_subtask_lcrm_files can read them
+    std::vector<int64_t> lcrm_file_sizes(2);
     for (int i = 0; i < 2; i++) {
         std::string lcrm_name = fmt::format("lcrm_{}.dat", i);
         std::string lcrm_path = _tablet_mgr->lcrm_location(tablet_id, lcrm_name);
@@ -6426,6 +6430,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
         std::vector<uint64_t> dummy_rows(num_rows, static_cast<uint64_t>(i));
         CHECK_OK(builder.append(dummy_rows));
         CHECK_OK(builder.finalize());
+        auto fi = builder.file_info();
+        lcrm_file_sizes[i] = fi.size.has_value() ? fi.size.value() : 0;
     }
 
     // Complete subtask 0 with SST files and LCRM file
@@ -6451,7 +6457,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     // Add LCRM file
     auto* lcrm0 = op0->mutable_lcrm_file();
     lcrm0->set_name("lcrm_0.dat");
-    lcrm0->set_size(100);
+    lcrm0->set_size(lcrm_file_sizes[0]);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -6473,7 +6479,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     // Add LCRM file
     auto* lcrm1 = op1->mutable_lcrm_file();
     lcrm1->set_name("lcrm_1.dat");
-    lcrm1->set_size(200);
+    lcrm1->set_size(lcrm_file_sizes[1]);
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
