@@ -185,29 +185,34 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
             for (String dbName : paimonCatalog.listDatabases()) {
                 try {
                     for (String tblName : paimonCatalog.listTables(dbName)) {
-                        List<Future<?>> futures = Lists.newArrayList();
-                        futures.add(refreshRemoteFileExecutor.submit(() ->
-                                paimonCatalog.invalidateTable(new Identifier(dbName, tblName))
-                        ));
-                        futures.add(refreshRemoteFileExecutor.submit(() ->
-                                paimonCatalog.getTable(new Identifier(dbName, tblName))
-                        ));
-                        if (paimonCatalog instanceof CachingCatalog) {
-                            futures.add(refreshRemoteFileExecutor.submit(() -> {
-                                        try {
-                                            ((CachingCatalog) paimonCatalog).refreshPartitions(new Identifier(dbName, tblName));
-                                        } catch (Catalog.TableNotExistException e) {
-                                            throw new RuntimeException(e);
-                                        }
-                                    }
+                        try {
+                            List<Future<?>> futures = Lists.newArrayList();
+                            futures.add(refreshRemoteFileExecutor.submit(() ->
+                                    paimonCatalog.invalidateTable(new Identifier(dbName, tblName))
                             ));
-                        }
-                        for (Future<?> future : futures) {
-                            future.get();
+                            futures.add(refreshRemoteFileExecutor.submit(() ->
+                                    paimonCatalog.getTable(new Identifier(dbName, tblName))
+                            ));
+                            if (paimonCatalog instanceof CachingCatalog) {
+                                futures.add(refreshRemoteFileExecutor.submit(() -> {
+                                            try {
+                                                ((CachingCatalog) paimonCatalog).refreshPartitions(
+                                                        new Identifier(dbName, tblName));
+                                            } catch (Catalog.TableNotExistException e) {
+                                                throw new RuntimeException(e);
+                                            }
+                                        }
+                                ));
+                            }
+                            for (Future<?> future : futures) {
+                                future.get();
+                            }
+                        } catch (Exception e) {
+                            LOG.warn("Failed to refresh paimon table {}.{}, msg: ", dbName, tblName, e);
                         }
                     }
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    LOG.warn("Failed to list tables in paimon database {}, msg: ", dbName, e);
                 }
             }
             LOG.info("Finish to refresh paimon catalog {}", catalogName);
