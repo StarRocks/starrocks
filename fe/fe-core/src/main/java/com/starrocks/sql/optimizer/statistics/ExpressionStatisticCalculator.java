@@ -26,10 +26,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +41,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.IsoFields;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +141,38 @@ public class ExpressionStatisticCalculator {
                     .setNullsFraction(nullFractions)
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
+                    .build();
+        }
+
+        @Override
+        public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+            final var inputStat = operator.getChild(0).accept(this, context);
+
+            Map<String, Long> mcvs = new HashMap<>();
+            if (!inputStat.isUnknown()) {
+                double inputNullFraction = inputStat.isUnknown() ? 0.0 : inputStat.getNullsFraction();
+                // Calculate amount of rows satisfying / not satisfying the predicate
+                long nullRows = Math.round(rowCount * inputNullFraction);
+                long nonNullRows = Math.round(rowCount * (1.0 - inputNullFraction));
+                // Add MCV for each branch
+                if (nullRows > 0) {
+                    final var castedMcv = ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR);
+                    castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), nullRows));
+                }
+                if (nonNullRows > 0) {
+                    final var castedMcv = ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR);
+                    castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), nonNullRows));
+                }
+            }
+
+            final var histogram = new Histogram(Collections.emptyList(), mcvs);
+            return ColumnStatistic.builder() //
+                    .setMinValue(0) //
+                    .setMaxValue(1) //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize()) //
+                    .setDistinctValuesCount(mcvs.size() < 2 ? 1 : 2) //
+                    .setHistogram(histogram) //
                     .build();
         }
 
