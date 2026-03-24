@@ -15,13 +15,11 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -33,9 +31,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -63,12 +58,12 @@ import java.util.Set;
 
 /**
  * VariantPathRewriteRule rewrites supported scalar VARIANT path functions into synthetic extended columns.
- *
+ * <p>
  * Example transformation:
  * get_variant_int(v, '$.a.b')
  * =>
  * v.a.b
- *
+ * <p>
  * This rule only supports constant object-field paths and deliberately excludes
  * array/key/index/offset semantics in the first version.
  */
@@ -92,12 +87,8 @@ public class VariantPathRewriteRule extends TransformationRule {
         super(RuleType.TF_VARIANT_PATH_REWRITE, Pattern.create(operatorType));
     }
 
-    public static VariantPathRewriteRule createForOlapScan() {
-        return new VariantPathRewriteRule(OperatorType.LOGICAL_OLAP_SCAN);
-    }
-
-    public static VariantPathRewriteRule createForMetaScan() {
-        return new VariantPathRewriteRule(OperatorType.LOGICAL_PROJECT);
+    public static VariantPathRewriteRule createForIcebergScan() {
+        return new VariantPathRewriteRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     }
 
     @Override
@@ -176,17 +167,10 @@ public class VariantPathRewriteRule extends TransformationRule {
         }
 
         private Column createExtendedColumn(Table table, String path, ColumnAccessPath variantPath) {
-            if (!table.containColumn(path)) {
-                Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
-                Column extendedColumn = new Column(path, variantPath.getValueType(), true);
-                OlapTable olapTable = (OlapTable) table;
-                int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
-                extendedColumn.setUniqueId(nextUniqueId);
-                table.addColumn(extendedColumn);
-                return extendedColumn;
-            } else {
+            if (table.containColumn(path)) {
                 return table.getColumn(path);
             }
+            return new Column(path, variantPath.getValueType(), true);
         }
 
         public static ColumnAccessPath pathFromColumn(Column column) {
@@ -215,58 +199,8 @@ public class VariantPathRewriteRule extends TransformationRule {
         }
 
         @Override
-        public OptExpression visitLogicalProject(OptExpression optExpr, Void context) {
-            Operator child = optExpr.inputAt(0).getOp();
-            if (child instanceof LogicalMetaScanOperator) {
-                return rewriteMetaScan(optExpr);
-            }
-            return optExpr;
-        }
-
-        private OptExpression rewriteMetaScan(OptExpression optExpr) {
-            LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
-            LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
-            LogicalMetaScanOperator.Builder scanBuilder = LogicalMetaScanOperator.builder().withOperator(metaScan);
-
-            VariantPathRewriteContext context = new VariantPathRewriteContext(columnRefFactory);
-            VariantPathExpressionRewriter rewriter = new VariantPathExpressionRewriter(context);
-
-            Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
-            boolean hasChanges = false;
-            for (var entry : project.getColumnRefMap().entrySet()) {
-                ScalarOperator rewritten = rewriteScalar(entry.getValue(), context, rewriter);
-                newProjection.put(entry.getKey(), rewritten);
-                hasChanges = hasChanges || !rewritten.equals(entry.getValue());
-            }
-
-            if (!hasChanges) {
-                return optExpr;
-            }
-
-            LogicalProjectOperator newProject = new LogicalProjectOperator(newProjection);
-            Map<ColumnRefOperator, Column> metaScanColumnMap = ImmutableMap.<ColumnRefOperator, Column>builder()
-                    .putAll(metaScan.getColRefToColumnMetaMap())
-                    .putAll(rewriter.getExtendedColumns())
-                    .build();
-            scanBuilder.setColRefToColumnMetaMap(metaScanColumnMap);
-
-            List<ColumnAccessPath> paths = Lists.newArrayList();
-            for (var entry : rewriter.getExtendedColumns().entrySet()) {
-                paths.add(VariantPathRewriteContext.pathFromColumn(entry.getValue()));
-            }
-            scanBuilder.setColumnAccessPaths(paths);
-
-            LogicalMetaScanOperator newMetaScan = scanBuilder.build();
-            OptExpression newMetaScanExpr = OptExpression.builder().with(optExpr.inputAt(0)).setOp(newMetaScan).build();
-            return OptExpression.builder().with(optExpr)
-                    .setOp(newProject)
-                    .setInputs(Lists.newArrayList(newMetaScanExpr))
-                    .build();
-        }
-
-        @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpr, Void context) {
-            if (!(optExpr.getOp() instanceof LogicalOlapScanOperator)) {
+            if (!(optExpr.getOp() instanceof LogicalScanOperator)) {
                 return optExpr;
             }
             return rewriteLogicalScan(optExpr);
@@ -287,15 +221,6 @@ public class VariantPathRewriteRule extends TransformationRule {
             if (builder.getPredicate() != null) {
                 requiredColumnSet.union(builder.getPredicate().getUsedColumns());
             }
-            if (scanOperator instanceof LogicalOlapScanOperator olapScanOperator
-                    && MapUtils.isNotEmpty(olapScanOperator.getColRefToColumnMetaMap())) {
-                for (ScalarOperator p : olapScanOperator.getPrunedPartitionPredicates()) {
-                    if (p != null) {
-                        requiredColumnSet.union(p.getUsedColumns());
-                    }
-                }
-            }
-
             if (scanOperator.getProjection() != null) {
                 Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
