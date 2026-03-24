@@ -6967,8 +6967,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     ThreadPoolBuilder("range_split_test_pool").set_max_threads(4).build(&pool);
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; },
-            [](bool) {});
+            tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
 
     pool->wait();
     _manager->cleanup_tablet(tablet_id, txn_id);
