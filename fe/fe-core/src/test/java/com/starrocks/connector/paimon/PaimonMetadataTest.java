@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Frontend;
 import com.starrocks.type.ArrayType;
@@ -777,6 +778,95 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+    }
+
+    @Test
+    public void testBuildColumnStatisticAverageRowSize() {
+        // Case 1: avgLen is present — averageRowSize should use avgLen (4), not nullCount (1000)
+        String statsWithAvgLen = "{\n" +
+                "  \"snapshotId\" : 1,\n" +
+                "  \"schemaId\" : 0,\n" +
+                "  \"mergedRecordCount\" : 5000,\n" +
+                "  \"mergedRecordSize\" : 40000,\n" +
+                "  \"colStats\" : {\n" +
+                "    \"id\" : {\n" +
+                "      \"colId\" : 0,\n" +
+                "      \"distinctCount\" : 5000,\n" +
+                "      \"min\" : \"1\",\n" +
+                "      \"max\" : \"5000\",\n" +
+                "      \"nullCount\" : 1000,\n" +
+                "      \"avgLen\" : 4,\n" +
+                "      \"maxLen\" : 4\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        Statistics statistics1 = JsonSerdeUtil.fromJson(statsWithAvgLen, Statistics.class);
+        statistics1.colStats().get("id").deserializeFieldsFromString(new IntType(true));
+
+        new Expectations() {
+            {
+                nativeTable.statistics();
+                result = Optional.of(statistics1);
+            }
+        };
+        PaimonTable paimonTable1 =
+                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable);
+        optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
+
+        Map<ColumnRefOperator, Column> colRefMap1 = new HashMap<>();
+        ColumnRefOperator idRef = new ColumnRefOperator(10, IntegerType.INT, "id", true);
+        colRefMap1.put(idRef, new Column("id", IntegerType.INT));
+
+        com.starrocks.sql.optimizer.statistics.Statistics result1 =
+                metadata.getTableStatistics(optimizerContext, paimonTable1, colRefMap1,
+                        null, null, -1, null);
+
+        ColumnStatistic idStat = result1.getColumnStatistic(idRef);
+        // averageRowSize should be avgLen (4), NOT nullCount (1000)
+        assertEquals(4.0, idStat.getAverageRowSize(), 0.001);
+
+        // Case 2: avgLen is absent — averageRowSize should fall back to type size
+        String statsWithoutAvgLen = "{\n" +
+                "  \"snapshotId\" : 1,\n" +
+                "  \"schemaId\" : 0,\n" +
+                "  \"mergedRecordCount\" : 100,\n" +
+                "  \"mergedRecordSize\" : 800,\n" +
+                "  \"colStats\" : {\n" +
+                "    \"score\" : {\n" +
+                "      \"colId\" : 1,\n" +
+                "      \"distinctCount\" : 50,\n" +
+                "      \"min\" : \"0.0\",\n" +
+                "      \"max\" : \"99.9\",\n" +
+                "      \"nullCount\" : 500\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        Statistics statistics2 = JsonSerdeUtil.fromJson(statsWithoutAvgLen, Statistics.class);
+        statistics2.colStats().get("score").deserializeFieldsFromString(new DoubleType(true));
+
+        new Expectations() {
+            {
+                nativeTable.statistics();
+                result = Optional.of(statistics2);
+            }
+        };
+        PaimonTable paimonTable2 =
+                new PaimonTable("paimon", "db1", "tbl2", Lists.newArrayList(), nativeTable);
+
+        Map<ColumnRefOperator, Column> colRefMap2 = new HashMap<>();
+        ColumnRefOperator scoreRef = new ColumnRefOperator(11, FloatType.DOUBLE, "score", true);
+        colRefMap2.put(scoreRef, new Column("score", FloatType.DOUBLE));
+
+        com.starrocks.sql.optimizer.statistics.Statistics result2 =
+                metadata.getTableStatistics(optimizerContext, paimonTable2, colRefMap2,
+                        null, null, -1, null);
+
+        ColumnStatistic scoreStat = result2.getColumnStatistic(scoreRef);
+        // Without avgLen, averageRowSize should fall back to type size (DOUBLE = 8 bytes)
+        assertEquals(FloatType.DOUBLE.getTypeSize(), scoreStat.getAverageRowSize(), 0.001);
+        // Verify it's NOT using nullCount (500) as averageRowSize
+        assertTrue(scoreStat.getAverageRowSize() < 100,
+                "averageRowSize should not be nullCount (500), should be type size");
     }
 
     @Test
