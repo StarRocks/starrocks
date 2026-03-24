@@ -1488,7 +1488,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: -
 - Is mutable: Yes
 - Description: The count of threads for shared-data table tablet metadata fetch operations (e.g., `get_tablet_stats`, `get_tablet_metadatas`).
-- Introduced in: -
+- Introduced in: v3.5.16, v4.0.9
 
 ##### enable_bitmap_union_disk_format_with_set
 
