@@ -1,0 +1,52 @@
+## 查看表级别缓存统计
+
+自 v4.1 版本起，您可以通过 `_CACHE_STATS_` 表 Hint 查询存算分离集群中每个 Tablet 的缓存统计信息。该功能可以帮助您了解各 Tablet 的数据缓存情况，以便进行缓存优化和问题排查。
+
+### 语法
+
+```SQL
+SELECT * FROM <table_name>
+[PARTITION(<partition_name>)]
+[TABLET(<tablet_id>)]
+[_CACHE_STATS_];
+```
+
+`_CACHE_STATS_` Hint 仅适用于存算分离表（Cloud Native Table）。
+
+### 返回列
+
+| 列名 | 类型 | 说明 |
+|------|------|------|
+| `tablet_id` | BIGINT | Tablet 的 ID |
+| `cached_bytes` | BIGINT | 该 Tablet 在本地缓存中已缓存的数据量（字节） |
+| `total_bytes` | BIGINT | 该 Tablet 的总数据量（字节） |
+
+### 示例
+
+- 汇总统计整张表的缓存率：
+
+  ```SQL
+  SELECT
+      sum(cached_bytes) AS total_cached,
+      sum(total_bytes) AS total_size,
+      round(sum(cached_bytes) / sum(total_bytes) * 100, 2) AS cache_hit_ratio
+  FROM my_table [_CACHE_STATS_];
+  ```
+
+- 查询表所有 Tablet 的缓存统计：
+
+  ```SQL
+  SELECT * FROM my_table [_CACHE_STATS_];
+  ```
+
+- 查询指定分区的缓存统计：
+
+  ```SQL
+  SELECT * FROM my_table PARTITION(p1) [_CACHE_STATS_];
+  ```
+
+- 查询指定 Tablet 的缓存统计：
+
+  ```SQL
+  SELECT * FROM my_table TABLET(10001) [_CACHE_STATS_];
+  ```
