@@ -46,7 +46,7 @@ import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.HintNode;
@@ -163,7 +163,7 @@ public class AstBuilderEPack extends AstBuilder {
     @Override
     public ParseNode visitCreateMaterializedViewStatement(StarRocksParser.CreateMaterializedViewStatementContext context) {
         StatementBase stmt = (StatementBase) super.visitCreateMaterializedViewStatement(context);
-        if (stmt instanceof CreateMaterializedViewStmt) {
+        if (stmt instanceof CreateSyncMVStmt) {
             return stmt;
         }
 

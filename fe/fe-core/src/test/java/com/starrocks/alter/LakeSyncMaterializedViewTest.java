@@ -27,7 +27,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -210,7 +210,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     @Test
     public void testMaterializedViews() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -230,7 +230,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     public void testSelectFromSyncMV() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view sync_mv as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -248,7 +248,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     @Test
     public void testCreateSyncMV1() throws Exception {
         String sql = "create materialized view aggregate_table_with_null as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
@@ -264,7 +264,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     @Test
     public void testCreateSyncMV2() throws Exception {
         String sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -284,7 +284,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
 
         // sync_mv2 already existed in the tbl1
         sql = "create materialized view sync_mv2 as select k1, sum(v1) from tbl1 group by k1;";
-        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        createTableStmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assertions.fail();
@@ -299,7 +299,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     @Test
     public void testCreateSyncMV3() throws Exception {
         String sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -309,7 +309,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
         Assertions.assertTrue(tbl1.hasMaterializedIndex("sync_mv3"));
         // sync_mv3 already existed in tbl1
         sql = "create materialized view sync_mv3 as select k1, sum(v1) from tbl3 group by k1;";
-        createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        createTableStmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
             Assertions.fail();
@@ -324,7 +324,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     public void testCreateSyncMV_WithUpperColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -360,7 +360,7 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
     public void testCreateSyncMV_WithLowerColumn() throws Exception {
         // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils
+        CreateSyncMVStmt createTableStmt = (CreateSyncMVStmt) UtFrameUtils
                 .parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
 
@@ -716,8 +716,8 @@ public class LakeSyncMaterializedViewTest extends StarRocksTestBase {
                 "   GROUP BY k1;";
 
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        if (stmt instanceof CreateMaterializedViewStmt) {
-            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+        if (stmt instanceof CreateSyncMVStmt) {
+            CreateSyncMVStmt createMaterializedViewStmt = (CreateSyncMVStmt) stmt;
             GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
         }
 

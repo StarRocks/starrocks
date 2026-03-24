@@ -40,8 +40,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -150,13 +151,13 @@ public class MetaUtils {
     }
 
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
-        CreateMaterializedViewStmt stmt;
+        CreateSyncMVStmt stmt;
 
         try {
             List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
-            stmt = (CreateMaterializedViewStmt) stmts.get(originStmt.idx);
+            stmt = (CreateSyncMVStmt) stmts.get(originStmt.idx);
             stmt.setIsReplay(true);
-            return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
+            return CreateSyncMVStmtAnalyzer.parseDefineExprWithoutAnalyze(stmt, originStmt.originStmt);
         } catch (Exception e) {
             LOG.warn("error happens when parsing create materialized view stmt [{}] use new parser",
                     originStmt, e);

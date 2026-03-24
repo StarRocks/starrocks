@@ -75,7 +75,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.KeysType;
@@ -191,7 +191,7 @@ public class MaterializedViewHandler extends AlterHandler {
      * @param olapTable
      * @throws DdlException
      */
-    public void processCreateMaterializedView(CreateMaterializedViewStmt addMVClause, Database db, OlapTable olapTable)
+    public void processCreateMaterializedView(CreateSyncMVStmt addMVClause, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException {
 
         if (olapTable.existTempPartitions()) {
@@ -397,7 +397,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
     }
 
-    private List<Column> checkAndPrepareMaterializedView(CreateMaterializedViewStmt addMVClause, Database db,
+    private List<Column> checkAndPrepareMaterializedView(CreateSyncMVStmt addMVClause, Database db,
                                                          OlapTable olapTable)
             throws DdlException {
         String mvName = addMVClause.getMVName();
