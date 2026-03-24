@@ -178,8 +178,7 @@ public:
         init_state_if_necessary(ctx, state);
 
         const Column* data_col = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const InputColumnType*>(data_col);
-        const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
+        const auto& value = AggDataTypeTraits<LT>::get_row_ref(*data_col, row_num);
 
         this->data(state).template process<true>(ctx->mem_pool(), value);
     }
@@ -243,7 +242,7 @@ public:
         int32_t n = get_n_value(ctx);
         DCHECK(dst->is_binary());
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
-        auto* src_column = down_cast<const InputColumnType*>(src[0].get());
+        const auto* src_column = src[0].get();
 
         for (size_t i = 0; i < src_column->size(); ++i) {
             MinMaxNAggregateState<LT, IsMin> state;
