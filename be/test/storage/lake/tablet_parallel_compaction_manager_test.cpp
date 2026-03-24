@@ -6352,7 +6352,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_range_split_groups_state
 // Tests for _variant_tuple_to_olap_tuple with null value
 // =============================================================================
 
-TEST_F(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple_null_value) {
+TEST_F(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple_null_value_single) {
     // Create a VariantTuple with a null datum
     VariantTuple vt;
     auto type_info = get_type_info(TYPE_INT);
@@ -6420,8 +6420,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     sst0->set_name("sst_0.sst");
     // Add SST range
     auto* sst_range0 = op0->add_sst_ranges();
-    sst_range0->set_start(0);
-    sst_range0->set_end(100);
+    sst_range0->set_start_key("0");
+    sst_range0->set_end_key("100");
     // Add LCRM file
     auto* lcrm0 = op0->mutable_lcrm_file();
     lcrm0->set_name("lcrm_0.dat");
