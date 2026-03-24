@@ -261,7 +261,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 13: {
-            // progress
+            // PROGRESS
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(13);
                 if (task_run_info.__isset.progress) {
@@ -275,7 +275,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 14: {
-            // extra_message
+            // EXTRA_MESSAGE
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(14);
                 if (task_run_info.__isset.extra_message) {
@@ -289,7 +289,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 15: {
-            // properties
+            // PROPERTIES
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(15);
                 if (task_run_info.__isset.properties) {
@@ -303,7 +303,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 16: {
-            // job_id
+            // JOB_ID
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(16);
                 if (task_run_info.__isset.job_id) {
@@ -317,7 +317,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 17: {
-            // process_time
+            // PROCESS_TIME
             {
                 auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(17);
                 auto* nullable_column = down_cast<NullableColumn*>(column);
