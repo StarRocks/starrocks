@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
@@ -499,6 +500,9 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
+            if (operator.getHints().contains(VariantPathRewriteRule.COLUMN_REF_HINT)) {
+                return null;
+            }
             return operator.getName();
         }
 
@@ -514,6 +518,9 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
             ColumnRefOperator columnRefChild = ((ColumnRefOperator) child);
+            if (columnRefChild.getHints().contains(VariantPathRewriteRule.COLUMN_REF_HINT)) {
+                return null;
+            }
             List<String> paths = new ImmutableList.Builder<String>()
                     .add(columnRefChild.getName()).addAll(operator.getFieldNames())
                     .build();

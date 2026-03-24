@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -459,6 +460,20 @@ public class IcebergExprVisitorTest {
         Expression convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, LAST_UPDATED_SEQUENCE_NUMBER,
                         ConstantOperator.createBigint(1))),
+                context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    @Test
+    public void testSkipSyntheticVariantRewriteColumn() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        ColumnRefOperator syntheticVariantColumn = new ColumnRefOperator(19, IntegerType.INT, "v.a.b", true, false);
+        syntheticVariantColumn.setHints(List.of(VariantPathRewriteRule.COLUMN_REF_HINT));
+
+        Expression convertedExpr = converter.convert(Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
