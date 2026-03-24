@@ -123,29 +123,39 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     return Status::OK();
 }
 
-void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
+CompactionTask::SstStats CompactionTask::compute_sst_stats(const std::vector<FileInfo>& writer_ssts,
+                                                           const TxnLogPB* txn_log) {
+    SstStats stats;
     // SST output from eager PK index build
-    _sst_output_files = static_cast<int32_t>(writer->ssts().size());
-    _sst_output_bytes = 0;
-    for (const auto& sst : writer->ssts()) {
-        _sst_output_bytes += sst.size.value_or(0);
+    stats.output_files = static_cast<int32_t>(writer_ssts.size());
+    for (const auto& sst : writer_ssts) {
+        stats.output_bytes += sst.size.value_or(0);
     }
     // SST input/output from PK index major compaction
     if (txn_log != nullptr && txn_log->has_op_compaction()) {
         const auto& op = txn_log->op_compaction();
-        _sst_input_files = op.input_sstables_size();
+        stats.input_files = op.input_sstables_size();
         for (const auto& sst : op.input_sstables()) {
-            _sst_input_bytes += sst.filesize();
+            stats.input_bytes += sst.filesize();
         }
         for (const auto& sst : op.output_sstables()) {
-            _sst_output_files += 1;
-            _sst_output_bytes += sst.filesize();
+            stats.output_files += 1;
+            stats.output_bytes += sst.filesize();
         }
         if (op.has_output_sstable()) {
-            _sst_output_files += 1;
-            _sst_output_bytes += op.output_sstable().filesize();
+            stats.output_files += 1;
+            stats.output_bytes += op.output_sstable().filesize();
         }
     }
+    return stats;
+}
+
+void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
+    auto stats = compute_sst_stats(writer->ssts(), txn_log);
+    _sst_input_files = stats.input_files;
+    _sst_input_bytes = stats.input_bytes;
+    _sst_output_files = stats.output_files;
+    _sst_output_bytes = stats.output_bytes;
 }
 
 bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {

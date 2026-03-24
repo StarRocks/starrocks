@@ -17,6 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "common/config_storage_fwd.h"
+#include "fs/fs.h"
+#include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/compaction_task.h"
+#include "storage/lake/lake_primary_index.h"
 
 namespace starrocks::lake {
 
@@ -424,6 +428,165 @@ TEST_F(TabletWriteLogManagerTest, test_time_range_filter_both_bounds) {
     ASSERT_EQ(2, logs.size());
     EXPECT_EQ(2, logs[0].txn_id);
     EXPECT_EQ(3, logs[1].txn_id);
+}
+
+// ============================================================
+// Tests for CompactionTask::compute_sst_stats (static method)
+// ============================================================
+
+class ComputeSstStatsTest : public testing::Test {};
+
+TEST_F(ComputeSstStatsTest, test_empty_ssts_no_txn_log) {
+    std::vector<FileInfo> ssts;
+    auto stats = CompactionTask::compute_sst_stats(ssts, nullptr);
+    EXPECT_EQ(0, stats.input_files);
+    EXPECT_EQ(0, stats.input_bytes);
+    EXPECT_EQ(0, stats.output_files);
+    EXPECT_EQ(0, stats.output_bytes);
+}
+
+TEST_F(ComputeSstStatsTest, test_writer_ssts_only) {
+    std::vector<FileInfo> ssts;
+    ssts.push_back(FileInfo{.path = "sst1.sst", .size = 4096});
+    ssts.push_back(FileInfo{.path = "sst2.sst", .size = 8192});
+    ssts.push_back(FileInfo{.path = "sst3.sst", .size = std::nullopt}); // size unknown
+
+    auto stats = CompactionTask::compute_sst_stats(ssts, nullptr);
+    EXPECT_EQ(0, stats.input_files);
+    EXPECT_EQ(0, stats.input_bytes);
+    EXPECT_EQ(3, stats.output_files);
+    EXPECT_EQ(4096 + 8192, stats.output_bytes); // nullopt treated as 0
+}
+
+TEST_F(ComputeSstStatsTest, test_txn_log_without_op_compaction) {
+    std::vector<FileInfo> ssts;
+    ssts.push_back(FileInfo{.path = "sst1.sst", .size = 1024});
+
+    TxnLogPB txn_log;
+    // No op_compaction set
+    auto stats = CompactionTask::compute_sst_stats(ssts, &txn_log);
+    EXPECT_EQ(0, stats.input_files);
+    EXPECT_EQ(0, stats.input_bytes);
+    EXPECT_EQ(1, stats.output_files);
+    EXPECT_EQ(1024, stats.output_bytes);
+}
+
+TEST_F(ComputeSstStatsTest, test_txn_log_with_input_sstables) {
+    std::vector<FileInfo> ssts;
+    ssts.push_back(FileInfo{.path = "eager.sst", .size = 2048});
+
+    TxnLogPB txn_log;
+    auto* op = txn_log.mutable_op_compaction();
+    auto* input1 = op->add_input_sstables();
+    input1->set_filesize(10240);
+    auto* input2 = op->add_input_sstables();
+    input2->set_filesize(20480);
+
+    auto stats = CompactionTask::compute_sst_stats(ssts, &txn_log);
+    EXPECT_EQ(2, stats.input_files);
+    EXPECT_EQ(10240 + 20480, stats.input_bytes);
+    EXPECT_EQ(1, stats.output_files); // only from writer
+    EXPECT_EQ(2048, stats.output_bytes);
+}
+
+TEST_F(ComputeSstStatsTest, test_txn_log_with_output_sstables) {
+    std::vector<FileInfo> ssts;
+
+    TxnLogPB txn_log;
+    auto* op = txn_log.mutable_op_compaction();
+    auto* input1 = op->add_input_sstables();
+    input1->set_filesize(5000);
+
+    auto* output1 = op->add_output_sstables();
+    output1->set_filesize(3000);
+    auto* output2 = op->add_output_sstables();
+    output2->set_filesize(2000);
+
+    auto stats = CompactionTask::compute_sst_stats(ssts, &txn_log);
+    EXPECT_EQ(1, stats.input_files);
+    EXPECT_EQ(5000, stats.input_bytes);
+    EXPECT_EQ(2, stats.output_files); // from output_sstables
+    EXPECT_EQ(3000 + 2000, stats.output_bytes);
+}
+
+TEST_F(ComputeSstStatsTest, test_txn_log_with_output_sstable_singular) {
+    std::vector<FileInfo> ssts;
+    ssts.push_back(FileInfo{.path = "eager.sst", .size = 1000});
+
+    TxnLogPB txn_log;
+    auto* op = txn_log.mutable_op_compaction();
+    auto* input = op->add_input_sstables();
+    input->set_filesize(8000);
+
+    // Set the singular output_sstable
+    op->mutable_output_sstable()->set_filesize(4000);
+
+    auto stats = CompactionTask::compute_sst_stats(ssts, &txn_log);
+    EXPECT_EQ(1, stats.input_files);
+    EXPECT_EQ(8000, stats.input_bytes);
+    EXPECT_EQ(2, stats.output_files); // 1 from writer + 1 from output_sstable
+    EXPECT_EQ(1000 + 4000, stats.output_bytes);
+}
+
+TEST_F(ComputeSstStatsTest, test_txn_log_with_all_sst_sources) {
+    // Writer SSTs (from eager build)
+    std::vector<FileInfo> ssts;
+    ssts.push_back(FileInfo{.path = "eager1.sst", .size = 1000});
+    ssts.push_back(FileInfo{.path = "eager2.sst", .size = 2000});
+
+    TxnLogPB txn_log;
+    auto* op = txn_log.mutable_op_compaction();
+
+    // Input SSTs from major compaction
+    op->add_input_sstables()->set_filesize(10000);
+    op->add_input_sstables()->set_filesize(20000);
+    op->add_input_sstables()->set_filesize(30000);
+
+    // Output SSTs from major compaction (plural)
+    op->add_output_sstables()->set_filesize(5000);
+
+    // Output SST from major compaction (singular)
+    op->mutable_output_sstable()->set_filesize(7000);
+
+    auto stats = CompactionTask::compute_sst_stats(ssts, &txn_log);
+    EXPECT_EQ(3, stats.input_files);
+    EXPECT_EQ(10000 + 20000 + 30000, stats.input_bytes);
+    EXPECT_EQ(2 + 1 + 1, stats.output_files); // 2 writer + 1 output_sstables + 1 output_sstable
+    EXPECT_EQ(1000 + 2000 + 5000 + 7000, stats.output_bytes);
+}
+
+// ============================================================
+// Tests for LakePrimaryIndex publish SST stats accessors
+// ============================================================
+
+class LakePrimaryIndexSstStatsTest : public testing::Test {};
+
+TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_disabled) {
+    LakePrimaryIndex index;
+    // persistent index is disabled by default
+    index.set_enable_persistent_index(false);
+
+    EXPECT_EQ(0, index.publish_sst_flush_count());
+    EXPECT_EQ(0, index.publish_sst_flush_bytes());
+
+    // reset should not crash when disabled
+    index.reset_publish_sst_stats();
+    EXPECT_EQ(0, index.publish_sst_flush_count());
+    EXPECT_EQ(0, index.publish_sst_flush_bytes());
+}
+
+TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_enabled_no_persistent_index) {
+    LakePrimaryIndex index;
+    // Enable persistent index but don't actually create one
+    // (the internal _persistent_index will be nullptr or not a LakePersistentIndex)
+    index.set_enable_persistent_index(true);
+
+    // Should return 0 when persistent_index is not LakePersistentIndex
+    EXPECT_EQ(0, index.publish_sst_flush_count());
+    EXPECT_EQ(0, index.publish_sst_flush_bytes());
+
+    // reset should not crash
+    index.reset_publish_sst_stats();
 }
 
 } // namespace starrocks::lake
