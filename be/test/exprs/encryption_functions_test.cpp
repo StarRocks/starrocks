@@ -1900,8 +1900,7 @@ TEST_F(EncryptionFunctionsTest, to_base64LargeInputTest) {
     decode_columns.emplace_back(encoded);
 
     ColumnPtr decoded = EncryptionFunctions::from_base64(ctx.get(), decode_columns).value();
-    auto decoded_data = ColumnHelper::cast_to<TYPE_VARCHAR>(decoded);
-    ASSERT_EQ(input, decoded_data->get_data()[0].to_string());
+    ASSERT_EQ(input, decoded->get(0).get_slice().to_string());
 }
 
 TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
