@@ -1080,7 +1080,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 単位: -
 - 可変: はい
 - 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
-- 導入バージョン: -
+- 導入バージョン: v3.5.16, v4.0.9
 
 ### transaction_apply_worker_count
 
