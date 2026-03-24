@@ -21,6 +21,7 @@
 #include <sstream>
 
 #include "butil/time.h"
+#include "common/config.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "types/decimalv3.h"
@@ -29,7 +30,12 @@ namespace starrocks {
 
 class EncryptionFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() override {}
+    void SetUp() override { _max_length_for_to_base64 = config::max_length_for_to_base64; }
+
+    void TearDown() override { config::max_length_for_to_base64 = _max_length_for_to_base64; }
+
+private:
+    int64_t _max_length_for_to_base64 = 0;
 };
 
 // ==================== AES Encrypt/Decrypt with Mode Tests ====================
@@ -1867,6 +1873,27 @@ TEST_F(EncryptionFunctionsTest, to_base64Test) {
     for (int j = 0; j < std::size(results); ++j) {
         ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
+}
+
+TEST_F(EncryptionFunctionsTest, to_base64LargeInputTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    constexpr size_t kInputSize = 8 * 1024 * 1024;
+    std::string input(kInputSize, 'x');
+    config::max_length_for_to_base64 = kInputSize;
+
+    plain->append(input);
+    columns.emplace_back(std::move(plain));
+
+    ColumnPtr encoded = EncryptionFunctions::to_base64(ctx.get(), columns).value();
+
+    Columns decode_columns;
+    decode_columns.emplace_back(encoded);
+
+    ColumnPtr decoded = EncryptionFunctions::from_base64(ctx.get(), decode_columns).value();
+    ASSERT_EQ(input, decoded->get(0).get_slice().to_string());
 }
 
 TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
