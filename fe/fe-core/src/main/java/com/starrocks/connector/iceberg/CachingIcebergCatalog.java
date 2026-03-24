@@ -246,29 +246,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-<<<<<<< HEAD
-        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
-            tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
-        }
-
-        if (!icebergProperties.isEnableIcebergMetadataCache()) {
+        if (!icebergProperties.isEnableIcebergMetadataCache() || delegate.isVendedCredentialsEnabled()) {
             return delegate.getTable(dbName, tableName);
         }
-        
-=======
-        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
-                !delegate.isVendedCredentialsEnabled();
-        if (!cacheAllowed) {
-            return delegate.getTable(connectContext, dbName, tableName);
-        }
 
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
->>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
         try {
             return tables.get(icebergTableName);
         } catch (NoSuchTableException e) {

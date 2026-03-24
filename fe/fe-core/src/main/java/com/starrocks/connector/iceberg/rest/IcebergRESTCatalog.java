@@ -69,12 +69,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private final Configuration conf;
     private final RESTCatalog delegate;
     private final boolean nestedNamespaceEnabled;
-<<<<<<< HEAD
-=======
-    private final boolean viewEndpointsEnabled;
     private final boolean enableVendedCredentials;
 
->>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
@@ -91,13 +87,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-<<<<<<< HEAD
-        boolean enableVendedCredentials =
-                Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
-=======
         this.enableVendedCredentials =
-                Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
->>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
+                Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
         }
@@ -124,12 +115,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.delegate = restCatalog;
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
-<<<<<<< HEAD
-=======
-        this.viewEndpointsEnabled = true;
-        this.restCatalogProperties = Maps.newHashMap();
         this.enableVendedCredentials = false;
->>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
     }
 
     @Override
@@ -400,31 +386,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         // iceberg rest catalog doesn't require location property, and could choose the default location.
         return null;
     }
-<<<<<<< HEAD
-=======
-
-    private SessionCatalog.SessionContext buildContext(ConnectContext context) {
-        String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
-
-        // only pass user's auth token to REST Catalog when security mode is JWT
-        boolean isJwtSecurity = Security.JWT.name().equalsIgnoreCase(
-                restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"));
-        if (!isJwtSecurity || Strings.isNullOrEmpty(context.getAuthToken())) {
-            return SessionCatalog.SessionContext.createEmpty();
-        }
-
-        Map<String, String> credentials = ImmutableMap.<String, String>builder()
-                .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken())
-                .put(OAuth2Properties.TOKEN, context.getAuthToken())
-                .buildOrThrow();
-
-        return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, ImmutableMap.of(),
-                context.getCurrentUserIdentity());
-    }
 
     @Override
     public boolean isVendedCredentialsEnabled() {
         return enableVendedCredentials;
     }
->>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
 }
