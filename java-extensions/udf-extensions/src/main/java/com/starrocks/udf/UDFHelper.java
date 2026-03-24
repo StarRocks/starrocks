@@ -237,7 +237,12 @@ public class UDFHelper {
             } else {
                 // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
                 long v = boxedArr[i].getTime();
-                dataArr[i] = (v + timeZone.getOffset(v)) / 1000;
+                double secondOfDay = (v + timeZone.getOffset(v)) / 1000.0;
+                secondOfDay %= 24 * 3600;
+                if (secondOfDay < 0) {
+                    secondOfDay += 24 * 3600;
+                }
+                dataArr[i] = secondOfDay;
             }
         }
 
@@ -272,6 +277,16 @@ public class UDFHelper {
 
     private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
         // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    private static void getStringTimeResult(int numRows, Time[] column, long columnAddr) {
         String[] results = new String[numRows];
         for (int i = 0; i < numRows; i++) {
             if (column[i] != null) {
@@ -532,6 +547,8 @@ public class UDFHelper {
                     getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Timestamp[]) {
                     getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Time[]) {
+                    getStringTimeResult(numRows, (Time[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigDecimal[]) {
                     getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof BigInteger[]) {
