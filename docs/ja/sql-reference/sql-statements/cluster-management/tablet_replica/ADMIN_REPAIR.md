@@ -34,6 +34,12 @@ ADMIN REPAIR TABLE table_name [PARTITION (p1,...)] [PROPERTIES ("key" = "value",
 
 - `enforce_consistent_version`: パーティション内の全タブレットを一貫性のあるバージョンにロールバックさせるかどうか。デフォルト: `true`。この項目が `true` に設定されている場合、システムはロールバックを実行するために、パーティション全体のデータバージョン整合性を確保するため、すべてのタブレットで有効な履歴内の整合性のあるバージョンを検索します。`false` に設定されている場合、パーティション内の各タブレットは、利用可能な最新の有効なバージョンにロールバックすることが許可されます。異なるタブレットのバージョンは不整合になる可能性がありますが、これによりデータ保存が最大化されます。
 - `allow_empty_tablet_recovery`: 空のタブレットを作成してリカバリを許可するかどうか。デフォルト: `false`。この項目は `enforce_consistent_version` が `false` の場合にのみ有効です。この項目が `true` に設定されている場合、一部のタブレットの全バージョンでメタデータが欠落しているが、少なくとも1つのタブレットに有効なメタデータが存在する場合、システムは欠落しているバージョンを埋めるために空のタブレットを作成しようと試みます。すべてのタブレットの全バージョンのメタデータが失われた場合、回復は不可能です。
+- `dry_run`: 実際に修復を実行せず、修復計画のみを返すかどうか。デフォルト: `false`。`true` に設定すると、システムは各パーティションの復旧可能性を評価して修復計画を返しますが、実際のメタデータのロールバックは実行しません。返される結果セットには以下の列が含まれます：
+  - `PartitionId`：パーティション ID。
+  - `VisibleVersion`：現在の可視バージョン。
+  - `RepairStatus`：修復ステータス。有効値：`NORMAL`（すべてのタブレットが正常、修復不要）、`RECOVERABLE`（メタデータまたはデータファイルが欠落しているが復旧可能）、`UNRECOVERABLE`（メタデータまたはデータファイルが欠落しており復旧不可能）、`UNKNOWN`（検査中に例外が発生）。
+  - `TabletRecoverInfo`：各タブレットがロールバックするバージョンを示す JSON 配列。`RepairStatus` が `RECOVERABLE` の場合のみ値が設定されます。
+  - `ErrorMsg`：エラーメッセージ。`RepairStatus` が `UNRECOVERABLE` または `UNKNOWN` の場合のみ値が設定されます。
 
 ## 例
 
@@ -56,4 +62,10 @@ ADMIN REPAIR TABLE table_name [PARTITION (p1,...)] [PROPERTIES ("key" = "value",
         "enforce_consistent_version" = "false",
         "allow_empty_tablet_recovery" = "true"
     );
+    ```
+
+4. 共有データテーブルに対してドライランを実行し、実際に修復を行わず修復計画をプレビューする
+
+    ```sql
+    ADMIN REPAIR TABLE cloud_tbl PARTITION (p1) PROPERTIES ("dry_run" = "true");
     ```

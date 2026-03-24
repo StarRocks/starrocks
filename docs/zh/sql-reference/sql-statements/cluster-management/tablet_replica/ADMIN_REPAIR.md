@@ -34,6 +34,12 @@ ADMIN REPAIR TABLE table_name [PARTITION (p1,...)] [PROPERTIES ("key" = "value",
 
 - `enforce_consistent_version`：是否强制分区内所有分片回滚至一致版本。默认值：`true`。若设置为`true`，系统将在历史中搜索对所有分片有效的版本进行回滚，确保分区内数据版本一致。若设置为`false`，则允许分区内每个分片回滚至其最新可用有效版本。不同分片版本可能不一致，但此方式可最大化数据保留率。
 - `allow_empty_tablet_recovery`：是否允许通过创建空分片进行恢复。默认值：`false`。该项仅在 `enforce_consistent_version` 为 `false` 时生效。若设置为 `true`，当某些分片的全部版本元数据缺失但至少存在一个分片的有效元数据时，系统将尝试创建空分片来填补缺失版本。若所有分片的所有版本元数据均丢失，则无法进行恢复。
+- `dry_run`：是否仅返回修复计划而不实际执行修复。默认值：`false`。若设置为 `true`，系统将评估每个分区的可修复性并返回修复计划，但不会执行任何实际的元数据回滚操作。返回结果包含以下列：
+  - `PartitionId`：分区 ID。
+  - `VisibleVersion`：当前可见版本。
+  - `RepairStatus`：修复状态，取值包括：`NORMAL`（所有分片正常，无需修复）、`RECOVERABLE`（存在丢失的元数据或数据文件，但可以修复）、`UNRECOVERABLE`（存在丢失的元数据或数据文件，无法修复）、`UNKNOWN`（探测过程中发生异常）。
+  - `TabletRecoverInfo`：JSON 数组，列出每个分片将回滚到的版本号（仅在状态为 `RECOVERABLE` 时有值）。
+  - `ErrorMsg`：错误信息（仅在状态为 `UNRECOVERABLE` 或 `UNKNOWN` 时有值）。
 
 ## 示例
 
@@ -56,4 +62,10 @@ ADMIN REPAIR TABLE table_name [PARTITION (p1,...)] [PROPERTIES ("key" = "value",
         "enforce_consistent_version" = "false",
         "allow_empty_tablet_recovery" = "true"
     );
+    ```
+
+4. 对存算分离表执行 Dry Run，预览修复计划而不实际执行
+
+    ```sql
+    ADMIN REPAIR TABLE cloud_tbl PARTITION (p1) PROPERTIES ("dry_run" = "true");
     ```

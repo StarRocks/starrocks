@@ -32,6 +32,12 @@ Note:
 
 - `enforce_consistent_version`: Whether to enforce all tablets in a partition to roll back to a consistent version. Default: `true`. If this item is set to `true`, the system will search for a consistent version in the history that is valid for all tablets to perform the rollback, ensuring data version alignment across the partition. If it is set to `false`, each tablet in the partition is allowed to rollback to its latest available valid version. The versions of different tablets may be inconsistent, but this maximizes data preservation.
 - `allow_empty_tablet_recovery`: Whether to allow recovery by creating empty tablets. Default: `false`. This item takes effect only when `enforce_consistent_version` is `false`. If this item is set to `true`, when metadata is missing for all versions of some tablets but valid metadata exists for at least one tablet, the system attempts to create empty tablets to fill the missing versions. If metadata for all versions of all tablets is lost, recovery is impossible.
+- `dry_run`: Whether to return the repair plan without actually executing the repair. Default: `false`. If set to `true`, the system evaluates the recoverability of each partition and returns the repair plan without performing any actual metadata rollback. The result set contains the following columns:
+  - `PartitionId`: Partition ID.
+  - `VisibleVersion`: Current visible version.
+  - `RepairStatus`: Repair status. Valid values: `NORMAL` (all tablets are healthy, no repair needed), `RECOVERABLE` (missing metadata or data files but recoverable), `UNRECOVERABLE` (missing metadata or data files and unrecoverable), `UNKNOWN` (an exception occurred during probing).
+  - `TabletRecoverInfo`: JSON array listing the version each tablet will roll back to. Only populated when status is `RECOVERABLE`.
+  - `ErrorMsg`: Error message. Only populated when status is `UNRECOVERABLE` or `UNKNOWN`.
 
 ## Examples
 
@@ -54,4 +60,10 @@ Note:
         "enforce_consistent_version" = "false",
         "allow_empty_tablet_recovery" = "true"
     );
+    ```
+
+4. Preview the repair plan for a shared-data table without executing it
+
+    ```sql
+    ADMIN REPAIR TABLE cloud_tbl PARTITION (p1) PROPERTIES ("dry_run" = "true");
     ```
