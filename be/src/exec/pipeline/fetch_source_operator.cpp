@@ -27,6 +27,7 @@ FetchSourceOperator::FetchSourceOperator(OperatorFactory* factory, int32_t id, i
 Status FetchSourceOperator::prepare(RuntimeState* state) {
     VLOG_ROW << "[GLM] FetchSourceOperator::prepare, processor: " << (void*)_processor.get() << ", " << (void*)this;
     RETURN_IF_ERROR(Operator::prepare(state));
+    _processor->set_allocator(allocator());
     return Status::OK();
 }
 

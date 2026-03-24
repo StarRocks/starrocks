@@ -194,7 +194,7 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
         throw std::runtime_error("local exchange gets empty shuffled chunk.");
     }
     // Unlock during merging partition chunks into a full chunk.
-    ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
+    ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot(allocator(), num_rows);
     chunk->reserve(num_rows);
     for (const auto& partition_chunk : selected_partition_chunks) {
         // NOTE: unpack column if `partition_chunk.chunk` constains const column
@@ -234,15 +234,15 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
     Columns partition_key_columns;
     std::vector<ChunkExtraColumnsMeta> extra_metas;
     for (auto& datum : partition_key_datum) {
-        auto res = ColumnHelper::create_column(datum.first, true);
+        auto res = ColumnHelper::create_column(allocator(), datum.first, true);
         res->append_datum(datum.second->get(0));
-        auto ptr = ConstColumn::create(std::move(res), 1);
+        auto ptr = ConstColumn::create(allocator(), std::move(res), 1);
         partition_key_columns.emplace_back(ptr);
         extra_metas.push_back(ChunkExtraColumnsMeta{datum.first, true /*useless*/, true /*useless*/});
     }
     chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
     // Unlock during merging partition chunks into a full chunk.
-    ChunkPtr chunk = selected_partition_chunks[0]->clone_empty_with_slot();
+    ChunkPtr chunk = selected_partition_chunks[0]->clone_empty_with_slot(allocator(), num_rows);
     chunk->reserve(num_rows);
     chunk->set_extra_data(chunk_extra_data);
     for (const auto& partition_chunk : selected_partition_chunks) {

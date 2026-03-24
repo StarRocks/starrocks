@@ -126,7 +126,7 @@ private:
     const phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
     const phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     const std::shared_ptr<StarRocksNodesInfo> _nodes_info;
-    // TODO: wire allocator propagation from Fetch operators in a follow-up phase.
+    // Allocator is propagated from Fetch sink/source operators during prepare().
     memory::Allocator* _allocator = memory::get_default_column_allocator();
     int32_t _local_be_id = 0;
 

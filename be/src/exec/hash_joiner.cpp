@@ -652,6 +652,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
+            filter->set_allocator(_build_allocator);
             filter->get_membership_filter()->init(ht_row_count);
             RETURN_IF_ERROR(
                     RuntimeFilterBuilder::fill(filter.get(), build_type, columns, kHashJoinKeyColumnOffset, eq_null));

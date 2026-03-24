@@ -28,7 +28,7 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
 
     for (const auto& desc : _factory->row_desc()->tuple_descriptors()) {
         for (const auto& slot : desc->slots()) {
-            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(allocator(), slot->type(), true);
             column->append_nulls(1);
             chunk->append_column(std::move(column), slot->id());
         }

@@ -42,7 +42,7 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
         TypeDescriptor* desc = _decode_column_types[i];
-        decode_columns[i] = ColumnHelper::create_column(*desc, encode_column->is_nullable());
+        decode_columns[i] = ColumnHelper::create_column(allocator(), *desc, encode_column->is_nullable());
         if (encode_column->only_null()) {
             bool res = decode_columns[i]->append_nulls(encode_column->size());
             DCHECK(res);

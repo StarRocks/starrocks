@@ -29,7 +29,7 @@ StatusOr<ChunkPtr> RawValuesSourceOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_dst_slots.size() == 1);
     const auto* dst_slot = _dst_slots[0];
 
-    MutableColumnPtr dst_column = ColumnHelper::create_column(dst_slot->type(), dst_slot->is_nullable());
+    MutableColumnPtr dst_column = ColumnHelper::create_column(allocator(), dst_slot->type(), dst_slot->is_nullable());
     dst_column->reserve(rows_count);
 
     size_t global_start_index = _start_index + _next_processed_row_index;

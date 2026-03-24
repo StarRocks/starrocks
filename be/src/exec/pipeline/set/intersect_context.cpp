@@ -68,7 +68,7 @@ StatusOr<ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
         MutableColumns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
             const auto& slot = _dst_tuple_desc->slots()[i];
-            dst_columns[i] = ColumnHelper::create_column(slot->type(), _dst_nullables[i]);
+            dst_columns[i] = ColumnHelper::create_column(_source_allocator, slot->type(), _dst_nullables[i]);
             dst_columns[i]->reserve(num_remained_keys);
         }
 

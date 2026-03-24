@@ -18,6 +18,7 @@ namespace starrocks::pipeline {
 
 Status ExceptOutputSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _except_ctx->set_source_allocator(allocator());
     _except_ctx->observable().attach_source_observer(state, observer());
     return Status::OK();
 }

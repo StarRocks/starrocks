@@ -99,7 +99,7 @@ private:
     // It is used to allocate keys in IntersectBuildSinkOperator, and release all allocated keys
     // when IntersectOutputSourceOperator is finished by calling close().
     std::unique_ptr<MemPool> _build_pool = nullptr;
-    // TODO: wire allocator propagation from sink/source operators in a follow-up phase.
+    // Allocators are set by sink/source operators during prepare().
     memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
     memory::Allocator* _source_allocator = memory::get_default_column_allocator();
 

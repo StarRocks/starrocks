@@ -102,7 +102,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             if (_limit > 0 && rewind_size > _limit) {
                 rewind_size = _limit;
             }
-            *chunk = tmp_chunk->clone_empty_with_slot(rewind_size);
+            *chunk = tmp_chunk->clone_empty_with_slot(allocator(), rewind_size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
                 auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);

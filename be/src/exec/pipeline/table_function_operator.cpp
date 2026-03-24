@@ -121,10 +121,10 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
 
     output_columns.reserve(_outer_slots.size());
     for (int _outer_slot : _outer_slots) {
-        output_columns.emplace_back(_input_chunk->get_column_by_slot_id(_outer_slot)->clone_empty());
+        output_columns.emplace_back(_input_chunk->get_column_by_slot_id(_outer_slot)->clone_empty(allocator()));
     }
     for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-        output_columns.emplace_back(_table_function_result.first[i]->clone_empty());
+        output_columns.emplace_back(_table_function_result.first[i]->clone_empty(allocator()));
     }
 
     while (output_columns[0]->size() < max_chunk_size) {

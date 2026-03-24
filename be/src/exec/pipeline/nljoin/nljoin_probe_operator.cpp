@@ -270,7 +270,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         if (_probe_chunk) {
             nullable |= _probe_chunk->is_column_nullable(slot->id());
         }
-        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
+        MutableColumnPtr new_col = ColumnHelper::create_column(allocator(), slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
@@ -279,7 +279,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         if (_curr_build_chunk) {
             nullable |= _curr_build_chunk->is_column_nullable(slot->id());
         }
-        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
+        MutableColumnPtr new_col = ColumnHelper::create_column(allocator(), slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
 
@@ -304,7 +304,7 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
 Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter) {
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t num_rows = chunk->num_rows();
-        auto null_column = NullColumn::create(chunk->num_rows());
+        auto null_column = NullColumn::create(allocator(), chunk->num_rows());
         auto& null_data = null_column->get_data();
 
         *filter = std::make_shared<Filter>(chunk->num_rows(), 1);

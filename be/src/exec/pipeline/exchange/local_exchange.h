@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/chunk_buffer_memory_manager.h"
@@ -171,6 +172,7 @@ public:
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
     size_t get_peak_memory_usage() const { return _memory_manager->get_peak_memory_usage(); }
     size_t get_peak_num_rows() const { return _memory_manager->get_peak_num_rows(); }
+    memory::Allocator* allocator() const { return _allocator; }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _sink_observable.add_observer(state, observer);
@@ -187,6 +189,9 @@ public:
 protected:
     const std::string _name;
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
+    // allocator used by LocalExchanger's own transient working state.
+    // Chunks handed off to source operators should still use each source allocator.
+    memory::Allocator* _allocator = memory::get_default_column_allocator();
     std::atomic<int32_t> _sink_number = 0;
     std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
