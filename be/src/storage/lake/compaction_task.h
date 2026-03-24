@@ -21,6 +21,7 @@
 #include "column/column_access_path.h"
 #include "common/status.h"
 #include "compaction_task_context.h"
+#include "fs/fs.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
