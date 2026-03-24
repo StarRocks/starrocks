@@ -104,4 +104,14 @@ public class SetPasswordTest {
         System.out.println(setSql);
     }
 
+    @Test
+    public void testAuditSetPasswordWithDoubleQuotedLiteral() {
+        String sql = "SET PASSWORD FOR admin = PASSWORD(\"testPass\"), pipeline_dop = 2";
+        SetStmt setStmt = (SetStmt) parseSql(sql);
+        String setSql = AstToStringBuilder.toString(setStmt);
+        Assertions.assertTrue(setSql.contains("PASSWORD FOR"));
+        Assertions.assertTrue(setSql.contains("PASSWORD('***')"));
+        Assertions.assertTrue(setSql.contains("`pipeline_dop` = 2"));
+    }
+
 }
