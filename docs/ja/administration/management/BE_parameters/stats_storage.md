@@ -45,7 +45,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージボリュームの状態を報告する時間間隔。これには、ボリューム内のデータサイズが含まれます。
 - 導入バージョン: -
 
@@ -63,7 +63,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: すべてのタブレットの最新バージョンを報告する時間間隔。
 - 導入バージョン: -
 
@@ -72,7 +72,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: タスクの状態を報告する時間間隔。タスクは、テーブルの作成、テーブルの削除、データのロード、またはテーブルスキーマの変更を行うことができます。
 - 導入バージョン: -
 
@@ -81,7 +81,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: すべてのワークグループの最新バージョンを報告する時間間隔。
 - 導入バージョン: -
 
@@ -94,7 +94,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: スキーマ変更のために使用されるスレッドの数。
 - 導入バージョン: -
 
@@ -103,7 +103,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ロード時の自動パーティション作成に使用する自動パーティションスレッドプールのスレッド数。プールのキューサイズはスレッド数の 10 倍に自動設定されます。
 - 導入バージョン: -
 
@@ -112,7 +112,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: Avro の Union データタイプからシリアライズされた JSON 文字列からタイプタグを取り除くかどうか。
 - 導入バージョン: v3.3.7, v3.4
 
@@ -121,7 +121,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ベースコンパクションのスレッドポーリングの時間間隔。
 - 導入バージョン: -
 
@@ -130,7 +130,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 86400
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
 - 導入バージョン: -
 
@@ -139,7 +139,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 各ストレージボリュームでのベースコンパクションに使用されるスレッド数。
 - 導入バージョン: -
 
@@ -148,7 +148,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0.3
 - タイプ: Double
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 累積ファイルサイズとベースファイルサイズの比率。この比率がこの値に達することがベースコンパクションをトリガーする条件の一つです。
 - 導入バージョン: -
 
@@ -157,7 +157,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: タブレットの一貫性をチェックするために使用されるスレッドの数。
 - 導入バージョン: -
 
@@ -166,7 +166,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3600
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 異常なレプリケーションによって残された期限切れのスナップショットをシステムがクリアする時間間隔。
 - 導入バージョン: v3.3.5
 
@@ -175,7 +175,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 4
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 同時コンパクションタスクに使用される最大スレッド数。この設定は v3.1.7 および v3.2.2 以降、動的に変更されました。
 - 導入バージョン: v3.0.0
 
@@ -193,7 +193,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2147483648
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 各コンパクションスレッドに許可される最大メモリサイズ。
 - 導入バージョン: -
 
@@ -202,7 +202,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 各コンパクションの時間しきい値。コンパクションがこの時間しきい値を超えて時間がかかる場合、StarRocks は対応するトレースを出力します。
 - 導入バージョン: -
 
@@ -220,7 +220,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 累積コンパクションのスレッドポーリングの時間間隔。
 - 導入バージョン: -
 
@@ -229,7 +229,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ディスクごとの累積コンパクションスレッド数。
 - 導入バージョン: -
 
@@ -247,7 +247,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1024
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 各行ブロックに格納できる最大行数。
 - 導入バージョン: -
 
@@ -274,7 +274,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ディスクの健康状態を監視する時間間隔。
 - 導入バージョン: -
 
@@ -283,7 +283,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 50
 - タイプ: Int
 - 単位: KB/秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 各 HTTP リクエストのダウンロード速度の下限。この値より低い速度で一定時間動作すると、HTTP リクエストは中止されます。この時間は、設定項目 `download_low_speed_time` で指定されます。
 - 導入バージョン: -
 
@@ -292,7 +292,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 300
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ダウンロード速度が下限より低い状態で動作できる最大時間。この時間内に `download_low_speed_limit_kbps` の値より低い速度で動作し続けると、HTTP リクエストは中止されます。
 - 導入バージョン: -
 
@@ -301,7 +301,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: BE ノードでのリストアジョブのダウンロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
 - 導入バージョン: -
 
@@ -310,7 +310,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: タブレットを削除するために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
 - 導入バージョン: -
 
@@ -319,7 +319,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 文字列の長さをチェックして、範囲外の VARCHAR データによるコンパクションの失敗を解決するかどうか。
 - 導入バージョン: -
 
@@ -328,7 +328,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: イベントベースのコンパクションフレームワークを有効にするかどうか。`true` はイベントベースのコンパクションフレームワークが有効であることを示し、`false` は無効であることを示します。イベントベースのコンパクションフレームワークを有効にすると、多くのタブレットがある場合や単一のタブレットに大量のデータがある場合のコンパクションのオーバーヘッドを大幅に削減できます。
 - 導入バージョン: -
 
@@ -346,7 +346,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: ハードメモリリソース制限に達したときに新しいロードプロセスを許可するかどうか。`true` は新しいロードプロセスが許可されることを示し、`false` は拒否されることを示します。
 - 導入バージョン: v3.3.2
 
@@ -355,7 +355,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでプライマリキーインデックスの並列コンパクションを有効にするかどうか。
 - 導入バージョン: -
 
@@ -364,7 +364,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするかどうか。有効化されると、システムは公開操作中にスレッドプールを使用してセグメントを並行処理し、大規模なテーブルのパフォーマンスを大幅に向上させます。
 - 導入バージョン: -
 
@@ -373,7 +373,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: データインポートおよびコンパクションの段階で、Primary Key インデックスファイルを即座に構築するかどうかを決定します。有効化されると、システムはデータ書き込み時に永続的な PK インデックスファイルを直接生成し、後続のクエリパフォーマンスを向上させます。
 - 導入バージョン: -
 
@@ -382,7 +382,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 主キーテーブルのサイズ階層型コンパクションポリシーを有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。この項目は、共有データクラスタでは v3.2.4 および v3.1.10 以降、共有なしクラスタでは v3.2.5 および v3.1.10 以降で有効になります。
 - 導入バージョン: -
 
@@ -391,7 +391,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
@@ -400,7 +400,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: サイズ階層型コンパクションポリシー (主キーテーブルを除く) を有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。
 - 導入バージョン: -
 
@@ -409,7 +409,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
 - 導入バージョン: -
 
@@ -427,7 +427,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3600
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 一定期間使用されていないファイルディスクリプタをクリーンアップする時間間隔。
 - 導入バージョン: -
 
@@ -436,7 +436,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1800
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 受信データの有効期限。この設定項目はインクリメンタルクローンで使用されます。
 - 導入バージョン: -
 
@@ -445,7 +445,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのハードリミット (比率)。`enable_new_load_on_memory_limit_exceeded` が `false` に設定されており、すべてのロードプロセスのメモリ消費が `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` を超える場合、新しいロードプロセスは拒否されます。
 - 導入バージョン: v3.3.2
 
@@ -454,7 +454,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 30
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのソフトリミット (パーセンテージ)。
 - 導入バージョン: -
 
@@ -490,7 +490,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: BE ノードでのスナップショット作成タスクの最大スレッド数。
 - 導入バージョン: -
 
@@ -499,7 +499,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 4
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 手動コンパクションのスレッド数。
 - 導入バージョン: -
 
@@ -508,7 +508,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 100
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 各ベースコンパクションでコンパクト化できる最大セグメント数。
 - 導入バージョン: -
 
@@ -517,7 +517,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 40960
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: コンパクションの候補タブレットの最大数。値が大きすぎると、高いメモリ使用量と高い CPU 負荷を引き起こします。
 - 導入バージョン: -
 
@@ -526,7 +526,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: -1
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: コンパクションの最大同時実行数 (ベースコンパクションと累積コンパクションの両方を含む)。値 `-1` は同時実行数に制限がないことを示します。`0` はコンパクションを無効にすることを示します。このパラメータは、イベントベースのコンパクションフレームワークが有効な場合に可変です。
 - 導入バージョン: -
 
@@ -535,7 +535,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 単一の累積コンパクションでマージできる最大セグメント数。コンパクション中に OOM が発生した場合、この値を減少させることができます。
 - 導入バージョン: -
 
@@ -544,7 +544,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 50000
 - タイプ: Int
 - 単位: KB/秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 各 HTTP リクエストの最大ダウンロード速度。この値は、BE ノード間のデータレプリカ同期のパフォーマンスに影響を与えます。
 - 導入バージョン: -
 
@@ -553,7 +553,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3600
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージボリュームのガーベジコレクションの最大時間間隔。この設定は v3.0 以降、動的に変更されました。
 - 導入バージョン: -
 
@@ -562,7 +562,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 対応する BE ノードが終了する前にストレージボリュームで許容されるエラーの最大パーセンテージ。
 - 導入バージョン: -
 
@@ -571,7 +571,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 209715200
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_memory_limit_per_worker` の値よりも低く設定する必要があります。
 - 導入バージョン: -
 
@@ -580,7 +580,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
 - 導入バージョン: -
 
@@ -589,7 +589,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2
 - タイプ: Int
 - 単位: GB
-- 可変: はい
+- 変更可能: はい
 - 説明: 各スキーマ変更タスクに許可される最大メモリサイズ。
 - 導入バージョン: -
 
@@ -598,7 +598,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: ベースコンパクションをトリガーする最小セグメント数。
 - 導入バージョン: -
 
@@ -607,7 +607,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 120
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 前回のコンパクション失敗からタブレットコンパクションをスケジュールできる最小時間間隔。
 - 導入バージョン: -
 
@@ -616,7 +616,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 30
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 累積コンパクションが失敗時にリトライする最小時間間隔。
 - 導入バージョン: -
 
@@ -625,7 +625,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 累積コンパクションをトリガーする最小セグメント数。
 - 導入バージョン: -
 
@@ -634,7 +634,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 180
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージボリュームのガーベジコレクションの最小時間間隔。この設定は v3.0 以降、動的に変更されました。
 - 導入バージョン: -
 
@@ -670,7 +670,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1800
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージエンジン内の保留中データの有効期限。
 - 導入バージョン: -
 
@@ -679,7 +679,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: ディスク上のコンパクションの最大同時実行数。これは、コンパクションによるディスク間の不均一な I/O の問題に対処します。この問題は、特定のディスクに対して過度に高い I/O を引き起こす可能性があります。
 - 導入バージョン: v3.0.9
 
@@ -688,7 +688,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1.5
 - タイプ: Double
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックスのコンパクションスコア比率。たとえば、N 個のファイルセットがある場合、コンパクションスコアは N * pk_index_compaction_score_ratio になります。
 - 導入バージョン: -
 
@@ -697,7 +697,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックス early sst コンパクションの閾値。
 - 導入バージョン: -
 
@@ -715,7 +715,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックス Memtable フラッシュ用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
@@ -724,7 +724,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックスの最大 Memtable 数。
 - 導入バージョン: -
 
@@ -733,7 +733,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 30000
 - タイプ: Int
 - 単位: ミリ秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージ・コンピューティング分離クラスタにおける、プライマリキーインデックス MemTable のフラッシュ完了を待機する最大タイムアウト時間。すべての MemTable を同期的にフラッシュする必要がある場合（例：SST インジェスト操作の前）、システムは最大でこのタイムアウト時間まで待機します。デフォルトは 30 秒です。
 - 導入バージョン: -
 
@@ -742,7 +742,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 33554432
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: プライマリキーインデックスコンパクションタスクの分割閾値。タスクに関連するファイルの合計サイズがこの閾値より小さい場合、タスクは分割されません。デフォルトは 32MB です。
 - 導入バージョン: -
 
@@ -751,7 +751,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのクラウドネイティブプライマリキーインデックス並列コンパクション用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
@@ -760,7 +760,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 16384
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするための最小行数閾値。
 - 導入バージョン: -
 
@@ -769,7 +769,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
@@ -778,7 +778,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル倍数パラメータ。
 - 導入バージョン: -
 
@@ -787,7 +787,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略のレベル数パラメータ。
 - 導入バージョン: -
 
@@ -796,7 +796,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 131072
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: プライマリキーインデックス Size-Tiered コンパクション戦略の最小レベルサイズパラメータ。
 - 導入バージョン: -
 
@@ -805,7 +805,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 16777216
 - タイプ: Int
 - 単位: Bytes
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージ・コンピューティング分離クラスタにおける、プライマリキーインデックス SSTable ファイルのサンプリング間隔サイズ。SSTable ファイルのサイズがこの閾値を超える場合、システムはこの間隔で SSTable からキーをサンプリングし、コンパクションタスクの境界分割を最適化します。この閾値より小さい SSTable については、開始キーのみが境界キーとして使用されます。デフォルトは 16 MB です。
 - 導入バージョン: -
 
@@ -814,7 +814,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 67108864
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データモードでのプライマリキーインデックスのターゲットファイルサイズ。デフォルトは 64MB です。
 - 導入バージョン: -
 
@@ -823,7 +823,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 104857600
 - タイプ: Int
 - 単位: Bytes
-- 可変: はい
+- 変更可能: はい
 - 説明: `enable_pk_index_eager_build` が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えたときのみ、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
 - 導入バージョン: -
 
@@ -832,7 +832,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 128
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルのキー列の最大サイズ。
 - 導入バージョン: v2.5
 
@@ -841,7 +841,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
 - 導入バージョン: -
 
@@ -850,7 +850,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 600
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 修復コンパクションスレッドをポーリングする時間間隔。
 - 導入バージョン: -
 
@@ -859,7 +859,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 50000
 - タイプ: Int
 - 単位: KB/s
-- 可変: はい
+- 変更可能: はい
 - 説明: 各レプリケーションスレッドの最大速度。
 - 導入バージョン: v3.3.5
 
@@ -868,7 +868,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 50
 - タイプ: Int
 - 単位: KB/s
-- 可変: はい
+- 変更可能: はい
 - 説明: 各レプリケーションスレッドの最小速度。
 - 導入バージョン: v3.3.5
 
@@ -877,7 +877,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 300
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: レプリケーションスレッドが最小速度を下回ることが許可される時間。実際の速度が `replication_min_speed_limit_kbps` を下回る時間がこの値を超えると、レプリケーションは失敗します。
 - 導入バージョン: v3.3.5
 
@@ -886,7 +886,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
 - 導入バージョン: v3.3.5
 
@@ -895,7 +895,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: サイズ階層型コンパクションポリシーにおける、2 つの連続するレベル間のデータサイズの倍率。
 - 導入バージョン: -
 
@@ -904,7 +904,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: サイズ階層型コンパクションポリシーにおいて、重複キーテーブルの 2 つの隣接するレベル間のデータ量の差の倍率。
 - 導入バージョン: -
 
@@ -913,7 +913,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 7
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: サイズ階層型コンパクションポリシーのレベル数。各レベルには最大で 1 つの rowset が保持されます。したがって、安定した状態では、この設定項目で指定されたレベル数と同じ数の rowset が最大で存在します。
 - 導入バージョン: -
 
@@ -922,7 +922,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 131072
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: サイズ階層型コンパクションポリシーの最小レベルのデータサイズ。この値より小さい rowset はすぐにデータコンパクションをトリガーします。
 - 導入バージョン: -
 
@@ -931,7 +931,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 172800
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: スナップショットファイルの有効期限。
 - 導入バージョン: -
 
@@ -949,7 +949,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 107374182400
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: すべての BE ディレクトリにおける残りのストレージスペースのハードリミット。BE ストレージディレクトリの残りのストレージスペースがこの値より少なく、ストレージ使用率 (パーセンテージ) が `storage_flood_stage_usage_percent` を超える場合、ロードおよびリストアジョブは拒否されます。この項目を FE 設定項目 `storage_usage_hard_limit_reserve_bytes` と一緒に設定する必要があります。
 - 導入バージョン: -
 
@@ -958,7 +958,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 95
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: すべての BE ディレクトリにおけるストレージ使用率のハードリミット。BE ストレージディレクトリのストレージ使用率 (パーセンテージ) がこの値を超え、残りのストレージスペースが `storage_flood_stage_left_capacity_bytes` より少ない場合、ロードおよびリストアジョブは拒否されます。この項目を FE 設定項目 `storage_usage_hard_limit_percent` と一緒に設定する必要があります。
 - 導入バージョン: -
 
@@ -967,7 +967,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 記憶媒体の移行 (SATA から SSD への移行) に使用されるスレッドの数。
 - 導入バージョン: -
 
@@ -976,7 +976,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: `${STARROCKS_HOME}/storage`
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ストレージボリュームのディレクトリと媒体。例: `/data1,medium:hdd;/data2,medium:ssd`。
   - 複数のボリュームはセミコロン (`;`) で区切られます。
   - ストレージ媒体が SSD の場合、ディレクトリの末尾に `,medium:ssd` を追加します。
@@ -988,7 +988,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: タブレットメタデータの同期を有効にするかどうかを制御するブール値。`true` は同期を有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
@@ -997,7 +997,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1024
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: タブレットマップシャードサイズ。値は 2 の累乗でなければなりません。
 - 導入バージョン: -
 
@@ -1006,7 +1006,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キー タブレットで許容される最大保留バージョン数。保留バージョンは、コミットされているがまだ適用されていないバージョンを指します。
 - 導入バージョン: -
 
@@ -1015,7 +1015,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: タブレットで許可される最大バージョン数。この値を超えると、新しい書き込みリクエストは失敗します。
 - 導入バージョン: -
 
@@ -1024,7 +1024,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 600
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: TabletMeta チェックポイントのスレッドポーリングの時間間隔。
 - 導入バージョン: -
 
@@ -1033,7 +1033,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 最後の TabletMeta チェックポイント以降に作成される最小 rowset 数。
 - 導入バージョン: -
 
@@ -1042,7 +1042,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1800
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: タブレット内の古い rowset をスイープする時間間隔。
 - 導入バージョン: -
 
@@ -1051,7 +1051,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 300
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: タブレット統計キャッシュが更新される時間間隔。
 - 導入バージョン: -
 
@@ -1060,7 +1060,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
 - 導入バージョン: -
 
@@ -1069,7 +1069,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 300000
 - タイプ: Int64
 - 単位: Milliseconds
-- 可変: はい
+- 変更可能: はい
 - 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
 - 導入バージョン: -
 
@@ -1078,7 +1078,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 3
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
 - 導入バージョン: v3.5.16, v4.0.9
 
@@ -1096,7 +1096,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 86400
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: ゴミファイルをクリーンアップする時間間隔。デフォルト値は v2.5.17、v3.0.9、v3.1.6 以降、259,200 から 86,400 に変更されました。
 - 導入バージョン: -
 
@@ -1105,7 +1105,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 30
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 期限切れの rowset をクリーンアップする時間間隔。
 - 導入バージョン: -
 
@@ -1114,7 +1114,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 360
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: Update Cache の有効期限。
 - 導入バージョン: -
 
@@ -1123,7 +1123,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルのコンパクションをチェックする時間間隔。
 - 導入バージョン: -
 
@@ -1132,7 +1132,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルの Delvec ファイルを含む rowset のコンパクションの優先順位を制御するために使用されます。値が大きいほど優先順位が高くなります。
 - 導入バージョン: -
 
@@ -1141,7 +1141,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルのディスクごとのコンパクションスレッド数。
 - 導入バージョン: -
 
@@ -1150,7 +1150,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 120
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブル内の各タブレットに対してコンパクションがトリガーされる最小時間間隔。
 - 導入バージョン: -
 
@@ -1159,7 +1159,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0.5
 - タイプ: Double
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタ内の主キーテーブルに対してコンパクションがマージできるデータの最大割合。単一のタブレットが過度に大きくなる場合、この値を縮小することをお勧めします。
 - 導入バージョン: v3.1.5
 
@@ -1168,7 +1168,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1073741824
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルの単一コンパクションの最大結果サイズ。
 - 導入バージョン: -
 
@@ -1177,7 +1177,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 268435456
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 主キーテーブルのコンパクションスコアはファイルサイズに基づいて計算され、他のテーブルタイプとは異なります。このパラメータは、主キーテーブルのコンパクションスコアを他のテーブルタイプのコンパクションスコアに似せるために使用でき、ユーザーが理解しやすくなります。
 - 導入バージョン: -
 
@@ -1186,7 +1186,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: BE ノードでのバックアップジョブのアップロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
 - 導入バージョン: -
 
@@ -1195,6 +1195,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 垂直コンパクションのグループごとの最大列数。
 - 導入バージョン: -

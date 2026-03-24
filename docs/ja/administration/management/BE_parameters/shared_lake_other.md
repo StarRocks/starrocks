@@ -80,7 +80,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1048576
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタでのクラウドネイティブテーブルコンパクションのためのリーダーのリモート I/O バッファサイズ。デフォルト値は 1MB です。この値を増やすことでコンパクションプロセスを加速できます。
 - 導入バージョン: v3.2.3
 
@@ -89,25 +89,25 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 500
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
 ### loop_count_wait_fragments_finish
 
 - デフォルト: 2
-- 型: Int
+- タイプ: Int
 - 単位: -
 - 変更可能: Yes
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
-- 導入: v2.5
+- 導入バージョン: v2.5
 
 ### starlet_filesystem_instance_cache_capacity
 
 - デフォルト: 10000
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: starlet filesystem インスタンスのキャッシュ容量。
 - 導入バージョン: v3.2.16, v3.3.11, v3.4.1
 
@@ -116,7 +116,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 86400
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: starlet filesystem インスタンス キャッシュの有効期限。
 - 導入バージョン: v3.3.15, 3.4.5
 
@@ -125,7 +125,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 9070
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE および CN のための追加のエージェントサービスポート。
 - 導入バージョン: -
 
@@ -134,7 +134,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 80
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。`datacache_unified_instance_enable` が `false` の場合のみ有効です。
 - 導入バージョン: v3.1
 
@@ -143,7 +143,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: v3.1 では false、v3.2.3 以降は true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタで Data Cache を有効にするかどうか。`true` はこの機能を有効にすることを示し、`false` は無効にすることを示します。デフォルト値は v3.2.3 以降、`false` から `true` に設定されました。
 - 導入バージョン: v3.1
 
@@ -152,7 +152,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
 - 導入バージョン: v3.5.3
 
@@ -172,7 +172,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: Data Cache の効率を最適化するために Block Buffer を有効にするかどうか。Block Buffer が有効な場合、システムは Data Cache から Block データを読み取り、一時バッファにキャッシュし、頻繁なキャッシュ読み取りによる余分なオーバーヘッドを削減します。
 - 導入バージョン: v3.2.0
 
@@ -181,7 +181,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: Data Cache の自動容量スケーリングの間隔。定期的に、システムはキャッシュディスクの使用状況をチェックし、必要に応じて自動スケーリングをトリガーします。
 - 導入バージョン: v3.3.0
 
@@ -190,7 +190,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 7200
 - タイプ: Int
 - 単位: 秒
-- 可変: はい
+- 変更可能: はい
 - 説明: Data Cache の自動拡張のための最小待機時間。ディスク使用率がこの期間を超えて `datacache_disk_low_level` を下回る場合にのみ、自動スケーリングがトリガーされます。
 - 導入バージョン: v3.3.0
 
@@ -199,7 +199,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: String
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
 - 導入バージョン: -
 
@@ -208,7 +208,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: Data Cache を有効にするかどうか。`true` は Data Cache が有効であることを示し、`false` は無効であることを示します。デフォルト値は v3.3 から `true` に変更されました。
 - 導入バージョン: -
 
@@ -217,7 +217,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: slru
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: Data Cache のエビクションポリシー。有効な値: `lru` (最も最近使用されていない) および `slru` (セグメント化された LRU)。
 - 導入バージョン: v3.4.0
 
@@ -226,7 +226,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 130172
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
 - 導入バージョン: v3.4.0
 
@@ -235,7 +235,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: String
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
 - 導入バージョン: -
 
@@ -244,7 +244,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10737418240
 - タイプ: Int
 - 単位: バイト
-- 可変: はい
+- 変更可能: はい
 - 説明: Data Cache 自動スケーリングのための最小有効容量。システムがキャッシュ容量をこの値未満に調整しようとする場合、キャッシュ容量は直接 `0` に設定され、キャッシュ容量の不足による頻繁なキャッシュの充填と削除によるパフォーマンスの低下を防ぎます。
 - 導入バージョン: v3.3.0
 
@@ -253,7 +253,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 90
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、`datacache_disk_high_level` から `disk_high_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
@@ -262,7 +262,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
@@ -271,7 +271,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 80
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、`datacache_disk_safe_level` から `disk_safe_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
@@ -280,7 +280,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 外部テーブルへの書き込み時にスピリングを有効化するかどうか。この機能を有効にすると、メモリ不足時に外部テーブルへの書き込みによって大量の小さなファイルが生成されるのを防ぎます。現在、この機能は Iceberg テーブルへの書き込みのみをサポートしています。
 - 導入バージョン: v4.0.0
 
@@ -289,7 +289,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
 - 導入バージョン: v3.3.0
 
@@ -298,7 +298,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 共有データクラスタで、internal catalog と external catalog のデータキャッシュを統一された Data Cache インスタンスで管理するかどうか。
 - 導入バージョン: v3.4.0
 
@@ -307,7 +307,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 600000
 - タイプ: Int
 - 単位: ミリ秒
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。
 - 導入バージョン: -
 
@@ -316,7 +316,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 8
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: JDBC 接続プールのサイズ。各 BE ノードで、同じ `jdbc_url` を持つ外部テーブルにアクセスするクエリは同じ接続プールを共有します。
 - 導入バージョン: -
 
@@ -325,7 +325,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: JDBC 接続プール内の最小アイドル接続数。
 - 導入バージョン: -
 
@@ -352,7 +352,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
 - 導入バージョン: v3.4
 
@@ -361,7 +361,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
 - 導入バージョン: v3.3
 
@@ -370,7 +370,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
 - 導入バージョン: v3.1.7, v3.2.3
 
@@ -379,7 +379,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 共有データクラスタにおける RPC リクエストの最大同時実行数。このしきい値に達すると、受信リクエストは拒否されます。この項目が `0` に設定されている場合、同時実行数に制限はありません。
 - 導入バージョン: -
 
@@ -388,7 +388,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 90
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: クエリプールが使用できる最大メモリ。プロセスメモリ制限のパーセンテージとして表されます。
 - 導入バージョン: v3.1.0
 
@@ -417,7 +417,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
 - 導入バージョン: v3.1
 
@@ -426,7 +426,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
 - 導入バージョン: v3.1
 
@@ -435,7 +435,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: 
-- 可変: はい
+- 変更可能: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
 - 導入バージョン: v3.1
 
@@ -444,7 +444,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
 - 導入バージョン: v3.1
 
@@ -453,7 +453,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: `error_urls` デバッグのために、オペレーターがFEハートビートからの元のホスト名を使用するか、環境要件に基づいてIPアドレスへの解決を強制するかを選択できるようにするかどうか。
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
@@ -473,7 +473,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
+- 変更可能: はい
 - 説明: トークンチェックを有効にするかどうかを制御するブール値。`true` はトークンチェックを有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
@@ -500,7 +500,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1000000
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ビットマップ関数の入力値の最大長。
 - 導入バージョン: -
 
@@ -509,7 +509,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 200000
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: to_base64() 関数の入力値の最大長。
 - 導入バージョン: -
 
@@ -545,7 +545,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: `${STARROCKS_HOME}/lib/small_file/`
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
 - 導入バージョン: -
 
@@ -563,6 +563,6 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: `${STARROCKS_HOME}/lib/udf`
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -

@@ -48,21 +48,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_system_metrics
 
-- 默认值: true
-- 类型: Boolean
+- 默认值：true
+- 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述: 为 true 时，StarRocks 在启动期间初始化系统级监控：它会根据配置的存储路径发现磁盘设备并枚举网络接口，然后将这些信息传入 metrics 子系统以启用磁盘 I/O、网络流量和内存相关的系统指标采集。如果设备或接口发现失败，初始化会记录警告并中止系统指标的设置。该标志仅控制是否初始化系统指标；周期性指标聚合线程由 `enable_metric_calculator` 单独控制，JVM 指标初始化由 `enable_jvm_metrics` 控制。更改此值需要重启。
-- 引入版本: v3.2.0
+- 描述：为 true 时，StarRocks 在启动期间初始化系统级监控：它会根据配置的存储路径发现磁盘设备并枚举网络接口，然后将这些信息传入 metrics 子系统以启用磁盘 I/O、网络流量和内存相关的系统指标采集。如果设备或接口发现失败，初始化会记录警告并中止系统指标的设置。该标志仅控制是否初始化系统指标；周期性指标聚合线程由 `enable_metric_calculator` 单独控制，JVM 指标初始化由 `enable_jvm_metrics` 控制。更改此值需要重启。
+- 引入版本：v3.2.0
 
 ### profile_report_interval
 
-- 默认值: 30
-- 类型: Int
-- 单位: Seconds
+- 默认值：30
+- 类型：Int
+- 单位：Seconds
 - 是否动态：是
-- 描述: ProfileReportWorker 用于（1）决定何时上报 LOAD 查询的每个 fragment 的 profile 信息以及（2）在上报周期之间休眠的间隔（秒）。该 worker 使用 (profile_report_interval * 1000) ms 将当前时间与每个任务的 last_report_time 进行比较，以确定是否需要对非 pipeline 和 pipeline 的 load 任务重新上报 profile。在每次循环中，worker 会读取当前值（运行时可变）；如果配置值小于等于 0，worker 会强制将其设为 1 并发出警告。修改此值会影响下一次的上报判断和休眠时长。
-- 引入版本: v3.2.0
+- 描述：ProfileReportWorker 用于（1）决定何时上报 LOAD 查询的每个 fragment 的 profile 信息以及（2）在上报周期之间休眠的间隔（秒）。该 worker 使用 (profile_report_interval * 1000) ms 将当前时间与每个任务的 last_report_time 进行比较，以确定是否需要对非 pipeline 和 pipeline 的 load 任务重新上报 profile。在每次循环中，worker 会读取当前值（运行时可变）；如果配置值小于等于 0，worker 会强制将其设为 1 并发出警告。修改此值会影响下一次的上报判断和休眠时长。
+- 引入版本：v3.2.0
 
 ### report_disk_state_interval_seconds
 
@@ -75,12 +75,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### report_resource_usage_interval_ms
 
-- 默认值: 1000
-- 类型: Int
+- 默认值：1000
+- 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述: 由 BE Agent 定期向 FE 发送资源使用报告的间隔（毫秒）。较低的值能提高报告的及时性，但会增加 CPU、网络和 FE 的负载；较高的值可降低开销但会使资源信息不够实时。上报会更新相关指标（`report_resource_usage_requests_total`、`report_resource_usage_requests_failed`）。请根据集群规模和 FE 负载调整。
-- 引入版本: v3.2.0
+- 描述：由 BE Agent 定期向 FE 发送资源使用报告的间隔（毫秒）。较低的值能提高报告的及时性，但会增加 CPU、网络和 FE 的负载；较高的值可降低开销但会使资源信息不够实时。上报会更新相关指标（`report_resource_usage_requests_total`、`report_resource_usage_requests_failed`）。请根据集群规模和 FE 负载调整。
+- 引入版本：v3.2.0
 
 ### report_tablet_interval_seconds
 
@@ -187,12 +187,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### chaos_test_enable_random_compaction_strategy
 
-- 默认值: false
-- 类型: Boolean
-- 单位: -
+- 默认值：false
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 当此项设置为 `true` 时，TabletUpdates::compaction() 将使用为混沌测试准备的随机压缩策略（compaction_random）。此标志强制在平板的压缩选择中采用非确定性/随机策略，而不是正常策略（例如 size-tiered compaction），并在压缩选择时具有优先权。仅用于可控的测试场景：启用后可能导致不可预测的压缩顺序、增加的 I/O/CPU 和测试不稳定性。请勿在生产环境中启用；仅用于故障注入或混沌测试场景。
-- 引入版本: v3.3.12, 3.4.2, 3.5.0, 4.0.0
+- 描述：当此项设置为 `true` 时，TabletUpdates::compaction() 将使用为混沌测试准备的随机压缩策略（compaction_random）。此标志强制在平板的压缩选择中采用非确定性/随机策略，而不是正常策略（例如 size-tiered compaction），并在压缩选择时具有优先权。仅用于可控的测试场景：启用后可能导致不可预测的压缩顺序、增加的 I/O/CPU 和测试不稳定性。请勿在生产环境中启用；仅用于故障注入或混沌测试场景。
+- 引入版本：v3.3.12, 3.4.2, 3.5.0, 4.0.0
 
 ### check_consistency_worker_count
 
@@ -223,12 +223,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### compaction_memory_limit_per_worker
 
-- 默认值: 2147483648
-- 类型: Int
-- 单位: Bytes
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
 - 是否动态：否
-- 描述: 每个 Compaction 线程允许的最大内存大小。
-- 引入版本: -
+- 描述：每个 Compaction 线程允许的最大内存大小。
+- 引入版本：-
 
 ### compaction_max_memory_limit_percent
 
@@ -277,12 +277,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### data_page_size
 
-- 默认值: 65536
-- 类型: Int
-- 单位: Bytes
+- 默认值：65536
+- 类型：Int
+- 单位：Bytes
 - 是否动态：否
-- 描述: 构建列数据与索引页时使用的目标未压缩 Page 大小（以字节为单位）。该值会被 Page Builder 用来决定何时完成一个 Page 以及预留多少内存。值为 0 会在构建器中禁用 Page 大小限制。更改此值会影响 Page 数量、元数据开销、内存预留以及 I/O/压缩的权衡（Page 越小 → Page 数和元数据越多；Page 越大 → Page 更少，压缩比更大，但内存峰值可能更大）。
-- 引入版本: v3.2.4
+- 描述：构建列数据与索引页时使用的目标未压缩 Page 大小（以字节为单位）。该值会被 Page Builder 用来决定何时完成一个 Page 以及预留多少内存。值为 0 会在构建器中禁用 Page 大小限制。更改此值会影响 Page 数量、元数据开销、内存预留以及 I/O/压缩的权衡（Page 越小 → Page 数和元数据越多；Page 越大 → Page 更少，压缩比更大，但内存峰值可能更大）。
+- 引入版本：v3.2.4
 
 ### default_num_rows_per_column_file_block
 
@@ -295,12 +295,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### delete_worker_count_high_priority
 
-- 默认值: 1
-- 类型: Int
-- 单位: Threads
+- 默认值：1
+- 类型：Int
+- 单位：Threads
 - 是否动态：否
-- 描述: 在 DeleteTaskWorkerPool 中被分配为高优先级删除线程的工作线程数。启动时 AgentServer 使用 total threads = delete_worker_count_normal_priority + delete_worker_count_high_priority 创建删除线程池；前 delete_worker_count_high_priority 个线程被标记为专门尝试弹出 TPriority::HIGH 任务（它们轮询高优先级删除任务，若无可用任务则睡眠/循环）。增加此值可以提高高优先级删除请求的并发性；减少它会降低专用容量并可能增加高优先级删除的延迟。更改需要重启进程才能生效。
-- 引入版本: v3.2.0
+- 描述：在 DeleteTaskWorkerPool 中被分配为高优先级删除线程的工作线程数。启动时 AgentServer 使用 total threads = delete_worker_count_normal_priority + delete_worker_count_high_priority 创建删除线程池；前 delete_worker_count_high_priority 个线程被标记为专门尝试弹出 TPriority::HIGH 任务（它们轮询高优先级删除任务，若无可用任务则睡眠/循环）。增加此值可以提高高优先级删除请求的并发性；减少它会降低专用容量并可能增加高优先级删除的延迟。更改需要重启进程才能生效。
+- 引入版本：v3.2.0
 
 ### dictionary_encoding_ratio
 
@@ -430,12 +430,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_lazy_delta_column_compaction
 
-- 默认值: true
-- 类型: Boolean
-- 单位: -
+- 默认值：true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 启用后，Compaction 将对由部分列更新产生的 Delta 列采用“懒惰”策略：StarRocks 会避免将 Delta-column 文件立即合并回其主段文件以节省 Compaction 的 I/O。实际上，Compaction 选择代码会检查是否存在部分列更新的 Rowset 和多个候选项；如果发现以上情况且此配置项为 `true`，引擎要么停止向 Compaction 添加更多输入，要么仅合并空的 Rowset（level -1），将 Delta 列保持分离。这会减少 Compaction 期间的即时 I/O 和 CPU 开销，但以延迟合并为代价（可能产生更多段和临时存储开销）。正确性和查询语义不受影响。
-- 引入版本: v3.2.3
+- 描述：启用后，Compaction 将对由部分列更新产生的 Delta 列采用“懒惰”策略：StarRocks 会避免将 Delta-column 文件立即合并回其主段文件以节省 Compaction 的 I/O。实际上，Compaction 选择代码会检查是否存在部分列更新的 Rowset 和多个候选项；如果发现以上情况且此配置项为 `true`，引擎要么停止向 Compaction 添加更多输入，要么仅合并空的 Rowset（level -1），将 Delta 列保持分离。这会减少 Compaction 期间的即时 I/O 和 CPU 开销，但以延迟合并为代价（可能产生更多段和临时存储开销）。正确性和查询语义不受影响。
+- 引入版本：v3.2.3
 
 ### enable_new_load_on_memory_limit_exceeded
 
@@ -513,12 +513,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_transparent_data_encryption
 
-- 默认值: false
-- 类型: Boolean
-- 单位: -
+- 默认值：false
+- 类型：Boolean
+- 单位：-
 - 是否动态：否
-- 描述: 启用后，StarRocks 将为新写入的存储对象（segment 文件、delete/update 文件、rowset segments、lake SSTs、persistent index 文件等）进行磁盘加密。写入路径（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex 及相关代码路径）会从 KeyCache 请求加密信息，将 encryption_info 附加到可写文件，并将 encryption_meta 持久化到 rowset / segment / sstable 元数据中（如 segment_encryption_metas、delete/update encryption metadata）。FE 与 FE/CN 的加密标志必须匹配。如果不匹配会导致 BE 在心跳时中止（LOG(FATAL)）。此参数不可在运行时修改，必须在第一次部署集群前启用，并确保密钥管理（KEK）与 KeyCache 已在集群中正确配置并同步。
-- 引入版本: v3.3.1
+- 描述：启用后，StarRocks 将为新写入的存储对象（segment 文件、delete/update 文件、rowset segments、lake SSTs、persistent index 文件等）进行磁盘加密。写入路径（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex 及相关代码路径）会从 KeyCache 请求加密信息，将 encryption_info 附加到可写文件，并将 encryption_meta 持久化到 rowset / segment / sstable 元数据中（如 segment_encryption_metas、delete/update encryption metadata）。FE 与 FE/CN 的加密标志必须匹配。如果不匹配会导致 BE 在心跳时中止（LOG(FATAL)）。此参数不可在运行时修改，必须在第一次部署集群前启用，并确保密钥管理（KEK）与 KeyCache 已在集群中正确配置并同步。
+- 引入版本：v3.3.1
 
 ### enable_zero_copy_from_page_cache
 
@@ -576,21 +576,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### lz4_expected_compression_ratio
 
-- 默认值: 2.1
-- 类型: Double
-- 单位: -
+- 默认值：2.1
+- 类型：Double
+- 单位：-
 - 是否动态：是
-- 描述: 序列化压缩策略用于判断观察到的 LZ4 压缩是否“良好”的阈值。增大此值会提高期望的压缩比（使条件更难满足），降低则更容易使观察到的压缩被视为令人满意。根据典型数据的可压缩性进行调优。有效范围：MIN=1, MAX=65537。
-- 引入版本: v3.4.1, 3.5.0, 4.0.0
+- 描述：序列化压缩策略用于判断观察到的 LZ4 压缩是否“良好”的阈值。增大此值会提高期望的压缩比（使条件更难满足），降低则更容易使观察到的压缩被视为令人满意。根据典型数据的可压缩性进行调优。有效范围：MIN=1, MAX=65537。
+- 引入版本：v3.4.1, 3.5.0, 4.0.0
 
 ### lz4_expected_compression_speed_mbps
 
-- 默认值: 600
-- 类型: Double
-- 单位: MB/s
+- 默认值：600
+- 类型：Double
+- 单位：MB/s
 - 是否动态：是
-- 描述: 自适应压缩策略中用于表示期望 LZ4 压缩吞吐量的值，单位为 MB/s。反馈例程会计算 `reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps)`。当 reward_ratio 大于 1.0 时增加正计数器（alpha），否则增加负计数器（beta）；这会影响未来数据是否被压缩。请根据你的硬件上典型的 LZ4 吞吐量调整此值——提高它会使策略更难将一次运行判定为“良好”（需要更高的观测速度），降低则更容易被判定为良好。必须为正的有限数。
-- 引入版本: v3.4.1, 3.5.0, 4.0.0
+- 描述：自适应压缩策略中用于表示期望 LZ4 压缩吞吐量的值，单位为 MB/s。反馈例程会计算 `reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps)`。当 reward_ratio 大于 1.0 时增加正计数器（alpha），否则增加负计数器（beta）；这会影响未来数据是否被压缩。请根据你的硬件上典型的 LZ4 吞吐量调整此值——提高它会使策略更难将一次运行判定为“良好”（需要更高的观测速度），降低则更容易被判定为良好。必须为正的有限数。
+- 引入版本：v3.4.1, 3.5.0, 4.0.0
 
 ### make_snapshot_worker_count
 
@@ -684,12 +684,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### max_queueing_memtable_per_tablet
 
-- 默认值: 2
-- 类型: Long
-- 单位: -
+- 默认值：2
+- 类型：Long
+- 单位：-
 - 是否动态：是
-- 描述: 控制写路径的每个 Tablet 的反压：当某个 Tablet 的排队（尚未刷写）memtable 数量达到或超过 `max_queueing_memtable_per_tablet` 时，`LocalTabletsChannel` 和 `LakeTabletsChannel` 中的写入者在提交更多写入工作之前会阻塞（sleep/retry）。这可以降低同时进行的 memtable 刷写并减少峰值内存使用，但代价是增加延迟或在高负载下发生 RPC 超时。将此值设高以允许更多并发 memtable（更多内存和 I/O 突发）；设低以限制内存压力并增加写入节流。
-- 引入版本: v3.2.0
+- 描述：控制写路径的每个 Tablet 的反压：当某个 Tablet 的排队（尚未刷写）memtable 数量达到或超过 `max_queueing_memtable_per_tablet` 时，`LocalTabletsChannel` 和 `LakeTabletsChannel` 中的写入者在提交更多写入工作之前会阻塞（sleep/retry）。这可以降低同时进行的 memtable 刷写并减少峰值内存使用，但代价是增加延迟或在高负载下发生 RPC 超时。将此值设高以允许更多并发 memtable（更多内存和 I/O 突发）；设低以限制内存压力并增加写入节流。
+- 引入版本：v3.2.0
 
 ### max_row_source_mask_memory_bytes
 
@@ -702,12 +702,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### max_tablet_write_chunk_bytes
 
-- 默认值: 536870912
-- 类型: long
-- 单位: Bytes
+- 默认值：536870912
+- 类型：long
+- 单位：Bytes
 - 是否动态：是
-- 描述: 当前内存 tablet 写入 chunk 在被视为已满并入队发送之前允许的最大内存（以字节为单位）。增大此值可以在加载宽表（列数多）时减少 RPC 频率，从而提高吞吐量，但代价是更高的内存使用和更大的 RPC 负载。需要调整此值以在减少 RPC 次数与内存及序列化/BRPC 限制之间取得平衡。
-- 引入版本: v3.2.12
+- 描述：当前内存 tablet 写入 chunk 在被视为已满并入队发送之前允许的最大内存（以字节为单位）。增大此值可以在加载宽表（列数多）时减少 RPC 频率，从而提高吞吐量，但代价是更高的内存使用和更大的 RPC 负载。需要调整此值以在减少 RPC 次数与内存及序列化/BRPC 限制之间取得平衡。
+- 引入版本：v3.2.12
 
 ### max_update_compaction_num_singleton_deltas
 
@@ -729,12 +729,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### memory_ratio_for_sorting_schema_change
 
-- 默认值: 0.8
-- 类型: Double
-- 单位: - (unitless ratio)
+- 默认值：0.8
+- 类型：Double
+- 单位：- (unitless ratio)
 - 是否动态：是
-- 描述: 在排序型 schema-change 操作期间，用作 memtable 最大缓冲区大小的每线程 schema-change 内存限制的比例。该比例会与 memory_limitation_per_thread_for_schema_change（以 GB 配置并转换为字节）相乘以计算 max_buffer_size，且结果上限为 4GB。SchemaChangeWithSorting 和 SortedSchemaChange 在创建 MemTable/DeltaWriter 时使用此值。增大该比例允许更大的内存缓冲区（减少 flush/merge 次数），但会增加内存压力风险；减小该比例会导致更频繁的 flush，从而增加 I/O/merge 开销。
-- 引入版本: v3.2.0
+- 描述：在排序型 schema-change 操作期间，用作 memtable 最大缓冲区大小的每线程 schema-change 内存限制的比例。该比例会与 memory_limitation_per_thread_for_schema_change（以 GB 配置并转换为字节）相乘以计算 max_buffer_size，且结果上限为 4GB。SchemaChangeWithSorting 和 SortedSchemaChange 在创建 MemTable/DeltaWriter 时使用此值。增大该比例允许更大的内存缓冲区（减少 flush/merge 次数），但会增加内存压力风险；减小该比例会导致更频繁的 flush，从而增加 I/O/merge 开销。
+- 引入版本：v3.2.0
 
 ### min_base_compaction_num_singleton_deltas
 
@@ -783,12 +783,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### parallel_clone_task_per_path
 
-- 默认值: 8
-- 类型: Int
-- 单位: Threads
+- 默认值：8
+- 类型：Int
+- 单位：Threads
 - 是否动态：是
-- 描述: 在 BE 的每个存储路径上分配的并行 clone 工作线程数。BE 启动时，clone 线程池的最大线程数计算为 max(number_of_store_paths * parallel_clone_task_per_path, MIN_CLONE_TASK_THREADS_IN_POOL)。例如，若有 4 个存储路径且默认=8，则 clone 池最大 = 32。此设置直接控制 BE 处理的 CLONE 任务（tablet 副本拷贝）的并发度：增加它会提高并行 clone 吞吐量，但也会增加 CPU、磁盘和网络争用；减少它会限制同时进行的 clone 任务并可能限制 FE 调度的 clone 操作。该值应用于动态 clone 线程池，可通过 update-config 路径在运行时更改（会导致 agent_server 更新 clone 池的最大线程数）。
-- 引入版本: v3.2.0
+- 描述：在 BE 的每个存储路径上分配的并行 clone 工作线程数。BE 启动时，clone 线程池的最大线程数计算为 max(number_of_store_paths * parallel_clone_task_per_path, MIN_CLONE_TASK_THREADS_IN_POOL)。例如，若有 4 个存储路径且默认=8，则 clone 池最大 = 32。此设置直接控制 BE 处理的 CLONE 任务（tablet 副本拷贝）的并发度：增加它会提高并行 clone 吞吐量，但也会增加 CPU、磁盘和网络争用；减少它会限制同时进行的 clone 任务并可能限制 FE 调度的 clone 操作。该值应用于动态 clone 线程池，可通过 update-config 路径在运行时更改（会导致 agent_server 更新 clone 池的最大线程数）。
+- 引入版本：v3.2.0
 
 ### pending_data_expire_time_sec
 
@@ -837,12 +837,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### pk_index_memtable_flush_threadpool_size
 
-- 默认值: 1048576
-- 类型: Int
-- 单位: -
+- 默认值：1048576
+- 类型：Int
+- 单位：-
 - 是否动态：是
-- 描述: 控制用于存算分离（云原生 / 数据湖）模式下 PK 索引 memtable 刷写的线程池（在 ExecEnv 中创建为 "cloud_native_pk_index_flush"）的最大队列大小（待处理任务数量）。该线程池的最大线程数由 `pk_index_memtable_flush_threadpool_max_threads` 管理。增大此值允许在执行前缓冲更多的 memtable flush 任务，这可以减少即时背压，但会增加由排队任务对象消耗的内存。减小它可以限制被缓冲的任务数量，并可能根据线程池行为更早引发背压或任务被拒绝。请根据可用内存和预期并发 flush 工作量进行调优。
-- 引入版本: -
+- 描述：控制用于存算分离（云原生 / 数据湖）模式下 PK 索引 memtable 刷写的线程池（在 ExecEnv 中创建为 "cloud_native_pk_index_flush"）的最大队列大小（待处理任务数量）。该线程池的最大线程数由 `pk_index_memtable_flush_threadpool_max_threads` 管理。增大此值允许在执行前缓冲更多的 memtable flush 任务，这可以减少即时背压，但会增加由排队任务对象消耗的内存。减小它可以限制被缓冲的任务数量，并可能根据线程池行为更早引发背压或任务被拒绝。请根据可用内存和预期并发 flush 工作量进行调优。
+- 引入版本：-
 
 ### pk_index_memtable_max_count
 

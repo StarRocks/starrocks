@@ -37,12 +37,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### dictionary_speculate_min_chunk_size
 
-- 默认值: 10000
-- 类型: Int
+- 默认值：10000
+- 类型：Int
 - 单位：Rows
 - 是否动态：否
-- 描述: StringColumnWriter 和 DictColumnWriter 用于触发字典编码推测的最小行数（chunk 大小）。如果传入列（或累积缓冲区加上传入行）大小大于等于 `dictionary_speculate_min_chunk_size`，写入器将立即运行推测并设置一种编码（DICT、PLAIN 或 BIT_SHUFFLE），而不是继续缓冲更多行。对于字符串列，推测使用 `dictionary_encoding_ratio` 来决定字典编码是否有利；对于数值/非字符串列，使用 `dictionary_encoding_ratio_for_non_string_column`。此外，如果列的 byte_size 很大（大于等于 UINT32_MAX），会强制立即进行推测以避免 `BinaryColumn<uint32_t>` 溢出。
-- 引入版本: v3.2.0
+- 描述：StringColumnWriter 和 DictColumnWriter 用于触发字典编码推测的最小行数（chunk 大小）。如果传入列（或累积缓冲区加上传入行）大小大于等于 `dictionary_speculate_min_chunk_size`，写入器将立即运行推测并设置一种编码（DICT、PLAIN 或 BIT_SHUFFLE），而不是继续缓冲更多行。对于字符串列，推测使用 `dictionary_encoding_ratio` 来决定字典编码是否有利；对于数值/非字符串列，使用 `dictionary_encoding_ratio_for_non_string_column`。此外，如果列的 byte_size 很大（大于等于 UINT32_MAX），会强制立即进行推测以避免 `BinaryColumn<uint32_t>` 溢出。
+- 引入版本：v3.2.0
 
 ### disable_storage_page_cache
 
@@ -266,12 +266,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
-- 默认值: false
-- 类型: Boolean
-- 单位: -
+- 默认值：false
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
-- 引入版本: v4.0
+- 描述：控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
+- 引入版本：v4.0
 
 ### max_hdfs_file_handle
 
@@ -356,12 +356,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### parquet_reader_bloom_filter_enable
 
-- 默认值: true
-- 类型: Boolean
-- 单位: -
+- 默认值：true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
-- 引入版本: v3.5
+- 描述：控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
+- 引入版本：v3.5
 
 ### path_gc_check_step
 
@@ -455,12 +455,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### pk_index_parallel_get_threadpool_size
 
-- 默认值: 1048576
-- 类型: Int
-- 单位: Tasks
+- 默认值：1048576
+- 类型：Int
+- 单位：Tasks
 - 是否动态：是
-- 描述: 设置用于 shared-data（cloud-native / lake）模式下 PK 索引并行获取操作的 "cloud_native_pk_index_get" 线程池的最大队列大小（待处理任务数量）。该池的实际线程数由 `pk_index_parallel_get_threadpool_max_threads` 控制；此设置仅限制可排队等待执行的任务数量。非常大的默认值（2^20）实际上使队列近似无界；降低此值可以防止排队任务导致的内存过度增长，但在队列已满时可能导致任务提交阻塞或失败。应根据工作负载并发性和内存约束与 `pk_index_parallel_get_threadpool_max_threads` 一起调优。
-- 引入版本: -
+- 描述：设置用于 shared-data（cloud-native / lake）模式下 PK 索引并行获取操作的 "cloud_native_pk_index_get" 线程池的最大队列大小（待处理任务数量）。该池的实际线程数由 `pk_index_parallel_get_threadpool_max_threads` 控制；此设置仅限制可排队等待执行的任务数量。非常大的默认值（2^20）实际上使队列近似无界；降低此值可以防止排队任务导致的内存过度增长，但在队列已满时可能导致任务提交阻塞或失败。应根据工作负载并发性和内存约束与 `pk_index_parallel_get_threadpool_max_threads` 一起调优。
+- 引入版本：-
 
 ### priority_exec_state_report_max_threads
 
@@ -491,12 +491,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### query_scratch_dirs
 
-- 默认值: `${STARROCKS_HOME}`
-- 类型: string
-- 单位: -
+- 默认值：`${STARROCKS_HOME}`
+- 类型：string
+- 单位：-
 - 是否动态：否
-- 描述: 用于查询执行在发生中间数据溢写（例如外部排序、哈希连接和其他算子）时的可写 scratch 目录的逗号分隔列表。指定一个或多个以 `;` 分隔的路径（例如 `/mnt/ssd1/tmp;/mnt/ssd2/tmp`）。这些目录应当对 BE 进程可访问且可写，并具有足够的可用空间；StarRocks 会在它们之间选择以分散溢写 I/O。更改此项需要重启才能生效。如果目录丢失、不可写或已满，溢写可能失败或导致查询性能下降。
-- 引入版本: v3.2.0
+- 描述：用于查询执行在发生中间数据溢写（例如外部排序、哈希连接和其他算子）时的可写 scratch 目录的逗号分隔列表。指定一个或多个以 `;` 分隔的路径（例如 `/mnt/ssd1/tmp;/mnt/ssd2/tmp`）。这些目录应当对 BE 进程可访问且可写，并具有足够的可用空间；StarRocks 会在它们之间选择以分散溢写 I/O。更改此项需要重启才能生效。如果目录丢失、不可写或已满，溢写可能失败或导致查询性能下降。
+- 引入版本：v3.2.0
 
 ### result_buffer_cancelled_interval_time
 
@@ -563,21 +563,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### udf_thread_pool_size
 
-- 默认值: 1
-- 类型: Int
+- 默认值：1
+- 类型：Int
 - 单位：Threads
 - 是否动态：否
-- 描述: 设置在 ExecEnv 中创建的 UDF 调用 PriorityThreadPool 的大小（用于执行用户自定义函数/UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 UDF 执行；保持较小可避免过度的 CPU 和内存争用。
-- 引入版本: v3.2.0
+- 描述：设置在 ExecEnv 中创建的 UDF 调用 PriorityThreadPool 的大小（用于执行用户自定义函数/UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 UDF 执行；保持较小可避免过度的 CPU 和内存争用。
+- 引入版本：v3.2.0
 
 ### update_memory_limit_percent
 
-- 默认值: 60
-- 类型: Int
+- 默认值：60
+- 类型：Int
 - 单位：Percent
 - 是否动态：否
-- 描述: BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
-- 引入版本: v3.2.0
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 引入版本：v3.2.0
 
 ## 导入导出
 
@@ -852,12 +852,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_load_channel_rpc_async
 
-- 默认值: true
-- 类型: Boolean
-- 单位: -
+- 默认值：true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
-- 引入版本: v3.5.0
+- 描述：启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
+- 引入版本：v3.5.0
 
 ### load_channel_rpc_thread_pool_num
 
@@ -879,12 +879,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_streaming_load_thread_pool
 
-- 默认值: true
-- 类型: Boolean
+- 默认值：true
+- 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述: 控制是否将 streaming load 的 scanner 提交到专用的 streaming load 线程池。当启用且查询为带有 `TLoadJobType::STREAM_LOAD` 的 LOAD 时，ConnectorScanNode 会将 scanner 任务提交到 `streaming_load_thread_pool`（该池配置为 INT32_MAX 的线程数和队列大小，即实际上是无界的）。当禁用时，scanner 使用通用的 `thread_pool` 及其 `PriorityThreadPool` 提交逻辑（优先级计算、try_offer/offer 行为）。启用可以将 streaming-load 的工作与常规查询执行隔离以减少干扰；但由于专用池实际上是无界的，在重度 streaming-load 流量下启用可能会增加并发线程数和资源使用。此选项默认开启，通常无需修改。
-- 引入版本: v3.2.0
+- 描述：控制是否将 streaming load 的 scanner 提交到专用的 streaming load 线程池。当启用且查询为带有 `TLoadJobType::STREAM_LOAD` 的 LOAD 时，ConnectorScanNode 会将 scanner 任务提交到 `streaming_load_thread_pool`（该池配置为 INT32_MAX 的线程数和队列大小，即实际上是无界的）。当禁用时，scanner 使用通用的 `thread_pool` 及其 `PriorityThreadPool` 提交逻辑（优先级计算、try_offer/offer 行为）。启用可以将 streaming-load 的工作与常规查询执行隔离以减少干扰；但由于专用池实际上是无界的，在重度 streaming-load 流量下启用可能会增加并发线程数和资源使用。此选项默认开启，通常无需修改。
+- 引入版本：v3.2.0
 
 ### streaming_load_thread_pool_idle_time_ms
 
@@ -905,30 +905,30 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 引入版本：-
 ### es_index_max_result_window
 
-- 默认值: 10000
-- 类型: Int
-- 单位: -
+- 默认值：10000
+- 类型：Int
+- 单位：-
 - 是否动态：否
-- 描述: 限制 StarRocks 在单个批次中从 Elasticsearch 请求的最大文档数。StarRocks 在为 ES reader 构建 `KEY_BATCH_SIZE` 时将 ES 请求批大小设置为 min(`es_index_max_result_window`, `chunk_size`)。如果 ES 请求超过 Elasticsearch 索引设置 `index.max_result_window`，Elasticsearch 会返回 HTTP 400 (Bad Request)。在扫描大型索引时调整此值，或在 Elasticsearch 端增加 ES `index.max_result_window` 以允许更大的单次请求。
-- 引入版本: v3.2.0
+- 描述：限制 StarRocks 在单个批次中从 Elasticsearch 请求的最大文档数。StarRocks 在为 ES reader 构建 `KEY_BATCH_SIZE` 时将 ES 请求批大小设置为 min(`es_index_max_result_window`, `chunk_size`)。如果 ES 请求超过 Elasticsearch 索引设置 `index.max_result_window`，Elasticsearch 会返回 HTTP 400 (Bad Request)。在扫描大型索引时调整此值，或在 Elasticsearch 端增加 ES `index.max_result_window` 以允许更大的单次请求。
+- 引入版本：v3.2.0
 
 ### load_channel_abort_clean_up_delay_seconds
 
-- 默认值: 600
-- 类型: Int
-- 单位: Seconds
+- 默认值：600
+- 类型：Int
+- 单位：Seconds
 - 是否动态：是
-- 描述: 控制 LoadChannelMgr 在将已中止的 load channel 的 load ID 从 `_aborted_load_channels` 中移除之前保留这些 load ID 的时长（以秒为单位）。当 load 作业被取消或失败时，load ID 会被记录下来以便立即拒绝任何迟到到达的 load RPC；一旦延迟到期，该条目将在周期性后台清理（最小清理间隔为 60 秒）时被清除。将延迟设置得过低会有在中止后仍接受零散 RPC 的风险，而设置得过高则可能比必要时间更长地保留状态并消耗资源。根据对迟到请求拒绝的正确性与中止 load 的资源保留之间的权衡进行调优。
-- 引入版本: v3.5.11, v4.0.4
+- 描述：控制 LoadChannelMgr 在将已中止的 load channel 的 load ID 从 `_aborted_load_channels` 中移除之前保留这些 load ID 的时长（以秒为单位）。当 load 作业被取消或失败时，load ID 会被记录下来以便立即拒绝任何迟到到达的 load RPC；一旦延迟到期，该条目将在周期性后台清理（最小清理间隔为 60 秒）时被清除。将延迟设置得过低会有在中止后仍接受零散 RPC 的风险，而设置得过高则可能比必要时间更长地保留状态并消耗资源。根据对迟到请求拒绝的正确性与中止 load 的资源保留之间的权衡进行调优。
+- 引入版本：v3.5.11, v4.0.4
 
 ### load_diagnose_rpc_timeout_stack_trace_threshold_ms
 
-- 默认值: 600000
-- 类型: Int
+- 默认值：600000
+- 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述: 用于决定何时为长时间运行的 load RPC 请求远程堆栈跟踪的阈值（毫秒）。当 load RPC 超时并返回超时错误且实际的 RPC 超时时间（_rpc_timeout_ms）超过此值时，`OlapTableSink`/`NodeChannel` 将在发往目标 BE 的 `load_diagnose` RPC 中包含 `stack_trace=true`，以便 BE 返回用于调试的堆栈跟踪。`LocalTabletsChannel::SecondaryReplicasWaiter` 也会在等待 secondary replicas 超过该间隔时触发从 primary 的尽力堆栈跟踪诊断。此行为依赖于 `enable_load_diagnose` 并使用 `load_diagnose_send_rpc_timeout_ms` 作为诊断 RPC 的超时；性能分析由 `load_diagnose_rpc_timeout_profile_threshold_ms` 单独控制。降低此值会更积极地请求堆栈跟踪。
-- 引入版本: v3.5.0
+- 描述：用于决定何时为长时间运行的 load RPC 请求远程堆栈跟踪的阈值（毫秒）。当 load RPC 超时并返回超时错误且实际的 RPC 超时时间（_rpc_timeout_ms）超过此值时，`OlapTableSink`/`NodeChannel` 将在发往目标 BE 的 `load_diagnose` RPC 中包含 `stack_trace=true`，以便 BE 返回用于调试的堆栈跟踪。`LocalTabletsChannel::SecondaryReplicasWaiter` 也会在等待 secondary replicas 超过该间隔时触发从 primary 的尽力堆栈跟踪诊断。此行为依赖于 `enable_load_diagnose` 并使用 `load_diagnose_send_rpc_timeout_ms` 作为诊断 RPC 的超时；性能分析由 `load_diagnose_rpc_timeout_profile_threshold_ms` 单独控制。降低此值会更积极地请求堆栈跟踪。
+- 引入版本：v3.5.0
 
 ### load_diagnose_rpc_timeout_profile_threshold_ms
 
@@ -950,12 +950,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### load_fp_brpc_timeout_ms
 
-- 默认值: -1
-- 类型: Int
+- 默认值：-1
+- 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述: 在触发 `node_channel_set_brpc_timeout` fail point 时，覆盖 OlapTableSink 所使用的每通道 brpc RPC 超时。如果设置为正值，NodeChannel 会将其内部 `_rpc_timeout_ms` 设置为该值（毫秒），使 open/add-chunk/cancel RPC 使用更短的超时，从而模拟产生 “[E1008]Reached timeout” 错误的 brpc 超时。默认值（`-1`）禁用覆盖。更改此值用于测试和故障注入；较小的值可能导致虚假超时并触发 load 诊断（参见 `enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms` 和 `load_diagnose_send_rpc_timeout_ms`）。
-- 引入版本: v3.5.0
+- 描述：在触发 `node_channel_set_brpc_timeout` fail point 时，覆盖 OlapTableSink 所使用的每通道 brpc RPC 超时。如果设置为正值，NodeChannel 会将其内部 `_rpc_timeout_ms` 设置为该值（毫秒），使 open/add-chunk/cancel RPC 使用更短的超时，从而模拟产生 “[E1008]Reached timeout” 错误的 brpc 超时。默认值（`-1`）禁用覆盖。更改此值用于测试和故障注入；较小的值可能导致虚假超时并触发 load 诊断（参见 `enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms` 和 `load_diagnose_send_rpc_timeout_ms`）。
+- 引入版本：v3.5.0
 
 ### load_fp_tablets_channel_add_chunk_block_ms
 
@@ -986,21 +986,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### pull_load_task_dir
 
-- 默认值: `${STARROCKS_HOME}/var/pull_load`
-- 类型: string
+- 默认值：`${STARROCKS_HOME}/var/pull_load`
+- 类型：string
 - 单位：-
 - 是否动态：否
-- 描述: BE 存储 “pull load” 任务的数据和工作文件（下载的源文件、任务状态、临时输出等）的文件系统路径。该目录必须对 BE 进程可写，并且具有足够的磁盘空间以容纳下载的内容。
-- 引入版本: v3.2.0
+- 描述：BE 存储 “pull load” 任务的数据和工作文件（下载的源文件、任务状态、临时输出等）的文件系统路径。该目录必须对 BE 进程可写，并且具有足够的磁盘空间以容纳下载的内容。
+- 引入版本：v3.2.0
 
 ### routine_load_pulsar_timeout_second
 
-- 默认值: 10
-- 类型: Int
+- 默认值：10
+- 类型：Int
 - 单位：秒
 - 是否动态：否
-- 描述: BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
-- 引入版本: v3.2.0
+- 描述：BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
+- 引入版本：v3.2.0
 
 ### routine_load_kafka_timeout_second
 

@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 空の文字列
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ログをフラッシュするための戦略。デフォルト値は、ログがメモリにバッファリングされることを示します。有効な値は `-1` と `0` です。`-1` は、ログがメモリにバッファリングされないことを示します。
 - 導入バージョン: -
 
@@ -62,7 +62,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: `${STARROCKS_HOME}/log`
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: システムログ (INFO、WARNING、ERROR、FATAL を含む) を保存するディレクトリ。
 - 導入バージョン: -
 
@@ -71,7 +71,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: INFO
 - タイプ: String
 - 単位: -
-- 可変: はい (v3.3.0、v3.2.7、v3.1.12 から)
+- 変更可能: はい (v3.3.0、v3.2.7、v3.1.12 から)
 - 説明: システムログエントリが分類される重大度レベル。 有効な値: INFO、WARN、ERROR、FATAL。この項目は v3.3.0、v3.2.7、v3.1.12 以降、動的設定に変更されました。
 - 導入バージョン: -
 
@@ -80,7 +80,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: SIZE-MB-1024
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: システムログがログロールに分割されるモード。有効な値には `TIME-DAY`、`TIME-HOUR`、および `SIZE-MB-` サイズが含まれます。デフォルト値は、各ロールが 1 GB であるログロールに分割されることを示します。
 - 導入バージョン: -
 
@@ -89,7 +89,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 保持するログロールの数。
 - 導入バージョン: -
 
@@ -98,7 +98,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ログプレフィックスにタイムゾーン情報を表示するかどうか。`true` はタイムゾーン情報を表示することを示し、`false` は表示しないことを示します。
 - 導入バージョン: -
 
@@ -107,7 +107,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 印刷するログのレベル。この設定項目は、コード内で VLOG で開始されたログの出力を制御するために使用されます。
 - 導入バージョン: -
 
@@ -116,7 +116,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 
 - タイプ: Strings
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: VLOGログを出力するファイル名（拡張子を除く）またはファイル名のワイルドカードを指定します。複数のファイル名はカンマで区切ることができます。たとえば、この設定項目を `storage_engine,tablet_manager` に設定すると、StarRocks は storage_engine.cpp および tablet_manager.cpp ファイルの VLOG ログを出力します。ワイルドカードも使用可能で、`*` に設定するとすべてのファイルの VLOG ログを出力します。VLOG ログの出力レベルは `sys_log_verbose_level` パラメータで制御されます。
 - 導入バージョン: -
 
@@ -145,7 +145,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 60
 - タイプ: Int
 - 単位: 秒
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: ディスクがハングした後、BE が終了するまでの待機時間。
 - 導入バージョン: -
 
@@ -154,7 +154,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 48
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: HTTP サーバーが使用するスレッドの数。
 - 導入バージョン: -
 
@@ -163,7 +163,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 8040
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE HTTP サーバーポート。
 - 導入バージョン: -
 
@@ -172,7 +172,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 9060
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE の thrift サーバーポートで、FEs からのリクエストを受け取るために使用されます。
 - 導入バージョン: -
 
@@ -181,7 +181,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 2147483648
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: bRPC の最大ボディサイズ。
 - 導入バージョン: -
 
@@ -199,7 +199,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: -1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: bRPC の bthreads の数。値 `-1` は CPU スレッドと同じ数を示します。
 - 導入バージョン: -
 
@@ -208,7 +208,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 8060
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE bRPC ポートで、bRPC のネットワーク統計を表示するために使用されます。
 - 導入バージョン: -
 
@@ -226,7 +226,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE 間の RPC で行バッチを圧縮するかどうかを制御するブール値です。`true` は行バッチを圧縮することを示し、`false` は圧縮しないことを示します。
 - 導入バージョン: -
 
@@ -280,7 +280,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 9050
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE ハートビートサービスポートで、FEs からのハートビートを受け取るために使用されます。
 - 導入バージョン: -
 
@@ -289,7 +289,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE ハートビートサービスのスレッド数。
 - 導入バージョン: -
 
@@ -307,7 +307,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 90%
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
 - 導入バージョン: -
 
@@ -325,7 +325,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: `priority_networks` が指定されていない場合に IPv6 アドレスを優先的に使用するかどうかを制御するブール値です。`true` は、ノードをホストするサーバーが IPv4 と IPv6 の両方のアドレスを持ち、`priority_networks` が指定されていない場合に、システムが IPv6 アドレスを優先的に使用することを許可することを示します。
 - 導入バージョン: v3.3.0
 
@@ -352,7 +352,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 空の文字列
 - タイプ: String
 - 単位: -
-- 可変: いいえ
+- 変更可能: いいえ
 - 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
@@ -370,7 +370,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 100
 - タイプ: Int
 - 単位: ミリ秒
-- 可変: はい
+- 変更可能: はい
 - 説明: thrift クライアントがリトライする時間間隔。
 - 導入バージョン: -
 
@@ -399,12 +399,13 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 単位: Milliseconds
 - 変更可能: いいえ
 - 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
+- 導入バージョン: -
 
 ### thrift_rpc_max_body_size
 
 - デフォルト: 0
 - タイプ: Int
-- 単位:
+- 単位: -
 - 変更可能: いいえ
 - 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
 - 導入バージョン: -
@@ -423,7 +424,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - デフォルト: 5000
 - タイプ: Int
 - 単位: ミリ秒
-- 可変: はい
+- 変更可能: はい
 - 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
 

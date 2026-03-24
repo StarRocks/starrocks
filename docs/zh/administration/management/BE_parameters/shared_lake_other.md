@@ -92,7 +92,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### loop_count_wait_fragments_finish
 
-- 默认值: 2
+- 默认值：2
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -101,12 +101,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### max_client_cache_size_per_host
 
-- 默认值: 10
-- 类型: Int
-- 单位: -
+- 默认值：10
+- 类型：Int
+- 单位：-
 - 是否动态：否
-- 描述: BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
-- 引入版本: v3.2.0
+- 描述：BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
+- 引入版本：v3.2.0
 
 ### starlet_filesystem_instance_cache_capacity
 
@@ -114,8 +114,8 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述: starlet filesystem 实例的缓存容量。
-- 引入版本: v3.2.16, v3.3.11, v3.4.1
+- 描述：starlet filesystem 实例的缓存容量。
+- 引入版本：v3.2.16, v3.3.11, v3.4.1
 
 ### starlet_filesystem_instance_cache_ttl_sec
 
@@ -123,8 +123,8 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 描述: starlet filesystem 实例缓存的过期时间。
-- 引入版本: v3.3.15, 3.4.5
+- 描述：starlet filesystem 实例缓存的过期时间。
+- 引入版本：v3.3.15, 3.4.5
 
 ### starlet_port
 
@@ -159,8 +159,8 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述: 存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
-- 引入版本: v3.5.3
+- 描述：存算分离集群下，是否将写入到对象存储的文件打上对象存储 Tag，方便自定义管理文件。
+- 引入版本：v3.5.3
 
 ### table_schema_service_max_retries
 
@@ -337,21 +337,21 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### jdbc_connection_max_lifetime_ms
 
-- 默认值: 300000
-- 类型: Long
-- 单位: 毫秒
-- 可变: 否
-- 描述: JDBC 连接池中连接的最大生命周期。连接在此超时前会被回收，以防止出现陈旧连接。允许的最小值为 30000 (30 秒)。
-- 引入版本: -
+- 默认值：300000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：否
+- 描述：JDBC 连接池中连接的最大生命周期。连接在此超时前会被回收，以防止出现陈旧连接。允许的最小值为 30000 (30 秒)。
+- 引入版本：-
 
 ### jdbc_connection_keepalive_time_ms
 
-- 默认值: 30000
-- 类型: Long
-- 单位: 毫秒
-- 可变: 否
-- 描述: 空闲 JDBC 连接的保活间隔。空闲连接会在此间隔进行测试，以主动检测陈旧连接。设置为 0 可禁用保活探测。启用时，必须 >= 30000 且小于 `jdbc_connection_max_lifetime_ms`。无效的启用值将被静默禁用（重置为 0）。
-- 引入版本: -
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：否
+- 描述：空闲 JDBC 连接的保活间隔。空闲连接会在此间隔进行测试，以主动检测陈旧连接。设置为 0 可禁用保活探测。启用时，必须 >= 30000 且小于 `jdbc_connection_max_lifetime_ms`。无效的启用值将被静默禁用（重置为 0）。
+- 引入版本：-
 
 ### lake_clear_corrupted_cache_data
 
@@ -456,23 +456,23 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
 
-- 默认值: false
-- 类型: Boolean
-- 单位: -
+- 默认值：false
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: `error_urls` Debug 过程中，是否允许 Operator 根据环境需求选择使用 FE 心跳的原始主机名，或强制解析为 IP 地址。
+- 描述：`error_urls` Debug 过程中，是否允许 Operator 根据环境需求选择使用 FE 心跳的原始主机名，或强制解析为 IP 地址。
   - `true`：将主机名解析为 IP 地址。
   - `false`（默认）：在错误 URL 中保留原始主机名。
 - 引入版本：v4.0.1
 
 ### enable_retry_apply
 
-- 默认值: true
-- 类型: Boolean
-- 单位: -
+- 默认值：true
+- 类型：Boolean
+- 单位：-
 - 是否动态：是
-- 描述: 启用后，被分类为可重试的 Tablet apply 失败（例如暂时的内存限制错误）会被重新调度以重试，而不是立即将 tablet 标记为错误。TabletUpdates 中的重试路径使用 `retry_apply_interval_second` 乘以当前失败计数并限制到 600s 的最大值来安排下一次尝试，因此随着连续失败，退避会增长。明确不可重试的错误（例如 corruption）会绕过重试并导致 apply 过程立即进入错误状态。重试会持续直到达到总体超时/终止条件，之后 apply 将进入错误状态。关闭此项会禁用对失败 apply 任务的自动重新调度，使失败的 apply 在没有重试的情况下直接转为错误状态。
-- 引入版本: v3.2.9
+- 描述：启用后，被分类为可重试的 Tablet apply 失败（例如暂时的内存限制错误）会被重新调度以重试，而不是立即将 tablet 标记为错误。TabletUpdates 中的重试路径使用 `retry_apply_interval_second` 乘以当前失败计数并限制到 600s 的最大值来安排下一次尝试，因此随着连续失败，退避会增长。明确不可重试的错误（例如 corruption）会绕过重试并导致 apply 过程立即进入错误状态。重试会持续直到达到总体超时/终止条件，之后 apply 将进入错误状态。关闭此项会禁用对失败 apply 任务的自动重新调度，使失败的 apply 在没有重试的情况下直接转为错误状态。
+- 引入版本：v3.2.9
 
 ### enable_token_check
 
@@ -503,30 +503,30 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### es_scroll_keepalive
 
-- 默认值: 5m
-- 类型: String
+- 默认值：5m
+- 类型：String
 - 单位：Minutes (string with suffix, e.g. "5m")
 - 是否动态：否
-- 描述: 发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (`?scroll=<value>`) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
-- 引入版本: v3.2.0
+- 描述：发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (`?scroll=<value>`) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
+- 引入版本：v3.2.0
 
 ### load_replica_status_check_interval_ms_on_failure
 
-- 默认值: 2000
-- 类型: Int
-- 单位: Milliseconds
+- 默认值：2000
+- 类型：Int
+- 单位：Milliseconds
 - 是否动态：是
-- 描述: 当上一次检查的 RPC 失败时，从副本向主副本检查其状态的时间间隔。
-- 引入版本: v3.5.1
+- 描述：当上一次检查的 RPC 失败时，从副本向主副本检查其状态的时间间隔。
+- 引入版本：v3.5.1
 
 ### load_replica_status_check_interval_ms_on_success
 
-- 默认值: 15000
-- 类型: Int
-- 单位: Milliseconds
+- 默认值：15000
+- 类型：Int
+- 单位：Milliseconds
 - 是否动态：是
-- 描述: 当上一次检查的 RPC 成功时，从副本向主副本检查其状态的时间间隔。
-- 引入版本: v3.5.1
+- 描述：当上一次检查的 RPC 成功时，从副本向主副本检查其状态的时间间隔。
+- 引入版本：v3.5.1
 
 ### max_length_for_bitmap_function
 
@@ -548,12 +548,12 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### memory_high_level
 
-- 默认值: 75
-- 类型: Long
-- 单位: Percent
+- 默认值：75
+- 类型：Long
+- 单位：Percent
 - 是否动态：是
-- 描述: 以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
-- 引入版本: v3.2.0
+- 描述：以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
+- 引入版本：v3.2.0
 
 ### memory_urgent_level
 
@@ -567,20 +567,20 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 ### report_exec_rpc_request_retry_num
 
 - 默认值：10
-- 类型: Int
+- 类型：Int
 - 单位：-
 - 是否动态：是
 - 描述：用于向 FE 汇报执行状态的 RPC 请求的重试次数。默认值为 10，意味着如果该 RPC 请求失败（仅限于 fragment instance 的 finish RPC），将最多重试 10 次。该请求对于导入任务（load job）非常重要，如果某个 fragment instance 的完成状态报告失败，整个导入任务将会一直挂起，直到超时。
--引入版本：-
+- 引入版本：-
 
 ### sleep_one_second
 
-- 默认值: 1
-- 类型: Int
+- 默认值：1
+- 类型：Int
 - 单位：秒
 - 是否动态：否
-- 描述: BE Agent Worker 线程的全局短睡眠间隔，当 Master 地址/心跳尚不可用或需要短时间重试/退避时作为一秒的暂停。多个 Report Worker Pool（例如 ReportDiskStateTaskWorkerPool、ReportOlapTableTaskWorkerPool、ReportWorkgroupTaskWorkerPool）引用此值，以避免忙等（busy-waiting）并在重试时降低 CPU 消耗。增大此值会降低重试频率并减慢对 Master 可用性的响应；减小会提高轮询频率并增加 CPU 使用。请在权衡响应性与资源使用后调整该项。
-- 引入版本: v3.2.0
+- 描述：BE Agent Worker 线程的全局短睡眠间隔，当 Master 地址/心跳尚不可用或需要短时间重试/退避时作为一秒的暂停。多个 Report Worker Pool（例如 ReportDiskStateTaskWorkerPool、ReportOlapTableTaskWorkerPool、ReportWorkgroupTaskWorkerPool）引用此值，以避免忙等（busy-waiting）并在重试时降低 CPU 消耗。增大此值会降低重试频率并减慢对 Master 可用性的响应；减小会提高轮询频率并增加 CPU 使用。请在权衡响应性与资源使用后调整该项。
+- 引入版本：v3.2.0
 
 ### small_file_dir
 
@@ -611,9 +611,9 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ### web_log_bytes
 
-- 默认值: 1048576 (1 MB)
-- 类型: long
+- 默认值：1048576 (1 MB)
+- 类型：long
 - 单位：Bytes
 - 是否动态：否
-- 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
-- 引入版本: v3.2.0
+- 描述：从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
+- 引入版本：v3.2.0
