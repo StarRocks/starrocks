@@ -483,6 +483,20 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    static BinaryImmContainer get_proxy_data(const BinaryColumn* column) { return column->immutable_data(); }
+
+    static BinaryImmContainer get_proxy_data(const LargeBinaryColumn* column) { return column->immutable_data(); }
+
+    static inline size_t get_binary_bytes_size(const Column* column) {
+        if (column->is_large_binary()) {
+            return down_cast<const LargeBinaryColumn*>(column)->get_immutable_bytes().size();
+        }
+        return down_cast<const BinaryColumn*>(column)->get_immutable_bytes().size();
+    }
+
+>>>>>>> 31ad752 ([Refactor] Use BinaryImmContainer as the immutable container of all binary column (#70701))
     template <typename Func>
     static inline void with_binary_column_bytes(Column* column, Func&& func) {
         if (column->is_large_binary()) {
