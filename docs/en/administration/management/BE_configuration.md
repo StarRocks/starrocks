@@ -10,21 +10,18 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
-
 # BE Configuration
 
 <BEConfigMethod />
 
 <CNConfigMethod />
 
-
 ## View BE configuration items
 
 You can view the BE configuration items using the following command:
 
-```shell
-curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```SQL
+SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 ```
 
 ## Configure BE parameters
@@ -33,6 +30,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 <StaticBEConfigNote />
 
+<<<<<<< HEAD
 ## Understand BE Parameters
 
 ### Server
@@ -5447,3 +5445,19 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: v4.0.1
 
 <EditionSpecificBEItem />
+=======
+## Parameter groups
+
+The parameters are grouped in these categories:
+
+- [Logging](./BE_parameters/log_server_meta.md)
+- [Server](./BE_parameters/log_server_meta.md)
+- [Metadata and Cluster management](./BE_parameters/log_server_meta.md)
+- [Query engine](./BE_parameters/query_loading.md)
+- [Loading and unloading](./BE_parameters/query_loading.md)
+- [Statistic report](./BE_parameters/stats_storage.md)
+- [Storage](./BE_parameters/stats_storage.md)
+- [Shared-data](./BE_parameters/shared_lake_other.md)
+- [Data Lake](./BE_parameters/shared_lake_other.md)
+- [Other](./BE_parameters/shared_lake_other.md)
+>>>>>>> 94d8ba7dff ([Doc] Separate BE Config Docs (#70702))
