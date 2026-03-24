@@ -241,14 +241,24 @@ template <>
 struct RunTimeTypeTraits<TYPE_CHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+<<<<<<< HEAD
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
+=======
+    using LargeColumnType = LargeBinaryColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_VARCHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+<<<<<<< HEAD
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
+=======
+    using LargeColumnType = LargeBinaryColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
 };
 
 template <>
@@ -311,14 +321,24 @@ template <>
 struct RunTimeTypeTraits<TYPE_BINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+<<<<<<< HEAD
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
+=======
+    using LargeColumnType = LargeBinaryColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
+<<<<<<< HEAD
     using ProxyContainerType = ColumnType::BinaryDataProxyContainer;
+=======
+    using LargeColumnType = LargeBinaryColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
 };
 
 template <>
@@ -349,7 +369,14 @@ template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 
 template <LogicalType Type>
+<<<<<<< HEAD
 using RunTimeProxyContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
+=======
+using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
+
+template <LogicalType Type>
+using RunTimeImmContainerType = typename RunTimeTypeTraits<Type>::ImmContainerType;
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
 
 // Movable: rvalue reference type
 template <LogicalType Type>
