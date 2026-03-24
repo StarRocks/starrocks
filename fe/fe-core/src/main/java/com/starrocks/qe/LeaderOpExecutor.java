@@ -329,6 +329,8 @@ public class LeaderOpExecutor {
         params.setSession_id(ctx.getSessionId().toString());
         params.setConnectionId(ctx.getConnectionId());
 
+        params.setUser_groups(new ArrayList<>(ctx.getGroups()));
+
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);
         currentRoles.setRole_id_list(new ArrayList<>(ctx.getCurrentRoleIds()));
