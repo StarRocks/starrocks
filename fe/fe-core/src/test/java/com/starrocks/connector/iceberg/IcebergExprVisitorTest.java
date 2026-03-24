@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
@@ -237,7 +236,6 @@ public class IcebergExprVisitorTest {
         expectedExpr = Expressions.isNull("k10.k11");
         Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString());
 
-
         // notNUll
         convertedExpr = converter.convert(Lists.newArrayList(new IsNullPredicateOperator(true, K11)), context);
         expectedExpr = Expressions.notNull("k10.k11");
@@ -458,8 +456,8 @@ public class IcebergExprVisitorTest {
         ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
 
         Expression convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryType.EQ, LAST_UPDATED_SEQUENCE_NUMBER,
-                        ConstantOperator.createBigint(1))),
+                        new BinaryPredicateOperator(BinaryType.EQ, LAST_UPDATED_SEQUENCE_NUMBER,
+                                ConstantOperator.createBigint(1))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
@@ -473,7 +471,7 @@ public class IcebergExprVisitorTest {
         syntheticVariantColumn.setHints(List.of(VariantPathRewriteRule.COLUMN_REF_HINT));
 
         Expression convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
+                        new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }

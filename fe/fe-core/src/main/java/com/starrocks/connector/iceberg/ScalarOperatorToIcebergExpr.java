@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
@@ -390,8 +389,8 @@ public class ScalarOperatorToIcebergExpr {
                 case BINARY:
                     res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
-                    // num usually don't need cast, and num and string has different comparator
-                    // cast is dangerous.
+                // num usually don't need cast, and num and string has different comparator
+                // cast is dangerous.
                 case DECIMAL:
                     res = operator.castTo(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
                     break;
@@ -447,10 +446,10 @@ public class ScalarOperatorToIcebergExpr {
                         //In iceberg transform expr, the decimal's scale will influence the result, like truncate and bucket...
                         //For column value 123.40 and const value 123.4, column = value should be true
                         //But in iceberg transform, 123.40 and 123.4 are not the same, and the partition may be pruned incorretly.
-                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(), 
+                        return operator.getDecimal().setScale(((Types.DecimalType) context).scale(),
                                 RoundingMode.HALF_UP);
                     } else {
-                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(), 
+                        return operator.getDecimal().setScale(((ScalarType) operator.getType()).getScalarScale(),
                                 RoundingMode.HALF_UP);
                     }
                 case HLL:
