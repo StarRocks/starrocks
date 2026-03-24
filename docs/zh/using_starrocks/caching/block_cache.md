@@ -5,6 +5,8 @@ toc_max_heading_level: 2
 keywords: ['huan cun']
 ---
 
+import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
+
 # Data Cache
 
 自 StarRocks v3.1.7 和 v3.2.3 版本起，StarRocks 引入 Data Cache 功能用以加速存算分离集群中的查询。该功能将取代早期版本中的 File Cache 功能。Data Cache 以 Block（MB 级别）为单位，按需从远端存储中加载数据。相较之下，File Cache 无论查询需要读取多少数据，都需要在后台线程加载整个数据文件。
@@ -112,6 +114,8 @@ storage_root_path =
 
 - 如果云原生表的 `datacache.enable` 属性设置为 `false`，则不会为该表启用 Data Cache。
 - 如果云原生表的 `datacache.partition_duration` 属性设置为一个特定的时间范围，则超出该时间范围的数据将不会被缓存。
+
+<CacheStats />
 
 ## 已知问题
 
