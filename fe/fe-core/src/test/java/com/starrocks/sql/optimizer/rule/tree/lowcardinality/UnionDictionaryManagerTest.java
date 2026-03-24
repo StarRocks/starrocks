@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -282,7 +281,7 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
         Assertions.assertEquals(Map.of(col7, ConstantOperator.createInt(2)), constantEncodingMap.get(1));
     }
-   
+
     @Test
     void testConstantCasts() {
         ColumnRefOperator col1 = new ColumnRefOperator(1, Type.STRING, "col1", true);
@@ -298,11 +297,11 @@ class UnionDictionaryManagerTest {
                 new UnionDictionaryManager(SESSION_VARIABLE, Map.of(), Map.of(), Set.of());
         dictManager.recordIfConstant(col1, ConstantOperator.createNull(Type.NULL));
         dictManager.recordIfConstant(col2, ConstantOperator.createVarchar("abc"));
-        dictManager.recordIfConstant(col3, new CastOperator( Type.STRING, col1));
-        dictManager.recordIfConstant(col4, new CastOperator( Type.STRING, col2));
-        dictManager.recordIfConstant(col5, new CastOperator( Type.STRING, ConstantOperator.createNull(Type.NULL)));
-        dictManager.recordIfConstant(col6, new CastOperator( Type.STRING, ConstantOperator.createVarchar("abc")));
-        dictManager.recordIfConstant(col8, new CastOperator( Type.STRING, col7));
+        dictManager.recordIfConstant(col3, new CastOperator(Type.STRING, col1));
+        dictManager.recordIfConstant(col4, new CastOperator(Type.STRING, col2));
+        dictManager.recordIfConstant(col5, new CastOperator(Type.STRING, ConstantOperator.createNull(Type.NULL)));
+        dictManager.recordIfConstant(col6, new CastOperator(Type.STRING, ConstantOperator.createVarchar("abc")));
+        dictManager.recordIfConstant(col8, new CastOperator(Type.STRING, col7));
 
         Assertions.assertTrue(dictManager.isSupportedConstant(col1));
         Assertions.assertTrue(dictManager.isSupportedConstant(col2));
