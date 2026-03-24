@@ -1242,7 +1242,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The count of threads for shared-data table tablet metadata fetch operations (e.g., `get_tablet_stats`, `get_tablet_metadatas`).
-- Introduced in: -
+- Introduced in: v3.5.16, v4.0.9
 
 ### tablet_writer_open_rpc_timeout_sec
 
