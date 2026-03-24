@@ -66,6 +66,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /***
@@ -179,7 +180,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                     // Use MCV-based skew values
                     skewValues = skewInfo.maybeMcvs().get()
                             .stream() //
-                            .map(pair -> ConstantOperator.createVarchar(pair.first)) //
+                            .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
+                                    .castTo(skewJoinColumn.getType())) //
+                            .filter(Optional::isPresent) //
+                            .map(Optional::get) //
                             .collect(Collectors.toList());
                 } else {
                     throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
