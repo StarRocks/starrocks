@@ -2137,6 +2137,46 @@ displayed_sidebar: docs
 - 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
 - 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
 
+### Hive 写入 FE 指标
+
+#### hive_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert` 或 `overwrite`）
+- 描述：目标表为 Hive 的 `INSERT` 或 `INSERT OVERWRITE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分两种操作类型。
+
+#### hive_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分两种操作类型。
+
+#### hive_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总字节数。表示写入到 Hive 表的数据文件总大小。`write_type` 区分两种操作类型。
+
+#### hive_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）的写入总行数。表示写入到 Hive 表的行数。`write_type` 区分两种操作类型。
+
+#### hive_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert` 或 `overwrite`）
+- 描述：Hive 写入任务（`INSERT`、`INSERT OVERWRITE`）写入的数据文件总数。表示写入到 Hive 表的数据文件个数。`write_type` 区分两种操作类型。
+
 ### DataCache 指标
 
 DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的可见性。
