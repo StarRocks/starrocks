@@ -1,0 +1,52 @@
+## テーブルレベルのキャッシュ統計を確認
+
+v4.1 以降、`_CACHE_STATS_` テーブルヒントを使用して、共有データクラスタ内の各タブレットのキャッシュ統計を照会できます。この機能により、各タブレットのキャッシュ状況を把握し、キャッシュの最適化やトラブルシューティングに役立てることができます。
+
+### 構文
+
+```SQL
+SELECT * FROM <table_name>
+[PARTITION(<partition_name>)]
+[TABLET(<tablet_id>)]
+[_CACHE_STATS_];
+```
+
+`_CACHE_STATS_` ヒントはクラウドネイティブテーブルでのみサポートされています。
+
+### 返却カラム
+
+| カラム名 | 型 | 説明 |
+|----------|------|------|
+| `tablet_id` | BIGINT | タブレットの ID |
+| `cached_bytes` | BIGINT | タブレットのローカルキャッシュにキャッシュされたデータ量（バイト） |
+| `total_bytes` | BIGINT | タブレットの総データサイズ（バイト） |
+
+### 例
+
+- テーブル全体のキャッシュ率を集計する：
+
+  ```SQL
+  SELECT
+      sum(cached_bytes) AS total_cached,
+      sum(total_bytes) AS total_size,
+      round(sum(cached_bytes) / sum(total_bytes) * 100, 2) AS cache_hit_ratio
+  FROM my_table [_CACHE_STATS_];
+  ```
+
+- テーブル内のすべてのタブレットのキャッシュ統計を照会する：
+
+  ```SQL
+  SELECT * FROM my_table [_CACHE_STATS_];
+  ```
+
+- 特定のパーティションのキャッシュ統計を照会する：
+
+  ```SQL
+  SELECT * FROM my_table PARTITION(p1) [_CACHE_STATS_];
+  ```
+
+- 特定のタブレットのキャッシュ統計を照会する：
+
+  ```SQL
+  SELECT * FROM my_table TABLET(10001) [_CACHE_STATS_];
+  ```

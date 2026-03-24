@@ -1,0 +1,52 @@
+## View table-level cache statistics
+
+From v4.1 onwards, you can use the `_CACHE_STATS_` table hint to query cache statistics for each tablet in a shared-data cluster. This feature helps you understand the caching status of each tablet for cache optimization and troubleshooting.
+
+### Syntax
+
+```SQL
+SELECT * FROM <table_name>
+[PARTITION(<partition_name>)]
+[TABLET(<tablet_id>)]
+[_CACHE_STATS_];
+```
+
+The `_CACHE_STATS_` hint is only supported for cloud-native tables.
+
+### Columns
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `tablet_id` | BIGINT | The ID of the tablet |
+| `cached_bytes` | BIGINT | The amount of data cached locally for the tablet (in bytes) |
+| `total_bytes` | BIGINT | The total data size of the tablet (in bytes) |
+
+### Examples
+
+- Calculate the overall cache ratio of a table:
+
+  ```SQL
+  SELECT
+      sum(cached_bytes) AS total_cached,
+      sum(total_bytes) AS total_size,
+      round(sum(cached_bytes) / sum(total_bytes) * 100, 2) AS cache_hit_ratio
+  FROM my_table [_CACHE_STATS_];
+  ```
+
+- Query cache statistics for all tablets in a table:
+
+  ```SQL
+  SELECT * FROM my_table [_CACHE_STATS_];
+  ```
+
+- Query cache statistics for a specific partition:
+
+  ```SQL
+  SELECT * FROM my_table PARTITION(p1) [_CACHE_STATS_];
+  ```
+
+- Query cache statistics for a specific tablet:
+
+  ```SQL
+  SELECT * FROM my_table TABLET(10001) [_CACHE_STATS_];
+  ```
