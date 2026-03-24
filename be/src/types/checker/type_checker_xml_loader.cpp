@@ -154,6 +154,7 @@ LogicalType TypeCheckerXMLLoader::parse_logical_type(const std::string& type_str
             {"TYPE_DATE", TYPE_DATE},
             {"TYPE_DATETIME", TYPE_DATETIME},
             {"TYPE_TIME", TYPE_TIME},
+            {"TYPE_JSON", TYPE_JSON},
             {"TYPE_DECIMAL32", TYPE_DECIMAL32},
             {"TYPE_DECIMAL64", TYPE_DECIMAL64},
             {"TYPE_DECIMAL128", TYPE_DECIMAL128},
