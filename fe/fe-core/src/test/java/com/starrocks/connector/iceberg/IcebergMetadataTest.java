@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -2010,6 +2011,207 @@ public class IcebergMetadataTest extends TableTestBase {
                 }
             }
         }
+    }
+
+    @Test
+    public void testReplacePartitionColumnV1Rejected() throws StarRocksException {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableF;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, dbName);
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TableName tableName = new TableName("db", "tbl");
+        SlotRef partitionSlot = new SlotRef(tableName, "dt");
+        FunctionCallExpr dayExpr = new FunctionCallExpr("day", Lists.newArrayList(partitionSlot));
+        FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
+
+        // REPLACE PARTITION COLUMN should be rejected for v1 tables
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(dayExpr, monthExpr, NodePosition.ZERO)))));
+    }
+
+    @Test
+    public void testReplacePartitionColumn() throws StarRocksException {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableFV2;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, dbName);
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TableName tableName = new TableName("db", "tbl");
+        SlotRef partitionSlot = new SlotRef(tableName, "dt");
+        FunctionCallExpr dayExpr = new FunctionCallExpr("day", Lists.newArrayList(partitionSlot));
+        FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
+
+        // replace day(dt) with month(dt) on v2 table should succeed
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName),
+                List.of(new ReplacePartitionColumnClause(dayExpr, monthExpr, NodePosition.ZERO))));
+        mockedNativeTableFV2.refresh();
+        List<String> partitionFields = IcebergApiConverter.toPartitionFields(mockedNativeTableFV2.spec(), false);
+        Assertions.assertTrue(partitionFields.contains("month(`dt`)"));
+        Assertions.assertFalse(partitionFields.contains("day(`dt`)"));
+
+        // replace with non-existent old partition column should fail
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(dayExpr, monthExpr, NodePosition.ZERO)))));
+
+        // replace with same old and new partition column should fail
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(monthExpr, monthExpr, NodePosition.ZERO)))));
+    }
+
+    @Test
+    public void testReplacePartitionColumnByFieldName() throws StarRocksException {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableFV2;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, dbName);
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TableName tableName = new TableName("db", "tbl");
+        SlotRef partitionSlot = new SlotRef(tableName, "dt");
+        FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
+
+        // replace by field name: "dt_day" is the default name for day(dt)
+        SlotRef fieldNameRef = new SlotRef(tableName, "dt_day");
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName),
+                List.of(new ReplacePartitionColumnClause(fieldNameRef, monthExpr, NodePosition.ZERO))));
+        mockedNativeTableFV2.refresh();
+        List<String> partitionFields = IcebergApiConverter.toPartitionFields(mockedNativeTableFV2.spec(), false);
+        Assertions.assertTrue(partitionFields.contains("month(`dt`)"));
+        Assertions.assertFalse(partitionFields.contains("day(`dt`)"));
+
+        // non-existent field name should fail
+        SlotRef badFieldName = new SlotRef(tableName, "no_such_field");
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(badFieldName, monthExpr, NodePosition.ZERO)))));
+    }
+
+    @Test
+    public void testReplacePartitionColumnNewAlreadyExists() throws StarRocksException {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableFV2;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, dbName);
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TableName tableName = new TableName("db", "tbl");
+        SlotRef partitionSlot = new SlotRef(tableName, "dt");
+        FunctionCallExpr dayExpr = new FunctionCallExpr("day", Lists.newArrayList(partitionSlot));
+        FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
+
+        // First add month(dt) so table has both day(dt) and month(dt)
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName),
+                List.of(new AddPartitionColumnClause(List.of(monthExpr), NodePosition.ZERO))));
+        mockedNativeTableFV2.refresh();
+
+        // Try to replace day(dt) with month(dt) - should fail because month(dt) already exists
+        FunctionCallExpr dayExpr2 = new FunctionCallExpr("day", Lists.newArrayList(new SlotRef(tableName, "dt")));
+        FunctionCallExpr monthExpr2 = new FunctionCallExpr("month", Lists.newArrayList(new SlotRef(tableName, "dt")));
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(dayExpr2, monthExpr2, NodePosition.ZERO)))));
+    }
+
+    @Test
+    public void testReplacePartitionColumnSchemaColumnAsFieldName() throws StarRocksException {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableFV2;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, dbName);
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TableName tableName = new TableName("db", "tbl");
+        SlotRef partitionSlot = new SlotRef(tableName, "dt");
+        FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
+
+        // Using "dt" as old partition - "dt" is a schema column name, so resolvePartitionFieldName
+        // returns null (treats it as identity transform, not a field name reference)
+        // This should fail because identity(dt) is not an existing partition (day(dt) is)
+        SlotRef schemaColRef = new SlotRef(tableName, "dt");
+        Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(new ConnectContext(),
+                new AlterTableStmt(createTableRef(tableName),
+                        List.of(new ReplacePartitionColumnClause(schemaColRef, monthExpr, NodePosition.ZERO)))));
     }
 
     @Test
