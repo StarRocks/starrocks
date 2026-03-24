@@ -106,8 +106,16 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
+<<<<<<< HEAD
+=======
+            this.properties.putAll(paimonNativeTable.options());
+>>>>>>> 7c201a1b72 ([BugFix] Show primary key for Paimon tables in SHOW CREATE and DESC statement (#70535))
         }
         return properties;
+    }
+
+    public List<String> getPrimaryKeyColumnNames() {
+        return paimonNativeTable.primaryKeys();
     }
 
     @Override

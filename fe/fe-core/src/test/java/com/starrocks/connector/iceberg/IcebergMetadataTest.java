@@ -277,6 +277,98 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testShowCreateTableWithSortOrder(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                                 @Mocked HiveTableOperations hiveTableOperations) {
+        new Expectations() {
+            {
+                icebergHiveCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+
+                icebergHiveCatalog.getTable(connectContext, "DB", "TBL");
+                result = new BaseTable(hiveTableOperations, "tbl");
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<Table>() {
+            @Mock
+            public List<Column> getFullSchema() {
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
+            }
+
+            @Mock
+            public List<Column> getFullVisibleSchema() {
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
+            }
+
+            @Mock
+            public Table.TableType getType() {
+                return ICEBERG;
+            }
+        };
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public boolean isUnPartitioned() {
+                return false;
+            }
+
+            @Mock
+            public List<Integer> getSortKeyIndexes() {
+                return ImmutableList.of(0, 1);
+            }
+
+            @Mock
+            public List<String> getPartitionColumnNamesWithTransform() {
+                return ImmutableList.of("hour(`c1`)");
+            }
+
+            @Mock
+            public int getFormatVersion() {
+                return 1;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        Table actual = metadata.getTable(new ConnectContext(), "DB", "TBL");
+        Assertions.assertTrue(actual instanceof IcebergTable);
+        IcebergTable icebergTable = (IcebergTable) actual;
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(actual.getFullSchema());
+        SortOrder.Builder builder = SortOrder.builderFor(schema);
+        builder.asc("c1", NullOrder.NULLS_FIRST);
+        builder.desc("c2", NullOrder.NULLS_LAST);
+        SortOrder sortOrder = builder.build();
+
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+
+        new Expectations() {
+            {
+                nativeTable.sortOrder();
+                result = sortOrder;
+                minTimes = 0;
+            }
+        };
+
+        Assertions.assertEquals("db", icebergTable.getCatalogDBName());
+        Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
+        String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
+        Assertions.assertEquals("CREATE TABLE `tbl` (\n"
+                        + "  `c1` int(11) DEFAULT NULL,\n"
+                        + "  `c2` varchar(1048576) DEFAULT NULL\n"
+                        + ")\n"
+                        + "PARTITION BY hour(`c1`)\n"
+                        + "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST)\n"
+                        + "PROPERTIES (\"format-version\" = \"1\");",
+                createSql);
+    }
+
+    @Test
+>>>>>>> 7c201a1b72 ([BugFix] Show primary key for Paimon tables in SHOW CREATE and DESC statement (#70535))
     public void testIcebergHiveCatalogTableExists(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
         new Expectations() {
             {
