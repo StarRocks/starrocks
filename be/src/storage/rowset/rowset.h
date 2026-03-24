@@ -237,7 +237,8 @@ public:
     // helper class to access RowsetMeta
     int64_t start_version() const override { return rowset_meta()->version().first; }
     int64_t end_version() const override { return rowset_meta()->version().second; }
-    size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
+    // Segment (column) data bytes only; excludes rowset-embedded indexes (see index_disk_size / total_disk_size).
+    size_t data_disk_size() const { return rowset_meta()->data_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
     int64_t num_rows() const override { return rowset_meta()->num_rows(); }
     int64_t num_rows_upt() const { return rowset_meta()->num_rows_upt(); }

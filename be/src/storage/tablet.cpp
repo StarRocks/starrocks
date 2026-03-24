@@ -1776,7 +1776,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.num_rowset = _tablet_meta->version_count();
         info.num_segment = _tablet_meta->segment_count();
         info.num_row = _tablet_meta->num_rows();
-        info.data_size = _tablet_meta->tablet_footprint();
+        info.data_size = _tablet_meta->tablet_data_size();
     }
 }
 
