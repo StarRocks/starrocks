@@ -41,7 +41,11 @@ struct AggDataTypeTraits<lt, FixedLengthLTGuard<lt>> {
     }
 
     static RefType get_row_ref(const Column& column, size_t row) {
+<<<<<<< HEAD
         return down_cast<const ColumnType&>(column).get_data()[row];
+=======
+        return down_cast<const ColumnType&>(column).immutable_data()[row];
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
     }
     static RefType get_ref(const ValueType& value) { return value; }
 
@@ -148,6 +152,7 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
         column->append(Slice(value.data(), value.size()));
     }
 
+<<<<<<< HEAD
     static void append_values(Column* column, const ValueType& value, size_t count) {
         if (UNLIKELY(column->is_large_binary())) {
             Slice slice(value.data(), value.size());
@@ -158,6 +163,8 @@ struct AggDataTypeTraits<lt, StringOrBinaryGuard<lt>> {
         }
     }
 
+=======
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
     static RefType get_row_ref(const Column& column, size_t row) {
         if (UNLIKELY(column.is_large_binary())) {
             return down_cast<const LargeColumnType&>(column).get_slice(row);

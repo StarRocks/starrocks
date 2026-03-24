@@ -113,7 +113,12 @@ class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
+<<<<<<< HEAD
     void get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
+=======
+    template <typename InputColumnType>
+    void do_get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
+>>>>>>> 751debc ([Enhancement] AggDataTypeTraits support large binary column (#70725))
         DCHECK_GT(end, start);
         DCHECK(dst->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(dst);
