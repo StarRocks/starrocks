@@ -630,7 +630,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum batch size for version scanning when fetching tablet metadata during lake tablet repair. The batch size starts at 5 and grows exponentially (doubling each iteration) up to this maximum. A larger value allows more versions to be fetched in a single batch, which can improve repair efficiency by leveraging file existence caching across versions. If set to a value less than 5, it will be clamped to 5 at runtime.
-- Introduced in: -
+- Introduced in: v3.5.16, v4.0.9
 
 ### `lake_enable_drop_tablet_cache`
 

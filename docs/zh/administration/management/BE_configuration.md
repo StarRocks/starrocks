@@ -2834,7 +2834,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：是
 - 描述：用于存算分离表 tablet 元数据获取操作（例如 `get_tablet_stats`、`get_tablet_metadatas`）的线程数。
-- 引入版本：-
+- 引入版本：v3.5.16, v4.0.9
 
 ##### tablet_writer_open_rpc_timeout_sec
 
