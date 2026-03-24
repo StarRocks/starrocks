@@ -23,11 +23,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
-<<<<<<< HEAD
-import com.starrocks.catalog.PartitionKey;
-=======
 import com.starrocks.catalog.OlapTable;
->>>>>>> 21f444e852 ([BugFix] Fix lock-free MV rewrite fallback to live metadata (#70475))
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
