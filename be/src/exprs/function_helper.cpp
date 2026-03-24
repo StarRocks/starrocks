@@ -234,7 +234,8 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
         DCHECK_EQ(column->size(), null_column->size());
         const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
-        return NullableColumn::create(new_null_column->allocator(), Column::mutate(nullable_column->data_column()->clone()),
+        return NullableColumn::create(new_null_column->allocator(),
+                                      Column::mutate(nullable_column->data_column()->clone()),
                                       std::move(new_null_column));
     } else {
         return NullableColumn::create(null_column->allocator(), Column::mutate(std::move(column)),

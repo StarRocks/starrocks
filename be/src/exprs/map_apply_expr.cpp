@@ -63,8 +63,8 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
-            return ColumnHelper::align_return_type(context->allocator(), std::move(child_col), type(), chunk->num_rows(),
-                                                   true);
+            return ColumnHelper::align_return_type(context->allocator(), std::move(child_col), type(),
+                                                   chunk->num_rows(), true);
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);

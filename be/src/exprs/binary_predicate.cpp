@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -22,7 +21,6 @@
 #include "exprs/binary_function.h"
 #include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
-#include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -32,10 +30,9 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
 
+#include "exprs/expr_context.h"
 #include "exprs/jit/expr_jit_codegen.h"
-#include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "exprs/expr_context.h"
 #endif
 
 namespace starrocks {
@@ -368,7 +365,8 @@ public:
                 return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), false, column->size());
             }
             auto col = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-            return VectorizedStrictUnaryFunction<isNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(context->allocator(), col);
+            return VectorizedStrictUnaryFunction<isNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(context->allocator(),
+                                                                                                col);
         };
 
         if (l->only_null()) {

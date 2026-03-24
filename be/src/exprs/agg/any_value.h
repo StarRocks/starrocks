@@ -17,8 +17,8 @@
 #include <limits>
 #include <type_traits>
 
-#include "base/memory/memory_allocator.h"
 #include "base/container/raw_container.h"
+#include "base/memory/memory_allocator.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"

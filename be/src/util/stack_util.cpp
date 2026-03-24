@@ -17,13 +17,14 @@
 
 #include "util/stack_util.h"
 
-#include <exception>
 #include <cxxabi.h>
 #include <dirent.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
+
+#include <exception>
 
 #ifdef __APPLE__
 #include <signal.h>

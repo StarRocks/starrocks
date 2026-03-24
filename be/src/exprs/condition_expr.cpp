@@ -457,7 +457,8 @@ private:
         return builder.build(ColumnHelper::is_all_const(columns));
     }
 
-    StatusOr<ColumnPtr> _evaluate_complex(memory::Allocator* allocator, const Columns& inputs) { // without only-null columns
+    StatusOr<ColumnPtr> _evaluate_complex(memory::Allocator* allocator,
+                                          const Columns& inputs) { // without only-null columns
         int size = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {

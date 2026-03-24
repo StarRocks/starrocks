@@ -375,9 +375,8 @@ struct ColumnBuilder {
     template <LogicalType ftype>
     MutableColumnPtr operator()(memory::Allocator* allocator, bool nullable) {
         [[maybe_unused]] auto NullableIfNeed = [&](MutableColumnPtr&& col) -> MutableColumnPtr {
-            return nullable
-                           ? MutableColumnPtr(NullableColumn::create(allocator, std::move(col),
-                                                                     NullColumn::create(allocator)))
+            return nullable ? MutableColumnPtr(
+                                      NullableColumn::create(allocator, std::move(col), NullColumn::create(allocator)))
                             : std::move(col);
         };
 
@@ -417,9 +416,8 @@ MutableColumnPtr ChunkHelper::column_from_field(memory::Allocator* allocator, co
     case TYPE_DECIMAL256:
         return NullableIfNeed(Decimal256Column::create(allocator, field.type()->precision(), field.type()->scale()));
     case TYPE_ARRAY: {
-        return NullableIfNeed(
-                ArrayColumn::create(allocator, column_from_field(allocator, field.sub_field(0)),
-                                    UInt32Column::create(allocator)));
+        return NullableIfNeed(ArrayColumn::create(allocator, column_from_field(allocator, field.sub_field(0)),
+                                                  UInt32Column::create(allocator)));
     }
     case TYPE_MAP:
         return NullableIfNeed(MapColumn::create(allocator, column_from_field(allocator, field.sub_field(0)),
@@ -514,8 +512,8 @@ StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* alloc
     TRY_CATCH_ALLOC_SCOPE_END();
 }
 
-StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* allocator,
-                                                        const TupleDescriptor& tuple_desc, size_t n) {
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
+                                                        size_t n) {
     return ChunkHelper::new_chunk_checked(allocator, tuple_desc.slots(), n);
 }
 
@@ -549,8 +547,8 @@ MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, con
     return new_mutable_chunk(allocator, tuple_desc.slots(), n);
 }
 
-MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator,
-                                               const std::vector<SlotDescriptor*>& slots, size_t n) {
+MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots,
+                                               size_t n) {
     auto chunk = std::make_shared<MutableChunk>();
     for (const auto slot : slots) {
         auto column = ColumnHelper::create_column(allocator, slot->type(), slot->is_nullable());

@@ -68,8 +68,8 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
             } else if (result_columns[i]->is_constant()) {
                 // Note: we must create a new column every time here,
                 // because result_columns[i] is shared_ptr
-                MutableColumnPtr new_column = ColumnHelper::create_column(allocator(), _expr_ctxs[i]->root()->type(),
-                                                                          false);
+                MutableColumnPtr new_column =
+                        ColumnHelper::create_column(allocator(), _expr_ctxs[i]->root()->type(), false);
                 auto* const_column = down_cast<const ConstColumn*>(result_columns[i].get());
                 new_column->append(*const_column->data_column(), 0, 1);
                 new_column->assign(num_rows, 0);

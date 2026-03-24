@@ -582,10 +582,9 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
                     (join_key_col_refs.find(slot->id()) == join_key_col_refs.end()) &&
                     (param.column_view_concat_rows_limit >= 0 || param.column_view_concat_bytes_limit >= 0);
 
-            MutableColumnPtr column = ColumnHelper::create_column(_table_items->build_allocator, slot->type(),
-                                                                  slot->is_nullable(), use_view,
-                                                                  param.column_view_concat_rows_limit,
-                                                                  param.column_view_concat_bytes_limit);
+            MutableColumnPtr column = ColumnHelper::create_column(
+                    _table_items->build_allocator, slot->type(), slot->is_nullable(), use_view,
+                    param.column_view_concat_rows_limit, param.column_view_concat_bytes_limit);
             if (column->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
                 nullable_column->append_default_not_null_value();
@@ -750,8 +749,8 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
             if (!_table_items->key_columns[i]->is_nullable() && key_columns[i]->is_nullable()) {
                 size_t row_count = _table_items->key_columns[i]->size();
                 auto* allocator = _table_items->key_columns[i]->allocator();
-                _table_items->key_columns[i] = NullableColumn::create(
-                        allocator, _table_items->key_columns[i], NullColumn::create(allocator, row_count, 0));
+                _table_items->key_columns[i] = NullableColumn::create(allocator, _table_items->key_columns[i],
+                                                                      NullColumn::create(allocator, row_count, 0));
             }
             _table_items->key_columns[i]->as_mutable_raw_ptr()->append(*key_columns[i]);
         }
@@ -777,7 +776,8 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && other_columns[i]->is_nullable()) {
             // upgrade to nullable column
             auto* allocator = columns[i]->allocator();
-            columns[i] = NullableColumn::create(allocator, columns[i], NullColumn::create(allocator, columns[i]->size(), 0));
+            columns[i] =
+                    NullableColumn::create(allocator, columns[i], NullColumn::create(allocator, columns[i]->size(), 0));
         }
         columns[i]->as_mutable_raw_ptr()->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
@@ -792,7 +792,8 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
             if (!key_columns[i]->is_nullable() && other_key_columns[i]->is_nullable()) {
                 const size_t row_count = key_columns[i]->size();
                 auto* allocator = key_columns[i]->allocator();
-                key_columns[i] = NullableColumn::create(allocator, key_columns[i], NullColumn::create(allocator, row_count, 0));
+                key_columns[i] =
+                        NullableColumn::create(allocator, key_columns[i], NullColumn::create(allocator, row_count, 0));
             }
             // Skip the dummy row at index 0 (same as build column merge above).
             // other_sz == 1 means the other partition only had the dummy row and no real rows.

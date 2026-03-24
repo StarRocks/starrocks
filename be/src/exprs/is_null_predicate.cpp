@@ -96,7 +96,8 @@ public:
         }
 
         auto col = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-        return VectorizedStrictUnaryFunction<isNotNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(context->allocator(), col);
+        return VectorizedStrictUnaryFunction<isNotNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(context->allocator(),
+                                                                                               col);
     }
 };
 

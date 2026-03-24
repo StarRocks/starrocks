@@ -172,8 +172,7 @@ public:
                                 bool large_column = false);
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
                                 PrimaryKeyEncodingType encoding_type, bool large_column = false) {
-        return create_column(memory::get_default_allocator(), schema, pcolumn, key_idxes, encoding_type,
-                             large_column);
+        return create_column(memory::get_default_allocator(), schema, pcolumn, key_idxes, encoding_type, large_column);
     }
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,

@@ -278,8 +278,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx8, CompressedAggHashSetF
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_cx16, CompressedAggHashSetFixedSize16<PhmapSeed2>);
 
 } // namespace detail
-void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat,
-                             memory::Allocator* allocator) {
+void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat, memory::Allocator* allocator) {
     _type = type;
     _agg_stat = agg_stat;
     switch (_type) {
@@ -295,7 +294,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                            \
     if (_type == AggHashMapVariant::Type::SRC) {                                                                      \
-        auto allocator = visit([](auto& hash_map_with_key) { return hash_map_with_key->allocator(); });              \
+        auto allocator = visit([](auto& hash_map_with_key) { return hash_map_with_key->allocator(); });               \
         auto dst = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>(              \
                 state->chunk_size(), _agg_stat, allocator);                                                           \
         std::visit(                                                                                                   \
@@ -366,8 +365,7 @@ size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
-void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat,
-                             memory::Allocator* allocator) {
+void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat, memory::Allocator* allocator) {
     _type = type;
     _agg_stat = agg_stat;
     switch (_type) {
@@ -383,7 +381,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
     if (_type == AggHashSetVariant::Type::SRC) {                                                                      \
-        auto allocator = visit([](auto& hash_set_with_key) { return hash_set_with_key->allocator(); });              \
+        auto allocator = visit([](auto& hash_set_with_key) { return hash_set_with_key->allocator(); });               \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
                 state->chunk_size(), _agg_stat, allocator);                                                           \
         std::visit(                                                                                                   \

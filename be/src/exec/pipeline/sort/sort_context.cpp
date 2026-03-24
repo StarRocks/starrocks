@@ -110,9 +110,9 @@ Status SortContext::_init_merger() {
         _required_rows = ((_limit < 0) ? _total_rows.load() : std::min<int64_t>(_limit + _offset, _total_rows));
     }
 
-    memory::Allocator* merge_alloc =
-            _chunks_sorter_partitions.empty() ? memory::get_default_allocator()
-                                            : _chunks_sorter_partitions[0]->source_allocator();
+    memory::Allocator* merge_alloc = _chunks_sorter_partitions.empty()
+                                             ? memory::get_default_allocator()
+                                             : _chunks_sorter_partitions[0]->source_allocator();
 #ifndef NDEBUG
     for (size_t pi = 1; pi < _chunks_sorter_partitions.size(); ++pi) {
         DCHECK_EQ(_chunks_sorter_partitions[pi]->source_allocator(), merge_alloc);

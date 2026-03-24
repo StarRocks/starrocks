@@ -127,8 +127,7 @@ public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) HistogramState<LT>;
         auto data = RunTimeColumnType<LT>::create(ctx->allocator());
-        state->column =
-                NullableColumn::create(ctx->allocator(), std::move(data), NullColumn::create(ctx->allocator()));
+        state->column = NullableColumn::create(ctx->allocator(), std::move(data), NullColumn::create(ctx->allocator()));
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

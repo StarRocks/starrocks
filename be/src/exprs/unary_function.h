@@ -191,7 +191,7 @@ public:
             }
 
             ColumnPtr result = FN::template evaluate<Type, ResultType, Args...>(allocator, col->data_column(),
-                                                                                 std::forward<Args>(args)...);
+                                                                                std::forward<Args>(args)...);
             if (result->is_nullable()) {
                 // when result column is NullableColumn, null columns in src and dst columns
                 // must be merged to produce finally result.

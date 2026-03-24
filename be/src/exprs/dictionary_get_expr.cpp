@@ -122,15 +122,14 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     MutableColumns sub_columns;
     for (const ColumnPtr& column : _value_chunk->columns()) {
         auto sub_null_column = UInt8Column::create(context->allocator(), 0, 0);
-        sub_columns.emplace_back(
-                NullableColumn::create(context->allocator(), Column::mutate(column->clone_empty()), std::move(sub_null_column)));
+        sub_columns.emplace_back(NullableColumn::create(context->allocator(), Column::mutate(column->clone_empty()),
+                                                        std::move(sub_null_column)));
     }
     auto null_column = UInt8Column::create(context->allocator(), 0, 0);
-    _nullable_struct_column =
-            NullableColumn::create(context->allocator(),
-                                   StructColumn::create(context->allocator(), std::move(sub_columns),
-                                                        std::move(value_columns_name)),
-                                   std::move(null_column));
+    _nullable_struct_column = NullableColumn::create(
+            context->allocator(),
+            StructColumn::create(context->allocator(), std::move(sub_columns), std::move(value_columns_name)),
+            std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();

@@ -243,8 +243,7 @@ public:
     class RunningContext {
     public:
         RunningContext()
-                : selection(memory::get_default_allocator()),
-                  merged_selection(memory::get_default_allocator()) {}
+                : selection(memory::get_default_allocator()), merged_selection(memory::get_default_allocator()) {}
 
         Filter selection = Filter(memory::get_default_allocator());
         Filter merged_selection = Filter(memory::get_default_allocator());

@@ -17,8 +17,8 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/memory_allocator.h"
 #include "base/bit/bit_util.h"
+#include "base/memory/memory_allocator.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/status.h"

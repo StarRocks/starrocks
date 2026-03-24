@@ -49,25 +49,24 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
 
 #define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                         \
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {    \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),    \
-                                                                                       VECTORIZED_FN_ARGS(0)); \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),   \
+                                                                                      VECTORIZED_FN_ARGS(0)); \
     }
 
 #define DEFINE_TIME_STRING_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                        \
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {          \
-        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),    \
-                                                                                             VECTORIZED_FN_ARGS(0)); \
+        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),   \
+                                                                                            VECTORIZED_FN_ARGS(0)); \
     }
 
 #define DEFINE_TIME_UNARY_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN) \
     DEFINE_UNARY_FN(NAME##Impl, FN);                                \
     DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
-#define DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {             \
-        return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(context->allocator(),   \
-                                                                                                 VECTORIZED_FN_ARGS(0), \
-                                                                                                 VECTORIZED_FN_ARGS(1)); \
+#define DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                             \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) { \
+        return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(            \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                       \
     }
 
 #define DEFINE_TIME_BINARY_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
@@ -76,8 +75,8 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
 
 #define DEFINE_TIME_UNARY_FN_EXTEND(NAME, TYPE, RESULT_TYPE, IDX)                                               \
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {      \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),      \
-                                                                                       VECTORIZED_FN_ARGS(IDX)); \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(context->allocator(),     \
+                                                                                      VECTORIZED_FN_ARGS(IDX)); \
     }
 
 template <LogicalType Type>
@@ -126,8 +125,8 @@ ColumnPtr date_valid(memory::Allocator* allocator, const ColumnPtr& v1) {
 
 #define DEFINE_TIME_CALC_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                               \
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) { \
-        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(context->allocator(), \
-                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                             \
+        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(          \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                       \
         return date_valid<RESULT_TYPE>(context->allocator(), p);                                           \
     }
 
@@ -1056,29 +1055,29 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
         return time_slice_function_##UNIT<LType, RType, ResultType, false>(context, columns);                    \
     }
 
-#define DEFINE_TIME_SLICE_FN(UNIT)                                                                     \
-    template <LogicalType LType, LogicalType RType, LogicalType ResultType, bool is_start>             \
-    StatusOr<ColumnPtr> time_slice_function_##UNIT(FunctionContext* context, const Columns& columns) { \
-        auto time_viewer = ColumnViewer<LType>(columns[0]);                                            \
-        auto period_viewer = ColumnViewer<RType>(columns[1]);                                          \
-        auto size = columns[0]->size();                                                                \
-        ColumnBuilder<ResultType> results(context->allocator(), size);                                                       \
-        for (int row = 0; row < size; row++) {                                                         \
-            if (time_viewer.is_null(row) || period_viewer.is_null(row)) {                              \
-                results.append_null();                                                                 \
-                continue;                                                                              \
-            }                                                                                          \
-            TimestampValue time_value = time_viewer.value(row);                                        \
-            auto period_value = period_viewer.value(row);                                              \
-            if (time_value.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                 \
-                return Status::InvalidArgument(TimeFunctions::info_reported_by_time_slice);            \
-            }                                                                                          \
-            time_value.template floor_to_##UNIT##_period<!is_start>(period_value);                     \
-            results.append(time_value);                                                                \
-        }                                                                                              \
+#define DEFINE_TIME_SLICE_FN(UNIT)                                                                               \
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType, bool is_start>                       \
+    StatusOr<ColumnPtr> time_slice_function_##UNIT(FunctionContext* context, const Columns& columns) {           \
+        auto time_viewer = ColumnViewer<LType>(columns[0]);                                                      \
+        auto period_viewer = ColumnViewer<RType>(columns[1]);                                                    \
+        auto size = columns[0]->size();                                                                          \
+        ColumnBuilder<ResultType> results(context->allocator(), size);                                           \
+        for (int row = 0; row < size; row++) {                                                                   \
+            if (time_viewer.is_null(row) || period_viewer.is_null(row)) {                                        \
+                results.append_null();                                                                           \
+                continue;                                                                                        \
+            }                                                                                                    \
+            TimestampValue time_value = time_viewer.value(row);                                                  \
+            auto period_value = period_viewer.value(row);                                                        \
+            if (time_value.diff_microsecond(TimeFunctions::start_of_time_slice) < 0) {                           \
+                return Status::InvalidArgument(TimeFunctions::info_reported_by_time_slice);                      \
+            }                                                                                                    \
+            time_value.template floor_to_##UNIT##_period<!is_start>(period_value);                               \
+            results.append(time_value);                                                                          \
+        }                                                                                                        \
         return date_valid<ResultType>(context->allocator(), results.build(ColumnHelper::is_all_const(columns))); \
-    }                                                                                                  \
-    DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                 \
+    }                                                                                                            \
+    DEFINE_TIME_SLICE_FN_CALL(datetime, UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);                           \
     DEFINE_TIME_SLICE_FN_CALL(date, UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 // time_slice_to_second
@@ -2253,8 +2252,8 @@ DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
 
 StatusOr<ColumnPtr> TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
     return date_valid<TYPE_DATE>(context->allocator(),
-            VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(context->allocator(),
-                                                                                        VECTORIZED_FN_ARGS(0)));
+                                 VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(
+                                         context->allocator(), VECTORIZED_FN_ARGS(0)));
 }
 
 // to_days
@@ -2509,7 +2508,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToDate, value) {
 StatusOr<ColumnPtr> TimeFunctions::str2date(FunctionContext* context, const Columns& columns) {
     ASSIGN_OR_RETURN(ColumnPtr datetime, str_to_date(context, columns));
     return VectorizedStrictUnaryFunction<TimestampToDate>::evaluate<TYPE_DATETIME, TYPE_DATE>(context->allocator(),
-                                                                                               datetime);
+                                                                                              datetime);
 }
 
 Status TimeFunctions::format_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -2926,7 +2925,8 @@ StatusOr<ColumnPtr> joda_standard_format(memory::Allocator* allocator, const std
 }
 
 template <LogicalType Type>
-StatusOr<ColumnPtr> joda_format(memory::Allocator* allocator, const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
+StatusOr<ColumnPtr> joda_format(memory::Allocator* allocator, const TimeFunctions::FormatCtx* ctx,
+                                const Columns& cols) {
     if (ctx->fmt_type == TimeFunctions::yyyyMMdd) {
         return date_format_func<yyyyMMddImpl, Type>(allocator, cols, 8);
     } else if (ctx->fmt_type == TimeFunctions::yyyy_MM_dd) {
@@ -3272,12 +3272,14 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_datetimeImpl, v) {
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_date(FunctionContext* context,
                                                                   const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_years_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
@@ -3293,12 +3295,14 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_datetimeImpl, v) {
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_date(FunctionContext* context,
                                                                    const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionContext* context,
                                                                        const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_months_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
@@ -3314,12 +3318,14 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
                                                                  const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_dateImpl>::evaluate<TYPE_DATE, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionContext* context,
                                                                      const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_days_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
@@ -3328,7 +3334,8 @@ DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(context->allocator(), VECTORIZED_FN_ARGS(0));
+    return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
+            context->allocator(), VECTORIZED_FN_ARGS(0));
 }
 
 // used as start point of time_slice.

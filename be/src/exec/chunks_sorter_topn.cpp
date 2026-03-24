@@ -14,8 +14,8 @@
 
 #include "chunks_sorter_topn.h"
 
-#include "base/memory/memory_allocator.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/memory/memory_allocator.h"
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
@@ -570,9 +570,9 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
     // Assemble the permutated segments into a chunk
     size_t right_chunk_size = permutation_second.size();
     ChunkUniquePtr right_unique_chunk =
-            dst->empty() ? segments[permutation_second[0].chunk_index].chunk->clone_empty(sink_allocator(),
-                                                                                        right_chunk_size)
-                         : dst->front().chunk->clone_empty(sink_allocator(), right_chunk_size);
+            dst->empty()
+                    ? segments[permutation_second[0].chunk_index].chunk->clone_empty(sink_allocator(), right_chunk_size)
+                    : dst->front().chunk->clone_empty(sink_allocator(), right_chunk_size);
     {
         std::vector<ChunkPtr> right_chunks;
         for (auto& segment : segments) {
@@ -720,8 +720,8 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         return Status::InternalError(fmt::format("TopN sort exceed rows limit {}", rows_to_keep));
     }
 
-    ChunkUniquePtr big_chunk = segments[new_permutation[0].chunk_index].chunk->clone_empty(sink_allocator(),
-                                                                                           rows_to_keep);
+    ChunkUniquePtr big_chunk =
+            segments[new_permutation[0].chunk_index].chunk->clone_empty(sink_allocator(), rows_to_keep);
 
     // Initial this big chunk.
     std::vector<ChunkPtr> chunks;

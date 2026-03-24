@@ -92,8 +92,8 @@ protected:
 
 protected:
     // convert the column to the nullable column if the arg is nullable and the column is not nullable
-    StatusOr<ColumnPtr> _convert_to_nullable_column(memory::Allocator* allocator, const ColumnPtr& column, bool arg_nullable,
-                                                    bool is_unpack_column) const {
+    StatusOr<ColumnPtr> _convert_to_nullable_column(memory::Allocator* allocator, const ColumnPtr& column,
+                                                    bool arg_nullable, bool is_unpack_column) const {
         // For constant columns, if we don't need to unpack, return directly to keep efficiency
         // e.g.: StateFunction with constant parameters like [0.2,0.5,0.75]
         if (!is_unpack_column && column->is_constant()) {

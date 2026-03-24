@@ -67,9 +67,8 @@ public:
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
             bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[i];
-            ASSIGN_OR_RETURN(
-                    ColumnPtr new_column,
-                    _convert_to_nullable_column(context->allocator(), columns[i], is_result_nullable, true));
+            ASSIGN_OR_RETURN(ColumnPtr new_column,
+                             _convert_to_nullable_column(context->allocator(), columns[i], is_result_nullable, true));
             new_columns.emplace_back(new_column);
         }
 

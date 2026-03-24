@@ -21,8 +21,8 @@
 #include <queue>
 #include <vector>
 
-#include "base/memory/memory_allocator.h"
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"

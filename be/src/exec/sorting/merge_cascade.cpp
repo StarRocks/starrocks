@@ -243,8 +243,8 @@ Status MergeCursorsCascade::init(const SortDescs& sort_desc,
         for (int i = 0; i < level_size; i += 2) {
             auto& left = current_level[i];
             auto& right = current_level[i + 1];
-            _mergers.push_back(std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right),
-                                                                _column_allocator));
+            _mergers.push_back(
+                    std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right), _column_allocator));
             next_level.push_back(_mergers.back()->as_chunk_cursor());
         }
         if (current_level.size() % 2 == 1) {
@@ -316,8 +316,7 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   const ChunkConsumer& consumer, size_t limit,
-                                   memory::Allocator* column_allocator) {
+                                   const ChunkConsumer& consumer, size_t limit, memory::Allocator* column_allocator) {
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors), column_allocator));
     CHECK(merger.is_data_ready());

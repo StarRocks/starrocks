@@ -77,20 +77,32 @@ public:
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase() : BinaryColumnBase(memory::get_default_allocator()) {}
     explicit BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator)
-            : SuperClass(allocator), _bytes(allocator), _offsets(allocator), _resource(), _slices(allocator),
+            : SuperClass(allocator),
+              _bytes(allocator),
+              _offsets(allocator),
+              _resource(),
+              _slices(allocator),
               _german_strings(allocator) {
         _offsets.emplace_back(0);
     }
     // Default value is empty string
     explicit BinaryColumnBase(size_t size) : BinaryColumnBase(memory::get_default_allocator(), size) {}
     BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, size_t size)
-            : SuperClass(allocator), _bytes(allocator), _offsets(allocator, size + 1, 0), _resource(),
-              _slices(allocator), _german_strings(allocator) {}
+            : SuperClass(allocator),
+              _bytes(allocator),
+              _offsets(allocator, size + 1, 0),
+              _resource(),
+              _slices(allocator),
+              _german_strings(allocator) {}
     BinaryColumnBase(Bytes bytes, Offsets offsets)
             : BinaryColumnBase(memory::get_default_allocator(), std::move(bytes), std::move(offsets)) {}
     BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, Bytes bytes, Offsets offsets)
-            : SuperClass(allocator), _bytes(std::move(bytes)), _offsets(std::move(offsets)), _resource(),
-              _slices(allocator), _german_strings(allocator) {
+            : SuperClass(allocator),
+              _bytes(std::move(bytes)),
+              _offsets(std::move(offsets)),
+              _resource(),
+              _slices(allocator),
+              _german_strings(allocator) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
@@ -319,7 +331,9 @@ public:
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return BinaryColumnBase<T>::create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
+        return BinaryColumnBase<T>::create();
+    }
 
     MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();

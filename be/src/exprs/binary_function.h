@@ -180,7 +180,8 @@ public:
             const ColumnPtr& data1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             const ColumnPtr& data2 = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
 
-            auto result = BaseBinaryFunction<OP>::template const_const<LType, RType, ResultType>(allocator, data1, data2);
+            auto result =
+                    BaseBinaryFunction<OP>::template const_const<LType, RType, ResultType>(allocator, data1, data2);
 
             return ConstColumn::create(allocator, result, v1->size());
         }
@@ -371,8 +372,8 @@ template <typename FN>
 class UnpackNotAlignDataAndNullColumnBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const NullColumnPtr& n1, const ColumnPtr& v2,
-                              const NullColumnPtr& n2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const NullColumnPtr& n1,
+                              const ColumnPtr& v2, const NullColumnPtr& n2) {
         if (v1->size() == v2->size()) {
             return FN::template vector_vector<LType, RType, ResultType>(allocator, v1, n1, v2, n2);
         } else if (v2->size() == 1) {
@@ -396,8 +397,8 @@ template <typename NULL_FN, typename FN>
 class LogicPredicateBaseBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                   const NullColumnPtr& rn) {
+    static ColumnPtr vector_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                   const ColumnPtr& rv, const NullColumnPtr& rn) {
         auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
@@ -429,8 +430,8 @@ public:
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr const_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                  const NullColumnPtr& rn) {
+    static ColumnPtr const_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                  const ColumnPtr& rv, const NullColumnPtr& rn) {
         const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
@@ -462,8 +463,8 @@ public:
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_const(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                  const NullColumnPtr& rn) {
+    static ColumnPtr vector_const(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                  const ColumnPtr& rv, const NullColumnPtr& rn) {
         const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 

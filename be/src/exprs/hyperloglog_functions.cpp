@@ -32,7 +32,8 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
 
 StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality_from_string(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<hllCardinalityFromStringImpl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(context->allocator(), columns[0]);
+    return VectorizedStrictUnaryFunction<hllCardinalityFromStringImpl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(
+            context->allocator(), columns[0]);
 }
 
 // hll_cardinality
@@ -41,7 +42,8 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityImpl, hll_ptr) {
 }
 
 StatusOr<ColumnPtr> HyperloglogFunctions::hll_cardinality(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<hllCardinalityImpl>::evaluate<TYPE_HLL, TYPE_BIGINT>(context->allocator(), columns[0]);
+    return VectorizedStrictUnaryFunction<hllCardinalityImpl>::evaluate<TYPE_HLL, TYPE_BIGINT>(context->allocator(),
+                                                                                              columns[0]);
 }
 
 // hll_hash
@@ -86,7 +88,8 @@ DEFINE_UNARY_FN_WITH_IMPL(HllSerializeImpl, hll) {
 }
 
 StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(context->allocator(),
+                                                                                                   columns[0]);
 }
 
 // hll_deserialize

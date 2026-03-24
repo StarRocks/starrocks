@@ -353,8 +353,8 @@ ChunkUniquePtr SortedRun::clone_slice(memory::Allocator* column_allocator) const
     } else {
         size_t slice_rows = num_rows();
         DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
-        ChunkUniquePtr cloned = column_allocator ? chunk->clone_empty(column_allocator, slice_rows)
-                                                 : chunk->clone_empty(slice_rows);
+        ChunkUniquePtr cloned =
+                column_allocator ? chunk->clone_empty(column_allocator, slice_rows) : chunk->clone_empty(slice_rows);
         cloned->append(*chunk, range.first, slice_rows);
         return cloned;
     }

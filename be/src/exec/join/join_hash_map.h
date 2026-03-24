@@ -119,8 +119,8 @@ private:
                 (*chunk)->append_column(src_column, slot->id());
             }
         } else {
-            MutableColumnPtr dest_column = ColumnHelper::create_column(_probe_state->allocator, slot->type(),
-                                                                       to_nullable);
+            MutableColumnPtr dest_column =
+                    ColumnHelper::create_column(_probe_state->allocator, slot->type(), to_nullable);
             dest_column->append_selective(*src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
             (*chunk)->append_column(std::move(dest_column), slot->id());
         }

@@ -1212,45 +1212,58 @@ public:
             if constexpr (lt_is_decimal<FromType>) {
                 ColumnPtr double_column;
                 if (context != nullptr && context->error_if_overflow()) {
-                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
-                            FromType, TYPE_DOUBLE>(context->allocator(), column);
+                    double_column =
+                            VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
+                                                                                                     TYPE_DOUBLE>(
+                                    context->allocator(), column);
                 } else {
-                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
-                            FromType, TYPE_DOUBLE>(context->allocator(), column);
+                    double_column =
+                            VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType,
+                                                                                                    TYPE_DOUBLE>(
+                                    context->allocator(), column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(allocator, std::move(double_column));
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(allocator,
+                                                                                             std::move(double_column));
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column));
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
                 if (context != nullptr && context->error_if_overflow()) {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                            context->allocator(), column, to_type.precision, to_type.scale);
                 } else {
-                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                            context->allocator(), column, to_type.precision, to_type.scale);
                 }
             } else {
-                result_column =
-                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column))->as_mutable_ptr();
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(allocator, std::move(column))
+                                        ->as_mutable_ptr();
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
                 return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
-                                                                                                       ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                                                                                                       ToType>(
+                        context->allocator(), column, to_type.precision, to_type.scale);
             } else {
-                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        context->allocator(), column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_decimal<FromType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        context->allocator(), column);
             } else {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        context->allocator(), column);
             }
         } else if constexpr (lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        context->allocator(), column, to_type.precision, to_type.scale);
             } else {
-                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(context->allocator(), column, to_type.precision, to_type.scale);
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        context->allocator(), column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
@@ -1354,44 +1367,45 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
 }
 
 // for time cast to date/datetime
-#define DEFINE_TIME_CAST_DATE_CLASS(TO_TYPE, IMPL, ALLOWTHROWEXCEPTION)                                         \
-    template <>                                                                                                 \
-    class VectorizedCastExpr<TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION> final : public Expr {                     \
-    public:                                                                                                     \
-        DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);                                                              \
-        Status prepare(RuntimeState* state, ExprContext* context) override {                                    \
-            RETURN_IF_ERROR(Expr::prepare(state, context));                                                     \
-            DateTimeValue dtv;                                                                                  \
-            if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {                           \
-                DateValue dv;                                                                                   \
-                dv.from_date(dtv.year(), dtv.month(), dtv.day());                                               \
-                _now = ColumnHelper::create_const_column<TYPE_DATE>(context->allocator(), dv, 1);               \
-            } else {                                                                                            \
-                _now = ColumnHelper::create_const_null_column(context->allocator(), 1);                         \
-            }                                                                                                   \
-            return Status::OK();                                                                                \
-        }                                                                                                       \
-                                                                                                                \
-        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {                       \
-            ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
-            if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
-                return ColumnHelper::create_const_null_column(context->allocator(), column->size());            \
-            }                                                                                                   \
-                                                                                                                \
-            return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(context->allocator(), _now, column); \
-        };                                                                                                      \
-                                                                                                                \
-        std::string debug_string() const override {                                                             \
-            std::stringstream out;                                                                              \
-            auto expr_debug_string = Expr::debug_string();                                                      \
-            out << "VectorizedCastExpr ("                                                                       \
-                << "from=" << _children[0]->type().debug_string() << ", to=" << this->type().debug_string()     \
-                << ", expr=" << expr_debug_string << ")";                                                       \
-            return out.str();                                                                                   \
-        }                                                                                                       \
-                                                                                                                \
-    private:                                                                                                    \
-        ColumnPtr _now;                                                                                         \
+#define DEFINE_TIME_CAST_DATE_CLASS(TO_TYPE, IMPL, ALLOWTHROWEXCEPTION)                                                \
+    template <>                                                                                                        \
+    class VectorizedCastExpr<TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION> final : public Expr {                            \
+    public:                                                                                                            \
+        DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);                                                                     \
+        Status prepare(RuntimeState* state, ExprContext* context) override {                                           \
+            RETURN_IF_ERROR(Expr::prepare(state, context));                                                            \
+            DateTimeValue dtv;                                                                                         \
+            if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {                                  \
+                DateValue dv;                                                                                          \
+                dv.from_date(dtv.year(), dtv.month(), dtv.day());                                                      \
+                _now = ColumnHelper::create_const_column<TYPE_DATE>(context->allocator(), dv, 1);                      \
+            } else {                                                                                                   \
+                _now = ColumnHelper::create_const_null_column(context->allocator(), 1);                                \
+            }                                                                                                          \
+            return Status::OK();                                                                                       \
+        }                                                                                                              \
+                                                                                                                       \
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {                              \
+            ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                          \
+            if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                          \
+                return ColumnHelper::create_const_null_column(context->allocator(), column->size());                   \
+            }                                                                                                          \
+                                                                                                                       \
+            return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(context->allocator(), \
+                                                                                                 _now, column);        \
+        };                                                                                                             \
+                                                                                                                       \
+        std::string debug_string() const override {                                                                    \
+            std::stringstream out;                                                                                     \
+            auto expr_debug_string = Expr::debug_string();                                                             \
+            out << "VectorizedCastExpr ("                                                                              \
+                << "from=" << _children[0]->type().debug_string() << ", to=" << this->type().debug_string()            \
+                << ", expr=" << expr_debug_string << ")";                                                              \
+            return out.str();                                                                                          \
+        }                                                                                                              \
+                                                                                                                       \
+    private:                                                                                                           \
+        ColumnPtr _now;                                                                                                \
     };
 
 DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATE, timeToDate, true);
@@ -1486,7 +1500,8 @@ public:
         if constexpr (Type == TYPE_DATE || Type == TYPE_DATETIME || Type == TYPE_DECIMALV2 || Type == TYPE_BOOLEAN ||
                       Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT || Type == TYPE_BIGINT ||
                       Type == TYPE_LARGEINT) {
-            return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
+            return VectorizedStringStrictUnaryFunction<CastToString>::template evaluate<Type, TYPE_VARCHAR>(
+                    context->allocator(), column);
         }
 
         if constexpr (Type == TYPE_VARBINARY) {
@@ -1495,9 +1510,11 @@ public:
 
         if constexpr (lt_is_decimal<Type>) {
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(
+                        context->allocator(), column);
             } else {
-                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(context->allocator(), column);
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(
+                        context->allocator(), column);
             }
         }
 
@@ -1531,10 +1548,12 @@ private:
         if (type().len == -1) {
             if constexpr (FloatType == TYPE_FLOAT) {
                 return VectorizedStringStrictUnaryFunction<FloatCastToString>::template evaluate<TYPE_FLOAT,
-                                                                                                 TYPE_VARCHAR>(context->allocator(), column);
+                                                                                                 TYPE_VARCHAR>(
+                        context->allocator(), column);
             } else {
                 return VectorizedStringStrictUnaryFunction<DoubleCastToString>::template evaluate<TYPE_DOUBLE,
-                                                                                                  TYPE_VARCHAR>(context->allocator(), column);
+                                                                                                  TYPE_VARCHAR>(
+                        context->allocator(), column);
             }
         }
         if (type().len < 0) {
@@ -2222,9 +2241,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             std::vector<int> source_field_indices(to_type.children.size());
             for (int i = 0; i < (int)to_type.children.size(); ++i) {
                 source_field_indices[i] = i;
-                ASSIGN_OR_RETURN(field_casts[i],
-                                 create_cast_expr(pool, from_type.children[i], to_type.children[i],
-                                                  allow_throw_exception));
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
+                                                                  allow_throw_exception));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[i]);
                 field_casts[i]->add_child(cast_input.get());

@@ -270,23 +270,24 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         new_aligned_offsets->append(0);
         new_aligned_offsets->append(data_column->size());
         aligned_offsets = std::move(new_aligned_offsets);
-        auto array_column = ArrayColumn::create(context->allocator(), std::move(*data_column).mutate(),
-                                                UInt32Column::static_pointer_cast(std::move(*aligned_offsets).mutate()));
+        auto array_column =
+                ArrayColumn::create(context->allocator(), std::move(*data_column).mutate(),
+                                    UInt32Column::static_pointer_cast(std::move(*aligned_offsets).mutate()));
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(
-                    context->allocator(), std::move(array_column),
-                    NullColumn::static_pointer_cast(std::move(*result_null_column).mutate()));
+            result_column =
+                    NullableColumn::create(context->allocator(), std::move(array_column),
+                                           NullColumn::static_pointer_cast(std::move(*result_null_column).mutate()));
             result_column->check_or_die();
         }
         result_column = ConstColumn::create(context->allocator(), result_column, chunk->num_rows());
         result_column->check_or_die();
         return result_column;
     } else {
-        auto array_column = ArrayColumn::create(
-                context->allocator(), std::move(column),
-                ColumnHelper::as_column<UInt32Column>(std::move(*aligned_offsets).mutate()));
+        auto array_column =
+                ArrayColumn::create(context->allocator(), std::move(column),
+                                    ColumnHelper::as_column<UInt32Column>(std::move(*aligned_offsets).mutate()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
             return NullableColumn::create(context->allocator(), std::move(array_column),
@@ -392,10 +393,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         if (result_null_column) {
             auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
             result_null_mut->resize(1);
-            auto result = ConstColumn::create(context->allocator(),
-                                              NullableColumn::create(context->allocator(), std::move(array_col),
-                                                                     std::move(result_null_mut)),
-                                              chunk->num_rows());
+            auto result = ConstColumn::create(
+                    context->allocator(),
+                    NullableColumn::create(context->allocator(), std::move(array_col), std::move(result_null_mut)),
+                    chunk->num_rows());
             result->check_or_die();
             return result;
         }

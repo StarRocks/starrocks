@@ -18,8 +18,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "column/column_access_path.h"
 #include "base/memory/memory_allocator.h"
+#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"

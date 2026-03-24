@@ -565,7 +565,7 @@ struct LeadLagState<LT, true> {
     bool is_null = false;
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
-    size_t non_null_count = 0;          // only used for lag
+    size_t non_null_count = 0;         // only used for lag
     bool default_value_is_constant = false;
 };
 

@@ -17,8 +17,8 @@
 #include <any>
 
 #include "base/container/fixed_hash_map.h"
-#include "base/memory/memory_allocator.h"
 #include "base/failpoint/fail_point.h"
+#include "base/memory/memory_allocator.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "column/column_hash.h"
@@ -136,8 +136,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     template <class... Args>
-    AggHashSetOfOneNumberKey(Args&&... args)
-            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
+    AggHashSetOfOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -219,8 +218,7 @@ struct AggHashSetOfOneNullableNumberKey
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     template <class... Args>
-    AggHashSetOfOneNullableNumberKey(Args&&... args)
-            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
+    AggHashSetOfOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -320,8 +318,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
-    AggHashSetOfOneStringKey(Args&&... args)
-            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
+    AggHashSetOfOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -407,8 +404,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
-    AggHashSetOfOneNullableStringKey(Args&&... args)
-            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
+    AggHashSetOfOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet

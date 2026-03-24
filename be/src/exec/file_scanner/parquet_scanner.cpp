@@ -297,8 +297,8 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
 }
 
 Status ParquetScanner::new_column(memory::Allocator* allocator, const arrow::DataType* arrow_type,
-                                  const SlotDescriptor* slot_desc, MutableColumnPtr* column,
-                                  ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool, bool strict_mode) {
+                                  const SlotDescriptor* slot_desc, MutableColumnPtr* column, ConvertFuncTree* conv_func,
+                                  Expr** expr, ObjectPool& pool, bool strict_mode) {
     auto& type_desc = slot_desc->type();
     auto* raw_type_desc = pool.add(new TypeDescriptor());
     bool need_cast = false;

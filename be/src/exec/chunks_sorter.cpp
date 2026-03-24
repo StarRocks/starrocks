@@ -71,8 +71,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                                                                const SortExecExprs& sort_exec_exprs,
                                                                const std::vector<OrderByType>& order_by_types,
                                                                memory::Allocator* column_allocator) {
-    memory::Allocator* alloc =
-            column_allocator ? column_allocator : memory::get_default_allocator();
+    memory::Allocator* alloc = column_allocator ? column_allocator : memory::get_default_allocator();
     ChunkPtr materialize_chunk = std::make_shared<Chunk>();
 
     // materialize all sorting columns: replace old columns with evaluated columns

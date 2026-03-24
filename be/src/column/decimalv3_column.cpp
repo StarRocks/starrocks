@@ -24,7 +24,8 @@ template <typename T>
 DecimalV3Column<T>::DecimalV3Column(size_t num_rows) : DecimalV3Column(memory::get_default_allocator(), num_rows) {}
 
 template <typename T>
-DecimalV3Column<T>::DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, size_t num_rows) : SuperClass(allocator) {
+DecimalV3Column<T>::DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, size_t num_rows)
+        : SuperClass(allocator) {
     this->resize_uninitialized(num_rows);
 }
 

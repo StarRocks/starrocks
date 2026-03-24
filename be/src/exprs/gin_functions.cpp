@@ -109,11 +109,10 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
         }
     }
     array_offsets->append(offset);
-    auto result_array = ArrayColumn::create(
-            context->allocator(),
-            NullableColumn::create(context->allocator(), std::move(array_binary_column),
-                                   NullColumn::create(context->allocator(), offset, 0)),
-            std::move(array_offsets));
+    auto result_array = ArrayColumn::create(context->allocator(),
+                                            NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                                                   NullColumn::create(context->allocator(), offset, 0)),
+                                            std::move(array_offsets));
     return NullableColumn::create(context->allocator(), std::move(result_array), std::move(null_array));
 }
 

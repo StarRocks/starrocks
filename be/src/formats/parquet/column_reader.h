@@ -22,8 +22,8 @@
 #include <string>
 #include <vector>
 
-#include "cache/cache_options.h"
 #include "base/memory/memory_allocator.h"
+#include "cache/cache_options.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"

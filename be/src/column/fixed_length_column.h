@@ -33,8 +33,7 @@ public:
 
     explicit FixedLengthColumn(const size_t n) : SuperClass(memory::get_default_allocator(), n) {}
 
-    FixedLengthColumn(const size_t n, const ValueType x)
-            : SuperClass(memory::get_default_allocator(), n, x) {}
+    FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(memory::get_default_allocator(), n, x) {}
 
     FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator, const size_t n) : SuperClass(allocator, n) {}
 

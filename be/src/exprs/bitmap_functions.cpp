@@ -212,7 +212,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_string(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<bitmapToStingImpl>::evaluate<TYPE_OBJECT, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<bitmapToStingImpl>::evaluate<TYPE_OBJECT, TYPE_VARCHAR>(
+            context->allocator(), columns[0]);
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_from_string(FunctionContext* context, const Columns& columns) {
@@ -250,7 +251,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(bitmapContainsImpl, bitmap_ptr, int_value) {
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_contains(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStrictBinaryFunction<bitmapContainsImpl>::evaluate<TYPE_OBJECT, TYPE_BIGINT, TYPE_BOOLEAN>(context->allocator(), columns[0], columns[1]);
+    return VectorizedStrictBinaryFunction<bitmapContainsImpl>::evaluate<TYPE_OBJECT, TYPE_BIGINT, TYPE_BOOLEAN>(
+            context->allocator(), columns[0], columns[1]);
 }
 
 // bitmap_has_any
@@ -263,7 +265,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(bitmapHasAny, lhs, rhs) {
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_has_any(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStrictBinaryFunction<bitmapHasAny>::evaluate<TYPE_OBJECT, TYPE_BOOLEAN>(context->allocator(), columns[0], columns[1]);
+    return VectorizedStrictBinaryFunction<bitmapHasAny>::evaluate<TYPE_OBJECT, TYPE_BOOLEAN>(context->allocator(),
+                                                                                             columns[0], columns[1]);
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_andnot(FunctionContext* context, const starrocks::Columns& columns) {
@@ -403,11 +406,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
 
     //Array Column
     if (!columns[0]->has_null()) {
-        return ArrayColumn::create(
-                context->allocator(),
-                NullableColumn::create(context->allocator(), std::move(array_bigint_column),
-                                       NullColumn::create(context->allocator(), offset, 0)),
-                std::move(array_offsets));
+        return ArrayColumn::create(context->allocator(),
+                                   NullableColumn::create(context->allocator(), std::move(array_bigint_column),
+                                                          NullColumn::create(context->allocator(), offset, 0)),
+                                   std::move(array_offsets));
     } else if (columns[0]->only_null()) {
         return ColumnHelper::create_const_null_column(context->allocator(), size);
     } else {

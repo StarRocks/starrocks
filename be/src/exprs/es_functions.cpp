@@ -13,9 +13,9 @@
 // limitations under the License.
 
 #include "exprs/es_functions.h"
-#include "exprs/function_context.h"
 
 #include "column/column_builder.h"
+#include "exprs/function_context.h"
 
 namespace starrocks {
 

@@ -221,8 +221,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res =
-            ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
 
     if (column->is_nullable() || has_null) {
         res = NullableColumn::create(context->allocator(), res->as_mutable_ptr(), std::move(null_column));
@@ -302,8 +301,7 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res =
-            ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
     if (column->is_nullable()) {
         res = NullableColumn::create(context->allocator(), res->as_mutable_ptr(), std::move(null_column));
     }

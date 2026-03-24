@@ -71,8 +71,7 @@ public:
     AdaptiveNullableColumn() : SuperClass(memory::get_default_allocator()) {}
 
     explicit AdaptiveNullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
-            : AdaptiveNullableColumn(memory::get_default_allocator(), std::move(data_column),
-                                     std::move(null_column)) {}
+            : AdaptiveNullableColumn(memory::get_default_allocator(), std::move(data_column), std::move(null_column)) {}
 
     AdaptiveNullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
                            MutableColumnPtr&& null_column)

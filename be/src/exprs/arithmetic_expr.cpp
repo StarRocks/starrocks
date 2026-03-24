@@ -161,9 +161,11 @@ public:
         if constexpr (lt_is_decimal<Type>) {
             // Enable overflow checking in decimal arithmetic
             if (context != nullptr && context->error_if_overflow()) {
-                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::REPORT_ERROR>::template evaluate<Type>(context->allocator(), l, r);
+                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::REPORT_ERROR>::template evaluate<Type>(
+                        context->allocator(), l, r);
             } else {
-                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::OUTPUT_NULL>::template evaluate<Type>(context->allocator(), l, r);
+                return VectorizedStrictDecimalBinaryFunction<OP, OverflowMode::OUTPUT_NULL>::template evaluate<Type>(
+                        context->allocator(), l, r);
             }
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
@@ -221,23 +223,23 @@ public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && lt_is_bigint<Type>) {
-#define EVALUATE_CHECKED_OVERFLOW(Mode)                                                   \
-    using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                        \
-    switch (_children[0]->type().type) {                                                  \
-    case TYPE_DECIMAL32: {                                                                \
-        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));   \
+#define EVALUATE_CHECKED_OVERFLOW(Mode)                                                                         \
+    using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                                              \
+    switch (_children[0]->type().type) {                                                                        \
+    case TYPE_DECIMAL32: {                                                                                      \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));                         \
         return CastFunction::evaluate<TYPE_DECIMAL32, LogicalType::TYPE_BIGINT>(context->allocator(), column);  \
-    }                                                                                     \
-    case TYPE_DECIMAL64: {                                                                \
-        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL64>(context, ptr));   \
+    }                                                                                                           \
+    case TYPE_DECIMAL64: {                                                                                      \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL64>(context, ptr));                         \
         return CastFunction::evaluate<TYPE_DECIMAL64, LogicalType::TYPE_BIGINT>(context->allocator(), column);  \
-    }                                                                                     \
-    case TYPE_DECIMAL128: {                                                               \
-        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL128>(context, ptr));  \
+    }                                                                                                           \
+    case TYPE_DECIMAL128: {                                                                                     \
+        ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL128>(context, ptr));                        \
         return CastFunction::evaluate<TYPE_DECIMAL128, LogicalType::TYPE_BIGINT>(context->allocator(), column); \
-    }                                                                                     \
-    default:                                                                              \
-        return evaluate_internal<Type>(context, ptr);                                     \
+    }                                                                                                           \
+    default:                                                                                                    \
+        return evaluate_internal<Type>(context, ptr);                                                           \
     }
 
             if (context != nullptr && context->error_if_overflow()) {
@@ -498,7 +500,8 @@ public:
         auto r = _children[1]->evaluate(context, ptr);
 
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
-        return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(context->allocator(), l, r);
+        return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(
+                context->allocator(), l, r);
     }
 
 #ifdef STARROCKS_JIT_ENABLE

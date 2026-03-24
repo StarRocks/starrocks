@@ -149,8 +149,9 @@ void ProbeKeyConstructorForSerializedFixedSize<LT>::build_key(const JoinHashTabl
                 data_columns.emplace_back((*probe_state->key_columns)[i]);
             } else {
                 auto* allocator = (*probe_state->key_columns)[i]->allocator();
-                auto tmp_column = NullableColumn::create(allocator, (*probe_state->key_columns)[i],
-                                                         NullColumn::create(allocator, probe_state->probe_row_count, 0));
+                auto tmp_column =
+                        NullableColumn::create(allocator, (*probe_state->key_columns)[i],
+                                               NullColumn::create(allocator, probe_state->probe_row_count, 0));
                 data_columns.emplace_back(tmp_column);
             }
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {

@@ -39,7 +39,9 @@ ArrayColumn::ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets
 
 ArrayColumn::ArrayColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& elements,
                          MutableColumnPtr&& offsets)
-        : Base(allocator), _elements(std::move(elements)), _offsets(OffsetColumn::static_pointer_cast(std::move(offsets))) {
+        : Base(allocator),
+          _elements(std::move(elements)),
+          _offsets(OffsetColumn::static_pointer_cast(std::move(offsets))) {
     DCHECK(_elements->is_nullable());
     if (_offsets->empty()) {
         _offsets->append(0);

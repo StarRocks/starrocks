@@ -103,9 +103,8 @@ ColumnPtr haystack_vector_and_needle_const(memory::Allocator* allocator, const C
             }
         }
         if (res_null != nullptr) {
-            return NullableColumn::create(
-                    allocator, std::move(res),
-                    NullColumn::static_pointer_cast(std::move(*res_null).mutate()));
+            return NullableColumn::create(allocator, std::move(res),
+                                          NullColumn::static_pointer_cast(std::move(*res_null).mutate()));
         } else {
             return res;
         }

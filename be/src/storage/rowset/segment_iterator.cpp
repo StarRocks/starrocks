@@ -1483,11 +1483,11 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
             // First predicate: result is already in _selection (merged_selection)
             use_merged_selection = false;
         } else {
-                // Subsequent predicates: AND current selection with merged selection
-                uint8_t* dest = _selection.data();             // merged_selection
-                const uint8_t* src = current_selection.data(); // current result
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    dest[j] = src[j] & dest[j];
+            // Subsequent predicates: AND current selection with merged selection
+            uint8_t* dest = _selection.data();             // merged_selection
+            const uint8_t* src = current_selection.data(); // current result
+            for (size_t j = 0; j < chunk_size; ++j) {
+                dest[j] = src[j] & dest[j];
             }
         }
     }
@@ -2401,8 +2401,7 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            ASSIGN_OR_RETURN(to->_dict_chunk, ChunkHelper::new_chunk_checked(_opts.allocator,
-                                                                             to->_dict_decode_schema,
+            ASSIGN_OR_RETURN(to->_dict_chunk, ChunkHelper::new_chunk_checked(_opts.allocator, to->_dict_decode_schema,
                                                                              _reserve_chunk_size));
         }
     } else {
@@ -2967,8 +2966,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
                                                          _column_decoders[cid].code_convert_data(),
-                                                         _column_decoders[cid].dict_convert_size(),
-                                                         _opts.allocator);
+                                                         _column_decoders[cid].dict_convert_size(), _opts.allocator);
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }

@@ -172,8 +172,9 @@ private:
                                                           desc.children[0].scale),
                     NullColumn::create(ctx->allocator()));
         } else {
-            dest_column_data = NullableColumn::create(ctx->allocator(), RunTimeColumnType<ResultType>::create(ctx->allocator()),
-                                                      NullColumn::create(ctx->allocator()));
+            dest_column_data =
+                    NullableColumn::create(ctx->allocator(), RunTimeColumnType<ResultType>::create(ctx->allocator()),
+                                           NullColumn::create(ctx->allocator()));
         }
 
         if (columns[0]->is_nullable()) {
@@ -1082,7 +1083,8 @@ private:
             }
         }
 
-        ColumnPtr dest_column = NullableColumn::create(allocator, std::move(dest_data_column), std::move(dest_null_column));
+        ColumnPtr dest_column =
+                NullableColumn::create(allocator, std::move(dest_data_column), std::move(dest_null_column));
         if (is_const) {
             dest_column = ConstColumn::create(allocator, std::move(dest_column), chunk_size);
         }
@@ -1778,8 +1780,9 @@ inline size_t calculate_accurate_step_count(
             }                                                                                                      \
         }                                                                                                          \
                                                                                                                    \
-        auto array_offsets = UInt32Column::create(ctx->allocator(), 0);                                             \
-        auto array_elements = ColumnHelper::create_column(ctx->allocator(), TypeDescriptor(ResultType), true, false, 0); \
+        auto array_offsets = UInt32Column::create(ctx->allocator(), 0);                                            \
+        auto array_elements =                                                                                      \
+                ColumnHelper::create_column(ctx->allocator(), TypeDescriptor(ResultType), true, false, 0);         \
                                                                                                                    \
         auto offsets = array_offsets.get();                                                                        \
         auto elements = down_cast<NullableColumn*>(array_elements.get());                                          \
@@ -1865,7 +1868,7 @@ inline size_t calculate_accurate_step_count(
                                                                                                                    \
         if (all_const_cols) {                                                                                      \
             if (nulls && nulls->is_null(0)) {                                                                      \
-                    return ColumnHelper::create_const_null_column(ctx->allocator(), num_rows);                         \
+                return ColumnHelper::create_const_null_column(ctx->allocator(), num_rows);                         \
             } else {                                                                                               \
                 return ConstColumn::create(ctx->allocator(), std::move(dst), num_rows);                            \
             }                                                                                                      \
@@ -2185,24 +2188,28 @@ public:
                         return is_nullable_target
                                        ? _process_with_hash_table<true>(context->allocator(), state, target_data_column,
                                                                         target_null_data, is_const_target)
-                                       : _process_with_hash_table<false>(context->allocator(), state, target_data_column,
-                                                                         target_null_data, is_const_target);
+                                       : _process_with_hash_table<false>(context->allocator(), state,
+                                                                         target_data_column, target_null_data,
+                                                                         is_const_target);
                     }
                 }
             }
 
             if (is_nullable_array && is_nullable_target) {
-                return _process_generic<true, true>(context->allocator(), array_data_column, target_data_column, array_null_data,
-                                                    target_null_data, is_const_array, is_const_target);
+                return _process_generic<true, true>(context->allocator(), array_data_column, target_data_column,
+                                                    array_null_data, target_null_data, is_const_array, is_const_target);
             } else if (is_nullable_array && !is_nullable_target) {
-                return _process_generic<true, false>(context->allocator(), array_data_column, target_data_column, array_null_data,
-                                                     target_null_data, is_const_array, is_const_target);
+                return _process_generic<true, false>(context->allocator(), array_data_column, target_data_column,
+                                                     array_null_data, target_null_data, is_const_array,
+                                                     is_const_target);
             } else if (!is_nullable_array && is_nullable_target) {
-                return _process_generic<false, true>(context->allocator(), array_data_column, target_data_column, array_null_data,
-                                                     target_null_data, is_const_array, is_const_target);
+                return _process_generic<false, true>(context->allocator(), array_data_column, target_data_column,
+                                                     array_null_data, target_null_data, is_const_array,
+                                                     is_const_target);
             } else {
-                return _process_generic<false, false>(context->allocator(), array_data_column, target_data_column, array_null_data,
-                                                      target_null_data, is_const_array, is_const_target);
+                return _process_generic<false, false>(context->allocator(), array_data_column, target_data_column,
+                                                      array_null_data, target_null_data, is_const_array,
+                                                      is_const_target);
             }
         };
 
@@ -2210,9 +2217,9 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
-            result_column = NullableColumn::create(
-                    context->allocator(), Column::mutate(std::move(result_column)),
-                    NullColumn::static_pointer_cast(std::move(*array_null_column).mutate()));
+            result_column =
+                    NullableColumn::create(context->allocator(), Column::mutate(std::move(result_column)),
+                                           NullColumn::static_pointer_cast(std::move(*array_null_column).mutate()));
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {
@@ -2260,8 +2267,8 @@ private:
 
     template <bool NullableTarget>
     static ColumnPtr _process_with_hash_table(memory::Allocator* allocator, ArrayContainsState* state,
-                                              const ColumnPtr& targets,
-                                              const NullColumn::ValueType* targets_null_data, bool is_const_target) {
+                                              const ColumnPtr& targets, const NullColumn::ValueType* targets_null_data,
+                                              bool is_const_target) {
         DCHECK(!targets->is_constant() && !targets->is_nullable()) << "targets should be real data column";
 
         size_t num_rows = targets->size();
@@ -2504,21 +2511,17 @@ public:
         }
 
         if (is_nullable_left && is_nullable_right) {
-            return _process<true, true>(context->allocator(), state, left_data_column, right_data_column, left_null_data,
-                                        right_null_data,
-                                        is_const_left, is_const_right);
+            return _process<true, true>(context->allocator(), state, left_data_column, right_data_column,
+                                        left_null_data, right_null_data, is_const_left, is_const_right);
         } else if (is_nullable_left && !is_nullable_right) {
-            return _process<true, false>(context->allocator(), state, left_data_column, right_data_column, left_null_data,
-                                         right_null_data,
-                                         is_const_left, is_const_right);
+            return _process<true, false>(context->allocator(), state, left_data_column, right_data_column,
+                                         left_null_data, right_null_data, is_const_left, is_const_right);
         } else if (!is_nullable_left && is_nullable_right) {
-            return _process<false, true>(context->allocator(), state, left_data_column, right_data_column, left_null_data,
-                                         right_null_data,
-                                         is_const_left, is_const_right);
+            return _process<false, true>(context->allocator(), state, left_data_column, right_data_column,
+                                         left_null_data, right_null_data, is_const_left, is_const_right);
         } else {
             return _process<false, false>(context->allocator(), state, left_data_column, right_data_column,
-                                          left_null_data, right_null_data,
-                                          is_const_left, is_const_right);
+                                          left_null_data, right_null_data, is_const_left, is_const_right);
         }
     }
 
@@ -2684,9 +2687,10 @@ private:
     }
 
     template <bool NullableLeft, bool NullableRight>
-    static ColumnPtr _process(memory::Allocator* allocator, const ArrayContainsAllState* state, const ColumnPtr& left_arrays,
-                              const ColumnPtr& right_arrays, const NullColumn::ValueType* left_null_data,
-                              const NullColumn::ValueType* right_null_data, bool is_const_left, bool is_const_right) {
+    static ColumnPtr _process(memory::Allocator* allocator, const ArrayContainsAllState* state,
+                              const ColumnPtr& left_arrays, const ColumnPtr& right_arrays,
+                              const NullColumn::ValueType* left_null_data, const NullColumn::ValueType* right_null_data,
+                              bool is_const_left, bool is_const_right) {
         DCHECK(!left_arrays->is_constant() && !left_arrays->is_nullable() && left_arrays->is_array());
         DCHECK(!right_arrays->is_constant() && !right_arrays->is_nullable() && right_arrays->is_array());
         if (!is_const_left && !is_const_right) {

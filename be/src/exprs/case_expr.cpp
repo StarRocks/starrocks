@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "exprs/case_expr.h"
-#include "exprs/expr_context.h"
 
 #include <cstdint>
 
@@ -25,16 +24,16 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
 #include "types/percentile_value.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "exprs/expr_context.h"
 #include "exprs/jit/expr_jit_codegen.h"
-#include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "exprs/expr_context.h"
 #endif
 
 namespace starrocks {
@@ -316,7 +315,8 @@ private:
     StatusOr<ColumnPtr> evaluate_case(ExprContext* context, Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
-            else_column = ColumnHelper::create_const_null_column(context->allocator(), chunk != nullptr ? chunk->num_rows() : 1);
+            else_column = ColumnHelper::create_const_null_column(context->allocator(),
+                                                                 chunk != nullptr ? chunk->num_rows() : 1);
         } else {
             ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
@@ -361,8 +361,7 @@ private:
                     res_nullable = true;
                 }
             }
-            MutableColumnPtr res =
-                    ColumnHelper::create_column(context->allocator(), this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(context->allocator(), this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -471,7 +470,8 @@ private:
     StatusOr<ColumnPtr> evaluate_no_case(ExprContext* context, Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
-            else_column = ColumnHelper::create_const_null_column(context->allocator(), chunk != nullptr ? chunk->num_rows() : 1);
+            else_column = ColumnHelper::create_const_null_column(context->allocator(),
+                                                                 chunk != nullptr ? chunk->num_rows() : 1);
         } else {
             ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
         }
@@ -529,8 +529,7 @@ private:
                     res_nullable = true;
                 }
             }
-            MutableColumnPtr res =
-                    ColumnHelper::create_column(context->allocator(), this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(context->allocator(), this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -595,7 +594,8 @@ private:
                         when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
                     }
                     for (int i = 0; i < when_column_size; ++i) {
-                        [[maybe_unused]] auto& filter = ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
+                        [[maybe_unused]] auto& filter =
+                                ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
                     }
 
                     using ResultContainer = typename RunTimeColumnType<ResultType>::Container;

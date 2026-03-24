@@ -229,7 +229,8 @@ MutableColumnPtr VariantColumn::clone(memory::Allocator* allocator) const {
         variant_cloned->_metadata_column = BinaryColumn::static_pointer_cast(_metadata_column->clone(allocator));
     }
     if (_remain_value_column != nullptr) {
-        variant_cloned->_remain_value_column = BinaryColumn::static_pointer_cast(_remain_value_column->clone(allocator));
+        variant_cloned->_remain_value_column =
+                BinaryColumn::static_pointer_cast(_remain_value_column->clone(allocator));
     }
     return cloned;
 }

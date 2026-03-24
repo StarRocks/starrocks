@@ -14,11 +14,11 @@
 
 #include "exec/chunks_sorter_heap_sort.h"
 
-#include "base/memory/memory_allocator.h"
 #include <functional>
 #include <memory>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -122,8 +122,7 @@ Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
         size_t result_rows = sorted_values.size();
-        ChunkPtr result_chunk =
-                sorted_values[0].data_segment()->chunk->clone_empty(sink_allocator(), result_rows);
+        ChunkPtr result_chunk = sorted_values[0].data_segment()->chunk->clone_empty(sink_allocator(), result_rows);
         for (int i = 0; i < result_rows; ++i) {
             auto rid = sorted_values[i].row_id();
             const auto& ref_chunk = sorted_values[i].data_segment()->chunk;

@@ -45,7 +45,8 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     }
 
     for (size_t i = 0; i < num_pairs; i++) {
-        pairs_columns[i] = ColumnHelper::cast_to_nullable_column(context->allocator(),
+        pairs_columns[i] = ColumnHelper::cast_to_nullable_column(
+                context->allocator(),
                 ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, pairs_columns[i]));
     }
 

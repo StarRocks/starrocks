@@ -18,9 +18,9 @@
 #include <queue>
 #include <vector>
 
-#include "base/memory/memory_allocator.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/container/raw_container.h"
+#include "base/memory/memory_allocator.h"
 #include "base/phmap/phmap.h"
 #include "bthread/mutex.h"
 #include "column/column.h"

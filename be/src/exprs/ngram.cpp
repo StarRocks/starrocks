@@ -190,7 +190,7 @@ private:
         if constexpr (case_insensitive) {
             // @TODO if ngram supports utf8 in the future, we should use antoher implementation.
             haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(),
-                                                                                                 haystackPtr);
+                                                                                                haystackPtr);
         }
 
         const BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);

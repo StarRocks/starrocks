@@ -412,14 +412,14 @@ constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::t
     return base + offset;
 }
 
-#define CREATE_ASOF_VECTOR_CASE(TYPE, BASE_INDEX)                           \
-    case BASE_INDEX + 0:                                                    \
+#define CREATE_ASOF_VECTOR_CASE(TYPE, BASE_INDEX)                                                          \
+    case BASE_INDEX + 0:                                                                                   \
         return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LT>>>(memory::get_default_allocator()); \
-    case BASE_INDEX + 1:                                                    \
+    case BASE_INDEX + 1:                                                                                   \
         return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LE>>>(memory::get_default_allocator()); \
-    case BASE_INDEX + 2:                                                    \
+    case BASE_INDEX + 2:                                                                                   \
         return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GT>>>(memory::get_default_allocator()); \
-    case BASE_INDEX + 3:                                                    \
+    case BASE_INDEX + 3:                                                                                   \
         return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GE>>>(memory::get_default_allocator());
 
 inline AsofIndexBufferVariant create_asof_index_vector(size_t variant_index) {

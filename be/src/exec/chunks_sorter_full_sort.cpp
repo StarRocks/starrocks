@@ -120,8 +120,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         SmallPermutation permutation = create_small_permutation(_staging_unsorted_rows);
         RETURN_IF_ERROR(
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
-        auto sorted_chunk =
-                _unsorted_chunk->clone_empty_with_slot(sink_allocator(), _unsorted_chunk->num_rows());
+        auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(sink_allocator(), _unsorted_chunk->num_rows());
         materialize_by_permutation_single(sorted_chunk.get(), _unsorted_chunk, permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
@@ -146,8 +145,7 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _early_materialized_slots.clear();
         _runtime_profile->add_info_string("LateMaterialization", "False");
-        RETURN_IF_ERROR(
-                merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, sink_allocator()));
+        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, sink_allocator()));
     } else {
         _runtime_profile->add_info_string("LateMaterialization", "True");
         _split_late_and_early_chunks();

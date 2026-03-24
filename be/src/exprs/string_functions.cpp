@@ -517,7 +517,8 @@ ColumnPtr right_const_not_null(memory::Allocator* allocator, const Columns& colu
 }
 
 template <typename StringConstFuncType, typename... Args>
-ColumnPtr string_func_const(memory::Allocator* allocator, StringConstFuncType func, const Columns& columns, Args&&... args) {
+ColumnPtr string_func_const(memory::Allocator* allocator, StringConstFuncType func, const Columns& columns,
+                            Args&&... args) {
     if (columns[0]->is_nullable()) {
         auto* src_nullable = down_cast<const NullableColumn*>(columns[0].get());
         if (src_nullable->has_null()) {
@@ -554,8 +555,7 @@ ColumnPtr string_func_const(memory::Allocator* allocator, StringConstFuncType fu
                                                   std::move(src_null));
                 }
             } else {
-                return NullableColumn::create(allocator, Column::mutate(std::move(binary)),
-                                              std::move(src_null));
+                return NullableColumn::create(allocator, Column::mutate(std::move(binary)), std::move(src_null));
             }
         } else {
             auto* src = down_cast<const BinaryColumn*>(src_nullable->data_column().get());
@@ -778,8 +778,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(starts_withImpl, str, prefix) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::starts_with(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictBinaryFunction<starts_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(), columns[0],
-                                                                                                 columns[1]);
+    return VectorizedStrictBinaryFunction<starts_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(
+            context->allocator(), columns[0], columns[1]);
 }
 
 // ends_with
@@ -790,7 +790,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ends_withImpl, str, suffix) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::ends_with(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictBinaryFunction<ends_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(), columns[0], columns[1]);
+    return VectorizedStrictBinaryFunction<ends_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(),
+                                                                                               columns[0], columns[1]);
 }
 
 struct SpaceFunction {
@@ -1199,8 +1200,9 @@ Status StringFunctions::translate_close(FunctionContext* context, FunctionContex
  * @param state stores the ASCII map.
  * @return The translated column, which is a non-nullable BinaryColumn.
  */
-static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(memory::Allocator* allocator, const Columns& columns,
-                                                                       const BinaryColumn* src, const TranslateState* state) {
+static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(memory::Allocator* allocator,
+                                                                       const Columns& columns, const BinaryColumn* src,
+                                                                       const TranslateState* state) {
     DCHECK(state->is_from_and_to_const);
     DCHECK(state->is_ascii_map);
 
@@ -1510,8 +1512,7 @@ static inline ColumnPtr ascii_pad_ascii_const(memory::Allocator* allocator, Colu
 
 template <bool src_is_utf8, bool fill_is_utf8, PadType pad_type>
 static inline ColumnPtr pad_utf8_const(memory::Allocator* allocator, Columns const& columns, const BinaryColumn* src,
-                                       const uint8_t* fill,
-                                       const size_t fill_size, const size_t len,
+                                       const uint8_t* fill, const size_t fill_size, const size_t len,
                                        std::vector<size_t> const& fill_utf8_index) {
     static_assert(src_is_utf8 || fill_is_utf8);
 
@@ -1602,8 +1603,8 @@ static inline ColumnPtr pad_utf8_const(memory::Allocator* allocator, Columns con
 }
 
 template <PadType pad_type>
-static inline ColumnPtr pad_const_not_null(memory::Allocator* allocator, const Columns& columns, const BinaryColumn* src,
-                                           const PadState* pad_state) {
+static inline ColumnPtr pad_const_not_null(memory::Allocator* allocator, const Columns& columns,
+                                           const BinaryColumn* src, const PadState* pad_state) {
     auto len = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
     auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
 
@@ -1937,7 +1938,8 @@ DEFINE_UNARY_FN_WITH_IMPL(lengthImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::length(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictUnaryFunction<lengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(), columns[0]);
+    return VectorizedStrictUnaryFunction<lengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(),
+                                                                                       columns[0]);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
@@ -1945,7 +1947,8 @@ DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(), columns[0]);
+    return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(),
+                                                                                           columns[0]);
 }
 
 template <char CA, char CZ>
@@ -2062,11 +2065,11 @@ ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(memory::Allocator* alloca
 
 template struct StringCaseToggleFunction<true>;
 template ColumnPtr StringCaseToggleFunction<true>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(memory::Allocator* allocator,
-                                                                                         const ColumnPtr& v1);
+                                                                                        const ColumnPtr& v1);
 
 template struct StringCaseToggleFunction<false>;
 template ColumnPtr StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(memory::Allocator* allocator,
-                                                                                          const ColumnPtr& v1);
+                                                                                         const ColumnPtr& v1);
 
 template <bool to_upper>
 struct UTF8StringCaseToggleFunction {
@@ -2466,10 +2469,12 @@ static StatusOr<ColumnPtr> trim_impl(FunctionContext* context, const starrocks::
     if (!state->is_utf8) {
         if (remove_chars.size() == 1) {
             return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, true, false>>::template evaluate<
-                    TYPE_VARCHAR, const std::string&>(context->allocator(), columns[0], remove_chars, state->utf8_index);
+                    TYPE_VARCHAR, const std::string&>(context->allocator(), columns[0], remove_chars,
+                                                      state->utf8_index);
         } else {
             return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false, false>>::template evaluate<
-                    TYPE_VARCHAR, const std::string&>(context->allocator(), columns[0], remove_chars, state->utf8_index);
+                    TYPE_VARCHAR, const std::string&>(context->allocator(), columns[0], remove_chars,
+                                                      state->utf8_index);
         }
     } else {
         return VectorizedUnaryFunction<AdaptiveTrimFunction<trim_type, 8, false, true>>::template evaluate<
@@ -2538,7 +2543,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(context->allocator(),
+                                                                                                 columns[0]);
 }
 
 static constexpr char const* alphabet = "0123456789ABCDEF";
@@ -2557,7 +2563,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_stringImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(
+            context->allocator(), columns[0]);
 }
 
 #ifdef __AVX2__
@@ -2683,7 +2690,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(),
+                                                                                                columns[0]);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(url_encodeImpl, str) {
@@ -2709,7 +2717,8 @@ std::string StringFunctions::url_encode_func(const std::string& value) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_encode(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<url_encodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<url_encodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(
+            context->allocator(), columns[0]);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(url_decodeImpl, str) {
@@ -2761,7 +2770,8 @@ std::string StringFunctions::url_decode_func(const std::string& value) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::url_decode(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<url_decodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<url_decodeImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(
+            context->allocator(), columns[0]);
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
@@ -2795,7 +2805,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(),
+                                                                                              columns[0]);
 }
 
 // ascii
@@ -2813,7 +2824,8 @@ DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<get_charImpl>::evaluate<TYPE_INT, TYPE_CHAR>(context->allocator(), columns[0]);
+    return VectorizedStringStrictUnaryFunction<get_charImpl>::evaluate<TYPE_INT, TYPE_CHAR>(context->allocator(),
+                                                                                            columns[0]);
 }
 
 // strcmp
@@ -2826,7 +2838,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(strcmpImpl, lhs, rhs) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(), columns[0], columns[1]);
+    return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(context->allocator(),
+                                                                                        columns[0], columns[1]);
 }
 
 // strpos without instance parameter
@@ -2920,8 +2933,7 @@ StatusOr<ColumnPtr> StringFunctions::strpos_instance(FunctionContext* context, c
 }
 
 static inline ColumnPtr concat_const_not_null(memory::Allocator* allocator, Columns const& columns,
-                                              const BinaryColumn* src,
-                                              const ConcatState* state) {
+                                              const BinaryColumn* src, const ConcatState* state) {
     NullableBinaryColumnBuilder builder(allocator);
     auto* binary = down_cast<BinaryColumn*>(builder.data_column_raw_ptr());
     auto& nulls = builder.get_null_data();
@@ -3634,11 +3646,10 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
     }
 
     auto str_size = str_col->size();
-    auto array = ArrayColumn::create(
-            context->allocator(),
-            NullableColumn::create(context->allocator(), std::move(str_col),
-                                   NullColumn::create(context->allocator(), str_size, 0)),
-            std::move(offset_col));
+    auto array = ArrayColumn::create(context->allocator(),
+                                     NullableColumn::create(context->allocator(), std::move(str_col),
+                                                            NullColumn::create(context->allocator(), str_size, 0)),
+                                     std::move(offset_col));
     return NullableColumn::create(context->allocator(), std::move(array), std::move(nl_col));
 }
 
@@ -3680,10 +3691,10 @@ static ColumnPtr regexp_extract_all_const_pattern(memory::Allocator* allocator, 
     }
 
     auto str_size = str_col->size();
-    auto array =
-            ArrayColumn::create(allocator, NullableColumn::create(allocator, std::move(str_col),
-                                                                  NullColumn::create(allocator, str_size, 0)),
-                                std::move(offset_col));
+    auto array = ArrayColumn::create(
+            allocator,
+            NullableColumn::create(allocator, std::move(str_col), NullColumn::create(allocator, str_size, 0)),
+            std::move(offset_col));
     if (ColumnHelper::is_all_const(columns)) {
         return ConstColumn::create(allocator, std::move(array), columns[0]->size());
     }
@@ -3712,10 +3723,9 @@ static ColumnPtr regexp_extract_all_const(memory::Allocator* allocator, re2::RE2
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
     if (group < 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
-        auto array = ArrayColumn::create(allocator,
-                                         NullableColumn::create(allocator, std::move(str_col),
-                                                                NullColumn::create(allocator, 0, 0)),
-                                         std::move(offset_col));
+        auto array = ArrayColumn::create(
+                allocator, NullableColumn::create(allocator, std::move(str_col), NullColumn::create(allocator, 0, 0)),
+                std::move(offset_col));
 
         if (ColumnHelper::is_all_const(columns)) {
             return ConstColumn::create(allocator, std::move(array), columns[0]->size());
@@ -3749,10 +3759,10 @@ static ColumnPtr regexp_extract_all_const(memory::Allocator* allocator, re2::RE2
     }
 
     auto str_size = str_col->size();
-    auto array =
-            ArrayColumn::create(allocator, NullableColumn::create(allocator, std::move(str_col),
-                                                                  NullColumn::create(allocator, str_size, 0)),
-                                std::move(offset_col));
+    auto array = ArrayColumn::create(
+            allocator,
+            NullableColumn::create(allocator, std::move(str_col), NullColumn::create(allocator, str_size, 0)),
+            std::move(offset_col));
 
     if (ColumnHelper::is_all_const(columns)) {
         return ConstColumn::create(allocator, std::move(array), columns[0]->size());
@@ -3892,8 +3902,7 @@ static ColumnPtr regexp_replace_const(FunctionContext* context, re2::RE2* const_
 }
 
 static StatusOr<ColumnPtr> hyperscan_vec_evaluate(memory::Allocator* allocator, const BinaryColumn* src,
-                                                  StringFunctionsState* state,
-                                                  const std::string& rpl_value) {
+                                                  StringFunctionsState* state, const std::string& rpl_value) {
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch) != HS_SUCCESS)) {
@@ -4013,7 +4022,8 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(memory::Allocator* allocator, 
     return dst;
 }
 
-StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(FunctionContext* context, StringFunctionsState* state,
+StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(FunctionContext* context,
+                                                                      StringFunctionsState* state,
                                                                       const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     if (columns[0]->size() == 0) {
@@ -4186,10 +4196,10 @@ static StatusOr<ColumnPtr> regexp_split_const(memory::Allocator* allocator, re2:
     }
 
     auto str_size = str_col->size();
-    auto array = ArrayColumn::create(allocator,
-                                     NullableColumn::create(allocator, std::move(str_col),
-                                                            NullColumn::create(allocator, str_size, 0)),
-                                     std::move(offset_col));
+    auto array = ArrayColumn::create(
+            allocator,
+            NullableColumn::create(allocator, std::move(str_col), NullColumn::create(allocator, str_size, 0)),
+            std::move(offset_col));
 
     if (ColumnHelper::is_all_const(columns)) {
         return ConstColumn::create(allocator, std::move(array), columns[0]->size());
@@ -4250,10 +4260,10 @@ static StatusOr<ColumnPtr> regexp_split_const_pattern(memory::Allocator* allocat
     }
 
     auto str_size = str_col->size();
-    auto array = ArrayColumn::create(allocator,
-                                     NullableColumn::create(allocator, std::move(str_col),
-                                                            NullColumn::create(allocator, str_size, 0)),
-                                     std::move(offset_col));
+    auto array = ArrayColumn::create(
+            allocator,
+            NullableColumn::create(allocator, std::move(str_col), NullColumn::create(allocator, str_size, 0)),
+            std::move(offset_col));
 
     if (ColumnHelper::is_all_const(columns)) {
         return ConstColumn::create(allocator, std::move(array), columns[0]->size());
@@ -4321,11 +4331,10 @@ static StatusOr<ColumnPtr> regexp_split_general(FunctionContext* context, re2::R
     }
 
     auto str_size = str_col->size();
-    auto array = ArrayColumn::create(
-            context->allocator(),
-            NullableColumn::create(context->allocator(), std::move(str_col),
-                                   NullColumn::create(context->allocator(), str_size, 0)),
-            std::move(offset_col));
+    auto array = ArrayColumn::create(context->allocator(),
+                                     NullableColumn::create(context->allocator(), std::move(str_col),
+                                                            NullColumn::create(context->allocator(), str_size, 0)),
+                                     std::move(offset_col));
     return NullableColumn::create(context->allocator(), std::move(array), std::move(nl_col));
 }
 
@@ -5082,7 +5091,8 @@ static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std:
     return seek_param_key_in_query_params(query_params, param_key, param_value);
 }
 
-static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(FunctionContext* context, const starrocks::Columns& columns,
+static StatusOr<ColumnPtr> url_extract_parameter_const_param_key(FunctionContext* context,
+                                                                 const starrocks::Columns& columns,
                                                                  const std::string& param_key) {
     auto url_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto num_rows = columns[0]->size();
@@ -5241,8 +5251,8 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
         if (state->result_is_null) {
             return ColumnHelper::create_const_null_column(context->allocator(), num_rows);
         } else {
-            return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), state->opt_const_result.value(),
-                                                                   num_rows);
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(),
+                                                                   state->opt_const_result.value(), num_rows);
         }
     } else if (state->opt_const_param_key.has_value()) {
         return url_extract_parameter_const_param_key(context, columns, state->opt_const_param_key.value());
@@ -5258,7 +5268,8 @@ DEFINE_UNARY_FN_WITH_IMPL(crc32Impl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::crc32(FunctionContext* context, const Columns& columns) {
-    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(context->allocator(), columns[0]);
+    return VectorizedStrictUnaryFunction<crc32Impl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(context->allocator(),
+                                                                                         columns[0]);
 }
 
 // format_bytes

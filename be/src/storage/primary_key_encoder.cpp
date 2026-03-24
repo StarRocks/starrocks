@@ -284,8 +284,8 @@ Status PrimaryKeyEncoder::create_column(memory::Allocator* allocator, const Sche
         // varchar use binary
         auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
-#define M(TYPE)                                       \
-    case TYPE:                                        \
+#define M(TYPE)                                                \
+    case TYPE:                                                 \
         *pcolumn = RunTimeColumnType<TYPE>::create(allocator); \
         break;
             APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M)

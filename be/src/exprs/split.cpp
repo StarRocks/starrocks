@@ -125,11 +125,10 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         }
         array_offsets->append(offset);
 
-        return ArrayColumn::create(
-                context->allocator(),
-                NullableColumn::create(context->allocator(), std::move(array_binary_column),
-                                       NullColumn::create(context->allocator(), offset, 0)),
-                std::move(array_offsets));
+        return ArrayColumn::create(context->allocator(),
+                                   NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                                          NullColumn::create(context->allocator(), offset, 0)),
+                                   std::move(array_offsets));
     } else if (columns[1]->is_constant()) {
         Slice delimiter = state->delimiter;
 
@@ -184,21 +183,20 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             array_offsets->append(offset);
         }
         if (!columns[0]->has_null()) {
-            return ArrayColumn::create(
-                    context->allocator(),
-                    NullableColumn::create(context->allocator(), std::move(array_binary_column),
-                                           NullColumn::create(context->allocator(), offset, 0)),
-                    std::move(array_offsets));
+            return ArrayColumn::create(context->allocator(),
+                                       NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                                              NullColumn::create(context->allocator(), offset, 0)),
+                                       std::move(array_offsets));
         } else {
             return NullableColumn::create(
                     context->allocator(),
-                    ArrayColumn::create(
-                            context->allocator(),
-                            NullableColumn::create(context->allocator(), std::move(array_binary_column),
-                                                   NullColumn::create(context->allocator(), offset, 0)),
-                            std::move(array_offsets)),
+                    ArrayColumn::create(context->allocator(),
+                                        NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                                               NullColumn::create(context->allocator(), offset, 0)),
+                                        std::move(array_offsets)),
                     NullColumn::static_pointer_cast(
-                            std::move(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()).mutate()));
+                            std::move(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column())
+                                    .mutate()));
         }
     } else {
         array_binary_column->reserve(row_nums * 5, haystack_columns->get_immutable_bytes().size() * sizeof(uint8_t));
@@ -238,11 +236,10 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             }
         }
         array_offsets->append(offset);
-        result_array = ArrayColumn::create(
-                context->allocator(),
-                NullableColumn::create(context->allocator(), std::move(array_binary_column),
-                                       NullColumn::create(context->allocator(), offset, 0)),
-                std::move(array_offsets));
+        result_array = ArrayColumn::create(context->allocator(),
+                                           NullableColumn::create(context->allocator(), std::move(array_binary_column),
+                                                                  NullColumn::create(context->allocator(), offset, 0)),
+                                           std::move(array_offsets));
         return NullableColumn::create(context->allocator(), std::move(result_array), std::move(null_array));
     }
 }

@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "column_reader.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -43,7 +44,6 @@
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
-#include "base/memory/memory_allocator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

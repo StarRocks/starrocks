@@ -230,7 +230,8 @@ private:
 
 // Cast nested type(including struct/map/* to json)
 // TODO(murphy): optimize the performance with columnwise-casting
-StatusOr<ColumnPtr> cast_nested_to_json(memory::Allocator* allocator, const ColumnPtr& column, bool allow_throw_exception) {
+StatusOr<ColumnPtr> cast_nested_to_json(memory::Allocator* allocator, const ColumnPtr& column,
+                                        bool allow_throw_exception) {
     ColumnBuilder<TYPE_JSON> column_builder(allocator, column->size());
     vpack::Builder json_builder;
     if (allow_throw_exception) {

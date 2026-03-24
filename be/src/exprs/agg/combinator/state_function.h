@@ -53,8 +53,8 @@ public:
         }
 
         // TODO: use mutable ptr as result
-        MutableColumnPtr result =
-                ColumnHelper::create_column(context->allocator(), _intermediate_type, _agg_state_desc.is_result_nullable());
+        MutableColumnPtr result = ColumnHelper::create_column(context->allocator(), _intermediate_type,
+                                                              _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
         _function->convert_to_serialize_format(context, new_columns, chunk_size, result);
 

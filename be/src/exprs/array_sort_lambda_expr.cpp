@@ -254,7 +254,8 @@ StatusOr<ColumnPtr> ArraySortLambdaExpr::evaluate_lambda_expr(ExprContext* conte
     }
 
     // Create output array column
-    auto result_array = ArrayColumn::create(context->allocator(), std::move(sorted_elements), std::move(sorted_offsets));
+    auto result_array =
+            ArrayColumn::create(context->allocator(), std::move(sorted_elements), std::move(sorted_offsets));
     result_array->check_or_die();
     if (compute_once) {
         auto const_result_array = ConstColumn::create(context->allocator(), std::move(result_array), chunk->num_rows());

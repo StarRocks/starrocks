@@ -211,7 +211,8 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
 }
 
 MutableColumnPtr ColumnHelper::create_const_null_column(memory::Allocator* allocator, size_t chunk_size) {
-    auto nullable_column = NullableColumn::create(allocator, Int8Column::create(allocator), NullColumn::create(allocator));
+    auto nullable_column =
+            NullableColumn::create(allocator, Int8Column::create(allocator), NullColumn::create(allocator));
     nullable_column->append_nulls(1);
     return ConstColumn::create(allocator, std::move(nullable_column), chunk_size);
 }
@@ -360,9 +361,8 @@ MutableColumnPtr ColumnHelper::create_column(memory::Allocator* allocator, const
                                              bool nullable, bool use_view_if_needed, long column_view_concat_rows_limit,
                                              long column_view_concat_bytes_limit) {
     if (use_view_if_needed) {
-        auto opt_column = ColumnViewHelper::create_column_view(allocator, type_desc, nullable,
-                                                               column_view_concat_rows_limit,
-                                                               column_view_concat_bytes_limit);
+        auto opt_column = ColumnViewHelper::create_column_view(
+                allocator, type_desc, nullable, column_view_concat_rows_limit, column_view_concat_bytes_limit);
         if (opt_column.has_value()) {
             return std::move(opt_column.value());
         }
@@ -439,7 +439,8 @@ MutableColumnPtr ColumnHelper::create_column(memory::Allocator* allocator, const
     }
     if (nullable) {
         if (use_adaptive_nullable_column) {
-            return AdaptiveNullableColumn::create(allocator, std::move(p), NullColumn::create(allocator, size, DATUM_NULL));
+            return AdaptiveNullableColumn::create(allocator, std::move(p),
+                                                  NullColumn::create(allocator, size, DATUM_NULL));
         } else {
             return NullableColumn::create(allocator, std::move(p), NullColumn::create(allocator, size, DATUM_NULL));
         }

@@ -176,9 +176,10 @@ void AvroScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chun
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
                 down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
-        chunk->update_column_by_index(NullableColumn::create(_allocator, adaptive_column->materialized_raw_data_column(),
-                                                             adaptive_column->materialized_raw_null_column()),
-                                      i);
+        chunk->update_column_by_index(
+                NullableColumn::create(_allocator, adaptive_column->materialized_raw_data_column(),
+                                       adaptive_column->materialized_raw_null_column()),
+                i);
     }
 }
 

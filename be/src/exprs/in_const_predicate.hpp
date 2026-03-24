@@ -22,10 +22,10 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
-#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "types/type_descriptor.h"
 

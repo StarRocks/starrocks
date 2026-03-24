@@ -84,8 +84,7 @@ public:
     static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots,
                                              size_t n);
     static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const Schema& schema, size_t n);
-    static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
-                                             size_t n);
+    static MutableChunkPtr new_mutable_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc, size_t n);
     // a wrapper of new_mutable_chunk with memory check
     static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(memory::Allocator* allocator, const Schema& schema,
                                                                size_t n);

@@ -16,9 +16,9 @@
 
 #include <glog/logging.h>
 
-#include "base/memory/memory_allocator.h"
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"

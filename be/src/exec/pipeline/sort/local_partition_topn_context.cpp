@@ -206,11 +206,9 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         ChunksSorterTopn::max_buffered_chunks(_partition_limit)));
                 {
                     memory::Allocator* sink_alloc =
-                            _sink_allocator_for_sorters ? _sink_allocator_for_sorters
-                                                        : memory::get_default_allocator();
-                    memory::Allocator* src_alloc =
-                            _source_allocator_for_sorters ? _source_allocator_for_sorters
-                                                          : memory::get_default_allocator();
+                            _sink_allocator_for_sorters ? _sink_allocator_for_sorters : memory::get_default_allocator();
+                    memory::Allocator* src_alloc = _source_allocator_for_sorters ? _source_allocator_for_sorters
+                                                                                 : memory::get_default_allocator();
                     _chunks_sorters.back()->set_sink_allocator(sink_alloc);
                     _chunks_sorters.back()->set_source_allocator(src_alloc);
                 }

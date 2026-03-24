@@ -173,11 +173,12 @@ public:
         if (data_column->is_nullable()) {
             NullableColumn* original_nullable_column =
                     const_cast<NullableColumn*>(down_cast<const NullableColumn*>(data_column.get()));
-            new_nullable_column = NullableColumn::create(
-                    ctx->allocator(), original_nullable_column->data_column()->as_mutable_ptr(), std::move(fake_null_column));
-        } else {
             new_nullable_column =
-                    NullableColumn::create(ctx->allocator(), data_column->as_mutable_ptr(), std::move(fake_null_column));
+                    NullableColumn::create(ctx->allocator(), original_nullable_column->data_column()->as_mutable_ptr(),
+                                           std::move(fake_null_column));
+        } else {
+            new_nullable_column = NullableColumn::create(ctx->allocator(), data_column->as_mutable_ptr(),
+                                                         std::move(fake_null_column));
         }
 
         for (int i = 0; i < column_size - 1; i++) {

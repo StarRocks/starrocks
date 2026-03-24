@@ -192,8 +192,8 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
     if (_is_returning_random_value) {
         if (ptr != nullptr) {
-            args.emplace_back(
-                    ColumnHelper::create_const_column<TYPE_INT>(context->allocator(), ptr->num_rows(), ptr->num_rows()));
+            args.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(context->allocator(), ptr->num_rows(),
+                                                                          ptr->num_rows()));
         } else {
             args.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(context->allocator(), 1, 1));
         }

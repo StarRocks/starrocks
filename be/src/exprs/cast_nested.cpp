@@ -54,10 +54,9 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
         casted_value_column = src_values_column->clone();
     }
     casted_value_column = NullableColumn::wrap_if_necessary(std::move(casted_value_column));
-    auto casted_map =
-            MapColumn::create(context->allocator(), Column::mutate(std::move(casted_key_column)),
-                              Column::mutate(std::move(casted_value_column)),
-                              ColumnHelper::as_column<UInt32Column>(std::move(*src_offsets_column).mutate()));
+    auto casted_map = MapColumn::create(context->allocator(), Column::mutate(std::move(casted_key_column)),
+                                        Column::mutate(std::move(casted_value_column)),
+                                        ColumnHelper::as_column<UInt32Column>(std::move(*src_offsets_column).mutate()));
     RETURN_IF_ERROR(down_cast<MapColumn*>(casted_map->as_mutable_raw_ptr())->unfold_const_children(_type));
     if (!orig_column->is_nullable()) {
         return casted_map;

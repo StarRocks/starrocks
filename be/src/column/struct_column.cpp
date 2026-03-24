@@ -49,8 +49,7 @@ StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, Mutabl
     DCHECK(_fields.size() == _field_names.size());
 }
 
-StructColumn::StructColumn(const Columns& fields)
-        : StructColumn(memory::get_default_allocator(), fields) {}
+StructColumn::StructColumn(const Columns& fields) : StructColumn(memory::get_default_allocator(), fields) {}
 
 StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields)
         : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields)) {}

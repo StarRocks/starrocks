@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "base/memory/memory_allocator.h"
 #include "base/hash/hash_std.hpp"
+#include "base/memory/memory_allocator.h"
 #include "base/phmap/phmap.h"
 #include "base/string/slice.h"
 #include "column/chunk.h"
