@@ -91,6 +91,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -188,6 +189,7 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
+        private static final String MASKED_AUTH_TEXT = "*XXX";
 
         // when you want to get the full string of a functionCallExpr set it true
         // when you just want to a function name as its alias set it false
@@ -245,26 +247,39 @@ public class AstToStringBuilder {
                 return sb;
             }
 
+            String authString = authOption.getAuthString();
+            String printedAuthString = shouldHideAuthString(authOption) ? MASKED_AUTH_TEXT : authString;
+
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
-                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                if (!Strings.isNullOrEmpty(authString)) {
                     if (authOption.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(authOption.getAuthString()).append("'");
+                    sb.append(printedAuthString).append("'");
                 }
             } else {
-                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                if (!Strings.isNullOrEmpty(authString)) {
                     if (authOption.isPasswordPlain()) {
-                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                        sb.append(" IDENTIFIED BY '").append(printedAuthString).append("'");
                     } else {
-                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(printedAuthString).append("'");
                     }
                 }
             }
             return sb;
+        }
+
+        private boolean shouldHideAuthString(UserAuthOption authOption) {
+            if (!hideCredential || Strings.isNullOrEmpty(authOption.getAuthString())) {
+                return false;
+            }
+            if (Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                return true;
+            }
+            return !AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authOption.getAuthPlugin());
         }
 
         @Override

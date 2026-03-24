@@ -16,6 +16,7 @@ package com.starrocks.common.util;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 public class SqlCredentialRedactorTest {
 
@@ -258,9 +259,6 @@ public class SqlCredentialRedactorTest {
         }
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
     }
-<<<<<<< HEAD
-=======
-
     @Test
     public void testRedactCreateAndAlterUserCredentialClauses() {
         String createPlainSql = "CREATE USER 'u1' IDENTIFIED BY 'secret'";
@@ -343,5 +341,4 @@ public class SqlCredentialRedactorTest {
             Assertions.assertEquals(longSql, redacted);
         }
     }
->>>>>>> a0df328836 ([BugFix] Mask user auth strings in audit and SQL redaction (#70360))
 }
