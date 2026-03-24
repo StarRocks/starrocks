@@ -257,6 +257,7 @@ import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -765,6 +766,13 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+<<<<<<< HEAD
+=======
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
+        // set true to change session variable
+        boolean skipRestore = false;
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
+>>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -1088,6 +1096,22 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
+<<<<<<< HEAD
+=======
+
+            // Restore compute resource only when a query-scope hint changed the warehouse.
+            // For normal statements (no hint), the compute resource may have been legitimately
+            // updated during execution (e.g., reset due to unavailability), and we must not
+            // overwrite those safety updates. Restore after onQueryFinished() so that audit
+            // CN group reflects the actual execution resource.
+            if (!skipRestore && restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
+            context.setOnlyReadIcebergCache(originSkipIcebergCache);
+            if (cteExecutor != null) {
+                cteExecutor.finalizeRecursiveCTE();
+            }
+>>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
         }
     }
 
@@ -1120,13 +1144,18 @@ public class StmtExecutor {
         }
     }
 
-    public void processQueryScopeSetVarHint() throws DdlException {
-        if (!parsedStmt.isExistQueryScopeHint()) {
-            return;
+    private Map<String, String> collectQueryScopeSetVarHints(StatementBase stmt) {
+        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (stmt == null || !stmt.isExistQueryScopeHint()) {
+            return hintSvs;
         }
 
+<<<<<<< HEAD
         SessionVariable clonedSessionVariable = null;
         for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+=======
+        for (HintNode hint : stmt.getAllQueryScopeHints()) {
+>>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
             if (!(hint instanceof SetVarHint)) {
                 continue;
             }
@@ -1139,6 +1168,16 @@ public class StmtExecutor {
                         new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
             }
         }
+        return hintSvs;
+    }
+
+    private boolean shouldRestoreComputeResourceForQueryScopeHint(StatementBase stmt) {
+        String hintedWarehouse = collectQueryScopeSetVarHints(stmt).get(SessionVariable.WAREHOUSE_NAME);
+        return hintedWarehouse != null && !StringUtils.equalsIgnoreCase(hintedWarehouse, context.getCurrentWarehouseName());
+    }
+
+    public void processQueryScopeSetVarHint() throws DdlException {
+        Map<String, String> hintSvs = collectQueryScopeSetVarHints(parsedStmt);
 
         if (clonedSessionVariable == null) {
             return;
@@ -3323,6 +3362,8 @@ public class StmtExecutor {
         }
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
         try {
             processQueryScopeSetVarHint();
         } catch (DdlException e) {
@@ -3361,6 +3402,9 @@ public class StmtExecutor {
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
         } finally {
             context.setSessionVariable(sessionVariableBackup);
+            if (restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
         }
     }
 
