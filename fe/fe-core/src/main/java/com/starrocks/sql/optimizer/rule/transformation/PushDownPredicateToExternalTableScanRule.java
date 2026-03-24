@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
@@ -62,7 +64,7 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator scanPredicate = operator.getPredicate();
         ScalarOperator filterPredicate = lfo.getPredicate();
         ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
-                operator.getOpType() == OperatorType.LOGICAL_MYSQL_SCAN);
+                        operator.getOpType() == OperatorType.LOGICAL_MYSQL_SCAN || isMySQLCompatibleJDBC(operator));
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
@@ -120,5 +122,13 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
 
             return Lists.newArrayList(project);
         }
+    }
+
+    private boolean isMySQLCompatibleJDBC(Operator operator) {
+        if (operator.getOpType() != OperatorType.LOGICAL_JDBC_SCAN) {
+            return false;
+        }
+        JDBCTable table = (JDBCTable) ((LogicalJDBCScanOperator) operator).getTable();
+        return table.isMySQLCompatible();
     }
 }
