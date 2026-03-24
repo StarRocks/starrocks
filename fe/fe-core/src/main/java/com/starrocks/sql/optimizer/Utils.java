@@ -825,6 +825,13 @@ public class Utils {
         if (distinctFuncs.size() <= 1) {
             return false;
         }
+
+        // If all distinct functions are constant-only expressions, do not treat them as
+        // "sharing the same distinct columns".
+        if (distinctFuncs.stream().allMatch(call -> call.getUsedColumns().isEmpty())) {
+            return false;
+        }
+
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
         for (CallOperator callOperator : distinctFuncs) {
             if (distinctChildren.isEmpty()) {
