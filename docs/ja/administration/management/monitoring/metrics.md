@@ -2194,6 +2194,46 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
 - 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）で書き込まれたデータファイルの総数。Iceberg テーブルに書き込まれたデータファイルの個数を表します。`write_type` は 3 つの操作タイプを区別します。
 
+### Hive 書き込み FE メトリクス
+
+#### hive_write_total
+
+- 単位: 個
+- タイプ: 累積値
+- ラベル:
+  - `status`（`success` または `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert` または `overwrite`）
+- 説明: Hive テーブルを対象とした `INSERT` または `INSERT OVERWRITE` タスクの総数。タスクが終了するたびに成功/失敗に関わらず 1 増加します。`write_type` は 2 つの操作タイプを区別します。
+
+#### hive_write_duration_ms_total
+
+- 単位: ミリ秒
+- タイプ: 累積値
+- ラベル: `write_type`（`insert` または `overwrite`）
+- 説明: Hive 書き込みタスク（`INSERT`、`INSERT OVERWRITE`）の総実行時間（ミリ秒）。タスクが終了するたびにそのタスクの実行時間が加算されます。`write_type` は 2 つの操作タイプを区別します。
+
+#### hive_write_bytes
+
+- 単位: バイト
+- タイプ: 累積値
+- ラベル: `write_type`（`insert` または `overwrite`）
+- 説明: Hive 書き込みタスク（`INSERT`、`INSERT OVERWRITE`）の書き込み総バイト数。Hive テーブルに書き込まれたデータファイルの総サイズを表します。`write_type` は 2 つの操作タイプを区別します。
+
+#### hive_write_rows
+
+- 単位: 行
+- タイプ: 累積値
+- ラベル: `write_type`（`insert` または `overwrite`）
+- 説明: Hive 書き込みタスク（`INSERT`、`INSERT OVERWRITE`）の書き込み総行数。Hive テーブルに書き込まれた行数を表します。`write_type` は 2 つの操作タイプを区別します。
+
+#### hive_write_files
+
+- 単位: 個
+- タイプ: 累積値
+- ラベル: `write_type`（`insert` または `overwrite`）
+- 説明: Hive 書き込みタスク（`INSERT`、`INSERT OVERWRITE`）で書き込まれたデータファイルの総数。Hive テーブルに書き込まれたデータファイルの個数を表します。`write_type` は 2 つの操作タイプを区別します。
+
 ### DataCache メトリクス
 
 DataCache メトリクスは、データキャッシュのキャッシュ容量、使用量、およびヒット率の可視性を提供します。
