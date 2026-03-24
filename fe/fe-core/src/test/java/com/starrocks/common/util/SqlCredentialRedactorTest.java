@@ -260,6 +260,55 @@ public class SqlCredentialRedactorTest {
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
     }
 
+    @Test
+    public void testRedactCreateAndAlterUserCredentialClauses() {
+        String createPlainSql = "CREATE USER 'u1' IDENTIFIED BY 'secret'";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY '***'",
+                SqlCredentialRedactor.redact(createPlainSql));
+
+        String createHashedSql = "CREATE USER 'u1' IDENTIFIED BY PASSWORD '*59C70DA2'";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY PASSWORD '***'",
+                SqlCredentialRedactor.redact(createHashedSql));
+
+        String createNativePluginSql = "CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2'";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '***'",
+                SqlCredentialRedactor.redact(createNativePluginSql));
+
+        String createLdapSql = "CREATE USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
+                + "AS 'uid=test,dc=example,dc=io'";
+        Assertions.assertEquals(createLdapSql, SqlCredentialRedactor.redact(createLdapSql));
+
+        String alterPlainSql = "ALTER USER 'u1' IDENTIFIED BY 'secret'";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY '***'",
+                SqlCredentialRedactor.redact(alterPlainSql));
+
+        String alterHashedSql = "ALTER USER 'u1' IDENTIFIED BY PASSWORD '*59C70DA2'";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY PASSWORD '***'",
+                SqlCredentialRedactor.redact(alterHashedSql));
+
+        String alterNativePluginSql = "ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'secret'";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '***'",
+                SqlCredentialRedactor.redact(alterNativePluginSql));
+
+        String alterLdapSql = "ALTER USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
+                + "BY 'uid=test,dc=example,dc=io'";
+        Assertions.assertEquals(alterLdapSql, SqlCredentialRedactor.redact(alterLdapSql));
+    }
+
+    @Test
+    public void testRedactSetPasswordClause() {
+        String plainSql = "SET PASSWORD = 'secret'";
+        Assertions.assertEquals("SET PASSWORD = '***'", SqlCredentialRedactor.redact(plainSql));
+
+        String plainForUserSql = "SET PASSWORD FOR 'test'@'%' = 'secret'";
+        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = '***'",
+                SqlCredentialRedactor.redact(plainForUserSql));
+
+        String sql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('secret')";
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = PASSWORD('***')", redacted);
+    }
+
     /**
      * java.regex uses NFA algorithm, it cannot guarantee O(N) complexity, might run into timeout
      * when the string is very long.
