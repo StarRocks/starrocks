@@ -46,7 +46,7 @@ ARG MINIMAL
 # TODO: switch to `openjdk-##-jre` when the starrocks core is ready.
 RUN OPTIONAL_PKGS="" && if [ "x$MINIMAL" = "xfalse" ] ; then OPTIONAL_PKGS="openjdk-17-jdk curl vim tree net-tools less pigz inotify-tools rclone gdb" ; fi && \
         apt-get update -y && apt-get install -y --no-install-recommends \
-        openjdk-17-jdk mysql-client tzdata locales tini $OPTIONAL_PKGS && \
+        openjdk-17-jdk mysql-client tzdata locales tini libssl-dev $OPTIONAL_PKGS && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
