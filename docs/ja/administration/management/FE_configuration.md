@@ -58,3 +58,4 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - [ストレージ](./FE_parameters/stats_storage.md)
 - [共有データ](./FE_parameters/shared_lake_other.md)
 - [データレイク](./FE_parameters/shared_lake_other.md)
+- [その他](./FE_parameters/shared_lake_other.md)
