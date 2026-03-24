@@ -5842,9 +5842,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     // Merged output
     EXPECT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(600, merged.output_rowset().num_rows());    // 100+200+300
-    EXPECT_EQ(6000, merged.output_rowset().data_size());   // 1000+2000+3000
-    EXPECT_FALSE(merged.output_rowset().overlapped());     // Non-overlapped for range split
-    EXPECT_EQ(3, merged.output_rowset().segments_size());  // 3 segments merged
+    EXPECT_EQ(6000, merged.output_rowset().data_size());  // 1000+2000+3000
+    EXPECT_FALSE(merged.output_rowset().overlapped());    // Non-overlapped for range split
+    EXPECT_EQ(3, merged.output_rowset().segments_size()); // 3 segments merged
     EXPECT_EQ("range_seg_0.dat", merged.output_rowset().segments(0));
     EXPECT_EQ("range_seg_1.dat", merged.output_rowset().segments(1));
     EXPECT_EQ("range_seg_2.dat", merged.output_rowset().segments(2));
@@ -6069,7 +6069,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     EXPECT_EQ(1, merged.input_rowsets_size());
     EXPECT_EQ(0, merged.input_rowsets(0));
     EXPECT_TRUE(merged.has_output_rowset());
-    EXPECT_EQ(300, merged.output_rowset().num_rows());   // 100+200
+    EXPECT_EQ(300, merged.output_rowset().num_rows());    // 100+200
     EXPECT_EQ(3000, merged.output_rowset().data_size());  // 1000+2000
     EXPECT_TRUE(merged.output_rowset().overlapped());     // Large rowset split is overlapped
     EXPECT_EQ(2, merged.output_rowset().segments_size()); // 2 segments
