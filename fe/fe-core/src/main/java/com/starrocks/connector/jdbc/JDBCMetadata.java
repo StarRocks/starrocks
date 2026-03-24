@@ -97,7 +97,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
             schemaResolver = new ClickhouseSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
-            schemaResolver = new OracleSchemaResolver();
+            schemaResolver = new OracleSchemaResolver(properties);
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
             schemaResolver = new SqlServerSchemaResolver();
         } else {
