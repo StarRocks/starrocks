@@ -593,6 +593,12 @@ Status ReplicationTxnManager::convert_dcg_meta_for_pk(
         auto& dcg_ver = (*dcg_meta->mutable_dcgs())[segment_id];
 
         for (const auto& dcg : dcg_list) {
+            if (dcg->column_ids().size() != dcg->relative_column_files().size()) {
+                return Status::Corruption(fmt::format(
+                        "Mismatch between column_ids size ({}) and column_files size ({}) in DeltaColumnGroup for "
+                        "segment {}",
+                        dcg->column_ids().size(), dcg->relative_column_files().size(), segment_id));
+            }
             for (size_t i = 0; i < dcg->relative_column_files().size(); i++) {
                 const auto& old_cols_filename = dcg->relative_column_files()[i];
                 std::string new_cols_filename = gen_cols_filename(transaction_id);
@@ -601,10 +607,8 @@ Status ReplicationTxnManager::convert_dcg_meta_for_pk(
                 dcg_ver.add_versions(dcg->version());
 
                 auto* ucids = dcg_ver.add_unique_column_ids();
-                if (i < dcg->column_ids().size()) {
-                    for (auto cid : dcg->column_ids()[i]) {
-                        ucids->add_column_ids(cid);
-                    }
+                for (auto cid : dcg->column_ids()[i]) {
+                    ucids->add_column_ids(cid);
                 }
 
                 FileEncryptionPair encryption_pair;

@@ -557,8 +557,11 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
             << "Incremental replication should not load DCG metadata";
 }
 
-// Verify full snapshot skips creating .dcgs_snapshot file when all DCG lists are empty.
-TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_skips_empty_dcg_file) {
+// Verify full snapshot always creates .dcgs_snapshot file (even when empty).
+// The target side must handle both empty and non-empty .dcgs_snapshot files correctly.
+// We do NOT skip writing on the source side because replication must not depend on
+// the source cluster upgrading its code version.
+TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_when_empty) {
     if (GetParam() == TKeysType::type::PRIMARY_KEYS) {
         return;
     }
@@ -585,13 +588,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_skips_empty_dcg_file) {
     ASSERT_TRUE(status.ok()) << status;
     ASSERT_FALSE(remote_snapshot_info.incremental_snapshot) << "data_version=1 should trigger full snapshot";
 
-    // Verify the .dcgs_snapshot file was NOT created (all DCG lists are empty)
+    // Verify the .dcgs_snapshot file IS created (source always writes it)
     std::string dcg_file_path = remote_snapshot_info.snapshot_path + "/" + std::to_string(_src_tablet_id) + "/" +
                                 std::to_string(_schema_hash) + "/" + std::to_string(_src_tablet_id) + ".dcgs_snapshot";
-    EXPECT_FALSE(fs::path_exist(dcg_file_path))
-            << "Empty .dcgs_snapshot file should not be created for tables without DCGs";
+    EXPECT_TRUE(fs::path_exist(dcg_file_path)) << ".dcgs_snapshot file should always be created by source cluster";
 
-    // Verify replicate_snapshot() still succeeds (handles NotFound gracefully)
+    // Verify replicate_snapshot() succeeds with the empty .dcgs_snapshot file
     TReplicateSnapshotRequest replicate_snapshot_request;
     replicate_snapshot_request.__set_transaction_id(_transaction_id);
     replicate_snapshot_request.__set_table_id(_table_id);
@@ -610,6 +612,15 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_skips_empty_dcg_file) {
 
     status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
     EXPECT_TRUE(status.ok()) << status;
+
+    // Verify txn_log has no DCG metadata (empty .dcgs_snapshot produces no DCGs)
+    auto txn_log_path = _tablet_manager->txn_log_location(_tablet_id, _transaction_id);
+    auto txn_log_or = _tablet_manager->get_txn_log(txn_log_path, false);
+    ASSERT_TRUE(txn_log_or.ok()) << txn_log_or.status();
+    // Empty DCG snapshot should result in no DCG metadata in txn log
+    if (txn_log_or.value()->op_replication().has_dcg_meta()) {
+        EXPECT_EQ(0, txn_log_or.value()->op_replication().dcg_meta().dcgs_size());
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeReplicationTxnManagerTest, LakeReplicationTxnManagerTest,
@@ -1140,6 +1151,29 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk
             lake::ReplicationTxnManager::convert_dcg_meta_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map);
     EXPECT_TRUE(status.is_corruption()) << status;
     EXPECT_TRUE(status.message().find("Duplicated cols file") != std::string::npos) << status;
+}
+
+// Test convert_dcg_meta_for_pk: column_ids size != column_files size → Corruption
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk_column_ids_files_mismatch) {
+    std::unordered_map<uint32_t, DeltaColumnGroupList> delta_column_groups;
+
+    // Create a DCG with mismatched column_ids and column_files sizes
+    {
+        auto dcg = std::make_shared<DeltaColumnGroup>();
+        // 2 column files but only 1 column_ids entry → mismatch
+        std::vector<std::string> column_files = {"file1.cols", "file2.cols"};
+        std::vector<std::vector<int32_t>> column_ids = {{1}};
+        dcg->init(1, column_ids, column_files);
+        delta_column_groups[5].push_back(dcg);
+    }
+
+    DeltaColumnGroupMetadataPB dcg_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+
+    Status status =
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(delta_column_groups, 12345, &dcg_meta, &filename_map);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_TRUE(status.message().find("Mismatch between column_ids size") != std::string::npos) << status;
 }
 
 // Test that duplicate .cols filenames in convert_dcg_meta_for_non_pk are detected
