@@ -20,6 +20,8 @@
 
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "connector/cache_stats_connector.h"
@@ -29,10 +31,12 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
@@ -70,6 +74,44 @@ public:
     }
 
 protected:
+    std::shared_ptr<TabletMetadata> create_base_metadata(int64_t version) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(_tablet_id);
+        metadata->set_version(version);
+
+        auto schema = metadata->mutable_schema();
+        schema->set_id(10);
+        schema->set_schema_version(1);
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        return metadata;
+    }
+
+    void write_dummy_file(const std::string& path, int64_t size) {
+        std::string content(size, 'x');
+        ASSIGN_OR_ABORT(auto file, fs::new_writable_file(path));
+        CHECK(file->append(Slice(content)).ok());
+        CHECK(file->close().ok());
+    }
+
+    void create_tablet_with_segment(int64_t version, const std::string& segment_name, int64_t segment_size) {
+        auto metadata = create_base_metadata(version);
+
+        auto rowset = metadata->add_rowsets();
+        rowset->add_segments(segment_name);
+        rowset->add_segment_size(segment_size);
+
+        CHECK(_tablet_mgr->put_tablet_metadata(*metadata).ok());
+
+        write_dummy_file(_tablet_mgr->segment_location(_tablet_id, segment_name), segment_size);
+    }
+
     void build_desc_tbl(bool with_unknown_slot = false) {
         TDescriptorTableBuilder table_desc_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -139,7 +181,7 @@ TEST_F(CacheStatsScannerTest, test_init_invalid_version) {
     ASSERT_TRUE(st.message().find("Invalid") != std::string::npos) << st.message();
 }
 
-TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported) {
+TEST_F(CacheStatsScannerTest, test_get_chunk_metadata_not_found) {
     build_desc_tbl();
     CacheStatsScanner scanner(tuple_desc());
 
@@ -153,34 +195,98 @@ TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported) {
     ChunkPtr chunk;
     bool eos = false;
     auto st = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
-    ASSERT_FALSE(eos);
-    ASSERT_EQ(chunk, nullptr);
+    ASSERT_FALSE(st.ok());
 }
 
-TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported_with_unknown_slot) {
+TEST_F(CacheStatsScannerTest, test_basic) {
+    const int64_t version = 2;
+    const int64_t seg_size = 512;
+    const int64_t seg_without_size = 64;
+    const int64_t seg_with_offset = 128;
+    const int64_t delvec_size = 128;
+    const int64_t sst_size = 256;
+    const int64_t dcg_size = 200;
+    const std::string delvec_name = lake::gen_delvec_filename(1);
+    const std::string sst_name = lake::gen_sst_filename();
+    const std::string dcg_name = lake::gen_cols_filename(1);
+
+    auto metadata = create_base_metadata(version);
+
+    auto rowset1 = metadata->add_rowsets();
+    rowset1->add_segments("seg_001.dat");
+    rowset1->add_segment_size(seg_size);
+
+    auto rowset2 = metadata->add_rowsets();
+    rowset2->add_segments("seg_without_size.dat");
+
+    auto rowset3 = metadata->add_rowsets();
+    rowset3->add_segments("seg_with_offset.dat");
+    rowset3->add_segment_size(seg_with_offset);
+    rowset3->add_bundle_file_offsets(64);
+
+    auto delvec_meta = metadata->mutable_delvec_meta();
+    auto& file_meta = (*delvec_meta->mutable_version_to_file())[1];
+    file_meta.set_name(delvec_name);
+    file_meta.set_size(delvec_size);
+
+    auto sst_meta = metadata->mutable_sstable_meta();
+    auto sst = sst_meta->add_sstables();
+    sst->set_filename(sst_name);
+    sst->set_filesize(sst_size);
+
+    auto dcg_meta = metadata->mutable_dcg_meta();
+    auto& dcg_ver = (*dcg_meta->mutable_dcgs())[0];
+    dcg_ver.add_column_files(dcg_name);
+
+    CHECK(_tablet_mgr->put_tablet_metadata(*metadata).ok());
+
+    write_dummy_file(_tablet_mgr->segment_location(_tablet_id, "seg_001.dat"), seg_size);
+    write_dummy_file(_tablet_mgr->segment_location(_tablet_id, "seg_without_size.dat"), seg_without_size);
+    write_dummy_file(_tablet_mgr->segment_location(_tablet_id, "seg_with_offset.dat"), seg_with_offset);
+    write_dummy_file(_tablet_mgr->delvec_location(_tablet_id, delvec_name), delvec_size);
+    write_dummy_file(_tablet_mgr->sst_location(_tablet_id, sst_name), sst_size);
+    write_dummy_file(_tablet_mgr->segment_location(_tablet_id, dcg_name), dcg_size);
+
     build_desc_tbl(true);
     CacheStatsScanner scanner(tuple_desc());
 
     TInternalScanRange scan_range;
     scan_range.tablet_id = _tablet_id;
-    scan_range.version = "2";
+    scan_range.version = std::to_string(version);
 
     ASSERT_TRUE(scanner.init(nullptr, scan_range).ok());
     ASSERT_TRUE(scanner.open(nullptr).ok());
 
     ChunkPtr chunk;
     bool eos = false;
-    auto st = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    ASSERT_TRUE(scanner.get_chunk(nullptr, &chunk, &eos).ok());
     ASSERT_FALSE(eos);
-    ASSERT_EQ(chunk, nullptr);
+    ASSERT_EQ(chunk->num_rows(), 1);
+
+    int64_t expected_total = seg_size + seg_without_size + seg_with_offset + delvec_size + sst_size + dcg_size;
+    ASSERT_EQ(chunk->get_column_by_index(0)->get(0).get_int64(), _tablet_id);
+    ASSERT_EQ(chunk->get_column_by_index(1)->get(0).get_int64(), expected_total);
+    ASSERT_EQ(chunk->get_column_by_index(2)->get(0).get_int64(), expected_total);
+    ASSERT_TRUE(chunk->get_column_by_index(3)->is_null(0));
+
+    ASSERT_TRUE(scanner.get_chunk(nullptr, &chunk, &eos).ok());
+    ASSERT_TRUE(eos);
 
     scanner.close(nullptr);
+
+    CacheStatsScanner invalid_version_scanner(tuple_desc());
+    scan_range.version = "0";
+    ASSERT_TRUE(invalid_version_scanner.init(nullptr, scan_range).ok());
+    eos = false;
+    auto st = invalid_version_scanner.get_chunk(nullptr, &chunk, &eos);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.message().find("Invalid cache stats scan range version") != std::string::npos) << st.message();
 }
 
 TEST_F(CacheStatsScannerTest, test_connector_data_source) {
     const int64_t version = 4;
+    const int64_t seg_size = 256;
+    create_tablet_with_segment(version, "connector_seg.dat", seg_size);
     build_desc_tbl();
 
     connector::CacheStatsConnector connector;
@@ -212,12 +318,17 @@ TEST_F(CacheStatsScannerTest, test_connector_data_source) {
 
     ChunkPtr chunk;
     auto st = data_source->get_next(_state, &chunk);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
-    ASSERT_EQ(chunk, nullptr);
-    ASSERT_EQ(data_source->raw_rows_read(), 0);
-    ASSERT_EQ(data_source->num_rows_read(), 0);
-    ASSERT_EQ(data_source->num_bytes_read(), 0);
+    ASSERT_TRUE(st.ok()) << st.message();
+    ASSERT_NE(chunk, nullptr);
+    ASSERT_EQ(chunk->num_rows(), 1);
+    ASSERT_EQ(data_source->raw_rows_read(), 1);
+    ASSERT_EQ(data_source->num_rows_read(), 1);
+    ASSERT_EQ(data_source->num_bytes_read(), chunk->bytes_usage());
+    ASSERT_GT(data_source->num_bytes_read(), 0);
     ASSERT_EQ(data_source->cpu_time_spent(), 0);
+
+    st = data_source->get_next(_state, &chunk);
+    ASSERT_TRUE(st.is_end_of_file()) << st.to_string();
 
     data_source->close(_state);
 }
