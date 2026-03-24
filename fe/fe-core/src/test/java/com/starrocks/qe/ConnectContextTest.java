@@ -595,6 +595,50 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void getCurrentComputeResource_reacquiresWhenWarehouseIdMismatch(
+            @Mocked WarehouseManager warehouseManager) {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        // computeResource belongs to warehouse 999, but session warehouse is default (id=0)
+        ComputeResource staleResource = WarehouseComputeResource.of(999L);
+        ComputeResource freshResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.warehouseExists(anyString);
+                minTimes = 0;
+                result = true;
+
+                warehouseManager.acquireComputeResource(anyLong, (ComputeResource) any);
+                minTimes = 0;
+                result = freshResource;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(staleResource);
+
+        // getCurrentComputeResource should detect the mismatch and re-acquire
+        ComputeResource result = ctx.getCurrentComputeResource();
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, result.getWarehouseId());
+        ComputeResource currentWithoutAcquire = ctx.getCurrentComputeResourceNoAcquire();
+        Assertions.assertNotNull(currentWithoutAcquire);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, currentWithoutAcquire.getWarehouseId());
+        Assertions.assertNotEquals(staleResource, currentWithoutAcquire);
+    }
+
+    @Test
     public void testConnectContextNoGlobalStateMgrNPE() {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null) {

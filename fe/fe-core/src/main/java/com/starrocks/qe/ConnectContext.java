@@ -1146,7 +1146,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();

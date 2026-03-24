@@ -24,6 +24,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -38,6 +39,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -653,6 +655,58 @@ public class StmtExecutorTest {
         Assertions.assertFalse(ctx.getState().isError());
         // TxnId should be cleared after commit
         Assertions.assertEquals(0, ctx.getTxnId());
+    }
+
+    @Test
+    public void testAddRunningQueryDetailRestoresComputeResource() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public void applyWarehouseSessionVariable(String warehouse, SessionVariable sv) {
+                sv.setWarehouseName(warehouse);
+            }
+        };
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+
+        String originalWarehouse = ctx.getCurrentWarehouseName();
+        ComputeResource originalResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        ctx.setCurrentComputeResource(originalResource);
+
+        String hintedWarehouse = "query_detail_hint_warehouse";
+        String sql = "select /*+ SET_VAR(warehouse='" + hintedWarehouse + "') */ 1";
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        stmt.setOrigStmt(new com.starrocks.sql.ast.OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        // Enable query detail collection
+        boolean oldConfig = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            executor.addRunningQueryDetail(stmt);
+        } finally {
+            Config.enable_collect_query_detail_info = oldConfig;
+        }
+
+        QueryDetail queryDetail = ctx.getQueryDetail();
+        Assertions.assertNotNull(queryDetail);
+        Assertions.assertEquals(hintedWarehouse, queryDetail.getWarehouse());
+        Assertions.assertEquals(originalWarehouse, ctx.getCurrentWarehouseName());
+
+        ComputeResource afterResource = ctx.getCurrentComputeResourceNoAcquire();
+        Assertions.assertEquals(originalResource, afterResource,
+                "ComputeResource should be restored after addRunningQueryDetail");
     }
 
     @Test

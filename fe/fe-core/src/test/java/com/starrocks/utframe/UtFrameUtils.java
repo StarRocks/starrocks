@@ -1552,6 +1552,8 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+        // Reset compute resource to avoid leaking a stale warehouse binding from query-scope hints.
+        context.resetComputeResource();
     }
 
     /***
