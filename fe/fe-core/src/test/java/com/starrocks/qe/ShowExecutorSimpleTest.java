@@ -854,9 +854,15 @@ public class ShowExecutorSimpleTest {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", Type.INT, true);
                 columnId.setComment("id");
+<<<<<<< HEAD
                 Column columnName = new Column("name", Type.VARCHAR);
                 Column columnYear = new Column("year", Type.INT);
                 Column columnDt = new Column("dt", Type.INT);
+=======
+                Column columnName = new Column("name", VarcharType.VARCHAR, true);
+                Column columnYear = new Column("year", IntegerType.INT, true);
+                Column columnDt = new Column("dt", IntegerType.INT, true);
+>>>>>>> 7c201a1b72 ([BugFix] Show primary key for Paimon tables in SHOW CREATE and DESC statement (#70535))
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -908,9 +914,15 @@ public class ShowExecutorSimpleTest {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", Type.INT, true);
                 columnId.setComment("id");
+<<<<<<< HEAD
                 Column columnName = new Column("name", Type.VARCHAR);
                 Column columnYear = new Column("year", Type.INT);
                 Column columnDt = new Column("dt", Type.INT);
+=======
+                Column columnName = new Column("name", VarcharType.VARCHAR, true);
+                Column columnYear = new Column("year", IntegerType.INT, true);
+                Column columnDt = new Column("dt", IntegerType.INT, true);
+>>>>>>> 7c201a1b72 ([BugFix] Show primary key for Paimon tables in SHOW CREATE and DESC statement (#70535))
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);

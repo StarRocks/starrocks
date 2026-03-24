@@ -332,7 +332,16 @@ public class IcebergMetadataTest extends TableTestBase {
         new MockUp<Table>() {
             @Mock
             public List<Column> getFullSchema() {
+<<<<<<< HEAD
                 return ImmutableList.of(new Column("c1", Type.INT), new Column("c2", STRING));
+=======
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
+            }
+
+            @Mock
+            public List<Column> getFullVisibleSchema() {
+                return ImmutableList.of(new Column("c1", IntegerType.INT, true), new Column("c2", STRING, true));
+>>>>>>> 7c201a1b72 ([BugFix] Show primary key for Paimon tables in SHOW CREATE and DESC statement (#70535))
             }
 
             @Mock
