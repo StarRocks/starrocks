@@ -134,7 +134,8 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
                 Assertions.fail();
             } catch (Exception e) {
                 assertThat(e.getMessage()).contains("base table 't1'");
-                assertThat(e.getMessage()).contains("was recreated but its table type is not supported for automatic meta repair");
+                assertThat(e.getMessage()).contains(
+                        "was recreated but its table type is not supported for automatic meta repair");
             }
             assertThat(mv.isActive()).isFalse();
             assertThat(mv.getInactiveReason().equals("base-table changed: t1")).isTrue();
