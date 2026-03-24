@@ -659,7 +659,7 @@ public class StmtExecutorTest {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
-        stmt.setOrigStmt(new com.starrocks.sql.ast.OriginStatement(sql, 0));
+        stmt.setOrigStmt(new OriginStatement(sql, 0));
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
 
         // Enable query detail collection
