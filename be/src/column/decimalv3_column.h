@@ -52,10 +52,14 @@ public:
     int precision() const;
     int scale() const;
 
-    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(_precision, _scale); }
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        return this->create(alloc, _precision, _scale);
+    }
 
-    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        auto p = clone_empty(alloc);
         p->append(*this, 0, this->size());
         return p;
     }

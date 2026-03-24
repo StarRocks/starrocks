@@ -381,6 +381,7 @@ Status OrderedInputStream::init(const SerdePtr& serde, const SortExecExprs* sort
         };
         chunk_providers.emplace_back(std::move(chunk_provider));
     }
+    _merger.set_column_allocator(spiller != nullptr ? spiller->restore_allocator() : nullptr);
     RETURN_IF_ERROR(_merger.init(chunk_providers, &(sort_exprs->lhs_ordering_expr_ctxs()), *descs));
     return Status::OK();
 }

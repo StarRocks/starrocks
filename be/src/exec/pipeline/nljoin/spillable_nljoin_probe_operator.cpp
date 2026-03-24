@@ -136,6 +136,9 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     _spiller = _spill_factory->create(opts);
     _spiller->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
+    _spiller->set_spill_allocator(allocator());
+    _spiller->set_restore_allocator(allocator());
+    _cross_join_context->set_build_spiller_restore_allocator(allocator());
     _cross_join_context->incr_prober();
     return Status::OK();
 }

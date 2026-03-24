@@ -330,10 +330,56 @@ ChunkUniquePtr Chunk::clone_empty_with_schema(size_t size) const {
     return std::make_unique<Chunk>(std::move(columns), _schema);
 }
 
+ChunkUniquePtr Chunk::clone_empty(memory::Allocator* allocator) const {
+    return clone_empty(allocator, num_rows());
+}
+
+ChunkUniquePtr Chunk::clone_empty(memory::Allocator* allocator, size_t size) const {
+    if (_columns.size() == _slot_id_to_index.size()) {
+        return clone_empty_with_slot(allocator, size);
+    }
+    return clone_empty_with_schema(allocator, size);
+}
+
+ChunkUniquePtr Chunk::clone_empty_with_slot(memory::Allocator* allocator, size_t size) const {
+    DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
+    Columns columns(_slot_id_to_index.size());
+    for (size_t i = 0; i < _slot_id_to_index.size(); i++) {
+        auto mutable_col = _columns[i]->clone_empty(allocator);
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_unique<Chunk>(std::move(columns), _slot_id_to_index);
+}
+
+ChunkUniquePtr Chunk::clone_empty_with_schema(memory::Allocator* allocator, size_t size) const {
+    Columns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        auto mutable_col = _columns[i]->clone_empty(allocator);
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_unique<Chunk>(std::move(columns), _schema);
+}
+
 ChunkUniquePtr Chunk::clone_unique() const {
-    ChunkUniquePtr chunk = clone_empty(0);
+    ChunkUniquePtr chunk = clone_empty(size_t{0});
     for (size_t idx = 0; idx < _columns.size(); idx++) {
         chunk->_columns[idx] = _columns[idx]->clone();
+    }
+    chunk->_owner_info = _owner_info;
+    if (_extra_data != nullptr) {
+        chunk->_extra_data = _extra_data->clone();
+    }
+    chunk->check_or_die();
+    return chunk;
+}
+
+ChunkUniquePtr Chunk::clone_unique(memory::Allocator* column_allocator) const {
+    DCHECK(column_allocator != nullptr);
+    ChunkUniquePtr chunk = clone_empty(column_allocator, size_t{0});
+    for (size_t idx = 0; idx < _columns.size(); idx++) {
+        chunk->_columns[idx] = _columns[idx]->clone(column_allocator);
     }
     chunk->_owner_info = _owner_info;
     if (_extra_data != nullptr) {
@@ -856,10 +902,57 @@ MutableChunkPtr MutableChunk::clone_empty_with_schema(size_t size) const {
     return std::make_shared<MutableChunk>(std::move(columns), _schema);
 }
 
+MutableChunkPtr MutableChunk::clone_empty(memory::Allocator* allocator) const {
+    return clone_empty(allocator, num_rows());
+}
+
+MutableChunkPtr MutableChunk::clone_empty(memory::Allocator* allocator, size_t size) const {
+    if (_columns.size() == _slot_id_to_index.size()) {
+        return clone_empty_with_slot(allocator, size);
+    }
+    return clone_empty_with_schema(allocator, size);
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_slot(memory::Allocator* allocator, size_t size) const {
+    DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
+    MutableColumns columns(_slot_id_to_index.size());
+    for (size_t i = 0; i < _slot_id_to_index.size(); i++) {
+        auto mutable_col = _columns[i]->clone_empty(allocator);
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), _slot_id_to_index);
+}
+
+MutableChunkPtr MutableChunk::clone_empty_with_schema(memory::Allocator* allocator, size_t size) const {
+    MutableColumns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); ++i) {
+        auto mutable_col = _columns[i]->clone_empty(allocator);
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), _schema);
+}
+
 MutableChunkPtr MutableChunk::clone_unique() const {
-    MutableChunkPtr chunk = clone_empty(0);
+    MutableChunkPtr chunk = clone_empty(size_t{0});
     for (size_t idx = 0; idx < _columns.size(); idx++) {
         chunk->_columns[idx] = _columns[idx]->clone();
+    }
+    chunk->_delete_state = _delete_state;
+    chunk->_owner_info = _owner_info;
+    if (_extra_data != nullptr) {
+        chunk->_extra_data = _extra_data->clone();
+    }
+    chunk->check_or_die();
+    return chunk;
+}
+
+MutableChunkPtr MutableChunk::clone_unique(memory::Allocator* column_allocator) const {
+    DCHECK(column_allocator != nullptr);
+    MutableChunkPtr chunk = clone_empty(column_allocator, size_t{0});
+    for (size_t idx = 0; idx < _columns.size(); idx++) {
+        chunk->_columns[idx] = _columns[idx]->clone(column_allocator);
     }
     chunk->_delete_state = _delete_state;
     chunk->_owner_info = _owner_info;

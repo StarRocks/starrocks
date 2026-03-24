@@ -25,6 +25,9 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
     _stream_aggregator->set_source_allocator(_allocator);
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
+    if (const auto& sp = _aggregator->spiller(); sp) {
+        sp->set_restore_allocator(_stream_aggregator->source_allocator());
+    }
     _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
 }

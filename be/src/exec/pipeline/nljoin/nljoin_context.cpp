@@ -31,6 +31,18 @@
 
 namespace starrocks::pipeline {
 
+void NLJoinContext::set_build_spiller_restore_allocator(memory::Allocator* allocator) {
+    for (auto& ch : _input_channel) {
+        if (!ch) {
+            continue;
+        }
+        const auto& sp = ch->spiller();
+        if (sp) {
+            sp->set_restore_allocator(allocator);
+        }
+    }
+}
+
 Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
         return Status::OK();

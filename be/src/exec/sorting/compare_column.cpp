@@ -157,7 +157,7 @@ public:
 
     Status do_visit(const ArrayColumn& column) {
         // Convert the datum to a array column
-        auto rhs_column = column.clone_empty();
+        auto rhs_column = column.clone_empty(column.allocator());
         rhs_column->append_datum(_rhs_value);
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
@@ -168,7 +168,7 @@ public:
 
     Status do_visit(const MapColumn& column) {
         // Convert the datum to a array column
-        auto rhs_column = column.clone_empty();
+        auto rhs_column = column.clone_empty(column.allocator());
         rhs_column->append_datum(_rhs_value);
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
@@ -179,7 +179,7 @@ public:
 
     Status do_visit(const StructColumn& column) {
         // Convert the datum to a struct column
-        auto rhs_column = column.clone_empty();
+        auto rhs_column = column.clone_empty(column.allocator());
         rhs_column->append_datum(_rhs_value);
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;

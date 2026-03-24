@@ -59,6 +59,7 @@ public:
         DCHECK_LT(driver_sequence, _chunks_sorter_partitions.size());
         return _chunks_sorter_partitions[driver_sequence].get();
     }
+    size_t num_chunks_sorters() const { return _chunks_sorter_partitions.size(); }
     TTopNType::type topn_type() const { return _topn_type; }
     int64_t offset() const { return _offset; }
     int64_t limit() const { return _limit; }

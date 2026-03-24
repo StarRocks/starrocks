@@ -229,12 +229,14 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
-        return create(_data_column->clone_empty(), _null_column->clone_empty());
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        return create(alloc, _data_column->clone_empty(alloc), _null_column->clone_empty(alloc));
     }
 
-    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        auto p = clone_empty(alloc);
         p->append(*this, 0, size());
         return p;
     }

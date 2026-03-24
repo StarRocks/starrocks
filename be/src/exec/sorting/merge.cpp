@@ -14,6 +14,7 @@
 
 #include "exec/sorting/merge.h"
 
+#include "base/memory/memory_allocator.h"
 #include "exec/sorting/sort_permute.h"
 
 namespace starrocks {
@@ -31,7 +32,7 @@ StatusOr<MergedRun> MergedRun::build(ChunkUniquePtr&& chunk, const std::vector<E
     return run;
 }
 
-ChunkPtr MergedRun::steal_chunk(size_t size) {
+ChunkPtr MergedRun::steal_chunk(size_t size, memory::Allocator* column_allocator) {
     if (empty()) {
         return {};
     }
@@ -45,7 +46,8 @@ ChunkPtr MergedRun::steal_chunk(size_t size) {
             res_chunk = std::move(chunk);
 
         } else {
-            res_chunk = chunk->clone_empty(reserved_rows);
+            res_chunk = column_allocator ? chunk->clone_empty(column_allocator, reserved_rows)
+                                         : chunk->clone_empty(reserved_rows);
             res_chunk->append(*chunk, range.first, reserved_rows);
         }
         range.first = range.second = 0;
@@ -54,7 +56,8 @@ ChunkPtr MergedRun::steal_chunk(size_t size) {
         return res_chunk;
     } else {
         size_t required_rows = std::min(size, reserved_rows);
-        ChunkPtr res_chunk = chunk->clone_empty(required_rows);
+        ChunkPtr res_chunk = column_allocator ? chunk->clone_empty(column_allocator, required_rows)
+                                              : chunk->clone_empty(required_rows);
         Columns res_orderby;
         res_chunk->append(*chunk, range.first, required_rows);
         range.first += required_rows;

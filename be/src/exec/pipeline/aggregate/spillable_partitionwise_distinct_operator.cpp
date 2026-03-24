@@ -84,6 +84,7 @@ void SpillablePartitionWiseDistinctSinkOperator::close(RuntimeState* state) {
 Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    _distinct_op->aggregator()->set_sink_allocator(allocator());
     RETURN_IF_ERROR(_distinct_op->prepare(state));
     RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
@@ -102,6 +103,10 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+
+    if (const auto& sp = _distinct_op->aggregator()->spiller(); sp) {
+        sp->set_spill_allocator(_distinct_op->aggregator()->sink_allocator());
+    }
 
     return Status::OK();
 }
@@ -218,6 +223,7 @@ OperatorPtr SpillablePartitionWiseDistinctSinkOperatorFactory::create(int32_t de
 
 Status SpillablePartitionWiseDistinctSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _non_pw_distinct->aggregator()->set_source_allocator(allocator());
     RETURN_IF_ERROR(_non_pw_distinct->prepare(state));
     RETURN_IF_ERROR(_pw_distinct->prepare(state));
     return Status::OK();
@@ -227,6 +233,9 @@ Status SpillablePartitionWiseDistinctSourceOperator::prepare_local_state(Runtime
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_non_pw_distinct->prepare_local_state(state));
     RETURN_IF_ERROR(_pw_distinct->prepare_local_state(state));
+    if (const auto& sp = _non_pw_distinct->aggregator()->spiller(); sp) {
+        sp->set_restore_allocator(_non_pw_distinct->aggregator()->source_allocator());
+    }
 
     return Status::OK();
 }

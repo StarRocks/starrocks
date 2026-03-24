@@ -155,7 +155,7 @@ public:
 
     const SpillProcessMetrics& metrics() { return _metrics; }
     void set_spill_allocator(memory::Allocator* allocator) { _spill_allocator = allocator; }
-    void set_restore_allocator(memory::Allocator* allocator) { _restore_allocator = allocator; }
+    void set_restore_allocator(memory::Allocator* allocator);
     memory::Allocator* spill_allocator() const { return _spill_allocator; }
     memory::Allocator* restore_allocator() const { return _restore_allocator; }
 

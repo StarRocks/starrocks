@@ -16,6 +16,7 @@
 
 #include <queue>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk_slice.h"
 #include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
@@ -116,6 +117,8 @@ public:
     CascadeChunkMerger(RuntimeState* state);
     ~CascadeChunkMerger() override = default;
 
+    void set_column_allocator(memory::Allocator* allocator) { _column_allocator = allocator; }
+
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
@@ -127,6 +130,7 @@ public:
 private:
     const std::vector<ExprContext*>* _sort_exprs{nullptr};
     SortDescs _sort_desc;
+    memory::Allocator* _column_allocator = nullptr;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;

@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/memory/memory_allocator.h"
 #include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
@@ -68,7 +69,10 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
 
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
                                                                const SortExecExprs& sort_exec_exprs,
-                                                               const std::vector<OrderByType>& order_by_types) {
+                                                               const std::vector<OrderByType>& order_by_types,
+                                                               memory::Allocator* column_allocator) {
+    memory::Allocator* alloc =
+            column_allocator ? column_allocator : memory::get_default_column_allocator();
     ChunkPtr materialize_chunk = std::make_shared<Chunk>();
 
     // materialize all sorting columns: replace old columns with evaluated columns
@@ -85,7 +89,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (col->is_nullable()) {
                 // Constant null column doesn't have original column data type information,
                 // so replace it by a nullable column of original data type filled with all NULLs.
-                MutableColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
+                MutableColumnPtr new_col = ColumnHelper::create_column(alloc, order_by_types[i].type_desc, true);
                 new_col->append_nulls(row_num);
                 materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
             } else {
@@ -97,7 +101,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 // non-constant one for another Chunk, we replace them all by non-constant columns.
                 auto* const_col = down_cast<const ConstColumn*>(col.get());
                 const auto& data_col = const_col->data_column();
-                auto new_col = data_col->clone_empty();
+                auto new_col = data_col->clone_empty(alloc);
                 new_col->append(*data_col, 0, 1);
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {

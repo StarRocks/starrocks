@@ -99,7 +99,8 @@ public:
 
     static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
                                                             const SortExecExprs& sort_exec_exprs,
-                                                            const std::vector<OrderByType>& order_by_types);
+                                                            const std::vector<OrderByType>& order_by_types,
+                                                            memory::Allocator* column_allocator = nullptr);
 
     virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
@@ -150,7 +151,6 @@ protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
-    // TODO: wire allocator propagation from sink/source operators in a follow-up phase.
     memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
     memory::Allocator* _source_allocator = memory::get_default_column_allocator();
 

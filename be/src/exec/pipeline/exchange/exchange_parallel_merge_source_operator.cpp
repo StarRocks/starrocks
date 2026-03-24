@@ -29,7 +29,7 @@ Status ExchangeParallelMergeSourceOperator::prepare(RuntimeState* state) {
     auto* factory = down_cast<ExchangeParallelMergeSourceOperatorFactory*>(_factory);
     _stream_recvr = factory->get_stream_recvr(state);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
-    _merger = factory->get_merge_path_merger(state);
+    _merger = factory->get_merge_path_merger(state, allocator());
     _merger->bind_profile(_driver_sequence, _unique_metrics.get());
     _stream_recvr->attach_observer(state, observer());
     _stream_recvr->attach_query_ctx(state->query_ctx());
@@ -105,14 +105,14 @@ DataStreamRecvr* ExchangeParallelMergeSourceOperatorFactory::get_stream_recvr(Ru
 }
 
 merge_path::MergePathCascadeMerger* ExchangeParallelMergeSourceOperatorFactory::get_merge_path_merger(
-        RuntimeState* state) {
+        RuntimeState* state, memory::Allocator* column_allocator) {
     if (_merger == nullptr) {
         auto chunk_providers = _stream_recvr->create_merge_path_chunk_providers();
         SortDescs sort_descs(_is_asc_order, _nulls_first);
         _merger = std::make_unique<merge_path::MergePathCascadeMerger>(
                 state->chunk_size(), degree_of_parallelism(), _sort_exec_exprs->lhs_ordering_expr_ctxs(), sort_descs,
                 _row_desc.tuple_descriptors()[0], TTopNType::ROW_NUMBER, _offset, _limit, chunk_providers,
-                _late_materialize_mode);
+                column_allocator, _late_materialize_mode);
     }
     return _merger.get();
 }

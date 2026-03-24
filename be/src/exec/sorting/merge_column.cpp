@@ -16,6 +16,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
@@ -343,19 +344,24 @@ int SortedRun::intersect(const SortDescs& sort_desc, const SortedRun& right_run)
     return 0;
 }
 
-ChunkUniquePtr SortedRun::clone_slice() const {
+ChunkUniquePtr SortedRun::clone_slice(memory::Allocator* column_allocator) const {
     if (range.first == 0 && range.second == chunk->num_rows()) {
+        if (column_allocator != nullptr) {
+            return chunk->clone_unique(column_allocator);
+        }
         return chunk->clone_unique();
     } else {
         size_t slice_rows = num_rows();
         DCHECK_LT(slice_rows, Column::MAX_CAPACITY_LIMIT);
-        ChunkUniquePtr cloned = chunk->clone_empty(slice_rows);
+        ChunkUniquePtr cloned = column_allocator ? chunk->clone_empty(column_allocator, slice_rows)
+                                                 : chunk->clone_empty(slice_rows);
         cloned->append(*chunk, range.first, slice_rows);
         return cloned;
     }
 }
 
-std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows) {
+std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows,
+                                              memory::Allocator* column_allocator) {
     if (empty()) {
         return {};
     }
@@ -379,12 +385,13 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
                 res_orderby = std::move(orderby);
             }
         } else {
-            res_chunk = chunk->clone_empty(reserved_rows);
+            res_chunk = column_allocator ? chunk->clone_empty(column_allocator, reserved_rows)
+                                         : chunk->clone_empty(reserved_rows);
             res_chunk->append(*chunk, range.first + skipped_rows, reserved_rows);
 
             if (steal_orderby) {
                 for (auto& column : orderby) {
-                    auto copy = column->clone_empty();
+                    auto copy = column_allocator ? column->clone_empty(column_allocator) : column->clone_empty();
                     copy->reserve(reserved_rows);
                     copy->append(*column, range.first + skipped_rows, reserved_rows);
                     res_orderby.emplace_back(std::move(copy));
@@ -397,13 +404,14 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
         return std::make_pair(std::move(res_chunk), std::move(res_orderby));
     } else {
         size_t required_rows = std::min(size, reserved_rows);
-        ChunkPtr res_chunk = chunk->clone_empty(required_rows);
+        ChunkPtr res_chunk = column_allocator ? chunk->clone_empty(column_allocator, required_rows)
+                                              : chunk->clone_empty(required_rows);
         Columns res_orderby;
         res_chunk->append(*chunk, range.first + skipped_rows, required_rows);
 
         if (steal_orderby) {
             for (auto& column : orderby) {
-                auto copy = column->clone_empty();
+                auto copy = column_allocator ? column->clone_empty(column_allocator) : column->clone_empty();
                 copy->reserve(reserved_rows);
                 copy->append(*column, range.first + skipped_rows, required_rows);
                 res_orderby.emplace_back(std::move(copy));
@@ -519,7 +527,8 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output) {
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output,
+                           memory::Allocator* column_allocator) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     std::vector<size_t> chunk_index(chunks.size(), 0);
 
@@ -550,11 +559,12 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         output->chunks.emplace_back(ChunkPtr(chunk.release()), sort_exprs);
         return Status::OK();
     };
-    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);
+    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer, column_allocator);
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs, MergedRuns& left,
-                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output) {
+                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output,
+                           memory::Allocator* column_allocator) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     cursors.resize(2);
     cursors[0] = std::make_unique<SimpleChunkSortCursor>(
@@ -594,7 +604,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         return Status::OK();
     };
 
-    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer, limit);
+    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer, limit, column_allocator);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,

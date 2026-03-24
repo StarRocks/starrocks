@@ -19,6 +19,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -183,6 +184,8 @@ public:
 
     const SpillProcessChannelFactoryPtr& spill_channel_factory() { return _spill_process_factory_ptr; }
     NLJoinBuildChunkStreamBuilder& builder() { return _build_stream_builder; }
+
+    void set_build_spiller_restore_allocator(memory::Allocator* allocator);
 
     void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _builder_observable.add_observer(state, observer);

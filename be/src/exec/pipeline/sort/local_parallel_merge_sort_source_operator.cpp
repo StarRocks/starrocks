@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <sstream>
 
+#include "base/memory/memory_allocator.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -27,6 +28,14 @@ Status LocalParallelMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
     _sort_context->attach_source_observer(state, observer());
+    memory::Allocator* source_alloc = allocator();
+    for (size_t i = 0; i < _sort_context->num_chunks_sorters(); ++i) {
+        auto* chunks_sorter = _sort_context->get_chunks_sorter(static_cast<int32_t>(i));
+        chunks_sorter->set_source_allocator(source_alloc);
+        if (chunks_sorter->spiller()) {
+            chunks_sorter->spiller()->set_restore_allocator(source_alloc);
+        }
+    }
     _merger->bind_profile(_merge_parallel_id, _unique_metrics.get());
     _merger->attach_observer(state, observer());
     return Status::OK();
@@ -102,10 +111,11 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                 DCHECK(chunks_sorter != nullptr);
                 chunk_providers.emplace_back(chunk_provider_factory(chunks_sorter));
             }
+            memory::Allocator* col_alloc = sort_context->get_chunks_sorter(0)->source_allocator();
             _mergers.push_back(std::make_unique<merge_path::MergePathCascadeMerger>(
                     _state->chunk_size(), degree_of_parallelism, sort_context->sort_exprs(), sort_context->sort_descs(),
                     _tuple_desc, sort_context->topn_type(), sort_context->offset(), sort_context->limit(),
-                    chunk_providers, _late_materialize_mode));
+                    chunk_providers, col_alloc, _late_materialize_mode));
         }
         return std::make_shared<LocalParallelMergeSortSourceOperator>(
                 this, _id, _plan_node_id, driver_sequence, sort_context.get(), _is_gathered, _mergers[0].get());
@@ -114,9 +124,10 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
         auto* chunks_sorter = sort_context->get_chunks_sorter(0);
         DCHECK(chunks_sorter != nullptr);
         chunk_providers.emplace_back(chunk_provider_factory(chunks_sorter));
+        memory::Allocator* col_alloc = sort_context->get_chunks_sorter(0)->source_allocator();
         _mergers.push_back(std::make_unique<merge_path::MergePathCascadeMerger>(
                 _state->chunk_size(), 1, sort_context->sort_exprs(), sort_context->sort_descs(), _tuple_desc,
-                sort_context->topn_type(), sort_context->offset(), sort_context->limit(), chunk_providers));
+                sort_context->topn_type(), sort_context->offset(), sort_context->limit(), chunk_providers, col_alloc));
         return std::make_shared<LocalParallelMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence,
                                                                       sort_context.get(), _is_gathered,
                                                                       _mergers[driver_sequence].get());

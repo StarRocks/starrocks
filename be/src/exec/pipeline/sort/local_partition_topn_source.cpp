@@ -26,6 +26,7 @@ LocalPartitionTopnSourceOperator::LocalPartitionTopnSourceOperator(OperatorFacto
 
 Status LocalPartitionTopnSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _partition_topn_ctx->set_source_allocator_for_sorters(allocator());
     _partition_topn_ctx->observable().attach_source_observer(state, observer());
     return Status::OK();
 }

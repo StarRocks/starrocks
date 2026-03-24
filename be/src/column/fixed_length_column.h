@@ -43,10 +43,12 @@ public:
 
     DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
 
-    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        return allocator ? this->create(allocator) : this->create();
+    }
 
-    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        auto p = clone_empty(allocator);
         p->append(*this, 0, this->size());
         return p;
     }

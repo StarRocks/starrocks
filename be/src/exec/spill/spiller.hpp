@@ -56,13 +56,13 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& gua
         if (!_opts.splittable && _opts.init_partition_nums > 0) {
             // For splittable spiller, we need to set the schema before spilling.
             // This is because the partitioned spiller needs to know the schema of the chunk.
-            ChunkPtr new_chunk = chunk->clone_empty(0);
+            ChunkPtr new_chunk = chunk->clone_empty(spill_allocator(), 0);
             new_chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
-            _chunk_builder.chunk_schema()->set_schema(new_chunk);
+            _chunk_builder.chunk_schema()->set_schema(new_chunk, spill_allocator());
         } else {
             // For non-splittable spiller, we can set the schema after spilling.
             // This is because the raw spiller does not need to know the schema of the chunk.
-            _chunk_builder.chunk_schema()->set_schema(chunk);
+            _chunk_builder.chunk_schema()->set_schema(chunk, spill_allocator());
         }
 
         RETURN_IF_ERROR(_serde->prepare());
@@ -86,7 +86,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
     DCHECK_GT(_opts.init_partition_nums, 0);
 
     if (_chunk_builder.chunk_schema()->empty()) {
-        _chunk_builder.chunk_schema()->set_schema(chunk);
+        _chunk_builder.chunk_schema()->set_schema(chunk, spill_allocator());
         RETURN_IF_ERROR(_serde->prepare());
         _init_max_block_nums();
     }

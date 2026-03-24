@@ -19,6 +19,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
@@ -82,12 +83,15 @@ struct SortedRun {
     int intersect(const SortDescs& sort_desc, const SortedRun& right_run) const;
 
     // Clone this SortedRun, could be the entire chunk or slice of chunk
-    ChunkUniquePtr clone_slice() const;
+    ChunkUniquePtr clone_slice(memory::Allocator* column_allocator = nullptr) const;
 
     // Steal part of chunk, skip the first `skipped_rows` rows and take the next `size` rows, avoid copy if possible
     // After steal out, this run will not reference the chunk anymore
-    ChunkPtr steal_chunk(size_t size, size_t skipped_rows = 0) { return steal(false, size, skipped_rows).first; }
-    std::pair<ChunkPtr, Columns> steal(bool steal_orderby, size_t size, size_t skipped_rows);
+    ChunkPtr steal_chunk(size_t size, size_t skipped_rows = 0, memory::Allocator* column_allocator = nullptr) {
+        return steal(false, size, skipped_rows, column_allocator).first;
+    }
+    std::pair<ChunkPtr, Columns> steal(bool steal_orderby, size_t size, size_t skipped_rows,
+                                       memory::Allocator* column_allocator = nullptr);
 
     int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const;
 
@@ -166,7 +170,7 @@ struct MergedRun {
     bool empty() const { return range.second == range.first || chunk == nullptr; }
 
     static StatusOr<MergedRun> build(ChunkUniquePtr&& chunk, const std::vector<ExprContext*>& exprs);
-    ChunkPtr steal_chunk(size_t size);
+    ChunkPtr steal_chunk(size_t size, memory::Allocator* column_allocator = nullptr);
 
 private:
     std::pair<uint32_t, uint32_t> range;
@@ -221,7 +225,8 @@ private:
 class MergeTwoCursor {
 public:
     MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor>&& left_cursor,
-                   std::unique_ptr<SimpleChunkSortCursor>&& right_cursor);
+                   std::unique_ptr<SimpleChunkSortCursor>&& right_cursor,
+                   memory::Allocator* column_allocator = nullptr);
 
     bool is_data_ready();
     bool is_eos();
@@ -247,6 +252,7 @@ private:
     std::unique_ptr<SimpleChunkSortCursor> _left_cursor;
     std::unique_ptr<SimpleChunkSortCursor> _right_cursor;
     ChunkProvider _chunk_provider;
+    memory::Allocator* _column_allocator = nullptr;
 
 #ifndef NDEBUG
     bool _left_is_empty = false;
@@ -260,7 +266,8 @@ public:
     MergeCursorsCascade() = default;
     ~MergeCursorsCascade() = default;
 
-    Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors);
+    Status init(const SortDescs& sort_desc, std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                memory::Allocator* column_allocator = nullptr);
     bool is_data_ready();
     bool is_eos();
     ChunkUniquePtr try_get_next();
@@ -270,6 +277,7 @@ public:
 private:
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
     std::unique_ptr<SimpleChunkSortCursor> _root_cursor;
+    memory::Allocator* _column_allocator = nullptr;
 };
 
 class SimpleChunkSortCursor;
@@ -279,15 +287,18 @@ class SimpleChunkSortCursor;
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output);
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output,
+                           memory::Allocator* column_allocator = nullptr);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs, MergedRuns& left,
-                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output);
+                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output,
+                           memory::Allocator* column_allocator = nullptr);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   const ChunkConsumer& consumer);
+                                   const ChunkConsumer& consumer, memory::Allocator* column_allocator = nullptr);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   const ChunkConsumer& consumer, size_t limit);
+                                   const ChunkConsumer& consumer, size_t limit,
+                                   memory::Allocator* column_allocator = nullptr);
 
 // Merge in rowwise, which is slow and used only in benchmark
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,

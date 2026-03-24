@@ -122,6 +122,10 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _agg_group_by_with_limit = false;
     _aggregator->params()->enable_pipeline_share_limit = false;
 
+    if (const auto& sp = _aggregator->spiller(); sp) {
+        sp->set_spill_allocator(_aggregator->sink_allocator());
+    }
+
     return Status::OK();
 }
 

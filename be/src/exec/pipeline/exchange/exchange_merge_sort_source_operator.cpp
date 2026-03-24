@@ -33,7 +33,8 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, this->observer());
     _stream_recvr->attach_query_ctx(state->query_ctx());
-    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
+    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first,
+                                                     allocator());
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {

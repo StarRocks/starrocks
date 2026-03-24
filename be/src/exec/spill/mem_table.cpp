@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 
+#include "base/memory/memory_allocator.h"
 #include <memory>
 
 #include "column/chunk.h"
@@ -66,7 +67,7 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK(!_is_done);
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
-        _chunks.emplace_back(src.clone_empty());
+        _chunks.emplace_back(src.clone_empty(_spiller->spill_allocator()));
         _tracker->consume(_chunks.back()->memory_usage());
         COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, _chunks.back()->memory_usage());
     }
@@ -128,7 +129,7 @@ bool OrderedMemTable::is_empty() {
 Status OrderedMemTable::append(ChunkPtr chunk) {
     DCHECK(chunk != nullptr);
     if (_chunk == nullptr) {
-        _chunk = chunk->clone_empty();
+        _chunk = chunk->clone_empty(_spiller->spill_allocator());
     }
     int64_t old_mem_usage = _chunk->memory_usage();
     _chunk->append(*chunk);
@@ -141,7 +142,7 @@ Status OrderedMemTable::append(ChunkPtr chunk) {
 
 Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
-        _chunk = src.clone_empty();
+        _chunk = src.clone_empty(_spiller->spill_allocator());
     }
 
     Chunk* current = _chunk.get();
@@ -212,7 +213,7 @@ StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
         RETURN_IF_ERROR(sort_and_tie_columns(_runtime_state->cancelled_ref(), order_bys, _sort_desc, &_permutation));
     }
 
-    ChunkPtr sorted_chunk = _chunk->clone_empty_with_slot(_chunk->num_rows());
+    ChunkPtr sorted_chunk = _chunk->clone_empty_with_slot(_spiller->spill_allocator(), _chunk->num_rows());
     {
         SCOPED_TIMER(_spiller->metrics().materialize_chunk_timer);
         materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);

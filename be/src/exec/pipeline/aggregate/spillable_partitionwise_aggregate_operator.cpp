@@ -111,6 +111,10 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
     _agg_op->set_agg_group_by_with_limit(false);
     _agg_op->aggregator()->params()->enable_pipeline_share_limit = false;
 
+    if (const auto& sp = _agg_op->aggregator()->spiller(); sp) {
+        sp->set_spill_allocator(_agg_op->aggregator()->sink_allocator());
+    }
+
     return Status::OK();
 }
 
@@ -383,6 +387,9 @@ Status SpillablePartitionWiseAggregateSourceOperator::prepare_local_state(Runtim
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_non_pw_agg->prepare_local_state(state));
     RETURN_IF_ERROR(_pw_agg->prepare_local_state(state));
+    if (const auto& sp = _non_pw_agg->aggregator()->spiller(); sp) {
+        sp->set_restore_allocator(_non_pw_agg->aggregator()->source_allocator());
+    }
     return Status::OK();
 }
 

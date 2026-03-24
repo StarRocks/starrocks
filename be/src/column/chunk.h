@@ -191,7 +191,14 @@ public:
     ChunkUniquePtr clone_empty(size_t size) const;
     ChunkUniquePtr clone_empty_with_slot(size_t size) const;
     ChunkUniquePtr clone_empty_with_schema(size_t size) const;
+    // Same as above but columns are created with the given allocator (nullptr uses default column behavior).
+    ChunkUniquePtr clone_empty(memory::Allocator* allocator) const;
+    ChunkUniquePtr clone_empty(memory::Allocator* allocator, size_t size) const;
+    ChunkUniquePtr clone_empty_with_slot(memory::Allocator* allocator, size_t size) const;
+    ChunkUniquePtr clone_empty_with_schema(memory::Allocator* allocator, size_t size) const;
     ChunkUniquePtr clone_unique() const;
+    // Deep copy using the given column allocator for empty shells and column clones (nullptr: legacy behavior).
+    ChunkUniquePtr clone_unique(memory::Allocator* column_allocator) const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
     void merge(Chunk&& src);
@@ -604,7 +611,12 @@ public:
     MutableChunkPtr clone_empty(size_t size) const;
     MutableChunkPtr clone_empty_with_slot(size_t size) const;
     MutableChunkPtr clone_empty_with_schema(size_t size) const;
+    MutableChunkPtr clone_empty(memory::Allocator* allocator) const;
+    MutableChunkPtr clone_empty(memory::Allocator* allocator, size_t size) const;
+    MutableChunkPtr clone_empty_with_slot(memory::Allocator* allocator, size_t size) const;
+    MutableChunkPtr clone_empty_with_schema(memory::Allocator* allocator, size_t size) const;
     MutableChunkPtr clone_unique() const;
+    MutableChunkPtr clone_unique(memory::Allocator* column_allocator) const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
     void merge(MutableChunk&& src);

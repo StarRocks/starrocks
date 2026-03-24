@@ -91,13 +91,16 @@ Status DataStreamRecvr::create_merger(RuntimeState* state, RuntimeProfile* profi
 
 Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs,
                                                    const std::vector<bool>* is_asc,
-                                                   const std::vector<bool>* is_null_first) {
+                                                   const std::vector<bool>* is_null_first,
+                                                   memory::Allocator* column_allocator) {
     DCHECK(_is_merging);
     _chunks_merger = nullptr;
     if (exprs->is_constant_lhs_ordering()) {
         _cascade_merger = std::make_unique<ConstChunkMerger>(state);
     } else {
-        _cascade_merger = std::make_unique<CascadeChunkMerger>(state);
+        auto merger = std::make_unique<CascadeChunkMerger>(state);
+        merger->set_column_allocator(column_allocator);
+        _cascade_merger = std::move(merger);
     }
 
     std::vector<ChunkProvider> providers;

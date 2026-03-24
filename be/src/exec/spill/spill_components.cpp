@@ -753,7 +753,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
                 filter.push_back(1);
             }
         }
-        auto chunk_merging = chunk->clone_empty_with_slot(indices.size());
+        auto chunk_merging = chunk->clone_empty_with_slot(_spiller->spill_allocator(), indices.size());
         chunk_merging->append_selective(*chunk, indices.data(), 0, indices.size());
         chunk->filter(filter);
         if (!chunk_merging->is_empty()) {
@@ -781,7 +781,8 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         RETURN_IF_ERROR(merger->convert_hash_map_to_chunk(hash_map_sz, &chunk_merged, true));
     }
     if (chunk_merged != nullptr && !chunk_merged->is_empty()) {
-        auto hash_column = UInt32Column::create(chunk_merged->num_rows(), target_hash_value);
+        auto hash_column = UInt32Column::create(_spiller->spill_allocator(), chunk_merged->num_rows(),
+                                                  target_hash_value);
         chunk_merged->append_column(hash_column, Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
         new_chunks.emplace_back(std::move(chunk_merged));
     }
