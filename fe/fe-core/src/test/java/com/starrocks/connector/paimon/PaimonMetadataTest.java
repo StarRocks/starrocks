@@ -365,6 +365,28 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testRefreshPaimonCatalogUnsupportedTableType(@Mocked CachingCatalog cachingCatalog)
+            throws Exception {
+        new Expectations() {
+            {
+                cachingCatalog.listDatabases();
+                result = ImmutableList.of("db");
+                cachingCatalog.listTables("db");
+                result = ImmutableList.of("object_tbl", "normal_tbl");
+                cachingCatalog.refreshPartitions(new Identifier("db", "object_tbl"));
+                result = new ClassCastException(
+                        "class org.apache.paimon.table.object.ObjectTableImpl cannot be cast to " +
+                        "class org.apache.paimon.table.FileStoreTable");
+                cachingCatalog.refreshPartitions(new Identifier("db", "normal_tbl"));
+            }
+        };
+        ConnectorTableMetadataProcessor processor = new ConnectorTableMetadataProcessor();
+        processor.registerPaimonCatalog("paimon_catalog", cachingCatalog);
+        // should not throw — the ClassCastException on object_tbl should be caught and logged
+        processor.refreshPaimonCatalog();
+    }
+
+    @Test
     public void testGetRemoteFiles(@Mocked FileStoreTable paimonNativeTable,
                                    @Mocked ReadBuilder readBuilder,
                                    @Mocked InnerTableScan scan)
