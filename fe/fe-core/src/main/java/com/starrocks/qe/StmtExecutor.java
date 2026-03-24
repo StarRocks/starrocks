@@ -279,6 +279,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -766,13 +767,8 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
-<<<<<<< HEAD
-=======
         ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
-        // set true to change session variable
-        boolean skipRestore = false;
         boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
->>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -1096,22 +1092,15 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
-<<<<<<< HEAD
-=======
 
             // Restore compute resource only when a query-scope hint changed the warehouse.
             // For normal statements (no hint), the compute resource may have been legitimately
             // updated during execution (e.g., reset due to unavailability), and we must not
             // overwrite those safety updates. Restore after onQueryFinished() so that audit
             // CN group reflects the actual execution resource.
-            if (!skipRestore && restoreComputeResourceForWarehouseHint) {
+            if (restoreComputeResourceForWarehouseHint) {
                 context.setCurrentComputeResource(computeResourceBackup);
             }
-            context.setOnlyReadIcebergCache(originSkipIcebergCache);
-            if (cteExecutor != null) {
-                cteExecutor.finalizeRecursiveCTE();
-            }
->>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
         }
     }
 
@@ -1150,23 +1139,11 @@ public class StmtExecutor {
             return hintSvs;
         }
 
-<<<<<<< HEAD
-        SessionVariable clonedSessionVariable = null;
-        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
-=======
         for (HintNode hint : stmt.getAllQueryScopeHints()) {
->>>>>>> 8e2f27f668 ([BugFix] Fix query-scope warehouse hint leaking ComputeResource in ConnectContext (#70706))
             if (!(hint instanceof SetVarHint)) {
                 continue;
             }
-
-            if (clonedSessionVariable == null) {
-                clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
-            }
-            for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
-                        new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
-            }
+            hintSvs.putAll(hint.getValue());
         }
         return hintSvs;
     }
@@ -1179,10 +1156,15 @@ public class StmtExecutor {
     public void processQueryScopeSetVarHint() throws DdlException {
         Map<String, String> hintSvs = collectQueryScopeSetVarHints(parsedStmt);
 
-        if (clonedSessionVariable == null) {
+        if (hintSvs.isEmpty()) {
             return;
         }
 
+        SessionVariable clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+        for (Map.Entry<String, String> entry : hintSvs.entrySet()) {
+            GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(clonedSessionVariable,
+                    new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true, context);
+        }
         context.setSessionVariable(clonedSessionVariable);
     }
 
