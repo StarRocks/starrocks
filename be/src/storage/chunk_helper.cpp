@@ -441,11 +441,11 @@ MutableColumnPtr ChunkHelper::column_from_field(memory::Allocator* allocator, co
 }
 
 MutableColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
-    return column_from_field_type(memory::get_default_column_allocator(), type, nullable);
+    return column_from_field_type(memory::get_default_allocator(), type, nullable);
 }
 
 MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
-    return column_from_field(memory::get_default_column_allocator(), field);
+    return column_from_field(memory::get_default_allocator(), field);
 }
 
 ChunkUniquePtr ChunkHelper::new_chunk(memory::Allocator* allocator, const Schema& schema, size_t n) {
@@ -477,15 +477,15 @@ ChunkUniquePtr ChunkHelper::new_chunk(memory::Allocator* allocator, const std::v
 }
 
 ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
-    return new_chunk(memory::get_default_column_allocator(), schema, n);
+    return new_chunk(memory::get_default_allocator(), schema, n);
 }
 
 ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_chunk(memory::get_default_column_allocator(), tuple_desc, n);
+    return new_chunk(memory::get_default_allocator(), tuple_desc, n);
 }
 
 ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    return new_chunk(memory::get_default_column_allocator(), slots, n);
+    return new_chunk(memory::get_default_allocator(), slots, n);
 }
 
 // create object column then reserve is exception safe.
@@ -520,15 +520,15 @@ StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* alloc
 }
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const Schema& schema, size_t n) {
-    return new_chunk_checked(memory::get_default_column_allocator(), schema, n);
+    return new_chunk_checked(memory::get_default_allocator(), schema, n);
 }
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    return new_chunk_checked(memory::get_default_column_allocator(), slots, n);
+    return new_chunk_checked(memory::get_default_allocator(), slots, n);
 }
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_chunk_checked(memory::get_default_column_allocator(), tuple_desc, n);
+    return new_chunk_checked(memory::get_default_allocator(), tuple_desc, n);
 }
 
 MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, const Schema& schema, size_t n) {
@@ -561,15 +561,15 @@ MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator,
 }
 
 MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {
-    return new_mutable_chunk(memory::get_default_column_allocator(), schema, n);
+    return new_mutable_chunk(memory::get_default_allocator(), schema, n);
 }
 
 MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_mutable_chunk(memory::get_default_column_allocator(), tuple_desc, n);
+    return new_mutable_chunk(memory::get_default_allocator(), tuple_desc, n);
 }
 
 MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    return new_mutable_chunk(memory::get_default_column_allocator(), slots, n);
+    return new_mutable_chunk(memory::get_default_allocator(), slots, n);
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(memory::Allocator* allocator, const Schema& schema,
@@ -596,15 +596,15 @@ StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(memory::Allocat
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const Schema& schema, size_t n) {
-    return new_mutable_chunk_checked(memory::get_default_column_allocator(), schema, n);
+    return new_mutable_chunk_checked(memory::get_default_allocator(), schema, n);
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    return new_mutable_chunk_checked(memory::get_default_column_allocator(), slots, n);
+    return new_mutable_chunk_checked(memory::get_default_allocator(), slots, n);
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_mutable_chunk_checked(memory::get_default_column_allocator(), tuple_desc, n);
+    return new_mutable_chunk_checked(memory::get_default_allocator(), tuple_desc, n);
 }
 
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {

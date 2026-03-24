@@ -32,7 +32,7 @@ namespace starrocks::spill {
 struct SpilledChunkBuildSchema {
     void set_schema(const ChunkPtr& chunk, memory::Allocator* column_allocator = nullptr) {
         memory::Allocator* alloc =
-                column_allocator ? column_allocator : memory::get_default_column_allocator();
+                column_allocator ? column_allocator : memory::get_default_allocator();
         _chunk = chunk->clone_empty(alloc, 0);
         _sample_chunk_memory_usage = chunk->memory_usage();
     }
@@ -40,7 +40,7 @@ struct SpilledChunkBuildSchema {
     bool empty() { return _chunk->num_columns() == 0; }
     ChunkUniquePtr new_chunk() {
         memory::Allocator* alloc = _restore_column_allocator ? _restore_column_allocator
-                                                            : memory::get_default_column_allocator();
+                                                            : memory::get_default_allocator();
         return _chunk->clone_empty(alloc, 0);
     }
     size_t column_number() const { return _chunk->num_columns(); }

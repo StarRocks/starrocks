@@ -188,7 +188,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
     int ctx_index = 0;
     int before_rows = cast->num_rows();
-    Filter filter(cast->num_rows(), 1);
+    Filter filter(memory::get_default_allocator(), cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1
     // on table COLUMNS (k1,k2,k3=k1)

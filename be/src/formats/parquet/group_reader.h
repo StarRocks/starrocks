@@ -89,7 +89,7 @@ struct GroupReaderParam {
     RandomAccessFile* file = nullptr;
 
     const FileMetaData* file_metadata = nullptr;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     bool case_sensitive = false;
 

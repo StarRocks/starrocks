@@ -256,7 +256,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     RETURN_IF_ERROR(_update_states(chunk_size, is_update_phase));
 
     // selector[i] == 0 means selected
-    Filter selector(chunk_size);
+    Filter selector(memory::get_default_allocator(), chunk_size, 0);
     _init_selector(selector, chunk_size);
 
     // finalize state
@@ -304,7 +304,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
     // selector[i] == 0 means selected
-    Filter selector(chunk_size);
+    Filter selector(memory::get_default_allocator(), chunk_size, 0);
     _init_selector(selector, chunk_size);
     auto res_group_by_columns = _create_group_by_columns(chunk_size, _sink_allocator);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
@@ -365,7 +365,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
         }
 
         // only create the state when selector == 0
-        Filter create_selector(chunk_size);
+        Filter create_selector(memory::get_default_allocator(), chunk_size, 0);
         for (size_t i = 0; i < _cmp_vector.size(); ++i) {
             create_selector[i] = _cmp_vector[i] == 0;
         }
@@ -396,7 +396,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Buffer<uint8_t>& selector,
+Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Filter& selector,
                                                           MutableColumns& agg_result_columns) {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     TRY_CATCH_ALLOC_SCOPE_START()

@@ -39,10 +39,9 @@ public:
 };
 
 // Temporary placeholder used during the refactoring process.
-// Callers currently do not rely on (or use) the return value.
-inline Allocator* get_default_column_allocator() {
-    return nullptr;
-}
+// When a column-specific allocator is not available yet, fall back to the
+// runtime default allocator instead of leaving the pointer null.
+Allocator* get_default_allocator();
 
 template <class Alloc>
 class AllocHolder : private Alloc {

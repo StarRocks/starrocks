@@ -51,7 +51,7 @@ private:
     Status _init_meta_reader_params();
 
     OlapMetaScanNode* _parent;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     TabletSharedPtr _tablet;
 
     OlapMetaReaderParams _reader_params;

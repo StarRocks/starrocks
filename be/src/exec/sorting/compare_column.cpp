@@ -95,7 +95,7 @@ public:
         int nan_direction = _sort_order * _null_first;
 
         // Set byte to 0 when it's null/null byte is 1
-        CompareVector null_vector(null_data.size());
+        CompareVector null_vector(column.allocator(), null_data.size());
         for (size_t i = 0; i < null_data.size(); i++) {
             null_vector[i] = (null_data[i] == 1) ? 0 : 1;
         }
@@ -107,7 +107,7 @@ public:
 
         int notnull_equal_count = 0;
 
-        CompareVector cmp_vector(null_data.size());
+        CompareVector cmp_vector(column.allocator(), null_data.size());
         auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
             DCHECK_EQ(a.size(), b.size());
             SIMD_selector<TYPE_TINYINT>::select_if((uint8_t*)a.data(), a, a, b);
@@ -126,7 +126,7 @@ public:
         } else {
             // 0 means not null, so compare it
             // 1 means null, not compare it for not-null values
-            CompareVector notnull_vector(null_data.size());
+            CompareVector notnull_vector(column.allocator(), null_data.size());
             for (size_t i = 0; i < null_data.size(); i++) {
                 notnull_vector[i] = null_data[i];
             }

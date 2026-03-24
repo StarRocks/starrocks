@@ -17,6 +17,7 @@
 #include <any>
 
 #include "base/container/fixed_hash_map.h"
+#include "base/memory/memory_allocator.h"
 #include "base/failpoint/fail_point.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
@@ -96,9 +97,12 @@ using SliceAggTwoLevelHashSet =
 
 template <typename HashSet, typename Impl>
 struct AggHashSet {
-    AggHashSet(size_t chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
+    AggHashSet(size_t chunk_size, AggStatistics* agg_stat_,
+               memory::Allocator* allocator = memory::get_default_allocator())
+            : agg_stat(agg_stat_), _allocator(allocator) {}
     using HHashSetType = HashSet;
     HashSet hash_set;
+    memory::Allocator* allocator() const { return _allocator; }
     AggStatistics* agg_stat;
 
     ////// Common Methods ////////
@@ -115,6 +119,9 @@ struct AggHashSet {
         static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
         defer.cancel();
     }
+
+protected:
+    memory::Allocator* _allocator;
 };
 
 // handle one number hash key
@@ -129,7 +136,8 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     template <class... Args>
-    AggHashSetOfOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashSetOfOneNumberKey(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -189,7 +197,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
 
     void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+        column->get_data().append(keys.begin(), keys.begin() + chunk_size);
     }
 
     static constexpr bool has_single_null_key = false;
@@ -211,7 +219,8 @@ struct AggHashSetOfOneNullableNumberKey
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     template <class... Args>
-    AggHashSetOfOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashSetOfOneNullableNumberKey(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -293,7 +302,7 @@ struct AggHashSetOfOneNullableNumberKey
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
         auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
         auto* column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
-        column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+        column->get_data().append(keys.begin(), keys.begin() + chunk_size);
         nullable_column->null_column_data().resize(chunk_size);
     }
 
@@ -311,7 +320,8 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
-    AggHashSetOfOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashSetOfOneStringKey(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -397,7 +407,8 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
-    AggHashSetOfOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashSetOfOneNullableStringKey(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -517,8 +528,10 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     template <class... Args>
     AggHashSetOfSerializedKey(int32_t chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
+              slice_sizes(Base::allocator()),
               _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
+              results(Base::allocator()),
               _chunk_size(chunk_size) {}
 
     // When compute_and_allocate=false:
@@ -643,7 +656,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using FixedSizeSliceKey = typename HashSet::key_type;
-    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    using ResultVector = Buffer<FixedSizeSliceKey>;
 
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
@@ -652,8 +665,11 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     template <class... Args>
     AggHashSetOfSerializedKeyFixedSize(int32_t chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
+              slice_sizes(Base::allocator()),
               _mem_pool(std::make_unique<MemPool>()),
               buffer(_mem_pool->allocate(max_fixed_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
+              results(Base::allocator()),
+              tmp_slices(Base::allocator()),
               _chunk_size(chunk_size) {
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
@@ -764,14 +780,14 @@ struct AggHashSetCompressedFixedSize : public AggHashSet<HashSet, AggHashSetComp
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using FixedSizeSliceKey = typename HashSet::key_type;
-    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    using ResultVector = Buffer<FixedSizeSliceKey>;
 
     bool has_null_column = false;
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
     template <class... Args>
     AggHashSetCompressedFixedSize(int32_t chunk_size, Args&&... args)
-            : Base(chunk_size, std::forward<Args>(args)...), _chunk_size(chunk_size) {
+            : Base(chunk_size, std::forward<Args>(args)...), results(Base::allocator()), _chunk_size(chunk_size) {
         fixed_keys.reserve(chunk_size);
     }
 

@@ -384,14 +384,18 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
             }
 
             auto& bitmap = *lhs.value(row);
-            bitmap.to_array(&array_bigint_column->get_data());
+            std::vector<int64_t> temp;
+            bitmap.to_array(&temp);
+            array_bigint_column->get_data().append(temp.begin(), temp.end());
             offset += bitmap.cardinality();
         }
     } else {
         for (int row = 0; row < size; ++row) {
             array_offsets->append(offset);
             auto& bitmap = *lhs.value(row);
-            bitmap.to_array(&array_bigint_column->get_data());
+            std::vector<int64_t> temp;
+            bitmap.to_array(&temp);
+            array_bigint_column->get_data().append(temp.begin(), temp.end());
             offset += bitmap.cardinality();
         }
     }

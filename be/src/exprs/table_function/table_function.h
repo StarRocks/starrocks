@@ -89,7 +89,7 @@ private:
     // used to identify left join for table function
     bool _is_left_join = false;
     bool _is_required = true;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
 };
 
 class TableFunction {

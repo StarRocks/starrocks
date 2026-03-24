@@ -535,7 +535,7 @@ public:
         }
         // further remove duplicated values
         // TODO(fzh) optimize N*N, since distinct is often rewritten to group by, the distinct values are not too many.
-        Buffer<bool> duplicated_flags;
+        std::vector<bool> duplicated_flags;
         if (ctx->get_is_distinct()) {
             duplicated_flags.resize(elem_size);
             bool is_duplicated = false;
@@ -557,7 +557,7 @@ public:
                 duplicated_flags[row_id] = is_duplicated;
             }
         }
-        Buffer<uint32_t> index;
+        std::vector<uint32_t> index;
         if (!duplicated_flags.empty() || !perm.empty()) {
             auto res_num = 0;
             index.resize(elem_size);

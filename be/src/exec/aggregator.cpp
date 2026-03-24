@@ -1573,7 +1573,7 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
 template <typename HashVariantType>
 void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename HashVariantType::Type type,
                                      CompressKeyContext&& context) {
-    hash_variant.init(_state, type, _agg_stat);
+    hash_variant.init(_state, type, _agg_stat, _sink_allocator);
     hash_variant.visit([&](auto& variant) {
         if constexpr (is_compressed_fixed_size_key<std::decay_t<decltype(*variant)>>) {
             variant->offsets = std::move(context.offsets);
@@ -1608,7 +1608,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
 
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
-    hash_variant.init(_state, type, _agg_stat);
+    hash_variant.init(_state, type, _agg_stat, _sink_allocator);
 
     hash_variant.visit([&](auto& variant) {
         if constexpr (is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {

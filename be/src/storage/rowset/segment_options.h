@@ -86,7 +86,7 @@ public:
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;

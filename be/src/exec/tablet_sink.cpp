@@ -803,10 +803,11 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 
     auto nullable_col_mut = down_cast<NullableColumn*>(col->as_mutable_raw_ptr());
     auto* data_col_mut = nullable_col_mut->data_column_raw_ptr();
-    const auto null_datas = nullable_col_mut->immutable_null_column_data();
-    Filter filter(null_datas.begin(), null_datas.end());
+    const auto& null_datas = nullable_col_mut->immutable_null_column_data();
+    Filter filter(memory::get_default_allocator());
+    filter.assign(null_datas.begin(), null_datas.end());
 
-    Filter init_filter(chunk->num_rows(), 0);
+    Filter init_filter(memory::get_default_allocator(), chunk->num_rows(), 0);
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;

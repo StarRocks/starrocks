@@ -45,7 +45,7 @@ struct MetaReaderParams {
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;

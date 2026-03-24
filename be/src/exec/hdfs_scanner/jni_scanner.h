@@ -50,7 +50,7 @@ public:
 protected:
     StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
 
-    Filter _chunk_filter;
+    Filter _chunk_filter = Filter(memory::get_default_allocator());
 
 private:
     struct FillColumnArgs {

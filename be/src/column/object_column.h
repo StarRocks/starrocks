@@ -50,17 +50,21 @@ public:
         const ObjectColumn* _column = nullptr;
     };
 
-    ObjectColumn() : ObjectColumn(memory::get_default_column_allocator()) {}
+    ObjectColumn() : ObjectColumn(memory::get_default_allocator()) {}
 
     explicit ObjectColumn([[maybe_unused]] memory::Allocator* allocator)
-            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator) {}
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(allocator) {}
 
-    explicit ObjectColumn(size_t size) : ObjectColumn(memory::get_default_column_allocator(), size) {}
+    explicit ObjectColumn(size_t size) : ObjectColumn(memory::get_default_allocator(), size) {}
 
     ObjectColumn([[maybe_unused]] memory::Allocator* allocator, size_t size)
-            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(size) {}
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(allocator, size) {}
 
-    ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
+    ObjectColumn(const ObjectColumn& column) = delete;
+
+    ObjectColumn(ObjectColumn&& rhs) noexcept
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(std::move(rhs)),
+              _pool(std::move(rhs._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 

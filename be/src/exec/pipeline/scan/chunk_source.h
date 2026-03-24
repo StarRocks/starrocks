@@ -94,7 +94,7 @@ protected:
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
     // TODO: wire allocator propagation from ScanOperator in a follow-up phase.
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     // The morsel will own by pipeline driver
     MorselPtr _morsel;
 

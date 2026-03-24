@@ -135,7 +135,7 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     const size_t num_rows = arg0->size();
     const auto* col_map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
     auto col_result = Int32Column::create(context->allocator());
-    raw::make_room(&col_result->get_data(), num_rows);
+    col_result->get_data().resize(num_rows);
     DCHECK_EQ(num_rows, col_result->size());
 
     const uint32_t* offsets = col_map->offsets().immutable_data().data();
@@ -306,7 +306,7 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     } else {
         filter = down_cast<const ArrayColumn*>(raw_filter.get());
     }
-    Buffer<uint32_t> indexes;
+    std::vector<uint32_t> indexes;
     // only keep the elements whose filter is not null and not 0.
     for (size_t i = 0; i < src_column->size(); ++i) {
         if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {               // dest_null_map[i] is not null
@@ -352,7 +352,7 @@ StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, co
         values = distinct_map_keys(context, map_values).value();
     }
 
-    Filter filter(keys->size(), 1);
+    Filter filter(memory::get_default_allocator(), keys->size(), 1);
     // compute hash for all keys
     auto hash = std::make_unique<uint32_t[]>(keys->size());
     memset(hash.get(), 0, keys->size() * sizeof(uint32_t));

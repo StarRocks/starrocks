@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include "base/memory/memory_allocator.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -22,6 +23,34 @@
 #include "exprs/agg/aggregate_traits.h"
 
 namespace starrocks {
+
+template <typename T>
+T make_window_value() {
+    if constexpr (std::is_constructible_v<T, memory::Allocator*>) {
+        return T(memory::get_default_allocator());
+    } else {
+        return T();
+    }
+}
+
+template <typename T>
+void clear_window_value(T& value) {
+    if constexpr (std::is_constructible_v<T, memory::Allocator*>) {
+        value.resize(0);
+    } else {
+        value = {};
+    }
+}
+
+template <typename T>
+void copy_window_value(T& dst, const T& src) {
+    if constexpr (std::is_constructible_v<T, memory::Allocator*>) {
+        dst.resize(0);
+        dst.append(src.begin(), src.end());
+    } else {
+        dst = src;
+    }
+}
 
 template <typename State>
 class WindowFunction : public AggregateFunctionStateHelper<State> {
@@ -406,7 +435,7 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
 template <LogicalType LT>
 struct FirstValueState {
     using T = AggDataValueType<LT>;
-    T value;
+    T value = make_window_value<T>();
     bool is_null = false;
     bool has_value = false;
 };
@@ -449,7 +478,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
+        clear_window_value(this->data(state).value);
         this->data(state).is_null = false;
         this->data(state).has_value = false;
     }
@@ -465,7 +494,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
 template <LogicalType LT, bool ignoreNulls, typename = guard::Guard>
 struct LastValueState {
     using T = AggDataValueType<LT>;
-    T value;
+    T value = make_window_value<T>();
     bool is_null = false;
     bool has_value = false;
 };
@@ -503,7 +532,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
+        clear_window_value(this->data(state).value);
         this->data(state).is_null = false;
         this->data(state).has_value = false;
     }
@@ -519,9 +548,9 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
 template <LogicalType LT, bool ignoreNulls>
 struct LeadLagState {
     using T = AggDataValueType<LT>;
-    T value;
+    T value = make_window_value<T>();
     int64_t offset = 0;
-    T default_value;
+    T default_value = make_window_value<T>();
     bool is_null = false;
     bool default_is_null = false;
     bool default_value_is_constant = false; // only used for lag
@@ -530,13 +559,13 @@ struct LeadLagState {
 template <LogicalType LT>
 struct LeadLagState<LT, true> {
     using T = AggDataValueType<LT>;
-    T value;
+    T value = make_window_value<T>();
     int64_t offset = 0;
-    T default_value;
+    T default_value = make_window_value<T>();
     bool is_null = false;
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
-    size_t non_null_count;             // only used for lag
+    size_t non_null_count = 0;          // only used for lag
     bool default_value_is_constant = false;
 };
 
@@ -647,7 +676,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                                     this->data(state).value,
                                     AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
                         } else {
-                            this->data(state).value = this->data(state).default_value;
+                            copy_window_value(this->data(state).value, this->data(state).default_value);
                         }
                     } else {
                         const Column* def_col = columns[2];
@@ -685,7 +714,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                                     this->data(state).value,
                                     AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
                         } else {
-                            this->data(state).value = this->data(state).default_value;
+                            copy_window_value(this->data(state).value, this->data(state).default_value);
                         }
                     }
                 } else {
@@ -720,7 +749,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     }
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
+        clear_window_value(this->data(state).value);
         this->data(state).is_null = false;
 
         // get offset
@@ -814,7 +843,7 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).session_id = 1;
-        this->data(state).last_not_null_value = {};
+        clear_window_value(this->data(state).last_not_null_value);
         this->data(state).is_null = false;
         this->data(state).has_value = false;
 

@@ -492,10 +492,10 @@ private:
     std::unordered_map<ColumnId, RuntimeFilterPredicates> _column_to_runtime_filters_map;
 
     // _selection is used to accelerate
-    Buffer<uint8_t> _selection;
+    Buffer<uint8_t> _selection = Buffer<uint8_t>(memory::get_default_allocator());
 
     // _selected_idx is used to store selected index when evaluating branchless predicate
-    Buffer<uint16_t> _selected_idx;
+    Buffer<uint16_t> _selected_idx = Buffer<uint16_t>(memory::get_default_allocator());
 
     ScanContext _context_list[2];
     // points to |_context_list[0]| or |_context_list[1]| after `_init_context`.
@@ -1432,7 +1432,7 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
     // Use two selections:
     // 1. _selection: for merged result of all predicates (merged_selection)
     // 2. current_selection: for current predicate result
-    Buffer<uint8_t> current_selection;
+    Buffer<uint8_t> current_selection(memory::get_default_allocator());
     current_selection.resize(chunk_size);
 
     bool use_merged_selection = true; // Similar to RuntimeFilter's use_merged_selection flag
@@ -1483,11 +1483,11 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
             // First predicate: result is already in _selection (merged_selection)
             use_merged_selection = false;
         } else {
-            // Subsequent predicates: AND current selection with merged selection
-            uint8_t* dest = _selection.data();             // merged_selection
-            const uint8_t* src = current_selection.data(); // current result
-            for (size_t j = 0; j < chunk_size; ++j) {
-                dest[j] = src[j] & dest[j];
+                // Subsequent predicates: AND current selection with merged selection
+                uint8_t* dest = _selection.data();             // merged_selection
+                const uint8_t* src = current_selection.data(); // current result
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    dest[j] = src[j] & dest[j];
             }
         }
     }
@@ -3624,8 +3624,8 @@ void SegmentIterator::close() {
         }
     }
 
-    STLClearObject(&_selection);
-    STLClearObject(&_selected_idx);
+    _selection.resize(0);
+    _selected_idx.resize(0);
 
     _bitmap_index_evaluator.close();
 

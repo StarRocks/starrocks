@@ -148,8 +148,8 @@ private:
 #undef JoinHashMapForIntBigintKey
 
     bool _is_empty_map = true;
-    memory::Allocator* _build_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _probe_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _build_allocator = memory::get_default_allocator();
+    memory::Allocator* _probe_allocator = memory::get_default_allocator();
     JoinKeyConstructorUnaryType _key_constructor_type;
     JoinHashMapMethodUnaryType _hash_map_method_type;
     JoinHashMapVariant _hash_map;

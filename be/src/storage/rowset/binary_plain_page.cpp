@@ -114,7 +114,7 @@ Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector
             const uint32_t end = std::min(_num_elems, begin + kMaxRowsPerEval);
             const uint32_t chunk_elems = end - begin;
 
-            BinaryColumn::Offsets offsets;
+            BinaryColumn::Offsets offsets(memory::get_default_allocator());
             offsets.resize(chunk_elems + 1);
             offsets[0] = 0;
 
@@ -343,7 +343,7 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
             return Status::OK();
         }
 
-        BinaryColumn::Offsets temp_offsets;
+        BinaryColumn::Offsets temp_offsets(dst->allocator());
         temp_offsets.resize(num_rows + 1);
         temp_offsets[0] = 0;
 

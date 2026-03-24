@@ -175,7 +175,7 @@ private:
     // contexts.
     RuntimeState* _state{nullptr};
     // TODO: wire allocator propagation from ExprContext/Operator in a follow-up phase.
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
 
     // Empty if there's no error
     mutable std::mutex _error_msg_mutex;

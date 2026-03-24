@@ -209,7 +209,7 @@ private:
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
     bool _invalid_as_null = false;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     // Key is slot name formatted with case sensitive
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
     std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;

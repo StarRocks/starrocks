@@ -65,8 +65,8 @@ private:
     OrcChunkReader::LazyLoadContext _lazy_load_ctx;
     std::unique_ptr<OrcChunkReader> _orc_reader;
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
-    Filter _dict_filter;
-    Filter _chunk_filter;
+    Filter _dict_filter = Filter(memory::get_default_allocator());
+    Filter _chunk_filter = Filter(memory::get_default_allocator());
     SkipRowsContextPtr _skip_rows_ctx;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
 };

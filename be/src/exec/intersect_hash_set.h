@@ -81,7 +81,7 @@ private:
 
     std::unique_ptr<HashSet> _hash_set;
 
-    Buffer<uint32_t> _slice_sizes;
+    Buffer<uint32_t> _slice_sizes = Buffer<uint32_t>(memory::get_default_allocator());
     size_t _max_one_row_size = 8;
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* _buffer;

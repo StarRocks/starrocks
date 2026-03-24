@@ -78,7 +78,7 @@ struct TabletReaderParams {
     RuntimeFilterPredicates runtime_filter_preds;
 
     RuntimeState* runtime_state = nullptr;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     RuntimeProfile* profile = nullptr;
 

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "base/stats/ndv_estimator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -34,6 +35,14 @@ template <LogicalType LT>
 struct Bucket {
     using RefType = AggDataRefType<LT>;
     using ValueType = AggDataValueType<LT>;
+
+    static ValueType make_value() {
+        if constexpr (std::is_constructible_v<ValueType, memory::Allocator*>) {
+            return ValueType(memory::get_default_allocator());
+        } else {
+            return ValueType();
+        }
+    }
 
     static Bucket from_json(simdjson::ondemand::array bucket_json, const FunctionContext::TypeDesc* type_desc,
                             MemPool* mem_pool) {
@@ -63,7 +72,11 @@ struct Bucket {
         return Bucket(lower_datum.get<RefType>(), upper_datum.get<RefType>(), count, upper_repeats);
     }
 
-    Bucket() = default;
+    Bucket() : lower(make_value()), upper(make_value()) {}
+    Bucket(const Bucket&) = delete;
+    Bucket& operator=(const Bucket&) = delete;
+    Bucket(Bucket&&) noexcept = default;
+    Bucket& operator=(Bucket&&) noexcept = default;
 
     Bucket(RefType input_lower, RefType input_upper, size_t count, size_t upper_repeats)
             : count(count), upper_repeats(upper_repeats), count_in_bucket(1), distinct_count(0) {
@@ -88,8 +101,8 @@ struct Bucket {
     Datum get_lower_datum() const { return Datum(AggDataTypeTraits<LT>::get_ref(lower)); }
     Datum get_upper_datum() const { return Datum(AggDataTypeTraits<LT>::get_ref(upper)); }
 
-    ValueType lower;
-    ValueType upper;
+    ValueType lower = make_value();
+    ValueType upper = make_value();
     // Up to this bucket, the total value
     int64_t count;
     // the number of values that on the upper boundary
@@ -193,7 +206,7 @@ private:
             }
             if (buckets.empty()) {
                 Bucket<LT> bucket(v, v, 1, 1);
-                buckets.emplace_back(bucket);
+                buckets.emplace_back(std::move(bucket));
             } else {
                 Bucket<LT>* last_bucket = &buckets.back();
 
@@ -204,7 +217,7 @@ private:
                 } else {
                     if (last_bucket->count_in_bucket >= bucket_size) {
                         Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
+                        buckets.emplace_back(std::move(bucket));
                     } else {
                         last_bucket->update_upper(v);
                         last_bucket->count++;
@@ -262,7 +275,7 @@ private:
             }
             if (buckets.empty()) {
                 Bucket<LT> bucket(v, v, 1, 1);
-                buckets.emplace_back(bucket);
+                buckets.emplace_back(std::move(bucket));
                 sample_distinct = 1;
                 count_once = 1;
                 new_upper = true;
@@ -284,7 +297,7 @@ private:
                                                                    count_once, sample_ratio);
                         last_bucket->distinct_count = last_ndv;
                         Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
+                        buckets.emplace_back(std::move(bucket));
                         sample_distinct = 1;
                         count_once = 1;
                     } else {

@@ -215,7 +215,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         active_chunk->reset();
 
         bool has_filter = false;
-        Filter chunk_filter(count, 1);
+        Filter chunk_filter(memory::get_default_allocator(), count, 1);
 
         // row id filter
         if (nullptr != _skip_rows_ctx && _skip_rows_ctx->has_skip_rows()) {
@@ -255,8 +255,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 Range<uint64_t> lazy_read_range = r.filter(&chunk_filter);
                 // if all data is filtered, we have skipped early.
                 DCHECK(lazy_read_range.span_size() > 0);
-                Filter lazy_filter = {chunk_filter.begin() + lazy_read_range.begin() - r.begin(),
-                                      chunk_filter.begin() + lazy_read_range.end() - r.begin()};
+                Filter lazy_filter(memory::get_default_allocator());
+                lazy_filter.assign(chunk_filter.begin() + lazy_read_range.begin() - r.begin(),
+                                   chunk_filter.begin() + lazy_read_range.end() - r.begin());
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, lazy_read_range, &lazy_filter, &lazy_chunk, true));
                 lazy_chunk->filter_range(lazy_filter, 0, lazy_read_range.span_size());
             } else {

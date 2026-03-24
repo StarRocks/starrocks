@@ -523,7 +523,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vo = values->get_offset();
     // We can resize directly
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize(vo.size() + size);
 
     size_t write_pos = vb.size();
     if (cvb->hasNulls) {
@@ -669,7 +669,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
 
     // vb is using RawVectorPad16, resize will not initialize vector
     vb.resize(vb.size() + len);
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize(vo.size() + size);
 
     if (cvb->hasNulls) {
         for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {

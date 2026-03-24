@@ -379,7 +379,7 @@ public:
                            TLateMaterializeMode::type mode = TLateMaterializeMode::AUTO);
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
     memory::Allocator* column_allocator() const {
-        return _column_allocator ? _column_allocator : memory::get_default_column_allocator();
+        return _column_allocator ? _column_allocator : memory::get_default_allocator();
     }
     const SortDescs& sort_descs() const { return _sort_descs; }
 

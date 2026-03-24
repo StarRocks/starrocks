@@ -262,7 +262,7 @@ struct HdfsScannerParams {
     std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     HdfsScanProfile* profile = nullptr;
 
@@ -351,7 +351,7 @@ struct HdfsScannerContext {
     std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     bool orc_use_column_names = false;
 

@@ -87,7 +87,7 @@ private:
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
     PredicateTree _pred_tree;
-    Filter _selection;
+    Filter _selection = Filter(memory::get_default_allocator());
 
     // for release memory.
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;

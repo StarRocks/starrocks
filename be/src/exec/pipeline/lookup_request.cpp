@@ -615,7 +615,7 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
 
     // Calculate row_id ranges and fetch data from storage
     phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>> row_id_ranges;
-    Buffer<uint32_t> replicated_offsets;
+    Buffer<uint32_t> replicated_offsets(memory::get_default_allocator());
     ASSIGN_OR_RETURN(auto sorted_chunk,
                      _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
     ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, {}, row_id_ranges));
@@ -670,7 +670,7 @@ Status NativeLookUpTask::process(RuntimeState* state, const ChunkPtr& request_ch
     }
 
     SmallPermutation permutation;
-    Buffer<uint32_t> replicated;
+    Buffer<uint32_t> replicated(memory::get_default_allocator());
 
     Columns columns;
 

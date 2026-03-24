@@ -427,7 +427,7 @@ private:
     bool _eq_null = false;
     int _array_size = 0;
     std::vector<uint8_t> _array_buffer;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
 
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free

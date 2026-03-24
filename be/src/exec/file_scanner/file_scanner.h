@@ -146,7 +146,7 @@ protected:
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     const TBrokerScanRangeParams& _params;
     ScannerCounter* _counter;
 

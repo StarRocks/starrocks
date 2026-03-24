@@ -104,9 +104,20 @@ using AsofIndexBufferVariant =
 #undef ASOF_INDEX_BUFFER_TYPES
 
 struct JoinHashTableItems {
+    JoinHashTableItems(memory::Allocator* build_allocator_ = memory::get_default_allocator())
+            : build_allocator(build_allocator_),
+              first(build_allocator_),
+              next(build_allocator_),
+              fps(build_allocator_),
+              key_bitset(build_allocator_),
+              dense_groups(build_allocator_),
+              build_slice(build_allocator_),
+              build_key_nulls(build_allocator_),
+              asof_index_vector(std::in_place_index<0>, build_allocator_) {}
+
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
-    memory::Allocator* build_allocator = memory::get_default_column_allocator();
+    memory::Allocator* build_allocator = memory::get_default_allocator();
     Columns key_columns;
     std::vector<HashTableSlotDescriptor> build_slots;
     std::vector<HashTableSlotDescriptor> probe_slots;
@@ -226,7 +237,7 @@ struct HashTableProbeState {
     // 0: not matched, 1: matched
     Buffer<uint8_t> build_match_index;
     Buffer<uint32_t> probe_match_index;
-    Buffer<uint8_t> probe_match_filter;
+    Filter probe_match_filter = Filter(memory::get_default_allocator());
     uint32_t count = 0; // current return values count
     // the rows of src probe chunk
     size_t probe_row_count = 0;
@@ -253,11 +264,12 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
     ColumnPtr asof_temporal_condition_column = nullptr;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     static MutableColumnPtr create_uint32_column(memory::Allocator* allocator, const MutableColumnPtr& src) {
         auto column = UInt32Column::create(allocator, src->size());
-        Buffer<uint32_t> indexes(src->size());
+        Buffer<uint32_t> indexes(allocator);
+        indexes.resize(src->size());
         for (uint32_t i = 0; i < src->size(); ++i) {
             indexes[i] = i;
         }
@@ -265,11 +277,18 @@ struct HashTableProbeState {
         return column;
     }
 
-    HashTableProbeState(memory::Allocator* allocator_ = memory::get_default_column_allocator())
-            : build_index_column(UInt32Column::create(allocator_)),
+    HashTableProbeState(memory::Allocator* allocator_ = memory::get_default_allocator())
+            : is_nulls(allocator_),
+              buckets(allocator_),
+              next(allocator_),
+              probe_slice(allocator_),
+              build_index_column(UInt32Column::create(allocator_)),
               probe_index_column(UInt32Column::create(allocator_)),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
               probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
+              build_match_index(allocator_),
+              probe_match_index(allocator_),
+              probe_match_filter(allocator_),
               allocator(allocator_) {}
 
     struct ProbeCoroutine {
@@ -299,10 +318,10 @@ struct HashTableProbeState {
     std::set<std::coroutine_handle<ProbeCoroutine::ProbePromise>> handles;
 
     HashTableProbeState(const HashTableProbeState& rhs)
-            : is_nulls(rhs.is_nulls),
-              buckets(rhs.buckets),
-              next(rhs.next),
-              probe_slice(rhs.probe_slice),
+            : is_nulls(rhs.allocator),
+              buckets(rhs.allocator),
+              next(rhs.allocator),
+              probe_slice(rhs.allocator),
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone(rhs.allocator)),
               key_columns(rhs.key_columns),
@@ -314,9 +333,9 @@ struct HashTableProbeState {
                                          : create_uint32_column(rhs.allocator, rhs.probe_index_column)),
               build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
               probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
-              build_match_index(rhs.build_match_index),
-              probe_match_index(rhs.probe_match_index),
-              probe_match_filter(rhs.probe_match_filter),
+              build_match_index(rhs.allocator),
+              probe_match_index(rhs.allocator),
+              probe_match_filter(rhs.allocator),
               count(rhs.count),
               probe_row_count(rhs.probe_row_count),
               match_flag(rhs.match_flag),
@@ -331,7 +350,15 @@ struct HashTableProbeState {
               asof_temporal_condition_column(rhs.asof_temporal_condition_column == nullptr
                                                      ? nullptr
                                                      : rhs.asof_temporal_condition_column->clone(rhs.allocator)),
-              allocator(rhs.allocator) {}
+              allocator(rhs.allocator) {
+        is_nulls.append(rhs.is_nulls.begin(), rhs.is_nulls.end());
+        buckets.append(rhs.buckets.begin(), rhs.buckets.end());
+        next.append(rhs.next.begin(), rhs.next.end());
+        probe_slice.append(rhs.probe_slice.begin(), rhs.probe_slice.end());
+        build_match_index.append(rhs.build_match_index.begin(), rhs.build_match_index.end());
+        probe_match_index.append(rhs.probe_match_index.begin(), rhs.probe_match_index.end());
+        probe_match_filter.assign(rhs.probe_match_filter.begin(), rhs.probe_match_filter.end());
+    }
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -370,8 +397,8 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* probe_counter = nullptr;
-    memory::Allocator* build_allocator = memory::get_default_column_allocator();
-    memory::Allocator* probe_allocator = memory::get_default_column_allocator();
+    memory::Allocator* build_allocator = memory::get_default_allocator();
+    memory::Allocator* probe_allocator = memory::get_default_allocator();
 };
 
 inline bool is_asof_join(TJoinOp::type join_type) {
@@ -387,13 +414,13 @@ constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::t
 
 #define CREATE_ASOF_VECTOR_CASE(TYPE, BASE_INDEX)                           \
     case BASE_INDEX + 0:                                                    \
-        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LT>>>{}; \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LT>>>(memory::get_default_allocator()); \
     case BASE_INDEX + 1:                                                    \
-        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LE>>>{}; \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::LE>>>(memory::get_default_allocator()); \
     case BASE_INDEX + 2:                                                    \
-        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GT>>>{}; \
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GT>>>(memory::get_default_allocator()); \
     case BASE_INDEX + 3:                                                    \
-        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GE>>>{};
+        return Buffer<std::unique_ptr<AsofIndex<TYPE, TExprOpcode::GE>>>(memory::get_default_allocator());
 
 inline AsofIndexBufferVariant create_asof_index_vector(size_t variant_index) {
     switch (variant_index) {
@@ -404,7 +431,7 @@ inline AsofIndexBufferVariant create_asof_index_vector(size_t variant_index) {
         __builtin_unreachable();
     }
 }
-#undef CREATE_ASOF_BUFFER_CASE
+#undef CREATE_ASOF_VECTOR_CASE
 
 template <size_t VariantIndex>
 constexpr auto& get_asof_index_vector_static(JoinHashTableItems* table_items) {

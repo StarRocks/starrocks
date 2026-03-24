@@ -61,7 +61,7 @@ public:
             return;
         }
 
-        state.buckets = buckets;
+        state.buckets = std::move(buckets);
         state.hlls = std::vector<HyperLogLog>(buckets.size());
     }
 

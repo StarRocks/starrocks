@@ -1436,7 +1436,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
         int size = v1->size();                                                                              \
         for (int i = 0; i < size; ++i) {                                                                    \
             auto f = fmt::format_int(r1[i]);                                                                \
-            bytes.insert(bytes.end(), (uint8_t*)f.data(), (uint8_t*)f.data() + f.size());                   \
+            bytes.append((uint8_t*)f.data(), (uint8_t*)f.data() + f.size());                                \
             offset[i + 1] = bytes.size();                                                                   \
         }                                                                                                   \
         return result;                                                                                      \

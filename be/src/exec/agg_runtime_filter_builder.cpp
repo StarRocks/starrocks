@@ -44,7 +44,7 @@ struct AggInRuntimeFilterBuilderImpl {
             const size_t hash_map_size = hash_map_variant.size();
             MutableColumns group_by_columns = aggregator->create_group_by_columns(hash_map_size);
             {
-                ResultVector result_vector;
+                auto result_vector = ResultVector(hash_map_with_key.allocator());
                 result_vector.resize(hash_map_size);
                 auto it = hash_map.begin();
                 auto end = hash_map.end();
@@ -140,7 +140,7 @@ struct AggTopRuntimeFilterBuilderImpl {
             const size_t hash_map_size = hash_map_variant.size();
             MutableColumns group_by_columns = aggregator->create_group_by_columns(hash_map_size);
             {
-                ResultVector result_vector;
+                auto result_vector = ResultVector(hash_map_with_key.allocator());
                 result_vector.resize(hash_map_size);
                 auto it = hash_map.begin();
                 auto end = hash_map.end();

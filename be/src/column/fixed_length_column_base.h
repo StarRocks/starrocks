@@ -52,19 +52,21 @@ public:
     using Container = Buffer<ValueType>;
     using ImmContainer = std::span<const ValueType>;
 
-    FixedLengthColumnBase() : FixedLengthColumnBase(memory::get_default_column_allocator()) {}
+    FixedLengthColumnBase() : FixedLengthColumnBase(memory::get_default_allocator()) {}
 
-    explicit FixedLengthColumnBase(const size_t n) : FixedLengthColumnBase(memory::get_default_column_allocator(), n) {}
+    explicit FixedLengthColumnBase(const size_t n) : FixedLengthColumnBase(memory::get_default_allocator(), n) {}
 
     FixedLengthColumnBase(const size_t n, const ValueType x)
-            : FixedLengthColumnBase(memory::get_default_column_allocator(), n, x) {}
+            : FixedLengthColumnBase(memory::get_default_allocator(), n, x) {}
 
-    explicit FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator) : Column(allocator) {}
+    explicit FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator)
+            : Column(allocator), _data(allocator) {}
 
-    FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator, const size_t n) : Column(allocator), _data(n) {}
+    FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator, const size_t n)
+            : Column(allocator), _data(allocator, n) {}
 
     FixedLengthColumnBase([[maybe_unused]] memory::Allocator* allocator, const size_t n, const ValueType x)
-            : Column(allocator), _data(n, x) {}
+            : Column(allocator), _data(allocator, n, x) {}
 
     DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 
@@ -112,7 +114,7 @@ public:
 
     void resize_uninitialized(size_t n) override {
         auto& data = get_data();
-        raw::stl_vector_resize_uninitialized(&data, n);
+        data.resize(n);
     }
 
     void assign(size_t n, size_t idx) override {
@@ -131,12 +133,12 @@ public:
 
     void append(const Buffer<T>& values) {
         auto& datas = get_data();
-        datas.insert(datas.end(), values.begin(), values.end());
+        datas.append(values.begin(), values.end());
     }
 
     void append(const ImmBuffer<T> values) {
         auto& datas = get_data();
-        datas.insert(datas.end(), values.begin(), values.end());
+        datas.append(values.begin(), values.end());
     }
 
     void append_datum(const Datum& datum) override {
@@ -170,7 +172,7 @@ public:
         const size_t count = length / sizeof(ValueType);
         auto& datas = this->get_data();
         size_t dst_offset = datas.size();
-        raw::stl_vector_resize_uninitialized(&datas, datas.size() + count);
+        datas.resize(datas.size() + count);
         T* dst = datas.data() + dst_offset;
         memcpy(dst, buff, length);
         return count;
@@ -180,7 +182,7 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override {
         auto& datas = get_data();
-        datas.insert(datas.end(), count, *reinterpret_cast<const T*>(value));
+        datas.append(count, *reinterpret_cast<const T*>(value));
     }
 
     void append_default() override;

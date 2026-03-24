@@ -253,8 +253,8 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto result_count = Int64Column::create();
             RETURN_IF_ERROR(agg_state->output_detail(chunk_size, agg_group_state, detail_cols, result_count.get()));
 
-            auto result_count_data = reinterpret_cast<Int64Column*>(result_count.get())->get_data();
-            Buffer<uint32_t> replicate_offsets;
+            auto& result_count_data = reinterpret_cast<Int64Column*>(result_count.get())->get_data();
+            Buffer<uint32_t> replicate_offsets(memory::get_default_allocator());
             replicate_offsets.reserve(result_count_data.size() + 1);
             int offset = 0;
             for (auto count : result_count_data) {

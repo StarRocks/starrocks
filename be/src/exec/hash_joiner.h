@@ -450,8 +450,8 @@ private:
 
     RuntimeState* _runtime_state = nullptr;
     // TODO: wire allocator propagation from build/probe operators in a follow-up phase.
-    memory::Allocator* _build_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _probe_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _build_allocator = memory::get_default_allocator();
+    memory::Allocator* _probe_allocator = memory::get_default_allocator();
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;

@@ -296,7 +296,7 @@ protected:
     const int32_t _driver_sequence;
     int32_t _runtime_filter_probe_sequence;
     // TODO: wire allocator propagation from upstream contexts in a follow-up phase.
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
     // e.g. OperatorTotalTime/PushChunkNum/PullChunkNum etc.

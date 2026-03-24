@@ -57,7 +57,7 @@ public:
 public:
     bool need_convert = false;
     tparquet::Type::type parquet_type;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
 };
 
 class ColumnConverterFactory {

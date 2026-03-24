@@ -91,11 +91,11 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
     while (s.size > 0) {
         char* next_pos = (char*)memchr(s.data, '"', s.size);
         if (next_pos == nullptr) {
-            bytes.insert(bytes.end(), s.data, s.data + s.size);
+            bytes.append(s.data, s.data + s.size);
             break;
         } else {
             ++next_pos;
-            bytes.insert(bytes.end(), s.data, next_pos);
+            bytes.append(s.data, next_pos);
             // If there are two successive double quotes.
             if (next_pos != end && *next_pos == '"') {
                 next_pos++;

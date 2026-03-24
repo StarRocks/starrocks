@@ -76,8 +76,8 @@ public:
             }
         }
 
-        NullData null_flags;
-        raw::make_room(&null_flags, num_rows);
+        NullData null_flags(arg0->allocator());
+        null_flags.resize(num_rows);
 
         // Construct null flags.
         uint32_t prev = offsets[0];
@@ -105,7 +105,7 @@ public:
 
         // construct selection list.
         std::vector<uint32_t> selection;
-        starrocks::raw::make_room(&selection, num_rows);
+        selection.resize(num_rows);
 
         prev = offsets[0];
         uint32_t idx = 0;

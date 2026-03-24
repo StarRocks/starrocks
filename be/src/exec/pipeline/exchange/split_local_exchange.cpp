@@ -61,7 +61,7 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
     size_t original_chunk_size = cur_chunk->num_rows();
     size_t cur_chunk_size = original_chunk_size;
     for (size_t i = _split_expr_ctxs.size() - 1; i > 0; i--) {
-        Filter chunk_filter(cur_chunk->num_rows(), 1);
+        Filter chunk_filter(memory::get_default_allocator(), cur_chunk->num_rows(), 1);
         auto& expr_ctx = _split_expr_ctxs[i];
         ASSIGN_OR_RETURN(size_t new_chunk_size, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
                                                         {expr_ctx}, cur_chunk.get(), &chunk_filter));

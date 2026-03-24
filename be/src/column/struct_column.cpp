@@ -20,7 +20,7 @@
 namespace starrocks {
 
 StructColumn::StructColumn(MutableColumns&& fields)
-        : StructColumn(memory::get_default_column_allocator(), std::move(fields)) {}
+        : StructColumn(memory::get_default_allocator(), std::move(fields)) {}
 
 StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields) : Base(allocator) {
     DCHECK_GT(fields.size(), 0);
@@ -34,7 +34,7 @@ StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, Mutabl
 }
 
 StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> field_names)
-        : StructColumn(memory::get_default_column_allocator(), std::move(fields), std::move(field_names)) {}
+        : StructColumn(memory::get_default_allocator(), std::move(fields), std::move(field_names)) {}
 
 StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields,
                            std::vector<std::string> field_names)
@@ -50,20 +50,20 @@ StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, Mutabl
 }
 
 StructColumn::StructColumn(const Columns& fields)
-        : StructColumn(memory::get_default_column_allocator(), fields) {}
+        : StructColumn(memory::get_default_allocator(), fields) {}
 
 StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields)
         : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields)) {}
 
 StructColumn::StructColumn(const Columns& fields, std::vector<std::string> field_names)
-        : StructColumn(memory::get_default_column_allocator(), fields, std::move(field_names)) {}
+        : StructColumn(memory::get_default_allocator(), fields, std::move(field_names)) {}
 
 StructColumn::StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields,
                            std::vector<std::string> field_names)
         : StructColumn(allocator, ColumnHelper::to_mutable_columns(fields), std::move(field_names)) {}
 
 StructColumn::Ptr StructColumn::create(const Columns& columns, std::vector<std::string> field_names) {
-    return StructColumn::create(memory::get_default_column_allocator(), columns, std::move(field_names));
+    return StructColumn::create(memory::get_default_allocator(), columns, std::move(field_names));
 }
 
 StructColumn::Ptr StructColumn::create(memory::Allocator* allocator, const Columns& columns,
@@ -73,7 +73,7 @@ StructColumn::Ptr StructColumn::create(memory::Allocator* allocator, const Colum
 }
 
 StructColumn::Ptr StructColumn::create(const Columns& columns) {
-    return StructColumn::create(memory::get_default_column_allocator(), columns);
+    return StructColumn::create(memory::get_default_allocator(), columns);
 }
 
 StructColumn::Ptr StructColumn::create(memory::Allocator* allocator, const Columns& columns) {

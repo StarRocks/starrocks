@@ -33,7 +33,7 @@ namespace starrocks {
     case NODE_TYPE: {                                                                       \
         DCHECK_EQ(node.node_type, TExprNodeType::CHECK_TYPE);                               \
         DCHECK(node.__isset.LITERAL_VALUE);                                                 \
-        _value = ColumnHelper::create_const_column<NODE_TYPE>(memory::get_default_column_allocator(), \
+        _value = ColumnHelper::create_const_column<NODE_TYPE>(memory::get_default_allocator(), \
                                                                node.LITERAL_VALUE.value, 1);             \
         break;                                                                              \
     }
@@ -66,7 +66,7 @@ static ColumnPtr const_column_from_literal(const TExprNode& node, int precision,
     auto fail =
             DecimalV3Cast::from_string<CppType>(&datum, precision, scale, literal_value.c_str(), literal_value.size());
     if (fail) {
-        return ColumnHelper::create_const_null_column(memory::get_default_column_allocator(), 1);
+        return ColumnHelper::create_const_null_column(memory::get_default_allocator(), 1);
     } else {
         return ColumnHelper::create_const_decimal_column<DecimalType>(datum, precision, scale, 1);
     }
@@ -74,7 +74,7 @@ static ColumnPtr const_column_from_literal(const TExprNode& node, int precision,
 
 VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
     if (node.node_type == TExprNodeType::NULL_LITERAL) {
-        _value = ColumnHelper::create_const_null_column(memory::get_default_column_allocator(), 1);
+        _value = ColumnHelper::create_const_null_column(memory::get_default_allocator(), 1);
         return;
     }
 
@@ -96,41 +96,41 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
             data = MAX_INT128;
         }
         _value =
-                ColumnHelper::create_const_column<TYPE_LARGEINT>(memory::get_default_column_allocator(), data, 1);
+                ColumnHelper::create_const_column<TYPE_LARGEINT>(memory::get_default_allocator(), data, 1);
         break;
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
-        _value = ColumnHelper::create_const_column<TYPE_VARCHAR>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_VARCHAR>(memory::get_default_allocator(),
                                                                   Slice(node.string_literal.value), 1);
         break;
     }
     case TYPE_TIME: {
-        _value = ColumnHelper::create_const_column<TYPE_TIME>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_TIME>(memory::get_default_allocator(),
                                                                node.float_literal.value, 1);
         break;
     }
     case TYPE_DATE: {
         DateValue v;
         if (v.from_string(node.date_literal.value.c_str(), node.date_literal.value.size())) {
-            _value = ColumnHelper::create_const_column<TYPE_DATE>(memory::get_default_column_allocator(), v, 1);
+            _value = ColumnHelper::create_const_column<TYPE_DATE>(memory::get_default_allocator(), v, 1);
         } else {
-            _value = ColumnHelper::create_const_null_column(memory::get_default_column_allocator(), 1);
+            _value = ColumnHelper::create_const_null_column(memory::get_default_allocator(), 1);
         }
         break;
     }
     case TYPE_DATETIME: {
         TimestampValue v;
         if (v.from_string(node.date_literal.value.c_str(), node.date_literal.value.size())) {
-            _value = ColumnHelper::create_const_column<TYPE_DATETIME>(memory::get_default_column_allocator(), v, 1);
+            _value = ColumnHelper::create_const_column<TYPE_DATETIME>(memory::get_default_allocator(), v, 1);
         } else {
-            _value = ColumnHelper::create_const_null_column(memory::get_default_column_allocator(), 1);
+            _value = ColumnHelper::create_const_null_column(memory::get_default_allocator(), 1);
         }
         break;
     }
     case TYPE_DECIMALV2: {
-        _value = ColumnHelper::create_const_column<TYPE_DECIMALV2>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_DECIMALV2>(memory::get_default_allocator(),
                                                                     DecimalV2Value(node.decimal_literal.value), 1);
         break;
     }
@@ -152,7 +152,7 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
     }
     case TYPE_VARBINARY: {
         // @IMPORTANT: build slice though get_data, else maybe will cause multi-thread crash in scanner
-        _value = ColumnHelper::create_const_column<TYPE_VARBINARY>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_VARBINARY>(memory::get_default_allocator(),
                                                                     Slice(node.binary_literal.value), 1);
         break;
     }

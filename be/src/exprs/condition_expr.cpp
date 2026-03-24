@@ -37,7 +37,7 @@ template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, memory::Allocator* allocator, ColumnPtr& selector,
                           const TypeDescriptor& type_desc) {
-        [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector->as_mutable_raw_ptr());
+        [[maybe_unused]] auto& select_vec = ColumnHelper::merge_nullable_filter(selector->as_mutable_raw_ptr());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 

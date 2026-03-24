@@ -742,7 +742,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         auto* hash_column = down_cast<const UInt32Column*>(chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         std::vector<uint32_t> indices;
-        Filter filter;
+        Filter filter(memory::get_default_allocator());
         indices.reserve(chunk->num_rows());
         filter.reserve(chunk->num_rows());
         for (uint32_t i = 0; i < hash_values.size(); ++i) {

@@ -476,7 +476,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
 
     HashMap hash_map;
 
-    Buffer<uint32_t> slice_sizes;
+    Buffer<uint32_t> slice_sizes = Buffer<uint32_t>(memory::get_default_allocator());
     uint32_t max_one_row_size = 8;
 
     std::unique_ptr<MemPool> inner_mem_pool;
@@ -546,7 +546,7 @@ struct PartitionHashMapWithSerializedKeyFixedSize : public PartitionHashMapBase<
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
 
-    Buffer<uint32_t> slice_sizes;
+    Buffer<uint32_t> slice_sizes = Buffer<uint32_t>(memory::get_default_allocator());
     std::vector<FixedSizeSliceKey> buffer;
 
     PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {

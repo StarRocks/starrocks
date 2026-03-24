@@ -99,7 +99,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
     size_t null_count = fill_null_column(&result_ary, 0, result_num_rows, null_column, 0);
     nullable_column->set_has_null(null_count != 0);
 
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
     filter.resize(result_num_rows);
     auto status = converter(&result_ary, 0, result_num_rows, data_column, 0, null_data, &filter, nullptr, nullptr);
     RETURN_IF_ERROR(status);

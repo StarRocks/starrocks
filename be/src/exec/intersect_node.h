@@ -82,7 +82,7 @@ private:
 
     std::unique_ptr<IntersectHashSerializeSet> _hash_set;
     IntersectHashSerializeSet::Iterator _hash_set_iterator;
-    IntersectHashSerializeSet::KeyVector _remained_keys;
+    IntersectHashSerializeSet::KeyVector _remained_keys{memory::get_default_allocator()};
 
     // pool for allocate key.
     std::unique_ptr<MemPool> _build_pool;

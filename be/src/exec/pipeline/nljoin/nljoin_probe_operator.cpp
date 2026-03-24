@@ -307,7 +307,8 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
         auto null_column = NullColumn::create(allocator(), chunk->num_rows());
         auto& null_data = null_column->get_data();
 
-        *filter = std::make_shared<Filter>(chunk->num_rows(), 1);
+        *filter = std::make_shared<Filter>(memory::get_default_allocator());
+        (*filter)->assign(chunk->num_rows(), 1);
         auto& filter_data = **filter;
 
         // for null-aware left anti join, join_conjunct[0] is on-predicate
@@ -428,7 +429,8 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
 
     if ((_is_left_semi_join() || _is_left_anti_join()) && chunk->num_rows() > 0) {
         if (!filter && chunk->num_rows() > 0) {
-            filter = std::make_shared<Filter>(chunk->num_rows(), 0);
+            filter = std::make_shared<Filter>(memory::get_default_allocator());
+            filter->assign(chunk->num_rows(), 0);
             if (_is_left_semi_join()) {
                 (*filter)[0] = 1;
             } else {

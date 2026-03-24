@@ -269,8 +269,8 @@ private:
     SpillProcessMetrics _metrics;
     SpilledOptions _opts;
     // TODO: wire allocator propagation from owner contexts in a follow-up phase.
-    memory::Allocator* _spill_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _restore_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _spill_allocator = memory::get_default_allocator();
+    memory::Allocator* _restore_allocator = memory::get_default_allocator();
     std::weak_ptr<SpillerFactory> _parent;
 
     std::unique_ptr<SpillerWriter> _writer;

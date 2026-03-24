@@ -609,7 +609,7 @@ private:
             dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column.data_column_raw_ptr());
             auto& dest_null_data = dest_nullable_column.null_column_data();
 
-            dest_null_data = null_result->get_data();
+            dest_null_data.assign(null_result->get_data().begin(), null_result->get_data().end());
             dest_nullable_column.set_has_null(has_null);
         } else {
             dest_data_column = down_cast<ArrayColumn*>(dest_column.get());

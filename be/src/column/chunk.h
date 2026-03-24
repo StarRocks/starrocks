@@ -237,10 +237,10 @@ public:
     // The size of |selection| must be equal to the number of rows.
     // @param force whether check zero-count of filter, skip the filter procedure if no data to filter
     // @return the number of rows after filter.
-    size_t filter(const Buffer<uint8_t>& selection, bool force = false);
+    size_t filter(const Filter& selection, bool force = false);
 
     // Return the number of rows after filter.
-    size_t filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
+    size_t filter_range(const Filter& selection, size_t from, size_t to);
 
     // Return the data of n-th row.
     // This method is relatively slow and mainly used for unit tests now.
@@ -625,8 +625,8 @@ public:
     void append_safe(const Chunk& src, size_t offset, size_t count);
     void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
     void rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
-    size_t filter(const Buffer<uint8_t>& selection, bool force = false);
-    size_t filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
+    size_t filter(const Filter& selection, bool force = false);
+    size_t filter_range(const Filter& selection, size_t from, size_t to);
     DatumTuple get(size_t n) const;
 
     void set_delete_state(DelCondSatisfied state) { _delete_state = state; }

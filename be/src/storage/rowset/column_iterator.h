@@ -68,7 +68,7 @@ struct ColumnIteratorOptions {
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     void sanity_check() const {
         CHECK_NOTNULL(read_file);

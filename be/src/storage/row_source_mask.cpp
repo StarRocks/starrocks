@@ -162,8 +162,8 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
         return Status::InternalError("fail to read masks size from mask file");
     }
 
-    Buffer<uint16_t> content;
-    raw::stl_vector_resize_uninitialized(&content, num_rows);
+    Buffer<uint16_t> content(memory::get_default_allocator());
+    content.resize(num_rows);
     r_size = ::read(_tmp_file_fd, content.data(), content.size() * sizeof(content[0]));
     if (r_size != content.size() * sizeof(content[0])) {
         PLOG(WARNING) << "fail to read masks from mask file. read size=" << r_size;

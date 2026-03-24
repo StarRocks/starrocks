@@ -59,6 +59,7 @@ public:
     /// Used to allocate memory for serializing columns to the key.
     struct BufferState {
     public:
+        BufferState() : slice_sizes(memory::get_default_allocator()) {}
         Status init(RuntimeState* state);
 
     public:

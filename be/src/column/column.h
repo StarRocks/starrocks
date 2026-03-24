@@ -496,7 +496,7 @@ public:
     }
 
 protected:
-    Column() : _allocator(memory::get_default_column_allocator()) {}
+    Column() : _allocator(memory::get_default_allocator()) {}
     explicit Column([[maybe_unused]] memory::Allocator* allocator) : _allocator(allocator) {}
 
     // Helper functions for downgrade and upgrade,

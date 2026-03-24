@@ -111,7 +111,7 @@ Status SortContext::_init_merger() {
     }
 
     memory::Allocator* merge_alloc =
-            _chunks_sorter_partitions.empty() ? memory::get_default_column_allocator()
+            _chunks_sorter_partitions.empty() ? memory::get_default_allocator()
                                             : _chunks_sorter_partitions[0]->source_allocator();
 #ifndef NDEBUG
     for (size_t pi = 1; pi < _chunks_sorter_partitions.size(); ++pi) {

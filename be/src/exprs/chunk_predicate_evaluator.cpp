@@ -29,7 +29,7 @@ namespace starrocks {
 namespace {
 
 Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk) {
-    Filter filter(chunk->num_rows(), 1);
+    Filter filter(memory::get_default_allocator(), chunk->num_rows(), 1);
     Filter* raw_filter = &filter;
 
     // prune chunk when pruned size is large enough
@@ -106,7 +106,8 @@ Status ChunkPredicateEvaluator::eval_conjuncts(const std::vector<ExprContext*>& 
     if (!apply_filter) {
         DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
     }
-    FilterPtr filter(new Filter(chunk->num_rows(), 1));
+    FilterPtr filter(new Filter(memory::get_default_allocator()));
+    filter->assign(chunk->num_rows(), 1);
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
     }
@@ -184,7 +185,7 @@ void ChunkPredicateEvaluator::eval_filter_null_values(Chunk* chunk,
     if (before_size == 0) return;
 
     // lazy allocation.
-    Buffer<uint8_t> selection(0);
+    Filter selection(memory::get_default_allocator());
 
     for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);

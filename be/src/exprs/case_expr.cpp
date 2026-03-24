@@ -595,7 +595,7 @@ private:
                         when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
                     }
                     for (int i = 0; i < when_column_size; ++i) {
-                        ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
+                        [[maybe_unused]] auto& filter = ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
                     }
 
                     using ResultContainer = typename RunTimeColumnType<ResultType>::Container;

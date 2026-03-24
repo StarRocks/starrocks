@@ -223,7 +223,7 @@ bool NLJoinContext::finish_probe(int32_t driver_seq, const Filter& build_match_f
     return is_last;
 }
 
-const Filter NLJoinContext::get_shared_build_match_flag() const {
+const Filter& NLJoinContext::get_shared_build_match_flag() const {
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     std::lock_guard guard(_join_stage_mutex);
     return _shared_build_match_flag;

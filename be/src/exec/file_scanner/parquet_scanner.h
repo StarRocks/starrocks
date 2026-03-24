@@ -84,7 +84,7 @@ private:
     std::vector<std::unique_ptr<ConvertFuncTree>> _conv_funcs;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
-    Filter _chunk_filter;
+    Filter _chunk_filter = Filter(memory::get_default_allocator());
     ArrowConvertContext _conv_ctx;
     int64_t _last_file_size = 0;
     int64_t _last_range_size = 0;

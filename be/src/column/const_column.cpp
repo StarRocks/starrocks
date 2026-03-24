@@ -23,13 +23,13 @@
 
 namespace starrocks {
 
-ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(memory::get_default_column_allocator(), std::move(data), 0) {}
+ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(memory::get_default_allocator(), std::move(data), 0) {}
 
 ConstColumn::ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data)
         : ConstColumn(allocator, std::move(data), 0) {}
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size)
-        : ConstColumn(memory::get_default_column_allocator(), std::move(data), size) {}
+        : ConstColumn(memory::get_default_allocator(), std::move(data), size) {}
 
 ConstColumn::ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data, size_t size)
         : SuperClass(allocator), _data(std::move(data)), _size(size) {

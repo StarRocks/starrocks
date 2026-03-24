@@ -23,14 +23,14 @@ namespace starrocks {
 VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
     switch (_type.type) {
     case TYPE_BIGINT: {
-        _value = ColumnHelper::create_const_column<TYPE_BIGINT>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_BIGINT>(memory::get_default_allocator(),
                                                                  node.info_func.int_value, 1);
         break;
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         // @IMPORTANT: build slice though get_data, else maybe will case multi-thread crash in scanner
-        _value = ColumnHelper::create_const_column<TYPE_VARCHAR>(memory::get_default_column_allocator(),
+        _value = ColumnHelper::create_const_column<TYPE_VARCHAR>(memory::get_default_allocator(),
                                                                   node.info_func.str_value, 1);
         break;
     }

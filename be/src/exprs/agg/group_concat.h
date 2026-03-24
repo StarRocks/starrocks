@@ -632,7 +632,7 @@ public:
         }
         // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
         // TODO(fzh) optimize it later, as distinct is often rewritten to group by.
-        Buffer<bool> duplicated(outputs[0]->size(), false);
+        std::vector<bool> duplicated(outputs[0]->size(), false);
         if (ctx->get_is_distinct()) {
             for (auto row_id = 0; row_id < elem_size; row_id++) {
                 bool is_duplicated = false;

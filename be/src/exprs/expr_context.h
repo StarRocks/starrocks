@@ -144,7 +144,7 @@ private:
 
     RuntimeState* _runtime_state = nullptr;
     // TODO: wire allocator propagation to/from FunctionContext in a follow-up phase.
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     /// The expr tree this context is for.
     Expr* _root;
 

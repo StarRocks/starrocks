@@ -83,7 +83,7 @@ private:
     std::unique_ptr<ExceptHashSerializeSet> _hash_set = nullptr;
     std::unique_ptr<ExceptBufferState> _buffer_state = nullptr;
     ExceptHashSerializeSet::Iterator _hash_set_iterator;
-    ExceptHashSerializeSet::KeyVector _remained_keys;
+    ExceptHashSerializeSet::KeyVector _remained_keys{memory::get_default_allocator()};
 
     // pool for allocate key.
     std::unique_ptr<MemPool> _build_pool;

@@ -163,7 +163,8 @@ public:
                 // step 2: merge first_nullable_arg_col(if exsited)'s null_column into fake_null_column
                 const uint8_t* __restrict nulls = first_nullable_arg_col->immutable_null_column_data().data();
                 // merge two null column
-                ColumnHelper::or_two_filters(&fake_null_column->get_data(), nulls);
+                ColumnHelper::or_two_filters(fake_null_column->get_data().size(), fake_null_column->get_data().data(),
+                                             nulls);
                 data_column = first_nullable_arg_col;
             }
         }

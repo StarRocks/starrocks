@@ -404,7 +404,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         auto result = BinaryColumn::create(allocator);
         auto& bytes = result->get_bytes();
         auto& offsets = result->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
+        offsets.resize(num_rows + 1);
         offsets[0] = 0;
         size_t max_length = decimal_precision_limit<DecimalCppType> + 4;
         bytes.resize(num_rows * max_length);

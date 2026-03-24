@@ -101,7 +101,7 @@ protected:
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
 

@@ -40,7 +40,7 @@ public:
         reserve(chunk_size);
     }
 
-    ColumnBuilder(int32_t chunk_size) : ColumnBuilder(memory::get_default_column_allocator(), chunk_size) {}
+    ColumnBuilder(int32_t chunk_size) : ColumnBuilder(memory::get_default_allocator(), chunk_size) {}
 
     ColumnBuilder(memory::Allocator* allocator, int32_t chunk_size, int precision, int scale) : _allocator(allocator) {
         _has_null = false;
@@ -58,15 +58,15 @@ public:
     }
 
     ColumnBuilder(int32_t chunk_size, int precision, int scale)
-            : ColumnBuilder(memory::get_default_column_allocator(), chunk_size, precision, scale) {}
+            : ColumnBuilder(memory::get_default_allocator(), chunk_size, precision, scale) {}
 
     ColumnBuilder(DataColumnMutablePtr&& column, NullColumnMutablePtr&& null_column, bool has_null)
-            : _allocator(memory::get_default_column_allocator()),
+            : _allocator(memory::get_default_allocator()),
               _column(std::move(column)),
               _null_column(std::move(null_column)),
               _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
-    explicit ColumnBuilder(void*) : _allocator(memory::get_default_column_allocator()) {}
+    explicit ColumnBuilder(void*) : _allocator(memory::get_default_allocator()) {}
 
     void append(const DatumType& value) {
         _null_column->append(DATUM_NOT_NULL);
@@ -153,20 +153,19 @@ public:
         _null_column = NullColumn::create(_allocator);
         _has_null = false;
     }
-    NullableBinaryColumnBuilder() : NullableBinaryColumnBuilder(memory::get_default_column_allocator()) {}
+    NullableBinaryColumnBuilder() : NullableBinaryColumnBuilder(memory::get_default_allocator()) {}
 
     // allocate enough room for offsets and null_column
     // reserve bytes_size bytes for Bytes. size of offsets
     // and null_column are deterministic, so proper memory
     // room can be allocated, but bytes' size is non-deterministic,
-    // so just reserve moderate memory room. offsets need no
-    // initialization(raw::make_room), because it is overwritten
-    // fully. null_columns should be zero-out(resize), just
-    // slot corresponding to null elements is marked to 1.
+    // so just reserve moderate memory room. offsets are resized
+    // and then overwritten fully. null_columns should be zero-out
+    // (resize), just slot corresponding to null elements is marked to 1.
     void resize(size_t num_rows, size_t bytes_size) {
         _column->get_bytes().reserve(bytes_size);
         auto& offsets = _column->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
+        offsets.resize(num_rows + 1);
         offsets[0] = 0;
         _null_column->get_data().resize(num_rows);
     }
@@ -190,7 +189,7 @@ public:
     void append(uint8_t* begin, uint8_t* end, size_t i) {
         Bytes& bytes = _column->get_bytes();
         Offsets& offsets = _column->get_offset();
-        bytes.insert(bytes.end(), begin, end);
+        bytes.append(begin, end);
         offsets[i + 1] = bytes.size();
     }
     // for concat and concat_ws, several columns are concatenated
@@ -200,7 +199,7 @@ public:
     // as follows
     void append_partial(const uint8_t* begin, const uint8_t* end) {
         Bytes& bytes = _column->get_bytes();
-        bytes.insert(bytes.end(), begin, end);
+        bytes.append(begin, end);
     }
 
     void append_partial(const Slice& slice) {

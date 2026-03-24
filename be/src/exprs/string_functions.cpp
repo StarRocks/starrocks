@@ -14,6 +14,7 @@
 
 #include "exprs/string_functions.h"
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
 #include "column/bytes.h"
 #include "function_context.h"
@@ -245,7 +246,7 @@ static inline void binary_column_empty_op(Bytes* bytes, Offsets* offsets, size_t
 }
 
 static inline void binary_column_non_empty_op(uint8_t* begin, uint8_t* end, Bytes* bytes, Offsets* offsets, size_t i) {
-    bytes->insert(bytes->end(), begin, end);
+    bytes->append(begin, end);
     (*offsets)[i + 1] = bytes->size();
 }
 
@@ -378,7 +379,7 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
     // size of concatenation of tail columns(i.e. columns except the 1st one)
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
-    raw::make_room(&tail, get_olap_string_max_length());
+    tail.resize(get_olap_string_max_length());
     auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
@@ -452,7 +453,7 @@ ColumnPtr substr_const_not_null(memory::Allocator* allocator, const Columns& col
         bytes.reserve(reserved);
     }
 
-    raw::make_room(&offsets, size + 1);
+    offsets.resize(size + 1);
     offsets[0] = 0;
 
     auto src_bytes = src->get_immutable_bytes();
@@ -501,7 +502,7 @@ ColumnPtr right_const_not_null(memory::Allocator* allocator, const Columns& colu
     }
 
     bytes.reserve(reserved);
-    raw::make_room(&offsets, size + 1);
+    offsets.resize(size + 1);
     offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
@@ -804,7 +805,7 @@ public:
         auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
         auto& nulls = builder.get_null_data();
 
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
         nulls.resize(num_rows);
         bool has_null = false;
@@ -904,7 +905,7 @@ static inline ColumnPtr repeat_const_not_null(memory::Allocator* allocator, cons
         dst_offsets.resize(num_rows + 1);
         return builder.build(ColumnHelper::is_all_const(columns));
     } else {
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
         if (reserved > get_olap_string_max_length() * num_rows) {
@@ -961,7 +962,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     bool has_null = false;
@@ -1215,7 +1216,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(memory::A
 
     const int num_src_bytes = src_offsets.back();
     dst_bytes.resize(num_src_bytes);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     uint8_t* dst_begin = dst_bytes.data();
@@ -1269,7 +1270,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(memory::Al
     // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
     // UTF-8 character.
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_nulls.resize(num_rows);
 
@@ -1335,7 +1336,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     const auto& src_offsets = src_viewer.column()->get_offset();
     const int num_src_bytes = src_offsets.back();
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_nulls.resize(num_rows);
 
@@ -1466,7 +1467,7 @@ static inline ColumnPtr ascii_pad_ascii_const(memory::Allocator* allocator, Colu
     auto& dst_bytes = result->get_bytes();
 
     dst_bytes.resize(num_rows * len);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
     uint8_t* dst_begin = dst_bytes.data();
@@ -1520,10 +1521,10 @@ static inline ColumnPtr pad_utf8_const(memory::Allocator* allocator, Columns con
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
 
-    Bytes dst_bytes;
+    Bytes dst_bytes(allocator);
     dst_bytes.reserve(16ULL << 20);
     size_t dst_off = 0;
     bool has_null = false;
@@ -1664,7 +1665,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
     builder.resize(num_rows, 0);
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
-    Bytes dst_bytes;
+    Bytes dst_bytes(memory::get_default_allocator());
     dst_bytes.reserve(16ULL << 20);
 
     size_t dst_off = 0;
@@ -1955,7 +1956,7 @@ static inline void vectorized_toggle_case(const ImmBytes src, Bytes* dst) {
     static_assert(sizeof(Bytes::value_type) == 1, "Underlying element type must be 8-bit width");
     static_assert(std::is_trivially_destructible_v<Bytes::value_type>,
                   "Underlying element type must have a trivial destructor");
-    Bytes buffer;
+    Bytes buffer(memory::get_default_allocator());
     buffer.resize(size);
     uint8_t* dst_ptr = buffer.data();
     char* begin = (char*)(src.data());
@@ -2388,7 +2389,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
         }
     }
 
-    bytes->insert(bytes->end(), (uint8*)from_ptr, (uint8*)to_ptr);
+    bytes->append((uint8*)from_ptr, (uint8*)to_ptr);
     (*offsets)[i + 1] = bytes->size();
 }
 
@@ -2404,7 +2405,7 @@ struct AdaptiveTrimFunction {
         auto& dst_bytes = dst->get_bytes();
 
         const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
+        dst_offsets.resize(num_rows + 1);
         dst_offsets[0] = 0;
         dst_bytes.reserve(src->get_immutable_bytes().size());
 
@@ -2929,7 +2930,7 @@ static inline ColumnPtr concat_const_not_null(memory::Allocator* allocator, Colu
     auto is_null = false;
 
     const auto num_rows = src->size();
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     nulls.resize(num_rows);
 
@@ -2982,7 +2983,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
 
@@ -3109,7 +3110,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
     auto* dst_begin = (uint8_t*)dst_bytes.data();
@@ -3969,7 +3970,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(memory::Allocator* allocator, 
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.resize(num_rows + 1);
     dst_bytes.reserve(data_count());
 
     // copy data row by row with replacements applied

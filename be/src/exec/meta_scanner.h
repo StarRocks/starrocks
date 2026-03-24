@@ -27,7 +27,7 @@ namespace starrocks {
 
 struct MetaScannerParams {
     const TInternalScanRange* scan_range = nullptr;
-    memory::Allocator* allocator = memory::get_default_column_allocator();
+    memory::Allocator* allocator = memory::get_default_allocator();
 };
 
 class MetaScanner {

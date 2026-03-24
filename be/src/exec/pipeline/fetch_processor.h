@@ -127,7 +127,7 @@ private:
     const phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     const std::shared_ptr<StarRocksNodesInfo> _nodes_info;
     // Allocator is propagated from Fetch sink/source operators during prepare().
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     int32_t _local_be_id = 0;
 
     BatchUnitPtr _current_unit;

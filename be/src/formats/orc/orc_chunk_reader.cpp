@@ -470,7 +470,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
     if (_broker_load_mode) {
         // always allocate load filter. it's much easier to use in fill chunk function.
         if (_broker_load_filter == nullptr) {
-            _broker_load_filter = std::make_shared<Filter>(_read_chunk_size);
+            _broker_load_filter = std::make_shared<Filter>(memory::get_default_allocator());
         }
         _broker_load_filter->assign(_batch->numElements, 1);
     }
@@ -1209,19 +1209,23 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
 StatusOr<MutableColumnPtr> OrcChunkReader::get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx) {
     int64_t start_pos = _row_reader->getRowNumber();
     auto num_rows = _batch->numElements;
-    auto filter_column = BooleanColumn::create(_allocator, num_rows, 1);
-    auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
-
     if (skip_rows_ctx == nullptr || !skip_rows_ctx->has_skip_rows()) {
+        auto filter_column = BooleanColumn::create(_allocator, num_rows, 1);
+        auto& data = static_cast<BooleanColumn*>(filter_column.get())->get_data();
+        data.assign(num_rows, 1);
         return filter_column;
     }
 
+    Filter filter(memory::get_default_allocator(), num_rows, 1);
     StatusOr<bool> status = skip_rows_ctx->deletion_bitmap->fill_filter(start_pos, start_pos + num_rows, filter);
     if (!status.ok()) {
         LOG(WARNING) << "OrcChunkReader::get_row_delete_filter, Failed to fill filter: " << status.status().message();
         return Status::InternalError(
                 strings::Substitute("OrcChunkReader Failed to fill filter: $0", status.status().message()));
     }
+    auto filter_column = BooleanColumn::create(_allocator, num_rows, 1);
+    auto& data = static_cast<BooleanColumn*>(filter_column.get())->get_data();
+    data.assign(filter.begin(), filter.end());
     return filter_column;
 }
 
@@ -1256,7 +1260,7 @@ Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<Slo
 
         const Filter& dict_filter = (*it.second);
         auto data_filter = BooleanColumn::create(_allocator, size);
-        Filter& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
+        auto& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
         DCHECK(data.size() == size);
 
         auto* batch = down_cast<orc::StringVectorBatch*>(struct_batch->fieldsColumnIdMap[column_id]);

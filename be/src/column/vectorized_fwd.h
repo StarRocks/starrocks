@@ -136,7 +136,7 @@ using SchemaPtr = std::shared_ptr<Schema>;
 using Fields = std::vector<std::shared_ptr<Field>>;
 using FieldPtr = std::shared_ptr<Field>;
 
-using Filter = std::vector<uint8_t>;
+using Filter = util::Buffer<uint8_t, 0>;
 using FilterPtr = std::shared_ptr<Filter>;
 using FilterData = uint8_t;
 

@@ -71,7 +71,7 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
 
     ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
     dict_value_chunk->append_column(result_column, slot_id);
-    Filter filter(dict_size, 1);
+    Filter filter(memory::get_default_allocator(), dict_size, 1);
     int dict_values_after_filter = 0;
     ASSIGN_OR_RETURN(dict_values_after_filter, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
                                                        conjunct_ctxs, dict_value_chunk.get(), &filter));

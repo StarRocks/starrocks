@@ -268,13 +268,13 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 const char* s = p_start + offset_data[i];
                 size_t old_size = offset_data[i + 1] - offset_data[i];
                 size_t new_size = remove_trailing_spaces(s, old_size);
-                bytes.insert(bytes.end(), s, s + new_size);
+                bytes.append(s, s + new_size);
                 offsets[i] = total_size;
                 total_size += new_size;
             }
             offsets[dict_size] = total_size;
         } else {
-            bytes.insert(bytes.end(), start, end);
+            bytes.append(start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
                 offsets[i] = offset_data[i];

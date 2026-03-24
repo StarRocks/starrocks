@@ -53,7 +53,7 @@ protected:
     Status _real_init();
 
     LakeMetaScanNode* _parent;
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     int64_t _tablet_id;
     std::unique_ptr<LakeMetaReader> _reader;
 };

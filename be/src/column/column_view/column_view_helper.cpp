@@ -54,7 +54,7 @@ std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(memory::All
 
 std::optional<MutableColumnPtr> ColumnViewHelper::create_column_view(const TypeDescriptor& type_desc, bool nullable,
                                                                      long concat_rows_limit, long concat_bytes_limit) {
-    return create_column_view(memory::get_default_column_allocator(), type_desc, nullable, concat_rows_limit,
+    return create_column_view(memory::get_default_allocator(), type_desc, nullable, concat_rows_limit,
                               concat_bytes_limit);
 }
 } // namespace starrocks

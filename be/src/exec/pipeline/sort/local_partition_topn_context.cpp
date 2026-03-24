@@ -31,7 +31,7 @@ void LocalPartitionTopnContext::set_sink_allocator_for_sorters(memory::Allocator
 
 void LocalPartitionTopnContext::set_source_allocator_for_sorters(memory::Allocator* allocator) {
     _source_allocator_for_sorters = allocator;
-    memory::Allocator* eff = allocator ? allocator : memory::get_default_column_allocator();
+    memory::Allocator* eff = allocator ? allocator : memory::get_default_allocator();
     for (auto& s : _chunks_sorters) {
         if (s) {
             s->set_source_allocator(eff);
@@ -207,10 +207,10 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                 {
                     memory::Allocator* sink_alloc =
                             _sink_allocator_for_sorters ? _sink_allocator_for_sorters
-                                                        : memory::get_default_column_allocator();
+                                                        : memory::get_default_allocator();
                     memory::Allocator* src_alloc =
                             _source_allocator_for_sorters ? _source_allocator_for_sorters
-                                                          : memory::get_default_column_allocator();
+                                                          : memory::get_default_allocator();
                     _chunks_sorters.back()->set_sink_allocator(sink_alloc);
                     _chunks_sorters.back()->set_source_allocator(src_alloc);
                 }

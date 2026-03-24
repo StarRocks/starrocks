@@ -135,7 +135,7 @@ struct StringUnaryFunction {
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
             std::string ret = OP::template apply<RunTimeCppType<Type>, std::string>(r1[i], std::forward<Args>(args)...);
-            bytes.insert(bytes.end(), (uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
+            bytes.append((uint8_t*)ret.data(), (uint8_t*)ret.data() + ret.size());
             offset.emplace_back(bytes.size());
         }
 

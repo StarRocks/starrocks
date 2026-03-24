@@ -623,11 +623,11 @@ void JoinHashMap<LT, CT, MT>::_search_ht_impl(RuntimeState* state, const ImmBuff
 
 #define REORDER_PROBE_INDEX()                                                                                         \
     if (_probe_state->match_flag != JoinMatchFlag::NORMAL) {                                                          \
-        Buffer<uint32_t> permutation(_probe_state->probe_index.size(), -1);                                           \
+        Buffer<uint32_t> permutation(_probe_state->allocator, _probe_state->probe_index.size(), -1);                  \
         for (auto i = 0; i < _probe_state->match_count; ++i) {                                                        \
             permutation[_probe_state->probe_index[i]] = i;                                                            \
         }                                                                                                             \
-        Buffer<uint32_t> new_order(_probe_state->build_index.size(), 0);                                              \
+        Buffer<uint32_t> new_order(_probe_state->allocator, _probe_state->build_index.size(), 0);                     \
         uint32_t count = 0;                                                                                           \
         for (auto i = 0; i < _probe_state->probe_row_count; ++i) {                                                    \
             if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE ||                                           \

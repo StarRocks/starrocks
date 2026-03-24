@@ -405,7 +405,7 @@ void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32
     }
 }
 
-size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
+size_t Chunk::filter(const Filter& selection, bool force) {
     if (!force && SIMD::count_zero(selection) == 0) {
         return num_rows();
     }
@@ -415,7 +415,7 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
     return num_rows();
 }
 
-size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
+size_t Chunk::filter_range(const Filter& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
         column->as_mutable_raw_ptr()->filter_range(selection, from, to);
     }
@@ -979,7 +979,7 @@ void MutableChunk::rolling_append_selective(Chunk& src, const uint32_t* indexes,
     }
 }
 
-size_t MutableChunk::filter(const Buffer<uint8_t>& selection, bool force) {
+size_t MutableChunk::filter(const Filter& selection, bool force) {
     if (!force && SIMD::count_zero(selection) == 0) {
         return num_rows();
     }
@@ -989,7 +989,7 @@ size_t MutableChunk::filter(const Buffer<uint8_t>& selection, bool force) {
     return num_rows();
 }
 
-size_t MutableChunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
+size_t MutableChunk::filter_range(const Filter& selection, size_t from, size_t to) {
     for (auto& column : _columns) {
         column->filter_range(selection, from, to);
     }

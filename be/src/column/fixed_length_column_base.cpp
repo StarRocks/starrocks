@@ -44,7 +44,7 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
 
     auto& datas = get_data();
     const size_t orig_size = datas.size();
-    raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
+    datas.resize(orig_size + count);
 
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
@@ -58,7 +58,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     indexes += from;
     auto& datas = get_data();
     const size_t orig_size = datas.size();
-    raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
+    datas.resize(orig_size + size);
     auto* dest_data = datas.data() + orig_size;
 
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
@@ -175,9 +175,10 @@ template <typename T>
 size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from, size_t to) {
     // TODO: FIXME
     const auto src = immutable_data();
-    raw::stl_vector_resize_uninitialized(&_data, src.size());
-    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
-    _data.resize(size);
+    auto& data = get_data();
+    data.resize(src.size());
+    auto size = column_filter_range::filter_range<T>(filter, data.data(), src.data(), from, to);
+    data.resize(size);
     _resource.reset();
     return size;
 }
@@ -277,7 +278,7 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* p
 template <typename T>
 void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     auto& datas = this->get_data();
-    raw::make_room(&datas, chunk_size);
+    datas.resize(chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(&datas[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);

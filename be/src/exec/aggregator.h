@@ -430,8 +430,8 @@ protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
     // TODO: wire allocator propagation from sink/source operators in a follow-up phase.
-    memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _source_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _sink_allocator = memory::get_default_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_allocator();
 
     // Expr/Object pool owned by Aggregator.
     // Used to allocate ExprContext and other helper objects whose lifetime
@@ -500,7 +500,7 @@ protected:
     // Indicates we should use update or merge method to process aggregate column data
     std::vector<bool> _is_merge_funcs;
     // In order batch update agg states
-    Buffer<AggDataPtr> _tmp_agg_states;
+    Buffer<AggDataPtr> _tmp_agg_states = Buffer<AggDataPtr>(memory::get_default_allocator());
     std::vector<AggFunctionTypes> _agg_fn_types;
 
     // Exprs used to evaluate conjunct
@@ -527,7 +527,7 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
-    Filter _streaming_selection;
+    Filter _streaming_selection = Filter(memory::get_default_allocator());
 
     bool _has_udaf = false;
 

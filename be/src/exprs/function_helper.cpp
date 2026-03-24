@@ -93,7 +93,7 @@ MutableColumnPtr FunctionHelper::create_column(memory::Allocator* allocator, con
 }
 
 MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
-    return create_column(memory::get_default_column_allocator(), type_desc, nullable);
+    return create_column(memory::get_default_allocator(), type_desc, nullable);
 }
 
 NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
@@ -212,7 +212,7 @@ NullColumn::MutablePtr FunctionHelper::union_null_column(const NullColumnPtr& v1
     NullColumn::MutablePtr null_result = NullColumn::create(v1->allocator());
 
     auto& result_data = null_result->get_data();
-    raw::make_room(&result_data, row_num);
+    result_data.resize(row_num);
     auto result_begin = (uint8_t*)result_data.data();
     const size_t bytes_size = sizeof(NullColumn::ValueType) * row_num;
 

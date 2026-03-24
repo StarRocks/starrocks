@@ -49,7 +49,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     } else {
         const auto* arg0 = columns[0].get();
         auto col_result = Int32Column::create(context->allocator());
-        raw::make_room(&col_result->get_data(), num_rows);
+        col_result->get_data().resize(num_rows);
         DCHECK_EQ(col_array->size(), col_result->size());
 
         int32_t* p = col_result->get_data().data();
@@ -455,7 +455,7 @@ private:
         }
         auto& offsets = arr_col->offsets().get_data();
         size_t num_rows = offsets.size() - 1;
-        NullColumn::Container::pointer null_data = null_column ? null_column->get_data().data() : nullptr;
+        const uint8_t* null_data = null_column ? null_column->get_data().data() : nullptr;
 
         if constexpr (element_nullable) {
             DCHECK(element_null_data != nullptr);
@@ -1538,7 +1538,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ct
     auto* base_offsets_ptr = base_offsets_col->get_data().data();
     auto* nulls_ptr = nulls->get_data().data();
 
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
     filter.resize(base_elements->size(), 1);
     auto* hits = filter.data();
 
@@ -1816,7 +1816,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         auto dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column->data_column_raw_ptr());
         auto& dest_null_data = dest_nullable_column->null_column_data();
-        dest_null_data = static_cast<NullColumn*>(null_result.get())->get_data();
+        dest_null_data.assign(static_cast<NullColumn*>(null_result.get())->get_data().begin(),
+                              static_cast<NullColumn*>(null_result.get())->get_data().end());
         dest_nullable_column->set_has_null(has_null);
     } else {
         dest_data_column = down_cast<ArrayColumn*>(dest_column.get());

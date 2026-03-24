@@ -96,10 +96,10 @@ private:
     // when ExceptOutputSourceOperator is finished by calling close().
     std::unique_ptr<MemPool> _build_pool = nullptr;
     // Allocators are set by sink/source operators during prepare().
-    memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _source_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _sink_allocator = memory::get_default_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_allocator();
 
-    ExceptHashSerializeSet::KeyVector _remained_keys;
+    ExceptHashSerializeSet::KeyVector _remained_keys{memory::get_default_allocator()};
     // Used for traversal on the hash set to get the undeleted keys to dest chunk.
     // Init when the hash set is finished building in finish_build_ht().
     ExceptHashSerializeSet::Iterator _next_processed_iter;

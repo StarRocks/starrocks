@@ -49,7 +49,7 @@ void get_compare_results_colwise(size_t rows_to_sort, const Columns& order_by_co
     size_t order_by_column_size = order_by_columns.size();
 
     for (size_t i = 0; i < dats_segment_size; i++) {
-        Buffer<Datum> rhs_values;
+        Buffer<Datum> rhs_values(memory::get_default_allocator());
         auto& segment = data_segments[i];
         for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
             rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
@@ -454,7 +454,11 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     DCHECK(_merged_runs.num_rows() > 0);
     size_t data_segment_size = data_segments.size();
 
-    std::vector<CompareVector> compare_results_array(data_segment_size);
+    std::vector<CompareVector> compare_results_array;
+    compare_results_array.reserve(data_segment_size);
+    for (size_t i = 0; i < data_segment_size; ++i) {
+        compare_results_array.emplace_back(memory::get_default_allocator());
+    }
     // First compare the chunk with last row of this segment.
     const size_t max_value_row_id = _get_number_of_rows_to_sort() - 1;
     const auto& [run, max_rid] = _get_run_by_row_id(max_value_row_id);
@@ -510,7 +514,11 @@ Status ChunksSorterTopn::_build_filter_from_low_comparison(const DataSegments& d
                                                            uint32_t& include_num) {
     DCHECK(_merged_runs.num_rows() > 0);
     size_t data_segment_size = data_segments.size();
-    std::vector<CompareVector> compare_results_array(data_segment_size);
+    std::vector<CompareVector> compare_results_array;
+    compare_results_array.reserve(data_segment_size);
+    for (size_t i = 0; i < data_segment_size; ++i) {
+        compare_results_array.emplace_back(memory::get_default_allocator());
+    }
 
     get_compare_results_colwise(0, _lowest_merged_run().orderby, compare_results_array, data_segments, sort_descs);
 

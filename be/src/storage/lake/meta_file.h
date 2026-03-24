@@ -131,7 +131,7 @@ private:
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
-    Buffer<uint8_t> _buf;
+    Buffer<uint8_t> _buf = Buffer<uint8_t>(memory::get_default_allocator());
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;

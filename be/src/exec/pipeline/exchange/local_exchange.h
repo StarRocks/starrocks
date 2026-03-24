@@ -191,7 +191,7 @@ protected:
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     // allocator used by LocalExchanger's own transient working state.
     // Chunks handed off to source operators should still use each source allocator.
-    memory::Allocator* _allocator = memory::get_default_column_allocator();
+    memory::Allocator* _allocator = memory::get_default_allocator();
     std::atomic<int32_t> _sink_number = 0;
     std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;

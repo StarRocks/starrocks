@@ -56,7 +56,7 @@ public:
         return NullableColumn::create(allocator, column, std::move(null));
     }
 
-    NullableColumn() : SuperClass(memory::get_default_column_allocator()) {}
+    NullableColumn() : SuperClass(memory::get_default_allocator()) {}
     explicit NullableColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
@@ -82,7 +82,7 @@ public:
     }
 
     static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
-        return NullableColumn::create(memory::get_default_column_allocator(), data_column, null_column);
+        return NullableColumn::create(memory::get_default_allocator(), data_column, null_column);
     }
 
     static MutablePtr create(memory::Allocator* allocator, MutableColumnPtr&& data_column,
@@ -97,7 +97,7 @@ public:
 
     template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
     static MutablePtr create(Args&&... args) {
-        return NullableColumn::create(memory::get_default_column_allocator(), std::forward<Args>(args)...);
+        return NullableColumn::create(memory::get_default_allocator(), std::forward<Args>(args)...);
     }
 
     ~NullableColumn() override = default;
@@ -230,12 +230,12 @@ public:
     }
 
     MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
-        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
         return create(alloc, _data_column->clone_empty(alloc), _null_column->clone_empty(alloc));
     }
 
     MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
-        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
         auto p = clone_empty(alloc);
         p->append(*this, 0, size());
         return p;
@@ -319,7 +319,7 @@ public:
     void swap_by_data_column(ColumnPtr& src) {
         reset_column();
         _data_column = std::move(src);
-        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
+        null_column_data().append(_data_column->size(), 0);
         update_has_null();
     }
 

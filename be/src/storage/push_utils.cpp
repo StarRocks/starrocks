@@ -155,7 +155,7 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
                                                  size_t num_rows) {
     const Column* data_column = ColumnHelper::get_data_column(column.get());
     const auto* binary = down_cast<const BinaryColumn*>(data_column);
-    const auto offsets = binary->get_offset();
+    const auto& offsets = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 
     // Padding 0 to CHAR field, the storage bitmap index and zone map need it.

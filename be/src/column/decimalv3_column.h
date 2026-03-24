@@ -34,7 +34,7 @@ public:
             CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
                        DecimalV3Column<DecimalType<T>>, Column>;
 
-    DecimalV3Column() : DecimalV3Column(memory::get_default_column_allocator()) {}
+    DecimalV3Column() : DecimalV3Column(memory::get_default_allocator()) {}
     explicit DecimalV3Column([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
     explicit DecimalV3Column(size_t num_rows);
     DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, size_t num_rows);
@@ -53,12 +53,12 @@ public:
     int scale() const;
 
     MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
-        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
         return this->create(alloc, _precision, _scale);
     }
 
     MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
-        memory::Allocator* alloc = allocator ? allocator : memory::get_default_column_allocator();
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
         auto p = clone_empty(alloc);
         p->append(*this, 0, this->size());
         return p;

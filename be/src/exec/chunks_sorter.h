@@ -151,8 +151,8 @@ protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
-    memory::Allocator* _sink_allocator = memory::get_default_column_allocator();
-    memory::Allocator* _source_allocator = memory::get_default_column_allocator();
+    memory::Allocator* _sink_allocator = memory::get_default_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_allocator();
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
