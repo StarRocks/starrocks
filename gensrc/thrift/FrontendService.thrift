@@ -853,6 +853,8 @@ struct TMasterOpRequest {
 
     39: optional bool is_arrow_flight_sql;
 
+    40: optional list<string> user_groups;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 
