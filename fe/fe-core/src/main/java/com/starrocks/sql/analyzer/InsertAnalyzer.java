@@ -462,23 +462,33 @@ public class InsertAnalyzer {
                             .map(Column::getName).collect(Collectors.toList());
                 }
 
-                // get select column names, null if it is not slot ref column
+                // get select column names, null if it is not slot ref column.
+                // selectColumnNames: source column names used to locate the file column to rewrite.
+                // selectOutputNames: output names (alias if present, else source name) used to look up the
+                //                    target table column type in BY NAME mode.
                 List<String> selectColumnNames = Lists.newArrayList();
+                List<String> selectOutputNames = Lists.newArrayList();
                 List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
                 for (SelectListItem item : listItems) {
                     if (item.isStar()) {
-                        selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
-                                .collect(Collectors.toList()));
+                        List<String> fileColNames = fileTable.getFullSchema().stream().map(Column::getName)
+                                .collect(Collectors.toList());
+                        selectColumnNames.addAll(fileColNames);
+                        selectOutputNames.addAll(fileColNames);
                         continue;
                     }
 
                     Expr expr = item.getExpr();
                     if (expr instanceof SlotRef) {
-                        selectColumnNames.add(((SlotRef) expr).getColumnName());
+                        String srcName = ((SlotRef) expr).getColumnName();
+                        selectColumnNames.add(srcName);
+                        String alias = item.getAlias();
+                        selectOutputNames.add(alias != null ? alias : srcName);
                         continue;
                     }
 
                     selectColumnNames.add(null);
+                    selectOutputNames.add(null);
                 }
 
                 if (targetColumnNames.size() != selectColumnNames.size()) {
@@ -497,7 +507,14 @@ public class InsertAnalyzer {
                         continue;
                     }
 
-                    String targetColumnName = targetColumnNames.get(i);
+                    // In BY NAME mode the output name (alias) is what gets matched to the target column,
+                    // so use selectOutputNames to find the right target column type.
+                    String targetColumnName;
+                    if (insertStmt.isColumnMatchByName()) {
+                        targetColumnName = selectOutputNames.get(i);
+                    } else {
+                        targetColumnName = targetColumnNames.get(i);
+                    }
                     if (!targetTableColumns.containsKey(targetColumnName)) {
                         continue;
                     }

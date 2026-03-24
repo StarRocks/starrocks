@@ -933,6 +933,10 @@ public class ConnectProcessor {
             return result;
         }
 
+        if (request.isSetUser_groups()) {
+            ctx.setGroups(new HashSet<>(request.getUser_groups()));
+        }
+
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
