@@ -266,33 +266,67 @@ public class SqlCredentialRedactorTest {
         Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY '***'",
                 SqlCredentialRedactor.redact(createPlainSql));
 
+        String createPlainDoubleQuotedSql = "CREATE USER 'u1' IDENTIFIED BY \"secret\"";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY \"***\"",
+                SqlCredentialRedactor.redact(createPlainDoubleQuotedSql));
+
         String createHashedSql = "CREATE USER 'u1' IDENTIFIED BY PASSWORD '*59C70DA2'";
         Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY PASSWORD '***'",
                 SqlCredentialRedactor.redact(createHashedSql));
+
+        String createHashedDoubleQuotedSql = "CREATE USER 'u1' IDENTIFIED BY PASSWORD \"*59C70DA2\"";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED BY PASSWORD \"***\"",
+                SqlCredentialRedactor.redact(createHashedDoubleQuotedSql));
 
         String createNativePluginSql = "CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2'";
         Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '***'",
                 SqlCredentialRedactor.redact(createNativePluginSql));
 
+        String createNativePluginDoubleQuotedSql = "CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS "
+                + "\"*59C70DA2\"";
+        Assertions.assertEquals("CREATE USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS \"***\"",
+                SqlCredentialRedactor.redact(createNativePluginDoubleQuotedSql));
+
         String createLdapSql = "CREATE USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
                 + "AS 'uid=test,dc=example,dc=io'";
         Assertions.assertEquals(createLdapSql, SqlCredentialRedactor.redact(createLdapSql));
+
+        String createLdapDoubleQuotedSql = "CREATE USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
+                + "AS \"uid=test,dc=example,dc=io\"";
+        Assertions.assertEquals(createLdapDoubleQuotedSql, SqlCredentialRedactor.redact(createLdapDoubleQuotedSql));
 
         String alterPlainSql = "ALTER USER 'u1' IDENTIFIED BY 'secret'";
         Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY '***'",
                 SqlCredentialRedactor.redact(alterPlainSql));
 
+        String alterPlainDoubleQuotedSql = "ALTER USER 'u1' IDENTIFIED BY \"secret\"";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY \"***\"",
+                SqlCredentialRedactor.redact(alterPlainDoubleQuotedSql));
+
         String alterHashedSql = "ALTER USER 'u1' IDENTIFIED BY PASSWORD '*59C70DA2'";
         Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY PASSWORD '***'",
                 SqlCredentialRedactor.redact(alterHashedSql));
+
+        String alterHashedDoubleQuotedSql = "ALTER USER 'u1' IDENTIFIED BY PASSWORD \"*59C70DA2\"";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED BY PASSWORD \"***\"",
+                SqlCredentialRedactor.redact(alterHashedDoubleQuotedSql));
 
         String alterNativePluginSql = "ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'secret'";
         Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '***'",
                 SqlCredentialRedactor.redact(alterNativePluginSql));
 
+        String alterNativePluginDoubleQuotedSql = "ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY "
+                + "\"secret\"";
+        Assertions.assertEquals("ALTER USER 'u1' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY \"***\"",
+                SqlCredentialRedactor.redact(alterNativePluginDoubleQuotedSql));
+
         String alterLdapSql = "ALTER USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
                 + "BY 'uid=test,dc=example,dc=io'";
         Assertions.assertEquals(alterLdapSql, SqlCredentialRedactor.redact(alterLdapSql));
+
+        String alterLdapDoubleQuotedSql = "ALTER USER 'u1' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE "
+                + "BY \"uid=test,dc=example,dc=io\"";
+        Assertions.assertEquals(alterLdapDoubleQuotedSql, SqlCredentialRedactor.redact(alterLdapDoubleQuotedSql));
     }
 
     @Test
@@ -300,13 +334,24 @@ public class SqlCredentialRedactorTest {
         String plainSql = "SET PASSWORD = 'secret'";
         Assertions.assertEquals("SET PASSWORD = '***'", SqlCredentialRedactor.redact(plainSql));
 
+        String doubleQuotedPlainSql = "SET PASSWORD = \"secret\"";
+        Assertions.assertEquals("SET PASSWORD = \"***\"", SqlCredentialRedactor.redact(doubleQuotedPlainSql));
+
         String plainForUserSql = "SET PASSWORD FOR 'test'@'%' = 'secret'";
         Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = '***'",
                 SqlCredentialRedactor.redact(plainForUserSql));
 
+        String doubleQuotedPlainForUserSql = "SET PASSWORD FOR 'test'@'%' = \"secret\"";
+        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = \"***\"",
+                SqlCredentialRedactor.redact(doubleQuotedPlainForUserSql));
+
         String sql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('secret')";
         String redacted = SqlCredentialRedactor.redact(sql);
         Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = PASSWORD('***')", redacted);
+
+        String doubleQuotedFunctionSql = "SET PASSWORD FOR 'test'@'%' = PASSWORD(\"secret\")";
+        redacted = SqlCredentialRedactor.redact(doubleQuotedFunctionSql);
+        Assertions.assertEquals("SET PASSWORD FOR 'test'@'%' = PASSWORD(\"***\")", redacted);
     }
 
     /**

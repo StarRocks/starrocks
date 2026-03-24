@@ -146,6 +146,44 @@ public class CreateUserStmtTest {
     }
 
     @Test
+    public void testToStringWithDoubleQuotedPasswordLiteral() throws Exception {
+        String sql = "CREATE USER 'user' IDENTIFIED BY \"passwd\"";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals("CREATE USER 'user'@'%' IDENTIFIED BY '*XXX'", AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                        StandardCharsets.UTF_8),
+                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertNull(stmt.getAuthOption().getAuthPlugin());
+
+        sql = "CREATE USER 'user' IDENTIFIED BY PASSWORD \"*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0\"";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals(
+                "CREATE USER 'user'@'%' IDENTIFIED BY PASSWORD '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertNull(stmt.getAuthOption().getAuthPlugin());
+
+        sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY \"passwd\"";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals("CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertEquals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthOption().getAuthPlugin());
+
+        sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS "
+                + "\"*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0\"";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        Assertions.assertEquals(
+                "CREATE USER 'user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*XXX'",
+                AstToSQLBuilder.toSQL(stmt));
+        Assertions.assertEquals(new String(new UserAuthenticationInfo(stmt.getUser(), stmt.getAuthOption()).getPassword(),
+                StandardCharsets.UTF_8), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
+        Assertions.assertEquals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthOption().getAuthPlugin());
+    }
+
+    @Test
     public void testEmptyUser() {
         assertThrows(AnalysisException.class, () -> {
             String sql = "CREATE USER '' IDENTIFIED BY 'passwd'";
