@@ -159,6 +159,9 @@ class ReflectedRefreshInfo:
             parts.append(self.type)
         return " ".join(parts)
 
+    def __hash__(self) -> int:
+        return hash(str(self))
+
 
 class MySQLKeyType(Enum):
     PRIMARY = "PRIMARY"
@@ -241,6 +244,9 @@ class ReflectedTableKeyInfo:
     def __repr__(self) -> str:
         return repr(str(self))
 
+    def __hash__(self) -> int:
+        return hash(str(self))
+
 
 @add_cached_str_clause
 @dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
@@ -270,6 +276,9 @@ class ReflectedPartitionInfo:
     def __repr__(self) -> str:
         return repr(str(self))
 
+    def __hash__(self) -> int:
+        return hash(str(self))
+
 
 @add_cached_str_clause
 @dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
@@ -296,3 +305,6 @@ class ReflectedDistributionInfo:
 
     def __repr__(self) -> str:
         return repr(str(self))
+
+    def __hash__(self) -> int:
+        return hash(str(self))
