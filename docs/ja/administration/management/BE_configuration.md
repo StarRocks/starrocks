@@ -20,8 +20,8 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 
 次のコマンドを使用して BE の設定項目を表示できます。
 
-```shell
-curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```SQL
+SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 ```
 
 ## BE パラメータを設定する
@@ -30,6 +30,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 <StaticBEConfigNote />
 
+<<<<<<< HEAD
 ## BE パラメータを理解する
 
 ### サーバー
@@ -2105,3 +2106,18 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ビットマップ関数の入力値の最大長。
 - 導入バージョン: -
+=======
+## パラメータグループ
+
+パラメータは以下のカテゴリに分類されています：
+- [ロギング](./BE_parameters/log_server_meta.md)
+- [サーバー](./BE_parameters/log_server_meta.md)
+- [メタデータおよびクラスタ管理](./BE_parameters/log_server_meta.md)
+- [クエリエンジン](./BE_parameters/query_loading.md)
+- [ロードおよびアンロード](./BE_parameters/query_loading.md)
+- [統計レポート](./BE_parameters/stats_storage.md)
+- [ストレージ](./BE_parameters/stats_storage.md)
+- [共有データ](./BE_parameters/shared_lake_other.md)
+- [データレイク](./BE_parameters/shared_lake_other.md)
+- [その他](./BE_parameters/shared_lake_other.md)
+>>>>>>> 94d8ba7dff ([Doc] Separate BE Config Docs (#70702))

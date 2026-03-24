@@ -16,13 +16,12 @@ import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_not
 
 <CNConfigMethod />
 
-
 ## View BE configuration items
 
 You can view the BE configuration items using the following command:
 
-```shell
-curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```SQL
+SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 ```
 
 ## Configure BE parameters
@@ -31,6 +30,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 <StaticBEConfigNote />
 
+<<<<<<< HEAD
 ## Understand BE Parameters
 
 ### Server
@@ -5374,3 +5374,19 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: The retry times of rpc request to report exec rpc request to FE. The default value is 10, which means that the rpc request will be retried 10 times if it fails only if it's fragment instatnce finish rpc. Report exec rpc request is important for load job, if one fragment instance finish report failed, the load job will be hang until timeout.
 - Introduced in: -
+=======
+## Parameter groups
+
+The parameters are grouped in these categories:
+
+- [Logging](./BE_parameters/log_server_meta.md)
+- [Server](./BE_parameters/log_server_meta.md)
+- [Metadata and Cluster management](./BE_parameters/log_server_meta.md)
+- [Query engine](./BE_parameters/query_loading.md)
+- [Loading and unloading](./BE_parameters/query_loading.md)
+- [Statistic report](./BE_parameters/stats_storage.md)
+- [Storage](./BE_parameters/stats_storage.md)
+- [Shared-data](./BE_parameters/shared_lake_other.md)
+- [Data Lake](./BE_parameters/shared_lake_other.md)
+- [Other](./BE_parameters/shared_lake_other.md)
+>>>>>>> 94d8ba7dff ([Doc] Separate BE Config Docs (#70702))
