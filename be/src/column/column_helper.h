@@ -699,13 +699,9 @@ public:
         }
     }
 
-    static BinaryImmContainer get_proxy_data(const BinaryColumn* column) {
-        return column->immutable_data();
-    }
+    static BinaryImmContainer get_proxy_data(const BinaryColumn* column) { return column->immutable_data(); }
 
-    static BinaryImmContainer get_proxy_data(const LargeBinaryColumn* column) {
-        return column->immutable_data();
-    }
+    static BinaryImmContainer get_proxy_data(const LargeBinaryColumn* column) { return column->immutable_data(); }
 
     static inline size_t get_binary_bytes_size(const Column* column) {
         if (column->is_large_binary()) {
