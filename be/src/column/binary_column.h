@@ -33,12 +33,12 @@ namespace starrocks {
 template <typename T>
 class BinaryColumnBase;
 
-class BinaryDataProxyContainer {
+class BinaryImmContainer {
 public:
-    BinaryDataProxyContainer() = default;
+    BinaryImmContainer() = default;
 
     template <typename T>
-    explicit BinaryDataProxyContainer(const BinaryColumnBase<T>& column) {
+    explicit BinaryImmContainer(const BinaryColumnBase<T>& column) {
         init(column);
     }
 
@@ -64,23 +64,10 @@ public:
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
-    using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
-
-    using ProxyContainer = ::starrocks::BinaryDataProxyContainer;
-
-    struct ImmContainer {
-        ImmContainer() = default;
-        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
-
-        Slice operator[](size_t index) const { return _column->get_slice(index); }
-
-        size_t size() const { return _column->size(); }
-
-    private:
-        const BinaryColumnBase* _column = nullptr;
-    };
+    using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     using Container = Buffer<Slice>;
+    using ImmContainer = BinaryImmContainer;
     using GermanStringContainer = Buffer<GermanString>;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
@@ -349,8 +336,6 @@ public:
 
     ImmContainer immutable_data() const { return ImmContainer(*this); }
 
-    ProxyContainer get_proxy_data() const { return ProxyContainer(*this); }
-
     Bytes& get_bytes() {
         _ensure_materialized();
         return _bytes;
@@ -447,7 +432,7 @@ private:
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
 using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
 
-inline Slice BinaryDataProxyContainer::operator[](size_t index) const {
+inline Slice BinaryImmContainer::operator[](size_t index) const {
     DCHECK(_column != nullptr);
     if (_is_large) {
         return down_cast<const LargeBinaryColumn*>(_column)->get_slice(index);
@@ -455,12 +440,12 @@ inline Slice BinaryDataProxyContainer::operator[](size_t index) const {
     return down_cast<const BinaryColumn*>(_column)->get_slice(index);
 }
 
-inline size_t BinaryDataProxyContainer::size() const {
+inline size_t BinaryImmContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
 }
 
 template <typename T>
-inline void BinaryDataProxyContainer::init(const BinaryColumnBase<T>& column) {
+inline void BinaryImmContainer::init(const BinaryColumnBase<T>& column) {
     _column = &column;
     _is_large = std::is_same_v<T, uint64_t>;
 }
