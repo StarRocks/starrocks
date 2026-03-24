@@ -52,6 +52,7 @@ public class MultiDistinctByMultiFuncRewriter {
     public List<OptExpression> transformImpl(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
 
+        boolean changed = false;
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : aggregationOperator.getAggregations()
                 .entrySet()) {
@@ -61,12 +62,15 @@ public class MultiDistinctByMultiFuncRewriter {
 
                 if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
+                    changed = true;
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
+                    changed = true;
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
                     if (oldFunctionCall.getColumnRefs().size() == 1 &&
                             !oldFunctionCall.getColumnRefs().get(0).getType().isDecimalOfAnyVersion()) {
                         newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                        changed = true;
                     } else {
                         newAggOperator = oldFunctionCall;
                     }
@@ -91,6 +95,7 @@ public class MultiDistinctByMultiFuncRewriter {
             CallOperator oldFunctionCall = aggMap.getValue();
             if (oldFunctionCall.isDistinct() && oldFunctionCall.getFnName().equals(FunctionSet.AVG)) {
                 hasAvg = true;
+                changed = true;
                 CallOperator count = buildMultiCountDistinct(oldFunctionCall);
                 ColumnRefOperator countColRef = null;
                 for (Map.Entry<ColumnRefOperator, CallOperator> entry : newAggMap.entrySet()) {
@@ -137,6 +142,10 @@ public class MultiDistinctByMultiFuncRewriter {
                 projections.put(aggMap.getKey(), aggMap.getKey());
                 newAggMapWithAvg.put(aggMap.getKey(), aggMap.getValue());
             }
+        }
+
+        if (!changed) {
+            return Lists.newArrayList();
         }
 
         OptExpression result;
