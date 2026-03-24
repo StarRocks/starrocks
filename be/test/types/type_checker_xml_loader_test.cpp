@@ -297,6 +297,29 @@ TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithSpecialCharacters) {
     EXPECT_EQ(mappings[1].java_class, "byte[]");
 }
 
+// Test XML with JSON logical type
+TEST_F(TypeCheckerXMLLoaderTest, LoadXMLWithJsonType) {
+    std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
+<type-checkers>
+  <type-mapping java_class="org.postgresql.util.PGobject" display_name="PostgreSQLPGobject">
+    <type-rule allowed_type="TYPE_JSON" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+</type-checkers>)";
+
+    std::string xml_file = "/tmp/type_checker_test/json_type.xml";
+    create_test_xml(xml_file, xml_content);
+
+    auto result = TypeCheckerXMLLoader::load_from_xml(xml_file);
+    ASSERT_TRUE(result.ok());
+
+    const auto& mappings = result.value();
+    ASSERT_EQ(mappings.size(), 1);
+    ASSERT_EQ(mappings[0].java_class, "org.postgresql.util.PGobject");
+    ASSERT_EQ(mappings[0].rules.size(), 1);
+    ASSERT_EQ(mappings[0].rules[0].allowed_type, TYPE_JSON);
+    ASSERT_EQ(mappings[0].rules[0].return_type, TYPE_VARCHAR);
+}
+
 // Test XML with missing type-rule elements
 TEST_F(TypeCheckerXMLLoaderTest, LoadXMLMissingTypeRules) {
     std::string xml_content = R"(<?xml version="1.0" encoding="UTF-8"?>
