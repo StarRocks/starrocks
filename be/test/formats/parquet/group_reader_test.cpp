@@ -1983,7 +1983,7 @@ TEST_F(GroupReaderTest, TestGetExtendedBigIntValueSuccess) {
 
     auto result = group_reader->_get_extended_bigint_value(0);
     ASSERT_OK(result);
-    ASSERT_EQ(result.value(), 42);
+    ASSERT_EQ(result.value().get_int64(), 42);
 }
 
 TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderNotFound) {
@@ -2024,10 +2024,74 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     param->chunk_size = config::vector_chunk_size;
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
     ASSERT_NE(group_reader->_column_readers[100], nullptr);
-    delete group_reader;
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(0, 4), nullptr, column));
+    ASSERT_EQ(4, column->size());
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_TRUE(column->get(i).is_null());
+    }
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, HdfsScanner::ICEBERG_ROW_ID,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* scan_range_id_slot = _pool.add(
+            new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
+    reserved_slots->push_back(row_id_slot);
+    reserved_slots->push_back(scan_range_id_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    auto* scan_range = new THdfsScanRange();
+    param->scan_range = _pool.add(scan_range);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7, 7);
+    ASSERT_OK(group_reader->init());
+
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(0, 4), nullptr, column));
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ(7, column->get(0).get_int64());
+    ASSERT_EQ(8, column->get(1).get_int64());
+    ASSERT_EQ(9, column->get(2).get_int64());
+    ASSERT_EQ(10, column->get(3).get_int64());
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {
@@ -2062,10 +2126,49 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
     param->chunk_size = config::vector_chunk_size;
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
-    delete group_reader;
+}
+
+TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralReturnsNull) {
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* seq_slot = _pool.add(new SlotDescriptor(101, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER,
+                                                  TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(seq_slot);
+    param->reserved_field_slots = _pool.add(reserved_slots);
+    param->timezone = "UTC";
+
+    std::map<int32_t, TExpr> extended_columns;
+    TExpr expr;
+    TExprNode node;
+    node.node_type = TExprNodeType::NULL_LITERAL;
+    expr.nodes.push_back(node);
+    extended_columns[101] = expr;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_extended_columns(extended_columns);
+    param->scan_range = _pool.add(scan_range);
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
+    ASSERT_OK(group_reader->init());
+
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_OK(group_reader->_column_readers[101]->read_range(Range<uint64_t>(0, 4), nullptr, column));
+    ASSERT_EQ(4, column->size());
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_TRUE(column->get(i).is_null());
+    }
 }
 
 // Helper to build a tparquet::FileMetaData that includes the standard 6 read_cols
@@ -2189,11 +2292,10 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
     param->chunk_size = config::vector_chunk_size;
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
     // The _row_id column reader should be created from the physical column (not IcebergRowIdReader)
     ASSERT_NE(group_reader->_column_readers[100], nullptr);
-    delete group_reader;
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation) {
@@ -2219,11 +2321,10 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
     param->chunk_size = config::vector_chunk_size;
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
     // The _last_updated_sequence_number reader should be created from the physical column
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
-    delete group_reader;
 }
 
 TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
@@ -2252,12 +2353,11 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
     param->chunk_size = config::vector_chunk_size;
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto* group_reader = new GroupReader(*param, 0, skip_rows_ctx, 0);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 0);
     ASSERT_OK(group_reader->init());
     // Both physical column readers should be created
     ASSERT_NE(group_reader->_column_readers[100], nullptr);
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
-    delete group_reader;
 }
 
 } // namespace starrocks::parquet
