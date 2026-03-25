@@ -58,3 +58,4 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - [存储](./FE_parameters/stats_storage.md)
 - [共享数据](./FE_parameters/shared_lake_other.md)
 - [数据湖](./FE_parameters/shared_lake_other.md)
+- [其他](./FE_parameters/shared_lake_other.md)
