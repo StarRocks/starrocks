@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "base/compiler_util.h"
 #include "base/logging.h"
+#include "base/string/slice.h"
 
 // For cross compiling with clang, we need to be able to generate an IR file with
 // no sse instructions.  Attempting to load a precompiled IR file that contains
@@ -190,6 +193,15 @@ public:
         h *= m;
         h ^= h >> r;
         return h;
+    }
+
+    template <typename T>
+    static uint64_t murmur_hash64A(const T& value, unsigned int seed) {
+        if constexpr (std::is_same_v<T, Slice>) {
+            return murmur_hash64A(value.data, value.size, seed);
+        } else {
+            return murmur_hash64A(&value, sizeof(T), seed);
+        }
     }
 
     // Computes the hash value for data.  Will call either CrcHash or FnvHash
