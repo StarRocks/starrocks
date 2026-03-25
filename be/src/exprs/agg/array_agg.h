@@ -145,7 +145,11 @@ public:
                 size_t row_num) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
+<<<<<<< HEAD
             auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+=======
+            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
             this->data(state).update_with_slice(mem_pool, slice);
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);

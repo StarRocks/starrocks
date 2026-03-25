@@ -56,7 +56,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    void update(T key) { set.insert(key); }
+    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
 
     void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
 
@@ -289,7 +289,27 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void update(T key) { set.insert(key); }
 
+<<<<<<< HEAD
     void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
+=======
+    void update([[maybe_unused]] MemPool* mempool, T key) {
+        [[maybe_unused]] const auto result = set.insert(key);
+        if constexpr (compute_sum) {
+            if (result.second) {
+                sum += key;
+            }
+        }
+    }
+
+    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        [[maybe_unused]] const auto result = set.emplace_with_hash(hash, key);
+        if constexpr (compute_sum) {
+            if (result.second) {
+                sum += key;
+            }
+        }
+    }
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 
     void prefetch(T key) { set.prefetch(key); }
 
@@ -352,7 +372,31 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 };
 
 template <LogicalType LT, LogicalType SumLT>
+<<<<<<< HEAD
 struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
+=======
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
+        : public DistinctAggregateState<LT, SumLT> {};
+
+template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
+struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
+
+template <LogicalType LT, LogicalType SumLT, bool compute_sum, typename = guard::Guard>
+struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT, SumLT, compute_sum> {
+    using CppType = RunTimeCppType<LT>;
+    using Base = DistinctAggregateStateV2Base<LT, SumLT, compute_sum>;
+    using Base::reset;
+    using Base::update;
+    MemPool mem_pool;
+
+    void update(CppType key) { this->Base::update(&mem_pool, key); }
+
+    void reset() {
+        this->Base::reset();
+        mem_pool.clear();
+    }
+};
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 
 // Dear god this template class as template parameter kills me!
 template <LogicalType LT, LogicalType SumLT,
@@ -366,6 +410,7 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+<<<<<<< HEAD
         if constexpr (IsSlice<T>) {
             auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
             this->data(state).update(ctx->mem_pool(), slice);
@@ -374,6 +419,10 @@ public:
             const auto& immutable_data = column->get_data();
             this->data(state).update(immutable_data[row_num]);
         }
+=======
+        auto value = GetContainer<LT>::get_data(columns[0], row_num);
+        this->data(state).update(ctx->mem_pool(), value);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
     }
 
     // The following two functions are specialized because of performance issue.
@@ -388,22 +437,21 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        auto build_and_update = [&](const auto& container_data) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-                cache[i] = CacheEntry{hash_value};
-            }
-            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-            size_t prefetch_index = 16;
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{hash_value};
+        }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+        size_t prefetch_index = 16;
 
-            MemPool* mem_pool = ctx->mem_pool();
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (prefetch_index < chunk_size) {
-                    agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
-                    prefetch_index++;
-                }
-                agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+        MemPool* mem_pool = ctx->mem_pool();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (prefetch_index < chunk_size) {
+                agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
+<<<<<<< HEAD
         };
 
         if constexpr (IsSlice<T>) {
@@ -419,6 +467,9 @@ public:
             const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
             const auto& container_data = GetContainer<LT>::get_data(column);
             build_and_update(container_data);
+=======
+            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
     }
 
@@ -433,24 +484,23 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        auto build_and_update = [&](const auto& container_data) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                AggDataPtr state = states[i] + state_offset;
-                auto& agg_state = this->data(state);
-                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-                cache[i] = CacheEntry{&agg_state, hash_value};
-            }
-            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-            size_t prefetch_index = 16;
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            AggDataPtr state = states[i] + state_offset;
+            auto& agg_state = this->data(state);
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{&agg_state, hash_value};
+        }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+        size_t prefetch_index = 16;
 
-            MemPool* mem_pool = ctx->mem_pool();
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (prefetch_index < chunk_size) {
-                    cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
-                    prefetch_index++;
-                }
-                cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+        MemPool* mem_pool = ctx->mem_pool();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (prefetch_index < chunk_size) {
+                cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
+<<<<<<< HEAD
         };
 
         if constexpr (IsSlice<T>) {
@@ -466,6 +516,9 @@ public:
             const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
             const auto& container_data = GetContainer<LT>::get_data(column);
             build_and_update(container_data);
+=======
+            cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
     }
 
@@ -484,7 +537,7 @@ public:
             } else {
                 T key;
                 memcpy(&key, slice.data, sizeof(T));
-                this->data(state).update(key);
+                this->data(state).update(ctx->mem_pool(), key);
             }
         }
     }
@@ -611,16 +664,25 @@ public:
         if (data_column->is_array()) {
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
+<<<<<<< HEAD
             const auto& off = array_column->offsets().get_data();
             ColumnHelper::with_binary_data_column(column, [&](const auto* typed_column) {
                 for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                     if (!column->is_null(i)) {
                         agg_state.update(mem_pool, typed_column->get_slice(i));
                     }
+=======
+            const auto off = array_column->offsets().immutable_data();
+            const auto* binary_column = ColumnHelper::get_data_column(column);
+            const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(binary_column);
+            for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                if (!column->is_null(i)) {
+                    agg_state.update(mem_pool, datas[i]);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
                 }
-            });
+            }
         } else {
-            agg_state.update(mem_pool, ColumnHelper::get_binary_slice(data_column, row_num));
+            agg_state.update(mem_pool, GetContainer<TYPE_VARCHAR>::get_data(data_column, row_num));
         }
 
         agg_state.update_over_limit();
@@ -726,4 +788,152 @@ public:
     std::string get_name() const override { return "dict_merge"; }
 };
 
+<<<<<<< HEAD
+=======
+static constexpr int COMPUTE_SUM_BIT = 0x1;
+static constexpr int COMPUTE_AVG_BIT = 0x2;
+
+static constexpr int compute_bits(const bool compute_sum, const bool compute_avg) {
+    return (COMPUTE_SUM_BIT * compute_sum) | (COMPUTE_AVG_BIT * compute_avg);
+}
+
+static constexpr bool enable_bit_sum(const int bits) {
+    return (bits & COMPUTE_SUM_BIT) != 0;
+}
+
+static constexpr bool enable_bit_avg(const int bits) {
+    return (bits & COMPUTE_AVG_BIT) != 0;
+}
+
+template <LogicalType LT, LogicalType SumLT, int compute_bits,
+          template <LogicalType X, LogicalType Y, bool, typename = guard::Guard> class TDistinctAggState,
+          typename T = RunTimeCppType<LT>>
+struct TFusedMultiDistinctFunction final
+        : public AggregateFunctionBatchHelper<
+                  TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>,
+                  TFusedMultiDistinctFunction<LT, SumLT, compute_bits, TDistinctAggState, T>> {
+    using State = TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>;
+    using InputColumn = RunTimeColumnType<LT>;
+    using SumColumn = RunTimeColumnType<SumLT>;
+    static constexpr auto AvgLT = AvgResultLT<LT>;
+    using AvgColumn = RunTimeColumnType<AvgLT>;
+    using AvgCppType = RunTimeCppType<AvgLT>;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        auto* struct_column = down_cast<StructColumn*>(dst);
+        // compute count
+        {
+            auto* count_column = struct_column->field_column_raw_ptr("count").value();
+            Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_data_column = static_cast<Int64Column*>(count_data_col);
+            const auto count = state_impl.distinct_count();
+            for (auto i = start; i < end; ++i) {
+                count_data_column->get_data()[i] = count;
+            }
+        }
+
+        // compute sum
+        if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
+            auto* sum_column = struct_column->field_column_raw_ptr("sum").value();
+            Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
+            const auto sum = state_impl.sum;
+            for (auto i = start; i < end; ++i) {
+                sum_data_column->get_data()[i] = sum;
+            }
+        }
+
+        // compute avg
+        if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
+            auto* avg_column = struct_column->field_column_raw_ptr("avg").value();
+            Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
+            const auto sum = state_impl.sum;
+            const auto count = state_impl.distinct_count();
+
+            if (count == 0) {
+                DCHECK(avg_column->is_nullable());
+                auto* nullable_avg = down_cast<NullableColumn*>(avg_column);
+                auto& null_data = nullable_avg->null_column_data();
+                for (auto i = start; i < end; ++i) {
+                    null_data[i] = DATUM_NULL;
+                }
+                return;
+            }
+
+            AvgCppType avg;
+            if constexpr (lt_is_arithmetic<LT>) {
+                avg = static_cast<AvgCppType>(static_cast<double>(sum) / static_cast<double>(count));
+            } else if constexpr (lt_is_decimal<LT>) {
+                static_assert(lt_is_decimal128<AvgLT> || lt_is_decimal256<AvgLT>,
+                              "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
+                avg = decimal_div_integer<AvgCppType>(AvgCppType(sum), AvgCppType(count), ctx->get_arg_type(0)->scale);
+            } else {
+                DCHECK(false) << "Invalid LogicalTypes for avg function";
+            }
+            for (auto i = start; i < end; ++i) {
+                avg_data_column->get_data()[i] = avg;
+            }
+        }
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        this->data(state).update(ctx->mem_pool(), GetContainer<LT>::get_data(columns[0], row_num));
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
+        for (auto i = frame_start; i < frame_end; ++i) {
+            this->data(state).update(datas[i]);
+        }
+    }
+
+    std::string get_name() const override { return "fused_multi_distinct"; }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+};
+
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType DistinctSumLT = SumResultLT<LT>;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal256LTGuard<LT>> = TYPE_DECIMAL256;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal128LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal64LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal32LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT, int compute_bits, typename T = RunTimeCppType<LT>>
+using FusedMultiDistinctFunction =
+        TFusedMultiDistinctFunction<LT, DistinctSumLT<LT>, compute_bits, FusedMultiDistinctAggregateState, T>;
+
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 } // namespace starrocks

@@ -370,6 +370,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     template <LogicalType Type, typename ColumnPtrType>
     static inline const auto& get_container_data(const ColumnPtrType& column) {
         using ColumnType = RunTimeColumnType<Type>;
@@ -398,6 +399,8 @@ public:
         }
     }
 
+=======
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
@@ -467,6 +470,7 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+<<<<<<< HEAD
     static inline Slice get_binary_slice(const Column* column, size_t row) {
         const Column* data_column = get_data_column(column);
         size_t index = column->is_constant() ? 0 : row;
@@ -475,6 +479,11 @@ public:
         }
         return down_cast<const BinaryColumn*>(data_column)->get_slice(index);
     }
+=======
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 
     static inline void append_binary_value(Column* column, const Slice& value) {
         Column* data_column = get_data_column(column);
@@ -514,6 +523,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     static inline const BinaryDataProxyContainer& get_proxy_data(const BinaryColumn* column) {
         return column->get_proxy_data();
     }
@@ -522,6 +532,8 @@ public:
         return column->get_proxy_data();
     }
 
+=======
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
     static inline size_t get_binary_bytes_size(const Column* column) {
         if (column->is_large_binary()) {
             return down_cast<const LargeBinaryColumn*>(column)->get_bytes().size();
@@ -627,8 +639,31 @@ struct ChunkSliceTemplate {
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+<<<<<<< HEAD
     static const auto& get_data(const Column* column) { return ColumnHelper::get_container_data<ltype>(column); }
     static const auto& get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
+=======
+    static const auto get_data(const Column* column) {
+        const auto* data_column = ColumnHelper::get_data_column(column);
+        if constexpr (lt_is_string_or_binary<ltype>) {
+            using LargeColumnType = RunTimeLargeColumnType<ltype>;
+            if (column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            }
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
+        }
+    }
+    static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
+    static const auto get_data(const MutableColumnPtr& column) { return get_data(column.get()); }
+
+    static const auto get_data(const Column* column, size_t row) {
+        const Column* data_column = ColumnHelper::get_data_column(column);
+        size_t index = column->is_constant() ? 0 : row;
+        return get_data(data_column)[index];
+    }
+>>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 };
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
