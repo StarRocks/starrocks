@@ -349,7 +349,7 @@ public:
                     size_t end) const override {
         DCHECK_GT(end, start);
         for (size_t i = start; i < end; ++i) {
-            ColumnHelper::append_binary_value(dst, this->data(state).slice());
+            ColumnHelper::append_column_value<LT>(dst, this->data(state).slice());
         }
     }
 
