@@ -121,11 +121,12 @@ using starrocks::ColumnIndexTypePB;
 using starrocks::OrdinalIndexReader;
 
 DEFINE_string(root_path, "", "storage root path");
-DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
-              "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap, "
-              "dump_lake_persistent_index_sst, dump_page_footer");
+DEFINE_string(
+        operation, "",
+        "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
+        "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
+        "print_lake_bundle_metadata, print_lake_txn_log, print_lake_combined_txn_log, print_lake_schema, dump_zonemap, "
+        "dump_lake_persistent_index_sst, dump_page_footer");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -212,6 +213,8 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_meta_file.meta> | {progname} --operation=print_lake_bundle_metadata
     print_lake_txn_log:
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
+    print_lake_combined_txn_log:
+      cat <combined_txn_log_file.log> | {progname} --operation=print_lake_combined_txn_log
     print_lake_schema:
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
@@ -1997,6 +2000,21 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        starrocks::CombinedTxnLogPB combined_txn_log;
+        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse combined txn log\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(combined_txn_log, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
