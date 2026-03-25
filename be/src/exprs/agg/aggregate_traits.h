@@ -73,8 +73,13 @@ struct AggDataTypeTraits<lt, ObjectFamilyLTGuard<lt>> {
     static void append_value(ColumnType* column, const ValueType& value) { column->append(&value); }
 
     static void append_values(Column* column, const ValueType& value, size_t count) {
+        if (count == 0) {
+            return;
+        }
+        auto* col = down_cast<ColumnType*>(column);
+        col->reserve(col->size() + count);
         for (size_t i = 0; i < count; ++i) {
-            down_cast<ColumnType*>(column)->append(&value);
+            col->append(&value);
         }
     }
 

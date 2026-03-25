@@ -417,7 +417,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const {
+                                              int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty
         if (frame_start >= frame_end) {
@@ -476,7 +476,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const {
+                                              int64_t frame_end) const override {
         if (frame_start >= frame_end) {
             if (!this->data(state).has_value) {
                 this->data(state).is_null = true;
@@ -546,7 +546,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const {
+                                              int64_t frame_end) const override {
         // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
         // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
         if constexpr (ignoreNulls) {
@@ -789,7 +789,7 @@ public:
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const {
+                                              int64_t frame_end) const override {
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
 
         DCHECK(frame_start < frame_end);
