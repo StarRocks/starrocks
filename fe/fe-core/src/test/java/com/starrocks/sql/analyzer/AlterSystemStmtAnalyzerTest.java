@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.UserIdentity;
@@ -34,23 +33,23 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.net.InetAddress;
 import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mockStatic;
 
 public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
-
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -60,34 +59,32 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
         AnalyzeTestUtil.init();
 
         UtFrameUtils.setUpForPersistTest();
+        MockitoAnnotations.openMocks(AlterSystemStmtAnalyzerTest.class);
     }
 
-    @Mocked
+    @Mock
     InetAddress addr1;
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) {
-                return addr1;
-            }
-        };
-    }
 
     @Test
     public void testVisitModifyBackendClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
-        Void result = visitor.visitModifyBackendClause(clause, null);
+        try (var mockedInetAddress = mockStatic(InetAddress.class)) {
+            mockedInetAddress.when(() -> InetAddress.getByName(anyString())).thenReturn(addr1);
+
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
+            visitor.visitModifyBackendClause(clause, null);
+        }
     }
 
     @Test
     public void testVisitModifyFrontendHostClause() {
-        mockNet();
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-        Void result = visitor.visitModifyFrontendHostClause(clause, null);
+        try (var mockedInetAddress = mockStatic(InetAddress.class)) {
+            mockedInetAddress.when(() -> InetAddress.getByName(anyString())).thenReturn(addr1);
+
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
+            visitor.visitModifyFrontendHostClause(clause, null);
+        }
     }
 
     @Test
