@@ -79,6 +79,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
+    public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
     // date partition table
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "t2";
@@ -179,6 +180,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         new Column("v", VariantType.VARIANT, true)),
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(4, "v", Types.VariantType.get())),
+                3);
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("c1", IntegerType.INT, true),
+                        new Column("c2", IntegerType.INT, true)),
+                new Schema(required(6, "id", Types.IntegerType.get()),
+                        required(7, "c1", Types.IntegerType.get()),
+                        required(8, "c2", Types.IntegerType.get())),
                 3);
     }
 

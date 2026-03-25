@@ -1,6 +1,7 @@
 -- name: test_glm_native
 
 set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
 
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",

@@ -30,6 +30,7 @@ public class GlobalLateMaterializeNativeTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+        connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
@@ -677,6 +678,71 @@ public class GlobalLateMaterializeNativeTest extends PlanTestBase {
         } finally {
             sv.setGlobalLateMaterializeMaxLimit(prevMaxLimit);
             sv.setGlobalLateMaterializeMaxFetchOps(prevMaxFetchOps);
+        }
+    }
+
+    @Test
+    public void testLambdaConjuncts() throws Exception {
+        // connectContext.getSessionVariable().setEnableGlobalLateMaterialization(false);
+        String table = """
+                create table tlambda (a int,b map<int,varchar(20)>) ENGINE=OLAP\s
+                DUPLICATE KEY(a)  DISTRIBUTED BY HASH(a)\s
+                BUCKETS 3\s
+                PROPERTIES("replication_num" = "1");
+                """;
+        starRocksAssert.withTable(table);
+        String sql = "select a from tlambda where map_filter((k,v)->v is not null and k is not null, " +
+                "map_apply((k,v)->(k+1,concat(v,'a')), b))=map{2:\"aba\",4:\"cdda\"} order by 1 limit 1;\n";
+        final String plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
+    }
+
+    @Test
+    public void testCostBasedGlm() throws Exception {
+        final SessionVariable sv = connectContext.getSessionVariable();
+        try {
+            sv.setEnableGlobalLateMaterializationCostBased(true);
+
+            // All deferred columns are numeric (S_NATIONKEY INTEGER, S_ACCTBAL DOUBLE):
+            // their total type-size is well below the 24-byte row-id overhead, so
+            // cost-based GLM should suppress the rewrite → no FETCH node.
+            String plan = getFragmentPlan(
+                    "select S_SUPPKEY, S_NATIONKEY, S_ACCTBAL " +
+                    "from supplier_nullable order by S_SUPPKEY limit 10");
+            assertNotContains(plan, "FETCH");
+
+            // At least one deferred column is non-numeric (S_COMMENT VARCHAR):
+            // cost-based GLM should allow the rewrite → FETCH node present.
+            plan = getFragmentPlan(
+                    "select S_SUPPKEY, S_COMMENT " +
+                    "from supplier_nullable order by S_SUPPKEY limit 10");
+            assertContains(plan, "FETCH");
+
+            // DATE and BIGINT are both treated as numeric, so deferring only such
+            // columns should also suppress GLM.
+            plan = getFragmentPlan(
+                    "select k1, value, dt " +
+                    "from test_range_partitioned order by k1 limit 10");
+            assertNotContains(plan, "FETCH");
+
+            // VARCHAR columns present → GLM applies even on test_range_partitioned.
+            plan = getFragmentPlan(
+                    "select k1, name " +
+                    "from test_range_partitioned order by k1 limit 10");
+            assertContains(plan, "FETCH");
+
+            // Exactly 2 deferred BIGINT columns: numericDeferredCount == 2 (≤ 2) → GLM skipped.
+            plan = getFragmentPlan(
+                    "select a_pk, a_c0, a_c1 from A order by a_pk limit 10");
+            assertNotContains(plan, "FETCH");
+
+            // 3 deferred BIGINT columns: numericDeferredCount == 3 (> 2) → GLM applied.
+            plan = getFragmentPlan(
+                    "select a_pk, a_c0, a_c1, a_c2 from A order by a_pk limit 10");
+            assertContains(plan, "FETCH");
+
+        } finally {
+            sv.setEnableGlobalLateMaterializationCostBased(false);
         }
     }
 }
