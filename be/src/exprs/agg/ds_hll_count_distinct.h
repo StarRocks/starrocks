@@ -60,15 +60,12 @@ public:
         _init_if_needed(ctx, columns, state);
 
         uint64_t value = 0;
-        const Column* column = ColumnHelper::get_data_column(columns[0]);
+        const auto& v = GetContainer<LT>::get_data(columns[0], row_num);
 
         if constexpr (lt_is_string_or_binary<LT>) {
-            Slice s = ColumnHelper::get_binary_slice(column, row_num);
-            value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+            value = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
         } else {
-            const auto* typed = down_cast<const ColumnType*>(column);
-            const auto v = typed->immutable_data();
-            value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
+            value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
         }
         update_state(ctx, state, value);
     }
@@ -78,29 +75,20 @@ public:
                                               int64_t frame_end) const override {
         // init state if needed
         _init_if_needed(ctx, columns, state);
-        const Column* column = ColumnHelper::get_data_column(columns[0]);
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
         if constexpr (lt_is_string_or_binary<LT>) {
-            auto hash_loop = [&](const auto* typed_col) {
-                uint64_t value = 0;
-                for (size_t i = frame_start; i < frame_end; ++i) {
-                    Slice s = typed_col->get_slice(i);
-                    value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-                    if (value != 0) {
-                        update_state(ctx, state, value);
-                    }
+            uint64_t value = 0;
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                Slice s = datas[i];
+                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+                if (value != 0) {
+                    update_state(ctx, state, value);
                 }
-            };
-            if (column->is_large_binary()) {
-                hash_loop(down_cast<const LargeBinaryColumn*>(column));
-            } else {
-                hash_loop(down_cast<const BinaryColumn*>(column));
             }
         } else {
             uint64_t value = 0;
-            const auto* typed = down_cast<const ColumnType*>(column);
-            const auto v = typed->immutable_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
-                value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
+                value = HashUtil::murmur_hash64A(&datas[i], sizeof(datas[i]), HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
                     update_state(ctx, state, value);
