@@ -30,7 +30,7 @@ displayed_sidebar: docs
 ### 行为变更
 
 - 改进 `sql_mode` 处理逻辑：当设置了 `DIVISION_BY_ZERO` 或 `FAIL_PARSE_DATE` 模式时，`str_to_date`/`str2date` 函数中的除以零及日期解析失败不再被静默忽略，而是返回错误。[#70004](https://github.com/StarRocks/starrocks/pull/70004)
-- 启用 `FORBID_INVALID_DATE` sql_mode 时，`INSERT VALUES` 子句中的无效日期现在会被正确拒绝，而非绕过校验。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- `sql_mode` 设置为 `FORBID_INVALID_DATE` 时，`INSERT VALUES` 子句中的无效日期现在会被正确拒绝，而非绕过校验。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
 - 表达式分区生成列现在不再显示在 `DESC` 和 `SHOW CREATE TABLE` 的输出中。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - 审计日志（Audit Log）中不再包含客户端 ID。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
 
@@ -48,9 +48,9 @@ displayed_sidebar: docs
 已修复以下问题：
 
 - JDBC MySQL 下推不支持某些 CAST 操作导致查询失败。[#70415](https://github.com/StarRocks/starrocks/pull/70415)
-- 新增 `mv_refresh_force_partition_type` 配置项，用于强制指定 MV 刷新时的分区类型，解决分区类型不匹配问题。[#70381](https://github.com/StarRocks/starrocks/pull/70381)
+- 物化视图刷新时的分区类型不匹配问题。新增 `mv_refresh_force_partition_type` 配置项，用于强制指定物化视图刷新时的分区类型。[#70381](https://github.com/StarRocks/starrocks/pull/70381)
 - 从备份恢复时 `dataVersion` 未正确设置。[#70373](https://github.com/StarRocks/starrocks/pull/70373)
-- MV 刷新任务中出现重复的分区名。[#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- 物化视图刷新任务中出现重复的分区名。[#70354](https://github.com/StarRocks/starrocks/pull/70354)
 - SLF4J 参数化日志使用字符串拼接而非占位符参数的问题。[#70330](https://github.com/StarRocks/starrocks/pull/70330)
 - 创建 Hive 表时注释（comment）未被正确设置。[#70318](https://github.com/StarRocks/starrocks/pull/70318)
 - `FileSystemExpirationChecker` 在 HDFS 关闭缓慢时发生阻塞。[#70311](https://github.com/StarRocks/starrocks/pull/70311)
@@ -62,7 +62,7 @@ displayed_sidebar: docs
 - `AuditEventProcessor` 线程因 `OutOfMemoryException` 异常退出。[#70206](https://github.com/StarRocks/starrocks/pull/70206)
 - `SplitTopNRule` 未正确应用分区裁剪。[#70154](https://github.com/StarRocks/starrocks/pull/70154)
 - Schema Change 发布阶段 `cal_new_base_version` 中存在越界访问。[#70132](https://github.com/StarRocks/starrocks/pull/70132)
-- MV 重写时忽略了基表中已删除的分区。[#70130](https://github.com/StarRocks/starrocks/pull/70130)
+- 物化视图重写时忽略了基表中已删除的分区。[#70130](https://github.com/StarRocks/starrocks/pull/70130)
 - 分区边界比较中类型不匹配导致分区谓词被意外裁剪。[#70097](https://github.com/StarRocks/starrocks/pull/70097)
 - `str_to_date` 在 BE 运行时丢失微秒精度。[#70068](https://github.com/StarRocks/starrocks/pull/70068)
 - Join Spill 过程在 `set_callback_function` 中发生崩溃。[#70030](https://github.com/StarRocks/starrocks/pull/70030)
@@ -83,7 +83,7 @@ displayed_sidebar: docs
 - Java UDTF/UDAF 在方法参数使用泛型类型时崩溃。[#69197](https://github.com/StarRocks/starrocks/pull/69197)
 - 查询规划完成后未释放查询级别的元数据，导致并发查询执行时 FE OOM。[#68444](https://github.com/StarRocks/starrocks/pull/68444)
 - 查询级别的 Warehouse hint 导致 `ConnectContext` 中的 `ComputeResource` 泄漏。[#70706](https://github.com/StarRocks/starrocks/pull/70706)
-- 无锁 MV 重写错误地回退到实时元数据。[#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- 无锁物化视图重写错误地回退到实时元数据。[#70475](https://github.com/StarRocks/starrocks/pull/70475)
 - `_tablet_multi_get_rpc` 中存在重复的闭包引用。[#70657](https://github.com/StarRocks/starrocks/pull/70657)
 - `ReplaceColumnRefRewriter` 中存在无限递归。[#66974](https://github.com/StarRocks/starrocks/pull/66974)
 - `NOT NULL` 约束被错误地下推到 `FILES()` 表函数的 Schema 中。[#70621](https://github.com/StarRocks/starrocks/pull/70621)
