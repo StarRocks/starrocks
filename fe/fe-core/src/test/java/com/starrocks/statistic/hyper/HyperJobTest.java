@@ -355,7 +355,8 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
 
             Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
             List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(
-                    analyzeId, statsCtx, db, table, pair.first, pair.second, List.of(pid), 1, false);
+                    analyzeId, statsCtx, db, table, pair.first, pair.second, List.of(pid), 1, false,
+                    Map.of());
 
             RuntimeException ex = Assertions.assertThrows(RuntimeException.class, () -> jobs.get(0).queryStatistics());
             Assertions.assertTrue(ex.getMessage().contains("USER_CANCEL"), ex.getMessage());
@@ -371,7 +372,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true");
 
         // WHEN
-        final var jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, namesAndTypes.first,
+        final var jobs = HyperQueryJob.createFullQueryJobs(1, connectContext, db, table, namesAndTypes.first,
                 namesAndTypes.second, List.of(pid), 1, false, properties);
 
         // THEN
@@ -430,7 +431,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         };
 
         Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true");
-        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, namesAndTypes.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(1, connectContext, db, table, namesAndTypes.first,
                 namesAndTypes.second, List.of(pid), 1, sampler, false, properties);
 
         // Should have jobs for both regular and virtual columns
@@ -469,7 +470,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Map<String, String> properties = Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "false");
 
         // WHEN
-        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(connectContext, db, table, namesAndTypes.first,
+        List<HyperQueryJob> jobs = HyperQueryJob.createFullQueryJobs(1, connectContext, db, table, namesAndTypes.first,
                 namesAndTypes.second, List.of(pid), 1, false, properties);
 
         // THEN
