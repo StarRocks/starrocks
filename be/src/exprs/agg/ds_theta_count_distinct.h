@@ -66,9 +66,8 @@ public:
         // init state if needed
         _init_if_needed(state);
         const auto& datas = GetContainer<LT>::get_data(columns[0]);
-        uint64_t value = 0;
         for (size_t i = frame_start; i < frame_end; ++i) {
-            value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
+            uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
             if (value != 0) {
                 update_state(ctx, state, value);
             }
