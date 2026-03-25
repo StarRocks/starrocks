@@ -295,7 +295,7 @@ class WindowSkewTest extends PlanTestBase {
 
     @Test
     @Disabled
-        // todo(martinr0x) enable once is merged https://github.com/StarRocks/starrocks/pull/68964
+    // todo(martinr0x) enable once is merged https://github.com/StarRocks/starrocks/pull/68964
     void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
         // Test that the skew hint works correctly when there is a join before the window function
         final var joinTable = getOlapTable("window_skew_table_join");
