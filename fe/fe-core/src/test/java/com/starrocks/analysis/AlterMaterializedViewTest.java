@@ -618,6 +618,62 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @Test
+    public void testAlterBaseTableWithOptimizeBucketOnly() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t_bucket (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY RANGE(k2) (\n" +
+                "    PARTITION p1 VALUES [('2020-06-01'), ('2020-07-01')),\n" +
+                "    PARTITION p2 VALUES [('2020-07-01'), ('2020-08-01'))\n" +
+                "  )\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "  PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv_bucket \n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t_bucket group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket");
+        Assertions.assertTrue(mv.isActive());
+
+        starRocksAssert.ddl("alter table base_t_bucket PARTITION(p1) DISTRIBUTED BY HASH(k1) BUCKETS 1;");
+
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket");
+        Assertions.assertTrue(mv.isActive());
+    }
+
+    @Test
+    public void testAlterBaseTableWithOptimizeBucketAndSortKey() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t_bucket_sort (\n" +
+                "  k1 int,\n" +
+                "  k2 date,\n" +
+                "  k3 string\n" +
+                "  )\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  PARTITION BY RANGE(k2) (\n" +
+                "    PARTITION p1 VALUES [('2020-06-01'), ('2020-07-01')),\n" +
+                "    PARTITION p2 VALUES [('2020-07-01'), ('2020-08-01'))\n" +
+                "  )\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "  PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv_bucket_sort \n" +
+                " REFRESH MANUAL\n" +
+                " AS select sum(k1), k2 from base_t_bucket_sort group by k2;");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(
+                connectContext.getDatabase(), "test_mv_bucket_sort");
+        Assertions.assertTrue(mv.isActive());
+
+        // Changing sort key along with bucket count is NOT a bucket-only optimize, MV should be inactivated.
+        starRocksAssert.ddl("alter table base_t_bucket_sort ORDER BY (k2, k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1;");
+
+        mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "test_mv_bucket_sort");
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.getInactiveReason().contains("base-table optimized:"));
+    }
+
+    @Test
     public void testMaterializedViewRename() throws Exception {
         starRocksAssert.withTable("CREATE TABLE base_t1 (\n" +
                 "  k1 int,\n" +
