@@ -493,14 +493,18 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             if (isAscending) {
                 if (prevStart != null && prevStart.equals(newStart)) {
                     // in ascending start should not be equal to prevStart, otherwise dead loop may happen
-                    throw new SemanticException("Generate new task run start is the same to the previous in ascending, dead " +
-                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                    throw new SemanticException("Materialized view %s.%s refresh failed: detected infinite loop in " +
+                            "ascending partition task generation, new start '%s' equals previous start '%s' " +
+                            "(range: [%s, %s)). Please check the partition column configuration.",
+                            db.getFullName(), mv.getName(), newStart, prevStart, newStart, newEnd);
                 }
             } else {
                 if (prevEnd != null && prevEnd.equals(newEnd)) {
                     // end descending end should not be equal to prevEnd, otherwise dead loop may happen
-                    throw new SemanticException("Generate new task run end is the same to the previous in descending, dead " +
-                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                    throw new SemanticException("Materialized view %s.%s refresh failed: detected infinite loop in " +
+                            "descending partition task generation, new end '%s' equals previous end '%s' " +
+                            "(range: [%s, %s)). Please check the partition column configuration.",
+                            db.getFullName(), mv.getName(), newEnd, prevEnd, newStart, newEnd);
                 }
             }
             mvContext.setNextPartitionStart(newStart);
@@ -559,8 +563,9 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(mvContext.getCtx(),
                         database, mv.getName(), alterPartition);
             } catch (Exception e) {
-                throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                        database.getFullName(), mv.getName());
+                throw new DmlException("Materialized view %s.%s refresh failed: " +
+                        "failed to add range partition, db: %s, cause: %s",
+                        e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
             Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
         }

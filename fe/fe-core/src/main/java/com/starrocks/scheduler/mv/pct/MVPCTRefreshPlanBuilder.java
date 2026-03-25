@@ -143,8 +143,10 @@ public class MVPCTRefreshPlanBuilder {
         Multimap<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
         Map<Table, List<SlotRef>> refBaseTablePartitionSlots = mv.getRefBaseTablePartitionSlots();
         if (CollectionUtils.sizeIsEmpty(refBaseTablePartitionSlots)) {
-            throw new AnalysisException(String.format("MV refresh cannot generate partition predicates " +
-                    "because of mv %s contains no ref base table's partitions", mv.getName()));
+            throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                    "cannot generate partition predicates because the MV has no ref base table partition slots. " +
+                    "Check if the MV is partitioned and references a valid base table partition column.",
+                    mvDb.getFullName(), mv.getName()));
         }
 
         Set<String> uniqueTableNames = tableRelations.keySet().stream().collect(Collectors.toSet());
@@ -166,8 +168,10 @@ public class MVPCTRefreshPlanBuilder {
             TableRelation tableRelation = relations.iterator().next();
             Table table = tableRelation.getTable();
             if (table == null) {
-                throw new AnalysisException(String.format("Optimize materialized view %s refresh task, generate table relation " +
-                        "%s failed: table is null", mv.getName(), tableRelation.getName()));
+                throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                        "table relation '%s' resolved to null when building refresh plan. " +
+                        "The base table may have been dropped or is inaccessible.",
+                        mvDb.getFullName(), mv.getName(), tableRelation.getName()));
             }
             // skip it table is not ref base table.
             if (!refBaseTablePartitionSlots.containsKey(table)) {
@@ -177,8 +181,10 @@ public class MVPCTRefreshPlanBuilder {
             }
             List<SlotRef> refTablePartitionSlotRefs = refBaseTablePartitionSlots.get(table);
             if (CollectionUtils.isEmpty(refTablePartitionSlotRefs)) {
-                throw new AnalysisException(String.format("Generate partition predicate failed: " +
-                        "cannot find partition slot ref %s from query relation"));
+                throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                        "cannot find partition slot refs for base table '%s' from query relation. " +
+                        "The partition column mapping may be missing or invalid.",
+                        mvDb.getFullName(), mv.getName(), table.getName()));
             }
 
             // If there are multiple table relations, don't push down partition predicate into table relation
