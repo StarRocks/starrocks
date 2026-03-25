@@ -92,7 +92,8 @@ public class ExpressionStatisticCalculator {
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
             if (operator.isNull()) {
                 // NULL has no distinct non-null values and is always null.
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0, 0, 0);
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
+                        operator.getType().getTypeSize(), 0);
             }
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
