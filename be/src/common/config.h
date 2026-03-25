@@ -1860,6 +1860,9 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// If turned on, parallel compaction will split by sort key range instead of segment index.
+// This produces non-overlapping output rowsets, improving subsequent query performance.
+CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
