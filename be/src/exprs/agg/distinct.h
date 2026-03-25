@@ -425,7 +425,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(columns[0]);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
@@ -454,7 +454,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(columns[0]);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);

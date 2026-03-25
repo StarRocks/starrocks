@@ -766,14 +766,15 @@ template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
     static const auto get_data(const Column* column) {
+        const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
             using LargeColumnType = RunTimeLargeColumnType<ltype>;
             if (column->is_large_binary()) {
-                return down_cast<const LargeColumnType*>(column)->immutable_data();
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
             }
-            return down_cast<const ColumnType*>(column)->immutable_data();
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
         } else {
-            return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
         }
     }
     static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
