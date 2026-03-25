@@ -136,6 +136,16 @@ public class IcebergConnector implements Connector {
                         .registerCachingIcebergCatalog(catalogName, nativeCatalog);
             }
             this.icebergNativeCatalog = nativeCatalog;
+
+            // Only register for maintenance on leader FE to avoid duplicate maintenance across nodes.
+            int cleanupHours = icebergCatalogProperties.getIcebergAutoCleanupIntervalHours();
+            int rewriteHours = icebergCatalogProperties.getIcebergAutoOptimizeIntervalHours();
+            if (!isResourceMappingCatalog(catalogName) && icebergCatalogProperties.isEnableAutoMaintenance()
+                    && (cleanupHours > 0 || rewriteHours > 0)) {
+                GlobalStateMgr.getCurrentState().getIcebergMaintenanceProcessor()
+                        .registerIcebergCatalogForMaintenance(catalogName, icebergNativeCatalog, hdfsEnvironment,
+                                cleanupHours, rewriteHours);
+            }
         }
         return icebergNativeCatalog;
     }
@@ -170,6 +180,8 @@ public class IcebergConnector implements Connector {
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                 .unRegisterCachingIcebergCatalog(catalogName);
+        GlobalStateMgr.getCurrentState().getIcebergMaintenanceProcessor()
+                .unRegisterIcebergCatalogForMaintenance(catalogName);
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }

@@ -1,0 +1,52 @@
+-- name: test_iceberg_auto_maintenance
+
+create external catalog iceberg_auto_maintenance_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_auto_maintenance" = "true",
+    "iceberg_auto_cleanup_interval_hours" = "20",
+    "iceberg_auto_optimize_interval_hours" = "5"
+);
+
+show create catalog `iceberg_auto_maintenance_${uuid0}`;
+
+drop catalog `iceberg_auto_maintenance_${uuid0}`;
+
+
+create external catalog iceberg_auto_maintenance_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "enable_iceberg_metadata_cache"="false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_auto_maintenance" = "true",
+    "iceberg_auto_cleanup_interval_hours" = "24",
+    "iceberg_auto_optimize_interval_hours" = "3"
+);
+
+show create catalog `iceberg_auto_maintenance_${uuid0}`;
+
+drop catalog `iceberg_auto_maintenance_${uuid0}`;
+
+create external catalog iceberg_auto_maintenance_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_auto_maintenance" = "true"
+);
+
+show create catalog `iceberg_auto_maintenance_${uuid0}`;
+
+drop catalog `iceberg_auto_maintenance_${uuid0}`;

@@ -44,6 +44,9 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
+    public static final String ENABLE_ICEBERG_AUTO_MAINTENANCE = "enable_iceberg_auto_maintenance";
+    public static final String ICEBERG_AUTO_CLEANUP_INTERVAL_HOURS = "iceberg_auto_cleanup_interval_hours";
+    public static final String ICEBERG_AUTO_OPTIMIZE_INTERVAL_HOURS = "iceberg_auto_optimize_interval_hours";
 
     // internal config
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
@@ -69,6 +72,9 @@ public class IcebergCatalogProperties {
     private double icebergDeleteFileCacheMemoryUsageRatio;
     private double icebergTableCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
+    private boolean enableAutoMaintenance;
+    private int icebergAutoCleanupIntervalHours;
+    private int icebergAutoOptimizeIntervalHours;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -80,6 +86,16 @@ public class IcebergCatalogProperties {
         initIcebergMetadataCache();
         initThreadPoolNum();
         initDistributedPlanProperties();
+        initOptimizationAutoMaintenance();
+    }
+
+    private void initOptimizationAutoMaintenance() {
+        this.enableAutoMaintenance = PropertyUtil.propertyAsBoolean(
+                properties, ENABLE_ICEBERG_AUTO_MAINTENANCE, false);
+        this.icebergAutoCleanupIntervalHours = PropertyUtil.propertyAsInt(
+                properties, ICEBERG_AUTO_CLEANUP_INTERVAL_HOURS, 24);
+        this.icebergAutoOptimizeIntervalHours = PropertyUtil.propertyAsInt(
+                properties, ICEBERG_AUTO_OPTIMIZE_INTERVAL_HOURS, 3);
     }
 
     private void initCatalogType() {
@@ -203,5 +219,17 @@ public class IcebergCatalogProperties {
 
     public boolean enableCacheDataFileIdentifierColumnStatistics() {
         return enableCacheDataFileIdentifierColumnStatistics;
+    }
+
+    public boolean isEnableAutoMaintenance() {
+        return enableAutoMaintenance;
+    }
+
+    public int getIcebergAutoCleanupIntervalHours() {
+        return icebergAutoCleanupIntervalHours;
+    }
+
+    public int getIcebergAutoOptimizeIntervalHours() {
+        return icebergAutoOptimizeIntervalHours;
     }
 }

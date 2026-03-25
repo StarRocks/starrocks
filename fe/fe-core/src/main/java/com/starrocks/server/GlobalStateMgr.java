@@ -109,6 +109,7 @@ import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+import com.starrocks.connector.iceberg.IcebergMaintenanceProcessor;
 import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
@@ -371,6 +372,7 @@ public class GlobalStateMgr {
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
+    private final IcebergMaintenanceProcessor icebergMaintenanceProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -778,6 +780,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
+        this.icebergMaintenanceProcessor = new IcebergMaintenanceProcessor();
 
         this.stat = new TabletSchedulerStat();
 
@@ -1225,6 +1228,10 @@ public class GlobalStateMgr {
 
     public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
         return connectorTableMetadataProcessor;
+    }
+
+    public IcebergMaintenanceProcessor getIcebergMaintenanceProcessor() {
+        return icebergMaintenanceProcessor;
     }
 
     public ReplicationMgr getReplicationMgr() {
@@ -1688,6 +1695,8 @@ public class GlobalStateMgr {
         }
 
         licenseMgr.start();
+
+        icebergMaintenanceProcessor.start();
     }
 
     // start threads that should run on all FE
@@ -3082,6 +3091,7 @@ public class GlobalStateMgr {
     public void shutdown() {
         // in a single thread.
         connectorMgr.shutdown();
+        icebergMaintenanceProcessor.shutdown();
     }
 
     public ReportHandler getReportHandler() {

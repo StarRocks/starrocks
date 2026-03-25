@@ -2945,6 +2945,23 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_queue_max_size = 1000;
 
     /**
+     * Thread pool size for Iceberg background maintenance tasks (expire_snapshots,
+     * remove_orphan_files, rewrite_manifests). The actual pool size is
+     * max(1, min(iceberg_background_maintenance_pool_size, CPU core count)).
+     * Requires FE restart to take effect.
+     */
+    @ConfField(mutable = false)
+    public static int iceberg_background_maintenance_pool_size = 4;
+
+    /**
+     * Interval in seconds for the Iceberg maintenance daemon to check and run
+     * background maintenance tasks (expire_snapshots, remove_orphan_files,
+     * rewrite_manifests) on registered Iceberg catalogs.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_background_check_maintenance_interval_seconds = 1800;
+
+    /**
      * paimon metadata cache preheat, default false
      */
     @ConfField(mutable = true)

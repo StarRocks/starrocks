@@ -45,6 +45,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.iceberg.IcebergMaintenanceProcessor;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
@@ -95,6 +96,16 @@ public class GlobalStateMgrTest {
         imageWriter.setOutputStream(image2.getDataOutputStream());
         globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
         globalStateMgr.loadHeader(image2.getDataInputStream());
+    }
+
+    @Test
+    public void testIcebergMaintenanceProcessorInitialized() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Field field = GlobalStateMgr.class.getDeclaredField("icebergMaintenanceProcessor");
+        field.setAccessible(true);
+        Object value = field.get(globalStateMgr);
+        Assertions.assertNotNull(value);
+        Assertions.assertTrue(value instanceof IcebergMaintenanceProcessor);
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
