@@ -49,7 +49,8 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -93,7 +94,7 @@ Status SmallFileMgr::_load_single_file(const std::string& path, const std::strin
         return Status::InternalError(strings::Substitute("Not a valid file name: $0", file_name));
     }
     int64_t file_id = std::stol(parts[0]);
-    std::string md5 = parts[1];
+    const std::string& md5 = parts[1];
 
     if (_file_cache.find(file_id) != _file_cache.end()) {
         return Status::InternalError(strings::Substitute("File with same id is already been loaded: $0", file_id));

@@ -34,6 +34,10 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include "base/bit/bitmap.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -43,7 +47,6 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/page_handle_fwd.h"
 #include "types/logical_type.h"
-#include "util/bitmap.h"
 
 namespace starrocks {
 
@@ -756,7 +759,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
             // merge page index
             page_index.back().second = iter_end.page_index();
         } else {
-            page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
+            page_index.emplace_back(iter_start.page_index(), iter_end.page_index());
         }
 
         prev_page_index = iter_end.page_index();

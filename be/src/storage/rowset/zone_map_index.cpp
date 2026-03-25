@@ -39,7 +39,7 @@
 #include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
@@ -508,6 +508,7 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 
     std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    parsed_zonemap.reserve(_page_zone_maps.size());
     for (auto& zonemap : _page_zone_maps) {
         parsed_zonemap.emplace_back(zonemap);
     }

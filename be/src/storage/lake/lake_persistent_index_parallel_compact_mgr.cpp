@@ -22,11 +22,14 @@
 #include <utility>
 
 #include "base/concurrency/countdown_latch.h"
+#include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -39,8 +42,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::lake {
 
@@ -380,7 +382,7 @@ Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const Per
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
-                                 block_cache ? block_cache->cache() : nullptr, false));
+                                 block_cache ? block_cache->cache() : nullptr, false, nullptr, metadata, _tablet_mgr));
         RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
     }
     return Status::OK();

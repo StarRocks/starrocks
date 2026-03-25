@@ -19,9 +19,10 @@
 #include <numeric>
 
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/system/cpu_info.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_table.h"
@@ -29,7 +30,6 @@
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

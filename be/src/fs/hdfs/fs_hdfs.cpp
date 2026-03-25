@@ -22,12 +22,14 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
+#include "common/config_hdfs_fwd.h"
+#include "common/system/backend_options.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
-#include "service/backend_options.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
@@ -37,7 +39,7 @@ namespace starrocks {
 
 class GetHdfsFileReadOnlyHandle {
 public:
-    GetHdfsFileReadOnlyHandle(const FSOptions& options, std::string path, int buffer_size)
+    GetHdfsFileReadOnlyHandle(FSOptions options, std::string path, int buffer_size)
             : _options(std::move(options)), _path(std::move(path)), _buffer_size(buffer_size) {}
 
     StatusOr<hdfsFS> getOrCreateFS() {
@@ -159,7 +161,7 @@ public:
     }
 
 private:
-    const FSOptions _options;
+    FSOptions _options;
     std::string _path;
     int _buffer_size;
     std::shared_ptr<HdfsFsClient> _hdfs_client = nullptr;
@@ -384,7 +386,7 @@ Status HDFSWritableFile::close() {
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem(const FSOptions& options) : _options(std::move(options)) {}
+    HdfsFileSystem(FSOptions options) : _options(std::move(options)) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;

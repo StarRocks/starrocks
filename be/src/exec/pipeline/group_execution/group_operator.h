@@ -22,7 +22,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 // P1: SourceOp->ProjectOp->JoinProbeOp->ProjectOp->ExchangeSink

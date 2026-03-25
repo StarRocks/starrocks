@@ -19,6 +19,8 @@
 #include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
@@ -26,6 +28,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
@@ -33,7 +36,6 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "types/logical_type_infra.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -52,6 +54,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             ncolumn--;
         }
         vector<ColumnId> column_idxes;
+        column_idxes.reserve(ncolumn);
         for (ColumnId i = 0; i < ncolumn; i++) {
             column_idxes.push_back(i);
         }
@@ -69,12 +72,18 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     }
 }
 
-Status MemTable::prepare() {
+Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
         ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(_vectorized_schema, 0, INT_MAX, 0));
+    }
+    if (_keys_type == KeysType::PRIMARY_KEYS) {
+        if (pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE) {
+            return Status::InternalError("invalid primary key encoding type");
+        }
+        _pk_encoding_type = pk_encoding_type;
     }
     return Status::OK();
 }
@@ -88,6 +97,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _sink(sink),
           _aggregator(nullptr),
           _merge_condition(std::move(merge_condition)),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
@@ -103,6 +113,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _keys_type(schema->keys_type()),
           _sink(sink),
           _aggregator(nullptr),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
@@ -287,7 +298,8 @@ Status MemTable::finalize() {
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
                 PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size,
+                                                       _pk_encoding_type)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
@@ -496,7 +508,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!(*deletes)) {
-        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes);
+        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes, _pk_encoding_type);
         if (!st.ok()) {
             LOG(ERROR) << "create column for primary key encoder failed, schema:" << *_vectorized_schema
                        << ", status:" << st.to_string();
@@ -509,7 +521,8 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
         (*deletes)->reset_column();
     }
     auto& delidx = indexes[TOpType::DELETE];
-    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get(),
+                                        _pk_encoding_type);
     return Status::OK();
 }
 

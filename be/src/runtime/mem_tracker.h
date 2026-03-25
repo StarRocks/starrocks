@@ -34,22 +34,23 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <unordered_map>
 
 #include "base/concurrency/spinlock.h"
 #include "base/metrics.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class MemTracker;
-class RuntimeState;
 
 /// A MemTracker tracks memory consumption; it contains an optional limit
 /// and can be arranged into a tree structure such that the consumption tracked
@@ -117,7 +118,8 @@ enum class MemTrackerType {
     ROWSET_UPDATE_STATE,
     INDEX_CACHE,
     DEL_VEC_CACHE,
-    COMPACTION_STATE
+    COMPACTION_STATE,
+    BUILTIN_INVERTED_INDEX
 };
 
 class MemTracker {
@@ -420,7 +422,7 @@ public:
 
     Status check_mem_limit(const std::string& msg) const;
 
-    std::string err_msg(const std::string& msg, RuntimeState* state = nullptr) const;
+    std::string err_msg(const std::string& msg, std::string_view fragment_instance_id = "") const;
 
     static const std::string PEAK_MEMORY_USAGE;
     static const std::string ALLOCATED_MEMORY_USAGE;
@@ -442,8 +444,8 @@ public:
 
     // no any memory allocate
     size_t debug_string(char* dst, size_t max_length) {
-        return snprintf(dst, max_length, "tracker:%s consumption: %ld\n", _label.c_str(),
-                        _consumption->current_value());
+        return snprintf(dst, max_length, "tracker:%s consumption: %" PRId64 "\n", _label.c_str(),
+                        static_cast<int64_t>(_consumption->current_value()));
     }
 
     MemTrackerType type() const { return _type; }

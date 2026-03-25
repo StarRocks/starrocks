@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -44,6 +45,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /*
  * Rule Objective:
@@ -147,8 +149,12 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         Statistics statistics = child.getStatistics();
 
         // 1. Identify Skew
-        // We look for a partition column that has a specific value causing data skew.
-        List<SkewedInfo> skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics);
+        // First check for explicit skew hint from user (takes precedence over statistics)
+        // Then fallback to statistics-based detection
+        List<SkewedInfo> skewedInfos = findSkewedPartitionFromHint(window);
+        if (skewedInfos.isEmpty()) {
+            skewedInfos = findSkewedPartition(window.getPartitionExpressions(), statistics);
+        }
 
         //todo (m.bogusz) in theory we could have multiple skewed values, but for now we only handle one
         if (skewedInfos.size() != 1) {
@@ -241,6 +247,8 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         LogicalWindowOperator.Builder windowBuilder = new LogicalWindowOperator.Builder()
                 .withOperator(originalWindow)
+                .setSkewColumn(null)
+                .setSkewValues(List.of())
                 .setUseHashBasedPartition(partitionExprs.isEmpty() && originalWindow.isUseHashBasedPartition())
                 .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed());
 
@@ -306,6 +314,46 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             this.columnMapping = columnMapping;
         }
 
+    }
+
+    /**
+     * Check for explicit skew hint from user: [skew|t.column(value)]
+     * This takes precedence over statistics-based detection.
+     */
+    private List<SkewedInfo> findSkewedPartitionFromHint(LogicalWindowOperator window) {
+        ScalarOperator skewColumn = window.getSkewColumn();
+        List<ScalarOperator> skewValues = window.getSkewValues();
+
+        if (skewColumn == null || skewValues == null || skewValues.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        if (!(skewColumn instanceof ColumnRefOperator col)) {
+            return Collections.emptyList();
+        }
+
+        // Verify that the skewed column is part of the partition expressions
+        if (!window.getPartitionExpressions().contains(col)) {
+            throw new SemanticException("Can't find skew column");
+        }
+
+        // Validate that each skew value is type-compatible with the column and cast to the column's type
+        return skewValues.stream()
+                .map(v -> {
+                    if (!(v instanceof ConstantOperator c)) {
+                        throw new SemanticException("Window skew hint values must be constant");
+                    }
+                    if (c.isNull()) {
+                        return new SkewedInfo(col, ConstantOperator.createNull(col.getType()));
+                    }
+                    Optional<ConstantOperator> cast = c.castTo(col.getType());
+                    if (cast.isEmpty()) {
+                        throw new SemanticException("Window skew hint value type mismatch: " +
+                                c.getType() + " vs " + col.getType());
+                    }
+                    return new SkewedInfo(col, cast.get());
+                })
+                .toList();
     }
 
     private List<SkewedInfo> findSkewedPartition(List<ScalarOperator> partitionExprs, Statistics statistics) {

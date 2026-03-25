@@ -17,7 +17,8 @@
 #include "agent/master_info.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -61,6 +62,24 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.lake_io_opts = {.fill_data_cache = true,
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
     reader_params.column_access_paths = &_column_access_paths;
+
+    // Apply range filter for range-split parallel compaction.
+    // Only set each bound when has_lower_bound / has_upper_bound is true, so that
+    // open-ended ranges (first/last subtask) leave that side unconstrained without
+    // relying on empty OlapTuple semantics in the segment iterator.
+    if (_context->has_range_split) {
+        if (_context->has_lower_bound && !_context->range_start_key.empty()) {
+            reader_params.start_key = _context->range_start_key;
+            reader_params.range = _context->range_lower_inclusive ? TabletReaderParams::RangeStartOperation::GE
+                                                                  : TabletReaderParams::RangeStartOperation::GT;
+        }
+        if (_context->has_upper_bound && !_context->range_end_key.empty()) {
+            reader_params.end_key = _context->range_end_key;
+            reader_params.end_range = _context->range_upper_inclusive ? TabletReaderParams::RangeEndOperation::LE
+                                                                      : TabletReaderParams::RangeEndOperation::LT;
+        }
+    }
+
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer,

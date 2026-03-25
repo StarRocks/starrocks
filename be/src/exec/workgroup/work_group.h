@@ -26,9 +26,9 @@
 #include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -310,6 +310,8 @@ public:
     void for_each_executors(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
+    void change_exec_state_report_max_threads(int max_threads);
+    void change_priority_exec_state_report_max_threads(int max_threads);
     void set_workgroup_expiration_time(std::chrono::seconds value);
 
 private:

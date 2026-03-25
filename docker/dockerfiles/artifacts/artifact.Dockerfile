@@ -44,7 +44,7 @@ COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --enable-shared-data --clean -j `nproc`
 
-FROM ubuntu:22.04 as downloader
+FROM ubuntu:24.04 as downloader
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
 

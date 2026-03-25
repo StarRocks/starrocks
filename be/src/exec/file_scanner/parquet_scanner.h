@@ -24,12 +24,12 @@
 
 #include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/parquet_reader.h"
 #include "runtime/mem_pool.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -72,13 +72,13 @@ private:
     Status finalize_src_chunk(ChunkPtr* chunk);
 
     const TBrokerScanRange& _scan_range;
-    int _next_file;
+    int _next_file{0};
     std::shared_ptr<ParquetChunkReader> _curr_file_reader;
-    bool _scanner_eof;
+    bool _scanner_eof{false};
     RecordBatchPtr _batch;
     const size_t _max_chunk_size;
-    size_t _batch_start_idx;
-    size_t _chunk_start_idx;
+    size_t _batch_start_idx{0};
+    size_t _chunk_start_idx{0};
     int _num_of_columns_from_file = 0;
     std::vector<std::unique_ptr<ConvertFuncTree>> _conv_funcs;
     std::vector<Expr*> _cast_exprs;

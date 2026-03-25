@@ -41,6 +41,7 @@
 
 #include "column/column.h"
 #include "common/logging.h"
+#include "common/util/debug_util.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
@@ -50,7 +51,6 @@
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "storage/types.h"
-#include "util/debug_util.h"
 
 namespace starrocks {
 

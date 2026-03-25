@@ -18,11 +18,11 @@
 #include <string>
 #include <vector>
 
+#include "base/container/lru_cache.h"
 #include "base/string/slice.h"
 #include "column/chunk.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "util/lru_cache.h"
 
 namespace starrocks::query_cache {
 class CacheManager;

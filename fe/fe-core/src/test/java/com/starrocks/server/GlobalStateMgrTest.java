@@ -131,11 +131,8 @@ public class GlobalStateMgrTest {
     @Mocked
     ReplicationGroupAdmin replicationGroupAdmin;
 
-    @Mocked
-    EditLog editLog;
-
     @Test
-    public void testUpdateFrontend() throws Exception {
+    public void testUpdateFrontend(@Mocked EditLog editLog) throws Exception {
 
         new Expectations() {
             {
@@ -152,12 +149,6 @@ public class GlobalStateMgrTest {
                     MemberNotFoundException,
                     ReplicaStateException,
                     UnknownMasterException {
-            }
-        };
-
-        new MockUp<EditLog>() {
-            @Mock
-            public void logUpdateFrontend(Frontend fe) {
             }
         };
 
@@ -317,7 +308,6 @@ public class GlobalStateMgrTest {
     public void testReloadTables() throws Exception {
         ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.setUpForPersistTest();
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         StarRocksAssert starRocksAssert = new StarRocksAssert();
 

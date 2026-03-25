@@ -62,7 +62,7 @@ private:
     void debug_string(int indentation_level, std::stringstream* out) const override;
 
     const TPlanNode _tnode;
-    bool _is_init;
+    bool _is_init{false};
     bool _is_finished = false;
     const std::string _table_name;
     SchemaScannerParam _scanner_param;
@@ -70,7 +70,7 @@ private:
     TupleId _tuple_id;
 
     // Descriptor of dest tuples
-    const TupleDescriptor* _dest_tuple_desc;
+    const TupleDescriptor* _dest_tuple_desc{nullptr};
     // Jni helper for scanning an schema table.
     std::unique_ptr<SchemaScanner> _schema_scanner;
 

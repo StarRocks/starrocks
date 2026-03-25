@@ -41,6 +41,7 @@
 #include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -49,9 +50,10 @@
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -232,7 +234,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 

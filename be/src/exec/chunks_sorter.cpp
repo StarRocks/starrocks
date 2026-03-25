@@ -20,12 +20,12 @@
 #include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

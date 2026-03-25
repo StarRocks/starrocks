@@ -15,11 +15,12 @@
 #include "exec/aggregate/aggregate_base_node.h"
 
 #include "exec/aggregator.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks {
 
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode) {}
+        : PipelineNode(pool, tnode, descs), _tnode(tnode) {}
 
 AggregateBaseNode::~AggregateBaseNode() {
     if (runtime_state() != nullptr) {
@@ -29,7 +30,8 @@ AggregateBaseNode::~AggregateBaseNode() {
 
 Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool, tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs, state, true));
     for (auto& expr : _group_by_expr_ctxs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -43,17 +45,6 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _build_runtime_filters.emplace_back(rf_desc);
         }
     }
-    return Status::OK();
-}
-
-Status AggregateBaseNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    auto params = convert_to_aggregator_params(_tnode);
-
-    // Avoid partial-prepared Aggregator, which is dangerous to close
-    auto aggregator = std::make_shared<Aggregator>(std::move(params));
-    RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
-    _aggregator = std::move(aggregator);
     return Status::OK();
 }
 

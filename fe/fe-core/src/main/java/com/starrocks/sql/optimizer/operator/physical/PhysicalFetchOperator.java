@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -31,23 +30,23 @@ import java.util.Set;
 
 public class PhysicalFetchOperator extends PhysicalOperator {
 
-    // row id column ref -> Table
-    Map<ColumnRefOperator, Table> rowIdToTable;
+    // row id column ref -> scan operator
+    Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator;
     Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToRefColumns;
     // row id column ref -> fetched columns
     Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns;
 
-    public PhysicalFetchOperator(Map<ColumnRefOperator, Table> rowIdToTable,
+    public PhysicalFetchOperator(Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator,
                                  Map<ColumnRefOperator, List<ColumnRefOperator>> rowIdToRefColumns,
                                  Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns) {
         super(OperatorType.PHYSICAL_FETCH);
-        this.rowIdToTable = rowIdToTable;
+        this.rowIdToScanOperator = rowIdToScanOperator;
         this.rowIdToRefColumns = rowIdToRefColumns;
         this.rowIdToLazyColumns = rowIdToLazyColumns;
     }
 
-    public Map<ColumnRefOperator, Table> getRowIdToTable() {
-        return rowIdToTable;
+    public Map<ColumnRefOperator, PhysicalScanOperator> getRowIdToScanOperator() {
+        return rowIdToScanOperator;
     }
 
     public Map<ColumnRefOperator, Set<ColumnRefOperator>> getRowIdToLazyColumns() {
@@ -84,7 +83,7 @@ public class PhysicalFetchOperator extends PhysicalOperator {
             return false;
         }
         PhysicalFetchOperator that = (PhysicalFetchOperator) o;
-        return Objects.equals(rowIdToTable, that.rowIdToTable)
+        return Objects.equals(rowIdToScanOperator, that.rowIdToScanOperator)
                 && Objects.equals(rowIdToRefColumns, that.rowIdToRefColumns)
                 && Objects.equals(rowIdToLazyColumns, that.rowIdToLazyColumns);
     }

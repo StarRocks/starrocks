@@ -20,6 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
@@ -196,6 +197,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
+    ASSERT_TRUE(morsel_queue_factory->create(0)->has_more_from_split());
 }
 
 // test issue https://github.com/StarRocks/starrocks/pull/44386

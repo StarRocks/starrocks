@@ -107,6 +107,8 @@ public class IcebergVariantShreddingTest {
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         metricsTyped))
                 .named("typed_value");
+        // Intentionally omit one field from typed_value so array element.value keeps
+        // a non-empty base object for overlay reconstruction tests.
         Type eventObjectTyped = org.apache.parquet.schema.Types.optionalGroup()
                 .addField(shreddedField("type",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
@@ -114,6 +116,23 @@ public class IcebergVariantShreddingTest {
                 .addField(shreddedField("count",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
+                .named("typed_value");
+
+        // groups: array of objects where each element contains name (STRING) and scores (nested INT32 array).
+        // This exercises the array-of-arrays shredding code path: _collect_overlays_for_array_element
+        // must recurse into ARRAY-kinded child nodes to reconstruct scores within each group element.
+        Type scoresTypedValue = shreddedScalarArrayTypedValue(
+                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value"));
+        // Same idea for groups: keep one unshredded element field so list.element.value
+        // is materialized in the Parquet file.
+        Type groupElementTyped = org.apache.parquet.schema.Types.optionalGroup()
+                .addField(shreddedField("name",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
+                .addField(shreddedField("scores",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        scoresTypedValue))
                 .named("typed_value");
 
         return org.apache.parquet.schema.Types.optionalGroup()
@@ -137,6 +156,16 @@ public class IcebergVariantShreddingTest {
                         shreddedArrayTypedValue(
                                 org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                                 eventObjectTyped)))
+                // Scalar array shredding: array of primitive integers (no nested shredded paths)
+                .addField(shreddedScalarArrayField("numbers",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
+                // Array-of-objects with nested scalar array: exercises array-of-arrays shredding
+                .addField(shreddedField("groups",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        shreddedArrayTypedValue(
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                groupElementTyped)))
                 .named("typed_value");
     }
 
@@ -154,6 +183,26 @@ public class IcebergVariantShreddingTest {
                 .named(fieldName);
     }
 
+    /**
+     * Build just the typed_value LIST group for a scalar array nested inside another object's typed_value.
+     * Analogous to shreddedArrayTypedValue but for scalar element types.
+     * Use when a scalar array (e.g. scores: [int, int, ...]) is shredded as a sub-field of an
+     * object that is itself an array element, exercising the array-of-arrays code path.
+     */
+    private static Type shreddedScalarArrayTypedValue(Type elementValueField, Type elementTypedValueField) {
+        Type elementInList = org.apache.parquet.schema.Types.optionalGroup()
+                .addField(elementValueField)
+                .addField(elementTypedValueField)
+                .named("element");
+        Type listGroup = org.apache.parquet.schema.Types.repeatedGroup()
+                .addField(elementInList)
+                .named("list");
+        return org.apache.parquet.schema.Types.optionalGroup()
+                .as(OriginalType.LIST)
+                .addField(listGroup)
+                .named("typed_value");
+    }
+
     private static Type shreddedArrayTypedValue(Type elementValueField, Type elementTypedValueField) {
         Type elementGroup = org.apache.parquet.schema.Types.requiredGroup()
                 .addField(elementValueField)
@@ -166,6 +215,40 @@ public class IcebergVariantShreddingTest {
                 .as(OriginalType.LIST)
                 .addField(listGroup)
                 .named("typed_value");
+    }
+
+    /**
+     * Build a shredded field for scalar arrays (e.g., [1, 2, 3]).
+     * Unlike object arrays, scalar arrays have no nested shredded paths,
+     * so the typed_value directly contains the array elements without children.
+     * <p>
+     * optional group <fieldName> {
+     * optional binary value;             // raw variant storage
+     * optional group typed_value {       // strongly typed array projection
+     * repeated group list {
+     * required group element {
+     * optional <type> value;        // scalar element value
+     * }
+     * }
+     * }
+     * }
+     */
+    private static Type shreddedScalarArrayField(String fieldName, Type valueField, Type elementTypedValueField) {
+        Type elementValueInList = org.apache.parquet.schema.Types.optionalGroup()
+                .addField(valueField)
+                .addField(elementTypedValueField)
+                .named("element");
+        Type listGroup = org.apache.parquet.schema.Types.repeatedGroup()
+                .addField(elementValueInList)
+                .named("list");
+        Type typedValue = org.apache.parquet.schema.Types.optionalGroup()
+                .as(OriginalType.LIST)
+                .addField(listGroup)
+                .named("typed_value");
+        return org.apache.parquet.schema.Types.optionalGroup()
+                .addField(valueField)
+                .addField(typedValue)
+                .named(fieldName);
     }
 
     private static void runWithShredding(Catalog catalog, String warehousePath) throws IOException {
@@ -218,10 +301,9 @@ public class IcebergVariantShreddingTest {
 
     private static List<Record> buildRecords(boolean multiTypes) {
         List<Record> records = new ArrayList<>();
-        VariantMetadata metadata = Variants.metadata(
-                "id", "age", "city", "score", "status", "name", "email", "profile",
-                "salary", "department", "rank", "metrics", "views", "ratio",
-                "events", "type", "count");
+        VariantMetadata metadata = Variants.metadata("id", "age", "city", "score", "status", "name", "email", "profile",
+                "salary", "department", "rank", "metrics", "views", "ratio", "events", "type", "count", "numbers",
+                "groups", "scores", "detail", "note");
         for (int i = 0; i < 5; i++) {
             Record rec = GenericRecord.create(SCHEMA.asStruct());
             ShreddedObject obj = Variants.object(metadata);
@@ -240,12 +322,20 @@ public class IcebergVariantShreddingTest {
             ShreddedObject event0 = Variants.object(metadata);
             event0.put("type", Variants.of("view"));
             event0.put("count", Variants.of(i + 1));
+            event0.put("detail", Variants.of("detail_view_" + i));
             events.add(event0);
             ShreddedObject event1 = Variants.object(metadata);
             event1.put("type", Variants.of("click"));
             event1.put("count", Variants.of((i + 1) * 2));
+            event1.put("detail", Variants.of("detail_click_" + i));
             events.add(event1);
             obj.put("events", events);
+            // Add scalar array for testing fully-typed array reconstruction
+            org.apache.iceberg.variants.ValueArray numbers = Variants.array();
+            numbers.add(Variants.of(1 + i));
+            numbers.add(Variants.of(2 + i));
+            numbers.add(Variants.of(3 + i));
+            obj.put("numbers", numbers);
             ShreddedObject profile = Variants.object(metadata);
             profile.put("salary", Variants.of(50000.0 + i * 1000));
             profile.put("department", Variants.of("dept_" + i));
@@ -259,6 +349,21 @@ public class IcebergVariantShreddingTest {
             metrics.put("ratio", Variants.of(0.1 + i * 0.05));
             profile.put("metrics", metrics);
             obj.put("profile", profile);  // merged details + profile
+            // groups: array of 2 group objects, each with name (STRING) and scores (nested INT32 array).
+            // Exercises the array-of-arrays shredding code path in the reader.
+            org.apache.iceberg.variants.ValueArray groups = Variants.array();
+            for (int g = 0; g < 2; g++) {
+                ShreddedObject groupObj = Variants.object(metadata);
+                groupObj.put("name", Variants.of("group_" + g));
+                groupObj.put("note", Variants.of("note_" + i + "_" + g));
+                org.apache.iceberg.variants.ValueArray scores = Variants.array();
+                scores.add(Variants.of(10 + i + g * 30));
+                scores.add(Variants.of(20 + i + g * 30));
+                scores.add(Variants.of(30 + i + g * 30));
+                groupObj.put("scores", scores);
+                groups.add(groupObj);
+            }
+            obj.put("groups", groups);
             obj.put("email", Variants.of("user" + i + "@example.com"));
             Variant value = Variant.of(metadata, obj);
             rec.setField("data", value);

@@ -14,6 +14,8 @@
 
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 
+#include "common/config_compaction_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/key_cache.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"

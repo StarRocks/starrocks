@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <ostream>
 #include <string>
 
 #include "base/string/slice.h"

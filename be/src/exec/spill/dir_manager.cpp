@@ -17,7 +17,9 @@
 #include <cstdlib>
 #include <regex>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/utils.h"
@@ -71,7 +73,7 @@ Status DirManager::init(const std::string& spill_dirs) {
     double max_dir_size_ratio = config::spill_max_dir_bytes_ratio;
     for (const auto& path : spill_local_storage_paths) {
         std::string spill_dir_path = path.path;
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(spill_dir_path));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(spill_dir_path));
         RETURN_IF_ERROR(fs->create_dir_if_missing(spill_dir_path));
         RETURN_IF_ERROR(fs->iterate_dir(spill_dir_path, [fs, &spill_dir_path,
                                                          &query_id_pattern](std::string_view sub_dir_v) {

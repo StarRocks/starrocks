@@ -57,7 +57,7 @@ TEST_F(SchemaTaskRunsScannerTest, test_scanner_initialization) {
 
     // Test that scanner has the correct number of columns
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(16, slot_descs.size());
+    EXPECT_EQ(17, slot_descs.size());
 
     // Test column names and types
     EXPECT_EQ("QUERY_ID", slot_descs[0]->col_name());
@@ -66,16 +66,17 @@ TEST_F(SchemaTaskRunsScannerTest, test_scanner_initialization) {
     EXPECT_EQ("FINISH_TIME", slot_descs[3]->col_name());
     EXPECT_EQ("STATE", slot_descs[4]->col_name());
     EXPECT_EQ("CATALOG", slot_descs[5]->col_name());
-    EXPECT_EQ("DATABASE", slot_descs[6]->col_name());
-    EXPECT_EQ("DEFINITION", slot_descs[7]->col_name());
-    EXPECT_EQ("EXPIRE_TIME", slot_descs[8]->col_name());
-    EXPECT_EQ("ERROR_CODE", slot_descs[9]->col_name());
-    EXPECT_EQ("ERROR_MESSAGE", slot_descs[10]->col_name());
-    EXPECT_EQ("PROGRESS", slot_descs[11]->col_name());
-    EXPECT_EQ("EXTRA_MESSAGE", slot_descs[12]->col_name());
-    EXPECT_EQ("PROPERTIES", slot_descs[13]->col_name());
-    EXPECT_EQ("JOB_ID", slot_descs[14]->col_name());
-    EXPECT_EQ("PROCESS_TIME", slot_descs[15]->col_name());
+    EXPECT_EQ("WAREHOUSE", slot_descs[6]->col_name());
+    EXPECT_EQ("DATABASE", slot_descs[7]->col_name());
+    EXPECT_EQ("DEFINITION", slot_descs[8]->col_name());
+    EXPECT_EQ("EXPIRE_TIME", slot_descs[9]->col_name());
+    EXPECT_EQ("ERROR_CODE", slot_descs[10]->col_name());
+    EXPECT_EQ("ERROR_MESSAGE", slot_descs[11]->col_name());
+    EXPECT_EQ("PROGRESS", slot_descs[12]->col_name());
+    EXPECT_EQ("EXTRA_MESSAGE", slot_descs[13]->col_name());
+    EXPECT_EQ("PROPERTIES", slot_descs[14]->col_name());
+    EXPECT_EQ("JOB_ID", slot_descs[15]->col_name());
+    EXPECT_EQ("PROCESS_TIME", slot_descs[16]->col_name());
 }
 
 TEST_F(SchemaTaskRunsScannerTest, test_uninitialized_scanner) {

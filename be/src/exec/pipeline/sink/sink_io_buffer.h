@@ -16,14 +16,20 @@
 
 #include <memory>
 #include <shared_mutex>
+#include <utility>
 
 #include "base/testutil/sync_point.h"
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "common/status.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/priority_thread_pool.hpp"
+
+namespace starrocks {
+class RuntimeProfile;
+}
 
 namespace starrocks::pipeline {
 
@@ -34,10 +40,7 @@ public:
         return &s_instance;
     }
 
-    int submit(void* (*fn)(void*), void* args) override {
-        bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
-        return ret ? 0 : -1;
-    }
+    int submit(void* (*fn)(void*), void* args) override;
 
 private:
     SinkIOExecutor() = default;
@@ -106,7 +109,7 @@ private:
     // That is, calling append_chunk() with a nullptr, won't accidentially stop the entire queue.
     struct QueueItem {
         ChunkPtr chunk_ptr;
-        QueueItem(const ChunkPtr& chunkPtr) : chunk_ptr(chunkPtr) {}
+        QueueItem(ChunkPtr chunkPtr) : chunk_ptr(std::move(chunkPtr)) {}
     };
     typedef std::shared_ptr<QueueItem> QueueItemPtr;
 

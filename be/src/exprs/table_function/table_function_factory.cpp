@@ -26,6 +26,7 @@
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "exprs/table_function/unnest_bitmap.h"
+#include "storage/olap_define.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {

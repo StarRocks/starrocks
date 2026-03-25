@@ -43,7 +43,6 @@
 #include "base/bit/bit_util.h"
 #include "base/string/posion.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
 #include "common/mem_chunk.h"
 
 namespace starrocks {
@@ -102,7 +101,7 @@ class MemTracker;
 ///    delete p;
 class MemPool {
 public:
-    MemPool() : next_chunk_size_(INITIAL_CHUNK_SIZE) {}
+    MemPool() = default;
 
     /// Frees all chunks of memory and subtracts the total allocated bytes
     /// from the registered limits.
@@ -120,7 +119,7 @@ public:
     // Don't check memory limit
     uint8_t* allocate_aligned(int64_t size, int alignment) {
         DCHECK_GE(alignment, 1);
-        DCHECK_LE(alignment, config::memory_max_alignment);
+        DCHECK_LE(alignment, memory_max_alignment());
         // alignment should be a power of 2
         DCHECK((alignment & (alignment - 1)) == 0);
         return allocate<false>(size, alignment, 0);
@@ -154,6 +153,8 @@ public:
 
 private:
     friend class MemPoolTest;
+    static int memory_max_alignment();
+
     static const int INITIAL_CHUNK_SIZE = 4 * 1024;
 
     /// The maximum size of chunk that should be allocated. Allocations larger than this
@@ -240,7 +241,7 @@ private:
     int current_chunk_idx_{-1};
 
     /// The size of the next chunk to allocate.
-    int next_chunk_size_;
+    int next_chunk_size_{INITIAL_CHUNK_SIZE};
 
     /// sum of allocated_bytes_
     int64_t total_allocated_bytes_{0};

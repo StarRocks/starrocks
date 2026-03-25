@@ -37,10 +37,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/string/parse_util.h"
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
 #include "gutil/map_util.h"
@@ -48,7 +51,9 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
@@ -56,22 +61,14 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/parse_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
 PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env),
           _report_status_cb(std::move(report_status_cb)),
-          _done(false),
-          _prepared(false),
-          _closed(false),
-          enable_profile(true),
-          _start_time_ms(MonotonicMillis()),
-          _is_report_on_cancel(true),
-          _collect_query_statistics_with_every_batch(false),
-          _is_runtime_filter_merge_node(false) {}
+
+          _start_time_ms(MonotonicMillis()) {}
 
 PlanFragmentExecutor::~PlanFragmentExecutor() {
     close();
@@ -104,19 +101,24 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up plan
     DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
+    RETURN_IF_ERROR(ExecFactory::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
+    auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+
     if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict(_runtime_state, request.fragment.query_global_dicts));
     }
 
     if (request.fragment.__isset.query_global_dicts && request.fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(_runtime_state->init_query_global_dict_exprs(request.fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict_exprs(_runtime_state,
+                                                                          request.fragment.query_global_dict_exprs));
     }
 
     if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(_runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(_runtime_state, request.fragment.load_global_dicts));
     }
 
     if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
@@ -152,7 +154,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
-    _query_statistics.reset(new QueryStatistics());
+    _query_statistics = std::make_shared<QueryStatistics>();
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {

@@ -136,11 +136,15 @@ public class LDAPGroupProvider extends GroupProvider {
     @Override
     public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
         String ldapUserSearchAttr = getLdapUserSearchAttr();
+        String lookupKey;
         if (ldapUserSearchAttr != null) {
-            return userToGroupCache.getOrDefault(userIdentity.getUser(), Set.of());
+            // Normalize username for case-insensitive matching (LDAP is case-insensitive by default)
+            lookupKey = LDAPAuthProvider.normalizeUsername(userIdentity.getUser());
         } else {
-            return userToGroupCache.getOrDefault(distinguishedName, Set.of());
+            // When using distinguished name, normalize it for case-insensitive matching
+            lookupKey = LDAPAuthProvider.normalizeUsername(distinguishedName);
         }
+        return userToGroupCache.getOrDefault(lookupKey, Set.of());
     }
 
     public void refreshGroups() {
@@ -212,8 +216,12 @@ public class LDAPGroupProvider extends GroupProvider {
                 continue;
             }
 
-            groups.putIfAbsent(extractUserName, new HashSet<>());
-            groups.get(extractUserName).add(groupName);
+            // Normalize extracted username for case-insensitive matching
+            // LDAP is case-insensitive by default, so we normalize to ensure consistent mapping
+            String normalizedUserName = LDAPAuthProvider.normalizeUsername(extractUserName);
+
+            groups.putIfAbsent(normalizedUserName, new HashSet<>());
+            groups.get(normalizedUserName).add(groupName);
 
             LOG.debug("Successfully extracted user '{}' from member '{}', added to group '{}'",
                     extractUserName, memberDN, groupName);

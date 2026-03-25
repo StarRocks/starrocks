@@ -18,9 +18,11 @@
 
 #include <algorithm>
 #include <future>
+#include <unordered_map>
 
 #include "base/url_coding.h"
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/sink_memory_manager.h"
@@ -30,6 +32,7 @@
 #include "formats/column_evaluator.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -52,7 +55,7 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
 
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
@@ -237,7 +240,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create filesystem
     std::shared_ptr<FileSystem> fs =
-            FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
 
     // For delete files, we only need file_path and row_position columns
     std::vector<std::string> column_names = {"file_path", "pos"};
@@ -303,6 +306,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     auto file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
             fs, ctx->compression_type, ctx->options, column_names, column_evaluators, file_column_ids, ctx->executor,
             runtime_state, nullable);
+
+    // Configure column-level dictionary encoding for position delete files
+    // Disable dictionary encoding for 'pos' column (monotonically increasing, poor dict compression)
+    // Keep dictionary encoding for 'file_path' column (high repetition, good dict compression)
+    std::unordered_map<std::string, bool> column_dict_config;
+    column_dict_config["pos"] = false;
+    file_writer_factory->set_column_dictionary_enabled(std::move(column_dict_config));
 
     // Initialize sort ordering for position delete files (required by Iceberg spec)
     // Sort by: file_path ASC, then pos ASC

@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -40,42 +41,47 @@ import java.util.List;
 public class PrepareStmtPlanner {
 
     public static ExecPlan plan(ExecuteStmt executeStmt, StatementBase stmt, ConnectContext session) {
-        if (!(stmt instanceof QueryStatement)) {
-            return StatementPlanner.plan(stmt, session);
-        }
-        QueryStatement queryStmt = (QueryStatement) stmt;
-        if (!queryStmt.isPointQuery()) {
-            return StatementPlanner.plan(stmt, session);
-        }
+        try {
+            if (!(stmt instanceof QueryStatement)) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            if (!queryStmt.isPointQuery()) {
+                return StatementPlanner.plan(stmt, session);
+            }
 
-        PrepareStmtContext prepareStmtContext = session.getPreparedStmt(executeStmt.getStmtName());
-        if (!prepareStmtContext.isCached()) {
-            return planAndCacheExecPlan(stmt, session, prepareStmtContext);
-        } else {
-            if (prepareStmtContext.needReAnalyze(queryStmt, session)) {
+            PrepareStmtContext prepareStmtContext = session.getPreparedStmt(executeStmt.getStmtName());
+            if (!prepareStmtContext.isCached()) {
                 return planAndCacheExecPlan(stmt, session, prepareStmtContext);
             } else {
-                ExecPlan execPlan = prepareStmtContext.getExecPlan();
+                if (prepareStmtContext.needReAnalyze(queryStmt, session)) {
+                    return planAndCacheExecPlan(stmt, session, prepareStmtContext);
+                } else {
+                    ExecPlan execPlan = prepareStmtContext.getExecPlan();
 
-                // use cache and rebuild physical plan
-                rePlan(executeStmt, execPlan.getLogicalPlan(), execPlan.getPhysicalPlan());
+                    // use cache and rebuild physical plan
+                    rePlan(executeStmt, execPlan.getLogicalPlan(), execPlan.getPhysicalPlan());
 
-                TResultSinkType resultSinkType = session instanceof HttpConnectContext ? TResultSinkType.HTTP_PROTOCAL :
-                        TResultSinkType.MYSQL_PROTOCAL;
-                resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
+                    TResultSinkType resultSinkType = session instanceof HttpConnectContext ? TResultSinkType.HTTP_PROTOCAL :
+                            TResultSinkType.MYSQL_PROTOCAL;
+                    resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
 
-                OptExpression physicalPlan = execPlan.getPhysicalPlan();
-                LogicalPlan logicalPlan = execPlan.getLogicalPlan();
-                ColumnRefFactory columnRefFactory = execPlan.getColumnRefFactory();
-                QueryRelation query = queryStmt.getQueryRelation();
-                List<String> colNames = query.getColumnOutputNames();
+                    OptExpression physicalPlan = execPlan.getPhysicalPlan();
+                    LogicalPlan logicalPlan = execPlan.getLogicalPlan();
+                    ColumnRefFactory columnRefFactory = execPlan.getColumnRefFactory();
+                    QueryRelation query = queryStmt.getQueryRelation();
+                    List<String> colNames = query.getColumnOutputNames();
 
-                return PlanFragmentBuilder.createPhysicalPlan(
-                        physicalPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                        colNames,
-                        resultSinkType,
-                        !session.getSessionVariable().isSingleNodeExecPlan());
+                    return PlanFragmentBuilder.createPhysicalPlan(
+                            physicalPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                            colNames,
+                            resultSinkType,
+                            !session.getSessionVariable().isSingleNodeExecPlan());
+                }
             }
+        } finally {
+            // Release query-level connector metadata when planning is done
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
     }
 

@@ -18,6 +18,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/variant_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
@@ -137,6 +138,7 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     }
 
     ColumnViewer<TYPE_VARIANT> viewer(column);
+    const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
     NullColumn::MutablePtr null_column = NullColumn::create();
 
     // 1. Cast struct fields to variant columns.
@@ -154,8 +156,18 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
             continue;
         }
 
-        const VariantRowValue* variant = viewer.value(row);
-        const VariantValue& value = variant->get_value();
+        const size_t variant_row = column->is_constant() ? 0 : row;
+        VariantRowRef row_ref;
+        VariantRowValue variant_buffer;
+        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+            if (variant == nullptr) {
+                APPEND_NULL(variant_columns, null_column);
+                continue;
+            }
+            row_ref = variant->as_ref();
+        }
+        const VariantValue& value = row_ref.get_value();
         if (value.type() != VariantType::OBJECT) {
             APPEND_NULL(variant_columns, null_column);
             continue;
@@ -166,13 +178,12 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
         // iterate struct fields via iterator:
         for (int field_index = 0; field_index < _type.field_names.size(); field_index++) {
             const VariantPath& variant_path = _variant_paths[field_index];
-            const auto field_variant = VariantPath::seek(variant, &variant_path);
+            const auto field_variant = VariantPath::seek_view(row_ref, variant_path);
             // If the field not found, append null.
             if (!field_variant.ok()) {
                 variant_columns[field_index].append_null();
             } else {
-                VariantRowValue field_value = field_variant.value();
-                variant_columns[field_index].append(std::move(field_value));
+                variant_columns[field_index].append(field_variant.value().to_owned());
             }
         }
         null_column->append(0);

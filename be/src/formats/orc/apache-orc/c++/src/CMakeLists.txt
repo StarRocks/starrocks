@@ -202,10 +202,19 @@ configure_file (
           --cpp_out="${CMAKE_CURRENT_BINARY_DIR}"
           "${PROJECT_SOURCE_DIR}/proto/orc_proto.proto"
   )
+
+  if (DEFINED ENV{PYTHON} AND NOT "$ENV{PYTHON}" STREQUAL "")
+    set(ORC_PYTHON_EXECUTABLE "$ENV{PYTHON}")
+  else()
+    find_program(ORC_PYTHON_EXECUTABLE NAMES python3 python)
+  endif()
+  if (NOT ORC_PYTHON_EXECUTABLE)
+    message(FATAL_ERROR "Python interpreter is required to generate bit_packing_gen.inc")
+  endif()
   
   # to generate bit_packing_gen.inc file, which is included in bit_packing.cc
   add_custom_command(OUTPUT bit_packing_gen.inc
-     COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/gen-bit-pack.py
+     COMMAND "${ORC_PYTHON_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/gen-bit-pack.py
   )
   
   set(SOURCE_FILES

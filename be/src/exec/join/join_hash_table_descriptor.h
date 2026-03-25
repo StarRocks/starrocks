@@ -24,9 +24,10 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "runtime/mem_pool.h"
 
 namespace starrocks {
 
@@ -272,7 +273,7 @@ struct HashTableProbeState {
         ProbeCoroutine(std::coroutine_handle<ProbePromise> h) : handle(h) {}
         ~ProbeCoroutine() = default;
         std::coroutine_handle<ProbePromise> handle;
-        operator std::coroutine_handle<promise_type>() const { return std::move(handle); }
+        operator std::coroutine_handle<promise_type>() const { return handle; }
     };
     uint32_t match_count = 0;
     int active_coroutines = 0;

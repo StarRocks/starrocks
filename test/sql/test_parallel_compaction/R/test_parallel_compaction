@@ -641,6 +641,7 @@ PROPERTIES (
 "enable_async_write_back" = "false",
 "enable_persistent_index" = "true",
 "file_bundling" = "true",
+"lake_compaction_max_parallel" = "2",
 "persistent_index_type" = "CLOUD_NATIVE",
 "replication_num" = "1",
 "storage_volume" = "builtin_storage_volume"
@@ -667,6 +668,7 @@ PROPERTIES (
 "enable_async_write_back" = "false",
 "enable_persistent_index" = "true",
 "file_bundling" = "true",
+"lake_compaction_max_parallel" = "5",
 "persistent_index_type" = "CLOUD_NATIVE",
 "replication_num" = "1",
 "storage_volume" = "builtin_storage_volume"
@@ -693,6 +695,7 @@ PROPERTIES (
 "enable_async_write_back" = "false",
 "enable_persistent_index" = "true",
 "file_bundling" = "true",
+"lake_compaction_max_parallel" = "0",
 "persistent_index_type" = "CLOUD_NATIVE",
 "replication_num" = "1",
 "storage_volume" = "builtin_storage_volume"

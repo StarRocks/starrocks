@@ -18,9 +18,9 @@ set(COLUMN_TEST_FILES
     mysql_row_buffer_test.cpp
     german_string_test.cpp
     object_column_core_test.cpp
-    variant_column_test.cpp
     column_visitor_test.cpp
     column_filter_range_test.cpp
+    column_viewer_core_test.cpp
     fixed_length_column_core_test.cpp
     column_hash_core_test.cpp
     array_column_core_test.cpp
@@ -31,9 +31,18 @@ set(COLUMN_TEST_FILES
     const_nullable_core_test.cpp
     nullable_column_core_test.cpp
     decimalv3_json_core_test.cpp
+    datum_convert_core_test.cpp
+    json_converter_core_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
+    variant_converter_test.cpp
+    variant_path_parser_test.cpp
+    variant_column_test.cpp
+    variant_merger_test.cpp
+    variant_builder_test.cpp
+    variant_encoder_test.cpp
+    buffer_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
@@ -45,7 +54,7 @@ set(COLUMN_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest
@@ -57,3 +66,33 @@ target_link_libraries(starrocks_column_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_column_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(column_test $<TARGET_OBJECTS:starrocks_column_test_objs>)
 target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
+
+set(CHUNK_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    chunk_core_test.cpp
+    field_test.cpp
+    schema_test.cpp
+)
+
+set(CHUNK_TEST_LINK_LIBS
+    ChunkCore
+    ColumnCore
+    TypesCore
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_chunk_test_objs OBJECT ${CHUNK_TEST_FILES})
+target_link_libraries(starrocks_chunk_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_chunk_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(chunk_test $<TARGET_OBJECTS:starrocks_chunk_test_objs>)
+target_link_libraries(chunk_test ${CHUNK_TEST_LINK_LIBS} gtest_main)

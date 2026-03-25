@@ -37,6 +37,7 @@ public class ListPartitionDesc extends PartitionDesc {
     private final List<MultiItemListPartitionDesc> multiListPartitionDescs;
 
     private final List<String> partitionColNames;
+    private List<String> partitionNames = Lists.newArrayList();
 
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
@@ -94,6 +95,14 @@ public class ListPartitionDesc extends PartitionDesc {
 
     public List<String> getPartitionColNames() {
         return partitionColNames;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
     }
 
     public List<String> findAllPartitionNames() {

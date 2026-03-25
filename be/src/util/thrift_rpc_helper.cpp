@@ -35,15 +35,17 @@
 #include "util/thrift_rpc_helper.h"
 
 #include <sstream>
+#include <utility>
 
+#include "base/network/network_util.h"
 #include "base/time/monotime.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/network_util.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -93,7 +95,14 @@ Status ThriftRpcHelper::rpc_impl(const std::function<void(ClientConnection<T>&)>
 
 template <typename T>
 Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
-                            std::function<void(ClientConnection<T>&)> callback, int timeout_ms, int retry_times) {
+                            const std::function<void(ClientConnection<T>&)>& callback) {
+    return rpc(ip, port, callback, config::thrift_rpc_timeout_ms);
+}
+
+template <typename T>
+Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
+                            const std::function<void(ClientConnection<T>&)>& callback, int timeout_ms,
+                            int retry_times) {
     if (UNLIKELY(_s_exec_env == nullptr)) {
         return Status::ThriftRpcError(
                 "Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please retry "
@@ -131,14 +140,27 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
 
 template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
         const std::string& ip, const int32_t port,
-        std::function<void(ClientConnection<FrontendServiceClient>&)> callback, int timeout_ms, int retry_times);
+        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback);
 
 template Status ThriftRpcHelper::rpc<BackendServiceClient>(
         const std::string& ip, const int32_t port,
-        std::function<void(ClientConnection<BackendServiceClient>&)> callback, int timeout_ms, int retry_times);
+        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback);
 
 template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
         const std::string& ip, const int32_t port,
-        std::function<void(ClientConnection<TFileBrokerServiceClient>&)> callback, int timeout_ms, int retry_times);
+        const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback);
+
+template Status ThriftRpcHelper::rpc<FrontendServiceClient>(
+        const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<BackendServiceClient>(
+        const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<BackendServiceClient>&)>& callback, int timeout_ms, int retry_times);
+
+template Status ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+        const std::string& ip, const int32_t port,
+        const std::function<void(ClientConnection<TFileBrokerServiceClient>&)>& callback, int timeout_ms,
+        int retry_times);
 
 } // namespace starrocks

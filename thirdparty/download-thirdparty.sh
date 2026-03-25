@@ -343,7 +343,7 @@ echo "Finished patching $RYU_SOURCE"
 
 # patch boost-1.75.0 diff
 cd $TP_SOURCE_DIR/$BOOST_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ "$BOOST_SOURCE" = "boost_1_80_0" ]; then
     patch -p1 < $TP_PATCH_DIR/boost-1.75.0.patch
     touch $PATCHED_MARK
 fi

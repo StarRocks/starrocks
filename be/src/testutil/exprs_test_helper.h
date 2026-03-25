@@ -22,13 +22,14 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -38,7 +39,7 @@ public:
     template <LogicalType Type>
     static TExpr create_column_ref_t_expr(SlotId slot_id, bool is_nullable) {
         TExpr expr;
-        expr.nodes.emplace_back(TExprNode());
+        expr.nodes.emplace_back();
         expr.nodes[0].__set_type(TypeDescriptor(Type).to_thrift());
         expr.nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         expr.nodes[0].__set_is_nullable(is_nullable);
@@ -116,8 +117,8 @@ public:
         return slot_desc;
     }
 
-    static TDescriptorTable create_table_desc(std::vector<TTupleDescriptor> tuple_descs,
-                                              std::vector<TSlotDescriptor> slot_descs) {
+    static TDescriptorTable create_table_desc(const std::vector<TTupleDescriptor>& tuple_descs,
+                                              const std::vector<TSlotDescriptor>& slot_descs) {
         TDescriptorTable t_desc_table;
         for (auto& slot_desc : slot_descs) {
             t_desc_table.slotDescriptors.push_back(slot_desc);
@@ -281,12 +282,12 @@ public:
 
     static Status create_and_open_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state,
                                                 std::vector<TExpr>* tExprs, std::vector<ExprContext*>* conjunct_ctxs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
-        RETURN_IF_ERROR(Expr::prepare(*conjunct_ctxs, runtime_state));
-        return Expr::open(*conjunct_ctxs, runtime_state);
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
+        RETURN_IF_ERROR(ExprExecutor::prepare(*conjunct_ctxs, runtime_state));
+        return ExprExecutor::open(*conjunct_ctxs, runtime_state);
     }
 
-    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, TTypeDesc ttype, bool is_nullable) {
+    static TExprNode create_slot_expr_node(TupleId tuple_id, SlotId slot_id, const TTypeDesc& ttype, bool is_nullable) {
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
         slot_ref.type = ttype;
@@ -367,13 +368,13 @@ public:
         return node;
     }
 
-    static TExpr create_slot_expr(TExprNode slot_ref) {
+    static TExpr create_slot_expr(const TExprNode& slot_ref) {
         TExpr expr;
         expr.nodes.push_back(slot_ref);
         return expr;
     }
 
-    static TFunction create_builtin_function(const std::string func_name, const std::vector<TTypeDesc>& arg_types,
+    static TFunction create_builtin_function(const std::string& func_name, const std::vector<TTypeDesc>& arg_types,
                                              const TTypeDesc& intermediate_type, const TTypeDesc& ret_type) {
         TFunction fn;
         {
@@ -389,7 +390,7 @@ public:
         return fn;
     }
 
-    static TExpr create_aggregate_expr(TFunction fn, const std::vector<TExprNode>& children) {
+    static TExpr create_aggregate_expr(const TFunction& fn, const std::vector<TExprNode>& children) {
         TExpr expr;
 
         TExprNode node;

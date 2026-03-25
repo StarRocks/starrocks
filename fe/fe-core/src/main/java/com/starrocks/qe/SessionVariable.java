@@ -826,6 +826,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
     public static final String BIG_QUERY_PROFILE_THRESHOLD = "big_query_profile_threshold";
+    public static final String PROFILE_LOG_LATENCY_THRESHOLD_MS = "profile_log_latency_threshold_ms";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -1070,10 +1071,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
+    public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED =
+            "enable_global_late_materialization_cost_based";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
+
+    /**
+     * When true, EXPLAIN output may include extended sections (e.g. query queue info at COSTS/VERBOSE level).
+     * Extensible for future explain-related features. Default false to preserve original explain output.
+     */
+    public static final String ENABLE_EXTENDED_EXPLAIN = "enable_extended_explain";
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
@@ -1081,9 +1090,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PREDICATE_COL_LATE_MATERIALIZE = "enable_predicate_col_late_materialize";
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
-
-    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
-    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
@@ -1175,8 +1181,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * used for test
-     * Determines whether to enable gather fragment locality optimization. When enabled, 
-     * gather fragments will be assigned to the same node as other fragments if all 
+     * Determines whether to enable gather fragment locality optimization. When enabled,
+     * gather fragments will be assigned to the same node as other fragments if all
      * other fragments' instances are on the same node.
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
@@ -1254,6 +1260,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
     private boolean colorExplainOutput = true;
+
+    // When true, EXPLAIN may include extended sections (e.g. query queue info). Extensible for other features.
+    @VariableMgr.VarAttr(name = ENABLE_EXTENDED_EXPLAIN)
+    private boolean enableExtendedExplain = false;
 
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
@@ -1537,6 +1547,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
     private String bigQueryProfileThreshold = "30s";
+
+    // -1 = use FE config profile_log_latency_threshold_ms; >= 0 = minimum latency (ms) to log to fe.profile.log
+    @VariableMgr.VarAttr(name = PROFILE_LOG_LATENCY_THRESHOLD_MS, flag = VariableMgr.SESSION_ONLY)
+    private long profileLogLatencyThresholdMs = -1;
 
     // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
     @VariableMgr.VarAttr(name = PROFILE_FORMAT_VERSION)
@@ -2037,7 +2051,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // DEFAULT/ETL
     @VarAttr(name = EXEC_MODE)
-    private String execMode = SessionVariableConstants.DEFAULT;
+    private String execMode = SessionVariableConstants.ExecMode.DEFAULT.name();
 
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
@@ -2201,12 +2215,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
-    private boolean enableGlobalLateMaterialization = false;
+    private boolean enableGlobalLateMaterialization = true;
 
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
     private int globalLateMaterializeMaxFetchOps = 4;
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
     private int globalLateMaterializeMaxLimit = 4096;
+    // When enabled, GLM is only applied to a scan if the estimated byte-cost of the
+    // columns that would be deferred exceeds the byte-cost of the row-id locator columns
+    // that GLM adds to the scan output.  This prevents GLM from being applied when the
+    // deferred columns are small (e.g. a single INT) and the row-id overhead would cost
+    // more than simply reading those columns eagerly.
+    @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED)
+    private boolean enableGlobalLateMaterializationCostBased = true;
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
@@ -2255,6 +2276,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return splitTopNAggLimit;
     }
 
+    public void setEnableSplitTopNAgg(boolean enableSplitTopNAgg) {
+        this.enableSplitTopNAgg = enableSplitTopNAgg;
+    }
+
     public void setEnableDistinctAggOverWindow(boolean value) {
         this.enableDistinctAggOverWindow = value;
     }
@@ -2284,17 +2309,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
-    
+
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
     private boolean enablePredicateColLateMaterialize = true;
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
-
-    @VarAttr(name = ARROW_FLIGHT_PROXY)
-    private String arrowFlightProxy = "";
-    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
-    private boolean arrowFlightProxyEnabled = true;
 
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
@@ -2492,20 +2512,45 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return windowPartitionMode;
     }
 
+    public SessionVariableConstants.ExecMode getExecMode() {
+        return SessionVariableConstants.ExecMode.parse(execMode);
+    }
+
+    public boolean isETLExecMode() {
+        return SessionVariableConstants.ETL.equalsIgnoreCase(execMode);
+    }
+
     public void setExecMode(String execMode) {
-        final SessionVariable sv = DEFAULT_SESSION_VARIABLE;
-        if (execMode.equalsIgnoreCase(SessionVariableConstants.ETL)) {
-            setEnableWaitDependentEvent(true);
-            setEnablePhasedScheduler(true);
-            setEnableSpill(true);
-            setEnableQueryQueue(Config.enable_query_queue_v2);
-        } else {
-            setEnableWaitDependentEvent(sv.enableWaitDependentEvent);
-            setEnablePhasedScheduler(sv.enablePhasedScheduler);
-            setEnableSpill(sv.enableSpill);
-            setEnableQueryQueue(sv.enableQueryQueue);
+        SessionVariableConstants.ExecMode result =
+                Enums.getIfPresent(SessionVariableConstants.ExecMode.class, StringUtils.upperCase(execMode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ExecMode.values());
+            throw new IllegalArgumentException("Legal values of exec_mode are " + legalValues);
         }
-        this.execMode = execMode;
+        switch (result) {
+            case ETL: {
+                setEnableWaitDependentEvent(true);
+                setEnablePhasedScheduler(true);
+                setEnableSpill(true);
+                setEnableQueryQueue(Config.enable_query_queue_v2);
+                break;
+            }
+            case DEFAULT: {
+                // Reset ETL-tuned session flags to their default values when switching back from ETL mode
+                setEnableWaitDependentEvent(DEFAULT_SESSION_VARIABLE.enableWaitDependentEvent);
+                setEnablePhasedScheduler(DEFAULT_SESSION_VARIABLE.enablePhasedScheduler);
+                setEnableSpill(DEFAULT_SESSION_VARIABLE.enableSpill);
+                setEnableQueryQueue(DEFAULT_SESSION_VARIABLE.enableQueryQueue);
+                setSpillPartitionWiseAgg(DEFAULT_SESSION_VARIABLE.spillPartitionWiseAgg);
+                break;
+            }
+            default: {
+                // do nothing
+                break;
+            }
+        }
+        this.execMode = execMode.toUpperCase();
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
@@ -2596,6 +2641,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getConnectorSinkCompressionCodec() {
         return connectorSinkCompressionCodec;
+    }
+
+    public void setConnectorSinkCompressionCodec(String connectorSinkCompressionCodec) {
+        this.connectorSinkCompressionCodec = connectorSinkCompressionCodec;
     }
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
@@ -3704,6 +3753,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return colorExplainOutput;
     }
 
+    public boolean isEnableExtendedExplain() {
+        return enableExtendedExplain;
+    }
+
+    public void setEnableExtendedExplain(boolean enableExtendedExplain) {
+        this.enableExtendedExplain = enableExtendedExplain;
+    }
+
     public boolean isEnableLoadProfile() {
         return enableLoadProfile;
     }
@@ -3843,6 +3900,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
         this.bigQueryProfileThreshold = bigQueryProfileThreshold;
+    }
+
+    public long getProfileLogLatencyThresholdMs() {
+        return profileLogLatencyThresholdMs;
+    }
+
+    public void setProfileLogLatencyThresholdMs(long profileLogLatencyThresholdMs) {
+        this.profileLogLatencyThresholdMs = profileLogLatencyThresholdMs;
     }
 
     // when pipeline engine is enabled
@@ -5908,6 +5973,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableGlobalLateMaterialization;
     }
 
+    public boolean isEnableGlobalLateMaterializationCostBased() {
+        return enableGlobalLateMaterializationCostBased;
+    }
+
+    public void setEnableGlobalLateMaterializationCostBased(boolean enableGlobalLateMaterializationCostBased) {
+        this.enableGlobalLateMaterializationCostBased = enableGlobalLateMaterializationCostBased;
+    }
+
     public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
@@ -5982,22 +6055,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.pushDownHeavyExprs;
     }
 
-    public void setArrowFlightProxy(String proxy) {
-        this.arrowFlightProxy = proxy;
-    }
-
-    public String getArrowFlightProxy() {
-        return this.arrowFlightProxy;
-    }
-
-    public void setArrowFlightProxyEnabled(boolean flag) {
-        this.arrowFlightProxyEnabled = flag;
-    }
-
-    public boolean isArrowFlightProxyEnabled() {
-        return this.arrowFlightProxyEnabled;
-    }
-
     public void setEnablePreAggTopNPushDown(int  topNPushDownAggMode) {
         this.topNPushDownAggMode = topNPushDownAggMode;
     }
@@ -6054,6 +6111,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            tResult.setError_for_division_by_zero(true);
         }
 
         tResult.setEnable_spill(enableSpill);

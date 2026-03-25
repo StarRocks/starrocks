@@ -290,6 +290,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
     // If true, just return the repair plan without executing it
     public static final String PROPERTIES_DRY_RUN = "dry_run";
+    // Show at most `limit` missing data files per tablet
+    public static final String PROPERTIES_MAX_MISSING_DATA_FILES_TO_SHOW = "max_missing_data_files_to_show";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -383,7 +385,11 @@ public class PropertyAnalyzer {
 
         } else if (hasCoolDownTTL) {
             if (!hasMedium) {
-                throw new AnalysisException("Invalid data property. storage medium property is not found");
+                if (inferredDataProperty != null && Config.tablet_sched_storage_cooldown_second > 0) {
+                    storageMedium = inferredDataProperty.getStorageMedium();
+                } else {
+                    throw new AnalysisException("Invalid data property. storage medium property is not found");
+                }
             }
             if (storageMedium == TStorageMedium.HDD) {
                 throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");
@@ -1627,6 +1633,10 @@ public class PropertyAnalyzer {
         }
     }
 
+    public static boolean analyzeDataCacheEnable(Map<String, String> properties) throws AnalysisException {
+        return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+    }
+
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
@@ -1658,10 +1668,11 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    // Analyze lake_compaction_max_parallel property
-    // Returns the max parallel value (default 3, 0 means disabled)
+    // Analyze lake_compaction_max_parallel table property.
+    // Returns the max parallel value (default from Config.lake_compaction_max_parallel_default;
+    // 0 means parallel lake compaction is disabled).
     public static int analyzeLakeCompactionMaxParallel(Map<String, String> properties) throws AnalysisException {
-        int defaultValue = 3;
+        int defaultValue = Config.lake_compaction_max_parallel_default;
         if (properties != null && properties.containsKey(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             String value = properties.get(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
             properties.remove(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);

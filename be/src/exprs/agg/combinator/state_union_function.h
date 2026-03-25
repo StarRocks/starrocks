@@ -42,13 +42,13 @@ public:
         DCHECK(_function != nullptr);
     }
 
-    ~StateUnionFunction() {
+    ~StateUnionFunction() override {
         if (_nested_ctx != nullptr) {
             delete _nested_ctx;
         }
     }
 
-    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
         _nested_ctx =
                 FunctionContext::create_context(context->state(), context->mem_pool(),
                                                 _agg_state_desc.get_return_type(), _agg_state_desc.get_arg_types());

@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public abstract class DefaultTraits extends ConnectorPartitionTraits {
@@ -167,17 +168,64 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                     // If this partition is dropped, ignore it.
                     continue;
                 }
-                long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
+                PartitionInfo latestPartition = latestPartitionInfo.get(basePartitionName);
 
                 MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
-                // basePartitionVersion less than 0 is illegal
-                if ((basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion())
-                        && basePartitionVersion >= 0) {
+                if (basePartitionInfo == null) {
+                    // if mv does not have this partition, add it to the result
                     result.add(basePartitionName);
+                    continue;
+                }
+
+                if (table.getType() == Table.TableType.ICEBERG) {
+                    long basePartitionVersion = basePartitionInfo.getVersion();
+                    long latestPartitionVersion = latestPartition.getVersion();
+                    long normalizedBasePartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(basePartitionInfo.getLastRefreshTime());
+                    long normalizedLatestPartitionModifiedTime =
+                            normalizeIcebergModifiedTimeToMicros(latestPartition.getModifiedTime());
+                    if (normalizedLatestPartitionModifiedTime > 0) {
+                        // last_updated_at is available: use modifiedTime as the primary signal.
+                        // Covers both live-snapshot partitions and historical MVs whose basePartitionVersion
+                        // was stored as a timestamp.
+                        if (normalizedLatestPartitionModifiedTime != normalizedBasePartitionModifiedTime) {
+                            result.add(basePartitionName);
+                        }
+                    } else {
+                        // last_updated_at is null: the partition's snapshot has been GC'd.
+                        // Historical MVs stored basePartitionVersion as a millisecond timestamp (~10^12),
+                        // which is always larger than Integer.MAX_VALUE. Stats fingerprints are in [0, 2^31-1].
+                        // If basePartitionVersion looks like a timestamp, skip the comparison to avoid a
+                        // spurious refresh — we have no reliable signal to compare against.
+                        boolean isLegacyTimestampVersion = basePartitionVersion == -1
+                                || basePartitionVersion > Integer.MAX_VALUE;
+                        if (!isLegacyTimestampVersion && latestPartitionVersion >= 0
+                                && latestPartitionVersion != basePartitionVersion) {
+                            result.add(basePartitionName);
+                        }
+                    }
+                } else {
+                    // TODO: correct the logic here by comparing version and modified time
+                    long latestPartitionVersion = latestPartition.getModifiedTime();
+                    // basePartitionVersion less than 0 is illegal
+                    if (latestPartitionVersion >= 0 && latestPartitionVersion != basePartitionInfo.getVersion()) {
+                        result.add(basePartitionName);
+                    }
                 }
             }
         }
         return result;
+    }
+
+    private long normalizeIcebergModifiedTimeToMicros(long modifiedTime) {
+        if (modifiedTime < 0) {
+            return modifiedTime;
+        }
+        // Iceberg partition metadata uses microseconds, but some historical MV metadata and fallback paths may
+        // persist epoch milliseconds. 1e14 micros is about 1973-03-03, so any present-day epoch timestamp below
+        // that threshold is almost certainly millis rather than micros. Normalize the legacy comparison branch to
+        // micros to avoid false positives.
+        return modifiedTime < 100_000_000_000_000L ? TimeUnit.MILLISECONDS.toMicros(modifiedTime) : modifiedTime;
     }
 
     @Override

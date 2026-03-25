@@ -24,7 +24,8 @@
 #include "base/bit/bit_util.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/aggregator.h"
 #include "exec/spill/common.h"
 #include "exec/spill/data_stream.h"
@@ -37,7 +38,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 // implements for SpillerWriter

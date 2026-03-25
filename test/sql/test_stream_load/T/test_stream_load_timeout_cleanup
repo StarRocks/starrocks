@@ -1,0 +1,139 @@
+-- name: test_multi_txn_timeout @sequential
+-- Test multi-statement stream load transaction timeout mechanism
+-- Use a short timeout (5 seconds) and verify operations fail after timeout
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin transaction with short timeout (5 seconds)
+shell: curl -s --location-trusted -u root: -H "label:timeout_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "timeout:5" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. Wait for timeout (8 seconds to ensure timeout is triggered)
+shell: sleep 8 && echo "waited"
+
+-- 3. Try to load after timeout - should fail because task was cancelled by timeout
+shell: curl -s --location-trusted -u root: -H "label:timeout_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 4. Try to commit after timeout - should also fail
+shell: curl -s --location-trusted -u root: -H "label:timeout_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Verify table is empty (no data committed)
+select count(*) from table1;
+
+drop database db_${uuid0};
+
+-- name: test_multi_txn_load_failure_then_retry_same_table @sequential
+-- Test LOAD failure followed by retry LOAD to same table
+-- Now consistent with basic transaction: LOAD failure auto-aborts, retry LOAD fails
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create table with NOT NULL column
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin transaction
+shell: curl -s --location-trusted -u root: -H "label:retry_same_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. First LOAD - should fail (missing required_col), transaction auto-aborted
+shell: curl -s --location-trusted -u root: -H "label:retry_same_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 3. Second LOAD to SAME table - should fail (transaction was auto-aborted)
+shell: curl -s --location-trusted -u root: -H "label:retry_same_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "transaction_type:multi" -d '2,bob,100' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 4. Commit - should fail (transaction was auto-aborted)
+shell: curl -s --location-trusted -u root: -H "label:retry_same_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Verify table is empty
+select count(*) from table_strict;
+
+drop database db_${uuid0};
+
+-- name: test_multi_txn_load_failure_then_load_different_table @sequential
+-- Test LOAD failure to one table, then LOAD to different table
+-- Now consistent with basic transaction: LOAD failure auto-aborts entire transaction
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Create two tables
+CREATE TABLE `table_strict` (
+  `id` int,
+  `name` varchar(100),
+  `required_col` bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+CREATE TABLE `table_normal` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin transaction
+shell: curl -s --location-trusted -u root: -H "label:multi_table_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 2. First LOAD to table_strict - should fail (missing required_col), transaction auto-aborted
+shell: curl -s --location-trusted -u root: -H "label:multi_table_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_strict" -H "column_separator:," -H "columns:id,name" -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 3. Second LOAD to table_normal - should fail (transaction was auto-aborted)
+shell: curl -s --location-trusted -u root: -H "label:multi_table_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table_normal" -H "column_separator:," -H "transaction_type:multi" -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 4. Commit - should fail (transaction was auto-aborted)
+shell: curl -s --location-trusted -u root: -H "label:multi_table_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 5. Verify both tables are empty
+select count(*) from table_strict;
+select count(*) from table_normal;
+
+drop database db_${uuid0};
+
+-- name: test_multi_txn_task_final_state @sequential
+-- Test that task enters final state correctly after commit/rollback
+-- Verify subsequent operations fail
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+
+-- 1. Begin, Load, Commit
+shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+[UC]shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -H "transaction_type:multi" -d '1,alice' -XPUT ${url}/api/transaction/load
+
+shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+-- 2. Try Load after commit - should fail (task in final state)
+shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -H "transaction_type:multi" -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+-- 3. Try Rollback after commit - should fail
+shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+
+-- 4. Try Begin with same label - should fail (label already used)
+shell: curl -s --location-trusted -u root: -H "label:final_state_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+-- 5. Verify only first LOAD data exists
+select * from table1 order by id;
+
+drop database db_${uuid0};

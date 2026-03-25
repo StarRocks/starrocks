@@ -22,6 +22,11 @@ public class TabletReshardUtils {
         return calcSplitCount(dataSize, Config.tablet_reshard_target_size) > 1;
     }
 
+    public static boolean needMerge(long minAdjacentTabletPairSize) {
+        long targetSize = Config.tablet_reshard_target_size;
+        return targetSize > 0 && minAdjacentTabletPairSize <= targetSize;
+    }
+
     /*
      * Return value > 1 if need split
      * Return value = 1 if not need split

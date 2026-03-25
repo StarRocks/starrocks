@@ -749,7 +749,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private boolean isInternalCancelError(String errMsg) {
-        return errMsg.equals(FeConstants.LIMIT_REACH_ERROR) || errMsg.equals(FeConstants.QUERY_FINISHED_ERROR);
+        return errMsg.startsWith(FeConstants.LIMIT_REACH_ERROR) || errMsg.startsWith(FeConstants.QUERY_FINISHED_ERROR);
     }
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)

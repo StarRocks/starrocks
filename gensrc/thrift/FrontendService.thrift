@@ -532,8 +532,10 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
-    15: optional string job_id
-    16: optional i64 process_time
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -546,6 +548,15 @@ struct TGetLoadsParams {
     3: optional i64 txn_id
     4: optional string label
     5: optional string load_type
+    6: optional string table_name
+    7: optional string user
+    8: optional string state
+    9: optional string load_start_time_from
+    10: optional string load_start_time_to
+    11: optional string load_finish_time_from
+    12: optional string load_finish_time_to
+    13: optional string create_time_from
+    14: optional string create_time_to
 }
 
 struct TTrackingLoadInfo {
@@ -841,6 +852,8 @@ struct TMasterOpRequest {
     38: optional bool isInternalStmt;
 
     39: optional bool is_arrow_flight_sql;
+
+    40: optional list<string> user_groups;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -1441,6 +1454,8 @@ struct TCreatePartitionRequest {
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
     5: optional bool is_temp
+    // timeout in seconds for partition creation request
+    6: optional i32 timeout_s
 }
 
 struct TCreatePartitionResult {
@@ -2425,4 +2440,3 @@ service FrontendService {
 
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 }
-

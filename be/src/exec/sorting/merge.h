@@ -101,7 +101,7 @@ struct SortedRuns {
     SortedRuns() = default;
     ~SortedRuns() = default;
     SortedRuns(const SortedRuns& run) = default;
-    SortedRuns(SortedRuns&& run) = default;
+    SortedRuns(SortedRuns&& run) noexcept = default;
     SortedRuns(const SortedRun& run) : chunks{run} {}
     SortedRuns& operator=(SortedRuns&& run) = default;
 

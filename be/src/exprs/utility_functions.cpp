@@ -30,6 +30,8 @@
 #include <limits>
 #include <random>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/uuid/uuid_generator.h"
@@ -38,18 +40,16 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/cidr.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -335,6 +335,7 @@ StatusOr<ColumnPtr> UtilityFunctions::get_query_profile(FunctionContext* context
     TGetProfileRequest req;
 
     std::vector<std::string> query_ids;
+    query_ids.reserve(columns[0]->size());
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         query_ids.emplace_back(viewer.value(i));
     }
@@ -595,7 +596,7 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     }
 
     for (size_t i = 0; i < num_rows; i++) {
-        result.append(std::move(buffs[i]));
+        result.append(buffs[i]);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

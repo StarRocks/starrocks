@@ -46,14 +46,17 @@
 #include "agent/task_worker_pool.h"
 #include "base/phmap/phmap.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_agent_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
-#include "util/threadpool.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

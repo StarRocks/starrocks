@@ -19,7 +19,7 @@
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/scan/schema_scan_context.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

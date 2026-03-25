@@ -21,11 +21,11 @@
 #include <filesystem>
 
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_path_fwd.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/substitute.h"
 #include "hs/hs_compile.h"
 #include "hs/hs_runtime.h"
-#include "service/backend_options.h"
 
 using namespace std;
 

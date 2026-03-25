@@ -35,7 +35,7 @@
 #ifdef WITH_TENANN
 #include "tenann_index_reader.h"
 
-#include "common/config.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
 #include "tenann/common/error.h"
 #include "tenann/common/seq_view.h"

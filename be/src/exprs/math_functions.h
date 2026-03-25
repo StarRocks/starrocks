@@ -360,8 +360,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(pmod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
             return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodFloatImpl>::evaluate<Type>(l, r);
@@ -377,8 +377,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(fmod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, fmodImpl>::evaluate<Type>(l, r);
     }
@@ -392,8 +392,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(mod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (lt_is_decimalv2<Type>) {
             return VectorizedUnstrictBinaryFunction<RValueCheckZeroDecimalv2Impl, modDecimalv2Impl>::evaluate<Type>(l,

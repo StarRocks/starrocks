@@ -388,9 +388,9 @@ void detail::MergeNode::process_input(const int32_t parallel_idx) {
     ChunkPtr dest_chunk = primitive->runs.chunks[0].chunk->clone_empty();
     Columns dest_orderby;
     for (auto& column : primitive->runs.chunks[0].orderby) {
-        dest_orderby.push_back(column->clone_empty());
+        dest_orderby.emplace_back(column->clone_empty());
     }
-    SortedRun dest_run(std::move(dest_chunk), std::move(dest_orderby));
+    SortedRun dest_run(dest_chunk, std::move(dest_orderby));
     std::vector<int32_t> orderby_indexes = _build_orderby_indexes(dest_run.chunk, _merger->sort_exprs());
 
     _output_segments[local_parallel_idx] =
@@ -573,7 +573,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 
         auto add_to_output_segments = [this, &output_size](ChunkPtr& standard_chunk, Columns& standard_orderby) {
             const size_t num_rows = standard_chunk->num_rows();
-            SortedRun run(std::move(standard_chunk), std::move(standard_orderby));
+            SortedRun run(standard_chunk, std::move(standard_orderby));
             std::vector<int32_t> orderby_indexes;
             auto output_segment = std::make_unique<OutputSegment>(std::move(run), std::move(orderby_indexes), num_rows);
 
@@ -604,7 +604,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
                         auto standard_column = column->clone_empty();
                         standard_column->reserve(num_rows);
                         standard_column->append(*column, offset, num_rows);
-                        standard_orderby.push_back(std::move(standard_column));
+                        standard_orderby.emplace_back(std::move(standard_column));
                     }
 
                     add_to_output_segments(standard_chunk, standard_orderby);
@@ -637,7 +637,7 @@ ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t
     }
 
     Columns columns;
-    columns.push_back(std::move(ordinal_column));
+    columns.emplace_back(std::move(ordinal_column));
     return std::make_shared<Chunk>(std::move(columns), s_slot_map);
 }
 
@@ -651,7 +651,7 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
           _streaming_batch_size(4 * chunk_size * degree_of_parallelism),
           _degree_of_parallelism(degree_of_parallelism),
           _sort_exprs(std::move(sort_exprs)),
-          _sort_descs(std::move(sort_descs)),
+          _sort_descs(sort_descs),
           _tuple_desc(tuple_desc),
           _topn_type(topn_type),
           _offset(offset),

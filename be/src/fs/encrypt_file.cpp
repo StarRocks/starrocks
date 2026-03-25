@@ -29,7 +29,7 @@
 #include "fmt/format.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks {
 

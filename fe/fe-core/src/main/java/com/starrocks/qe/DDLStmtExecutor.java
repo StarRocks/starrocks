@@ -94,13 +94,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
@@ -386,7 +386,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateSyncMVStmt(CreateSyncMVStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
             });
@@ -444,10 +444,11 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
+            } catch (StarRocksException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
@@ -872,7 +873,7 @@ public class DDLStmtExecutor {
             });
 
             if (isDryRun) {
-                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+                return new ShowResultSet(new ShowResultMetaFactory().getMetadata(stmt), result);
             } else {
                 return null;
             }
@@ -1169,10 +1170,10 @@ public class DDLStmtExecutor {
             Task task = taskManager.getTask(taskName);
             switch (alterTaskStmt.getAction()) {
                 case RESUME:
-                    taskManager.resumeTask(task);
+                    taskManager.resumeTask(task, false);
                     break;
                 case SUSPEND:
-                    taskManager.suspendTask(task);
+                    taskManager.suspendTask(task, false);
                     break;
                 case SET:
                     taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());

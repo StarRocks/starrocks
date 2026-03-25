@@ -473,7 +473,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     _last_state = nullptr;
     _last_columns.clear();
 
-    return _build_output_chunk(std::move(group_by_columns), ColumnHelper::to_columns(std::move(agg_result_columns)),
+    return _build_output_chunk(group_by_columns, ColumnHelper::to_columns(std::move(agg_result_columns)),
                                use_intermediate);
 }
 

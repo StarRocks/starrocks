@@ -144,7 +144,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
+                            ConnectContext context = new ConnectContext();
+                            context.setOnlyReadIcebergCache(true);
+                            Table nativeTable = getTable(context, key.dbName, key.tableName);
                             IcebergTable icebergTable =
                                     IcebergTable.builder()
                                             .setCatalogDBName(key.dbName)
@@ -232,19 +234,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
-            tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
-        }
-
-        // do not cache if jwt or oauth2 is not used OR if it is not a REST Catalog.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() && 
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
+        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
+                !delegate.isVendedCredentialsEnabled();
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
+
+        if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
+            tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
+        }
         try {
-            TABLE_LOAD_CONTEXT.set(connectContext);
-            return tables.get(icebergTableName);
+            if (shouldOnlyReadCache(connectContext)) {
+                Table cachedTable = tables.getIfPresent(icebergTableName);
+                return cachedTable != null ? cachedTable : delegate.getTable(connectContext, dbName, tableName);
+            } else {
+                TABLE_LOAD_CONTEXT.set(connectContext);
+                return tables.get(icebergTableName);
+            }
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
@@ -497,7 +506,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
                 icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
-
+        scanContext.setOnlyReadCache(shouldOnlyReadCache(scanContext.getConnectContext()));
         return delegate.getTableScan(table, scanContext);
     }
 
@@ -517,6 +526,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private Caffeine<Object, Object> newCacheBuilderWithMaximumSize(long expiresAfterWriteSec, long refreshInterval,
                                                                     long maximumSize) {
         return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
+    }
+
+    // We still allow reads from caches, but skip populating or refreshing them when this flag is set.
+    private boolean shouldOnlyReadCache(ConnectContext context) {
+        return context != null && context.isOnlyReadIcebergCache();
     }
 
     public static class IcebergTableName {

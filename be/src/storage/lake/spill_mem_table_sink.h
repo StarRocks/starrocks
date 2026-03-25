@@ -14,9 +14,10 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
+#include "runtime/mem_tracker.h"
 #include "storage/load_chunk_spiller.h"
 #include "storage/memtable_sink.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

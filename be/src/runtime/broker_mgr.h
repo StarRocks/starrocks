@@ -39,8 +39,9 @@
 #include <thread>
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "gen_cpp/Types_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
@@ -57,7 +58,7 @@ private:
     std::string _client_id;
     std::mutex _mutex;
     std::unordered_set<TNetworkAddress> _broker_set;
-    bool _thread_stop;
+    bool _thread_stop{false};
     std::thread _ping_thread;
 };
 

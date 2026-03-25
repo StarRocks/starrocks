@@ -659,6 +659,8 @@ public class GlobalStateMgr {
     private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
+            // set the global read-only variable again, avoid static variable initialization order chaos
+            GlobalVariable.runMode = Config.run_mode;
         }
 
         if (RunMode.isSharedDataMode()) {
@@ -2394,18 +2396,6 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
-    }
-
-    public void markLeaderTransferred() {
-        // Set isReady to false, so that the leader info will be got from HA protocol, see NodeMgr.getLeaderIpAndRpcPort
-        isReady.set(false);
-        feType = FrontendNodeType.FOLLOWER;
-        journalWriter.setLeaderTransferred();
-    }
-
-    public boolean isLeaderTransferred() {
-        return journalWriter != null
-                && journalWriter.isLeaderTransferred();
     }
 
     public void setSynchronizedTime(long time) {

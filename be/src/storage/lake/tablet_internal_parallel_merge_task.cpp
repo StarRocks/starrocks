@@ -14,10 +14,13 @@
 
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 
+#include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
@@ -27,7 +30,6 @@
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/storage_engine.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::lake {
 

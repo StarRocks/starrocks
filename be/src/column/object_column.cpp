@@ -45,13 +45,11 @@ size_t ObjectColumn<T>::byte_size(size_t idx) const {
 template <typename T>
 void ObjectColumn<T>::resize(size_t n) {
     _pool.resize(n);
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::reserve(size_t n) {
     _pool.reserve(n);
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -65,26 +63,21 @@ void ObjectColumn<T>::assign(size_t n, size_t idx) {
     for (size_t i = 1; i < n; ++i) {
         append(&_pool[0]);
     }
-
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(const T* object) {
     _pool.emplace_back(*object);
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(T&& object) {
     _pool.emplace_back(std::move(object));
-    _cache_ok = false;
 }
 
 template <typename T>
 void ObjectColumn<T>::append(const T& object) {
     _pool.emplace_back(object);
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -95,7 +88,6 @@ void ObjectColumn<T>::remove_first_n_values(size_t count) {
     }
 
     _pool.resize(remain_size);
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -140,7 +132,6 @@ bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
         }
     }
 
-    _cache_ok = false;
     return true;
 }
 
@@ -152,14 +143,11 @@ void ObjectColumn<T>::append_value_multiple_times(const void* value, size_t coun
     for (size_t i = 0; i < count; ++i) {
         _pool.emplace_back(*reinterpret_cast<T*>(slice->data));
     }
-
-    _cache_ok = false;
-};
+}
 
 template <typename T>
 void ObjectColumn<T>::append_default() {
     _pool.emplace_back(T());
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -176,7 +164,6 @@ void ObjectColumn<T>::fill_default(const Filter& filter) {
             _pool[i] = {};
         }
     }
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -187,7 +174,6 @@ void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
         DCHECK_LT(indexes[i], _pool.size());
         _pool[indexes[i]] = *obj_col.get_object(i);
     }
-    _cache_ok = false;
 }
 
 template <typename T>
@@ -236,7 +222,6 @@ bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
         res = true;
     }
 
-    _cache_ok = false;
     return res;
 }
 
@@ -268,7 +253,6 @@ size_t ObjectColumn<T>::filter_range(const Filter& filter, size_t from, size_t t
         }
     }
     _pool.resize(new_sz);
-    _cache_ok = false;
     return new_sz;
 }
 
@@ -290,10 +274,9 @@ void ObjectColumn<T>::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_
 }
 
 template <typename T>
-void ObjectColumn<T>::_build_slices() const {
-    // TODO(kks): improve this
-    _buffer.clear();
-    _slices.clear();
+void ObjectColumn<T>::build_slices(Buffer<uint8_t>& buffer, Buffer<Slice>& slices) const {
+    buffer.clear();
+    slices.clear();
 
     // FIXME(kks): bitmap itself compress is more effective than LZ4 compress?
     // Do we really need compress bitmap here?
@@ -307,12 +290,12 @@ void ObjectColumn<T>::_build_slices() const {
     }
 
     size_t size = byte_size();
-    _buffer.resize(size);
-    _slices.reserve(_pool.size());
+    buffer.resize(size);
+    slices.reserve(_pool.size());
     size_t old_size = 0;
     for (size_t i = 0; i < _pool.size(); ++i) {
-        size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
-        _slices.emplace_back(_buffer.data() + old_size, slice_size);
+        size_t slice_size = _pool[i].serialize(buffer.data() + old_size);
+        slices.emplace_back(buffer.data() + old_size, slice_size);
         old_size += slice_size;
     }
 }

@@ -100,10 +100,6 @@ int128_t div_gcc_x86_64(const int128_t& x, const int128_t& y) {
 }
 #endif // defined(__x86_64__) && defined(__GNUC__)
 
-static inline int128_t abs(const int128_t& x) {
-    return (x < 0) ? -x : x;
-}
-
 static inline int128_t do_add(int128_t x, int128_t y) {
     auto res = x + y;
     auto s = res >> 127;
@@ -200,7 +196,7 @@ int128_t mul(const int128_t& x, const int128_t& y) {
 
     bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
 
-    do_mul(abs(x), abs(y), &result);
+    do_mul(starrocks::abs(x), starrocks::abs(y), &result);
 
     if (!is_positive) result = -result;
 
@@ -220,7 +216,7 @@ int128_t div(const int128_t& x, const int128_t& y) {
     //todo: return 0 for divide zero
     if (x == 0 || y == 0) return DecimalV2Value(0);
     bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
-    do_div(abs(x), abs(y), &result);
+    do_div(starrocks::abs(x), starrocks::abs(y), &result);
 
     if (!is_positive) result = -result;
 
@@ -440,7 +436,7 @@ int DecimalV2Value::round(DecimalV2Value* to, int rounding_scale, DecimalRoundMo
     switch (op) {
     case HALF_UP:
     case HALF_EVEN:
-        if (abs(remainder) >= (base >> 1)) {
+        if (starrocks::abs_as_uint128(remainder) >= static_cast<uint128_t>(base >> 1)) {
             result = (result + one) * base;
         } else {
             result = result * base;

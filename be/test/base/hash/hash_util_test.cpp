@@ -20,8 +20,10 @@
 #include <array>
 #include <cstring>
 #include <string_view>
+#include <vector>
 
 #include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
 
 #if defined(__SSE4_2__)
 #include <nmmintrin.h>
@@ -177,6 +179,37 @@ TEST(HashUtilTest, HashCombine) {
     const std::size_t expected = seed ^ (std::hash<HashCombineTag>{}(tag) + 0x9e3779b9u + (seed << 6) + (seed >> 2));
     HashUtil::hash_combine(seed, tag);
     EXPECT_EQ(seed, expected);
+}
+
+TEST(HashUtilTest, StdHashSpecializations) {
+    uint24_t u24 = 123456;
+    EXPECT_EQ(std::hash<uint24_t>{}(u24), HashUtil::hash(&u24, sizeof(u24), 0));
+
+    int96_t i96{};
+    i96.lo = 0x1122334455667788ULL;
+    i96.hi = 0x99aabbccU;
+    EXPECT_EQ(std::hash<int96_t>{}(i96), HashUtil::hash(&i96, sizeof(i96), 0));
+
+    decimal12_t d12{123, 456};
+    EXPECT_EQ(std::hash<decimal12_t>{}(d12), HashUtil::hash(&d12, sizeof(d12), 0));
+
+    TUniqueId uid;
+    uid.__set_hi(7);
+    uid.__set_lo(11);
+    using UniqueIdPair = std::pair<TUniqueId, int64_t>;
+    UniqueIdPair key{uid, 13};
+    size_t expected_pair_hash = 0;
+    expected_pair_hash = HashUtil::hash(&key.first.lo, sizeof(key.first.lo), expected_pair_hash);
+    expected_pair_hash = HashUtil::hash(&key.first.hi, sizeof(key.first.hi), expected_pair_hash);
+    expected_pair_hash = HashUtil::hash(&key.second, sizeof(key.second), expected_pair_hash);
+    EXPECT_EQ(std::hash<UniqueIdPair>{}(key), expected_pair_hash);
+
+    std::vector<int> values{1, 2, 3, 4};
+    size_t expected_vector_hash = 0;
+    for (int v : values) {
+        boost::hash_combine(expected_vector_hash, v);
+    }
+    EXPECT_EQ(std::hash<std::vector<int>>{}(values), expected_vector_hash);
 }
 
 TEST(HashUtilTest, UnalignedLoad) {

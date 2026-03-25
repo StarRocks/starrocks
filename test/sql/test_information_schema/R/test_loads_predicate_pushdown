@@ -1,0 +1,325 @@
+-- name: test_information_schema_loads_predicate_pushdown
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_evaluate_schema_scan_rule=true;
+-- result:
+-- !result
+create table t_insert_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t_stream_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t_merge_${uuid0} (id int) primary key(id) distributed by hash(id) properties("replication_num" = "1");
+-- result:
+-- !result
+create table t_mstmt_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_insert_${uuid0} values (1);
+-- result:
+-- !result
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:sl_${uuid0}" -d '2' ${url}/api/db_${uuid0}/t_stream_${uuid0}/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:1" -d '{"id":3}' ${url}/api/db_${uuid0}/t_merge_${uuid0}/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+-- result:
+0
+{
+  "Status": "OK",
+  "Message": ""
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"4"}' -X PUT ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Db": "db_b46de9221a4647deb351901e173e0631",
+    "Table": "t_mstmt_b46de9221a4647deb351901e173e0631",
+    "Label": "mstmt_b46de9221a4647deb351901e173e0631",
+    "TxnId": 1012,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"5"}' -X PUT ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Db": "db_b46de9221a4647deb351901e173e0631",
+    "Table": "t_mstmt_b46de9221a4647deb351901e173e0631",
+    "Label": "mstmt_b46de9221a4647deb351901e173e0631",
+    "TxnId": 1012,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"6"}' -X PUT ${url}/api/transaction/load
+-- result:
+0
+{
+    "Status": "OK",
+    "Message": "",
+    "Db": "db_b46de9221a4647deb351901e173e0631",
+    "Table": "t_mstmt_b46de9221a4647deb351901e173e0631",
+    "Label": "mstmt_b46de9221a4647deb351901e173e0631",
+    "TxnId": 1012,
+    "LoadBytes": 10,
+    "StreamLoadPlanTimeMs": 0,
+    "ReceivedDataTimeMs": 0
+}
+-- !result
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+-- result:
+0
+{
+  "Label": "mstmt_b46de9221a4647deb351901e173e0631",
+  "Status": "OK",
+  "TxnId": 1012,
+  "ChannelId": 0,
+  "Message": "",
+  "Prepared Channel Num": 1
+}
+-- !result
+function: wait_db_transaction_finish("db_${uuid0}", 60)
+-- result:
+None
+-- !result
+sync;
+-- result:
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads
+where db_name='db_${uuid0}'
+  and user='root'
+  and create_time >= date_sub(now(), interval 1 hour) and create_time <= date_add(now(), interval 1 hour)
+  and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour)
+  and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
+-- result:
+2
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}';
+-- result:
+4
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid1}' and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='__no_such_table__';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and user='root';
+-- result:
+3
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and user='__no_such_user__';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='FINISHED';
+-- result:
+3
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='__NO_SUCH_STATE__';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where table_name='t_stream_${uuid0}'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where table_name='__no_such_table__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where user='__no_such_user__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where state='__NO_SUCH_STATE__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time >= date_sub(now(), interval 1 hour) and create_time <= date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
+-- result:
+3
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time > date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+-- result:
+3
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time > date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
+-- result:
+3
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time > date_add(now(), interval 1 hour);
+-- result:
+0
+-- !result
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+-- result:
+12078
+-- !result
+select count(1) from information_schema.loads where id = '${job_id}';
+-- result:
+1
+-- !result
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+-- result:
+12081
+-- !result
+select count(1) from information_schema.loads where id = '${job_id}';
+-- result:
+1
+-- !result
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+-- result:
+12082
+-- !result
+select count(1) from information_schema.loads where id = '${job_id}';
+-- result:
+1
+-- !result
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+-- result:
+12084
+-- !result
+select count(1) from information_schema.loads where id = '${job_id}';
+-- result:
+0
+-- !result
+[UC]job_label=select label from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+-- result:
+insert_019c9379-1c40-792d-bc96-e9bdd29e3516
+-- !result
+select count(1) from information_schema.loads where label = '${job_label}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = '${job_label}' and db_name='db_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_${job_label}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_${job_label}' and db_name='db_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where label = 'sl_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = 'sl_${uuid0}' and db_name='db_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_sl_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_sl_${uuid0}' and db_name='db_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where label = 'mstmt_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = 'mstmt_${uuid0}' and db_name='db_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_mstmt_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where label = 'no_exist_mstmt_${uuid0}' and db_name='db_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) > 0 from information_schema.loads;
+-- result:
+1
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+-- result:
+0
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+-- result:
+1
+-- !result
+select count(1) > 0 from information_schema.loads;
+-- result:
+1
+-- !result

@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/operator.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

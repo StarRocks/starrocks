@@ -124,10 +124,9 @@ public:
  */
 template <typename OP>
 struct StringUnaryFunction {
-public:
     template <LogicalType Type, LogicalType ResultType, typename... Args>
     static ColumnPtr evaluate(const ColumnPtr& v1, Args&&... args) {
-        auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->get_data();
+        const auto& r1 = ColumnHelper::cast_to_raw<Type>(v1)->immutable_data();
 
         auto result = RunTimeColumnType<TYPE_VARCHAR>::create(std::forward<Args>(args)...);
 

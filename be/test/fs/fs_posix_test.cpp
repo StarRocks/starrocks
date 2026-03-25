@@ -446,4 +446,25 @@ TEST_F(PosixFileSystemTest, test_delete_files) {
     EXPECT_OK(fs->delete_dir_recursive(path2));
 }
 
+TEST_F(PosixFileSystemTest, get_cache_stats) {
+    auto fs = FileSystem::Default();
+    std::string fname = "./ut_dir/fs_posix/cache_stats_test";
+    ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(fname));
+    ASSERT_OK(wf->append("hello world!"));
+    ASSERT_OK(wf->close());
+
+    // size < 0: uses get_file_size
+    {
+        ASSIGN_OR_ABORT(auto stats, fs->get_cache_stats(fname, 0, -1));
+        ASSERT_EQ(stats.first, 12);
+        ASSERT_EQ(stats.second, 12);
+    }
+    // size >= 0: returns size directly
+    {
+        ASSIGN_OR_ABORT(auto stats, fs->get_cache_stats(fname, 0, 100));
+        ASSERT_EQ(stats.first, 100);
+        ASSERT_EQ(stats.second, 100);
+    }
+}
+
 } // namespace starrocks

@@ -38,6 +38,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -878,10 +879,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         UInt32Column* col_offsets = col_map->offsets_column_raw_ptr();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
+#ifndef __APPLE__
         auto* keys_column = col_map->keys_column_raw_ptr();
         auto* values_column = col_map->values_column_raw_ptr();
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
+#endif
         for (auto i = 0; i < 2; ++i) {
             size_t child_array_start_idx;
             size_t child_array_num_elements;
@@ -1067,7 +1070,7 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     std::string error_msg =
             strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
                                 (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
-    state->append_error_msg_to_file(error_msg, reason);
+    RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 }
 
 } // namespace starrocks

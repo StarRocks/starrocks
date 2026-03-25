@@ -67,6 +67,7 @@ struct ArraySelectorSingle final : public ArraySelector {
 
     ArraySelectorSingle(int index) : index(index) { type = SINGLE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
@@ -84,6 +85,7 @@ struct ArraySelectorSingle final : public ArraySelector {
 struct ArraySelectorWildcard final : public ArraySelector {
     ArraySelectorWildcard() { type = WILDCARD; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
@@ -96,6 +98,7 @@ struct ArraySelectorSlice final : public ArraySelector {
 
     ArraySelectorSlice(int left, int right) : left(left), right(right) { type = SLICE; }
 
+    using ArraySelector::match;
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;

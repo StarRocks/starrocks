@@ -14,12 +14,17 @@
 
 package com.starrocks.connector.delta;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.memory.estimate.Estimator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.FileStatus;
@@ -31,6 +36,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DeltaLakeMetastoreTest {
     private DeltaLakeMetastore metastore;
@@ -44,90 +50,151 @@ public class DeltaLakeMetastoreTest {
     }
 
     @Test
-    public void testCheckpointCacheWeigherHandlesLargeSize() throws Exception {
-        // Mock SizeEstimator to return a value larger than Integer.MAX_VALUE
-        new MockUp<org.apache.spark.util.SizeEstimator>() {
+    public void testCheckpointCacheWeigherUsesExpectedEstimatorSamplingArgs() throws Exception {
+        AtomicInteger keyEstimateCalls = new AtomicInteger();
+        AtomicInteger valueEstimateCalls = new AtomicInteger();
+        AtomicInteger sampledSize = new AtomicInteger();
+        AtomicInteger sampledDepth = new AtomicInteger();
+
+        new MockUp<Estimator>() {
             @mockit.Mock
             public long estimate(Object obj) {
-                // Return a value larger than Integer.MAX_VALUE to simulate overflow scenario
-                return 3L * Integer.MAX_VALUE;
+                keyEstimateCalls.incrementAndGet();
+                return 100L;
+            }
+
+            @mockit.Mock
+            public long estimate(Object obj, int sampleSize, int maxDepth) {
+                valueEstimateCalls.incrementAndGet();
+                sampledSize.set(sampleSize);
+                sampledDepth.set(maxDepth);
+                return 200L;
             }
         };
 
-        // Create a new DeltaLakeMetastore instance to trigger cache creation with mocked SizeEstimator
-        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
-        DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(Maps.newHashMap());
-        DeltaLakeMetastore testMetastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore,
-                new Configuration(), properties);
+        LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache =
+                getCheckpointCache(createMetastoreForTest());
+        checkpointCache.put(createCheckpointCacheKey(), Lists.newArrayList());
 
-        // Get the checkpointCache field using reflection
-        Field checkpointCacheField = DeltaLakeMetastore.class.getDeclaredField("checkpointCache");
-        checkpointCacheField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        com.google.common.cache.LoadingCache<com.starrocks.common.Pair<DeltaLakeFileStatus, StructType>,
-                List<ColumnarBatch>> checkpointCache =
-                (com.google.common.cache.LoadingCache<com.starrocks.common.Pair<DeltaLakeFileStatus, StructType>,
-                        List<ColumnarBatch>>) checkpointCacheField.get(testMetastore);
-
-        // Create FileStatus using static factory method
-        FileStatus fileStatus = FileStatus.of("s3://bucket/path/to/file.parquet", 100, 123);
-
-        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
-        StructType structType = new io.delta.kernel.types.StructType(com.google.common.collect.Lists.newArrayList());
-        com.starrocks.common.Pair<DeltaLakeFileStatus, StructType> key =
-                com.starrocks.common.Pair.create(deltaLakeFileStatus, structType);
-
-        // Put an entry into the cache - this should trigger the weigher
-        // If the weigher throws ArithmeticException due to integer overflow, this test will fail
-        try {
-            checkpointCache.put(key, com.google.common.collect.Lists.newArrayList());
-            // If we reach here, the weigher handled the large size correctly
-            Assertions.assertTrue(true);
-        } catch (ArithmeticException e) {
-            Assertions.fail("Weigher should not throw ArithmeticException for large sizes");
-        }
+        Assertions.assertTrue(keyEstimateCalls.get() > 0);
+        Assertions.assertTrue(valueEstimateCalls.get() > 0);
+        Assertions.assertEquals(3, sampledSize.get());
+        Assertions.assertEquals(8, sampledDepth.get());
     }
 
     @Test
-    public void testJsonCacheWeigherHandlesLargeSize() throws Exception {
-        // Mock SizeEstimator to return a value larger than Integer.MAX_VALUE
-        new MockUp<org.apache.spark.util.SizeEstimator>() {
+    public void testJsonCacheWeigherUsesExpectedEstimatorSamplingArgs() throws Exception {
+        AtomicInteger keyEstimateCalls = new AtomicInteger();
+        AtomicInteger valueEstimateCalls = new AtomicInteger();
+        AtomicInteger sampledSize = new AtomicInteger();
+        AtomicInteger sampledDepth = new AtomicInteger();
+
+        new MockUp<Estimator>() {
             @mockit.Mock
             public long estimate(Object obj) {
-                // Return a value larger than Integer.MAX_VALUE to simulate overflow scenario
-                return 3L * Integer.MAX_VALUE;
+                keyEstimateCalls.incrementAndGet();
+                return 100L;
+            }
+
+            @mockit.Mock
+            public long estimate(Object obj, int sampleSize, int maxDepth) {
+                valueEstimateCalls.incrementAndGet();
+                sampledSize.set(sampleSize);
+                sampledDepth.set(maxDepth);
+                return 200L;
             }
         };
 
-        // Create a new DeltaLakeMetastore instance to trigger cache creation with mocked SizeEstimator
+        LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = getJsonCache(createMetastoreForTest());
+        jsonCache.put(createJsonCacheKey(), Lists.newArrayList());
+
+        Assertions.assertTrue(keyEstimateCalls.get() > 0);
+        Assertions.assertTrue(valueEstimateCalls.get() > 0);
+        Assertions.assertEquals(5, sampledSize.get());
+        Assertions.assertEquals(10, sampledDepth.get());
+    }
+
+    @Test
+    public void testCheckpointCacheWeigherFallsBackToStructureEstimatorWhenEstimatorFails() throws Exception {
+        AtomicInteger fallbackCalls = new AtomicInteger();
+
+        new MockUp<Estimator>() {
+            @mockit.Mock
+            public long estimate(Object obj) {
+                throw new RuntimeException("mock estimator failure");
+            }
+        };
+
+        new MockUp<DeltaLakeCacheSizeEstimator>() {
+            @mockit.Mock
+            public long estimateCheckpointByStructure(Pair<DeltaLakeFileStatus, StructType> key, List<ColumnarBatch> value) {
+                fallbackCalls.incrementAndGet();
+                return 123L;
+            }
+        };
+
+        LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache =
+                getCheckpointCache(createMetastoreForTest());
+        checkpointCache.put(createCheckpointCacheKey(), Lists.newArrayList());
+
+        Assertions.assertTrue(fallbackCalls.get() > 0);
+    }
+
+    @Test
+    public void testJsonCacheWeigherFallsBackToStructureEstimatorWhenEstimatorFails() throws Exception {
+        AtomicInteger fallbackCalls = new AtomicInteger();
+
+        new MockUp<Estimator>() {
+            @mockit.Mock
+            public long estimate(Object obj) {
+                throw new RuntimeException("mock estimator failure");
+            }
+        };
+
+        new MockUp<DeltaLakeCacheSizeEstimator>() {
+            @mockit.Mock
+            public long estimateJsonByStructure(DeltaLakeFileStatus key, List<JsonNode> value) {
+                fallbackCalls.incrementAndGet();
+                return 123L;
+            }
+        };
+
+        LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = getJsonCache(createMetastoreForTest());
+        jsonCache.put(createJsonCacheKey(), Lists.newArrayList());
+
+        Assertions.assertTrue(fallbackCalls.get() > 0);
+    }
+
+    private DeltaLakeMetastore createMetastoreForTest() {
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
         IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
         DeltaLakeCatalogProperties properties = new DeltaLakeCatalogProperties(Maps.newHashMap());
-        DeltaLakeMetastore testMetastore = new HMSBackedDeltaMetastore("delta0", hiveMetastore,
-                new Configuration(), properties);
+        return new HMSBackedDeltaMetastore("delta0", hiveMetastore, new Configuration(), properties);
+    }
 
-        // Get the jsonCache field using reflection
+    @SuppressWarnings("unchecked")
+    private LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> getCheckpointCache(
+            DeltaLakeMetastore testMetastore) throws Exception {
+        Field checkpointCacheField = DeltaLakeMetastore.class.getDeclaredField("checkpointCache");
+        checkpointCacheField.setAccessible(true);
+        return (LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>>) checkpointCacheField.get(testMetastore);
+    }
+
+    @SuppressWarnings("unchecked")
+    private LoadingCache<DeltaLakeFileStatus, List<JsonNode>> getJsonCache(DeltaLakeMetastore testMetastore) throws Exception {
         Field jsonCacheField = DeltaLakeMetastore.class.getDeclaredField("jsonCache");
         jsonCacheField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        com.google.common.cache.LoadingCache<DeltaLakeFileStatus, List<com.fasterxml.jackson.databind.JsonNode>> jsonCache =
-                (com.google.common.cache.LoadingCache<DeltaLakeFileStatus,
-                        List<com.fasterxml.jackson.databind.JsonNode>>) jsonCacheField.get(testMetastore);
+        return (LoadingCache<DeltaLakeFileStatus, List<JsonNode>>) jsonCacheField.get(testMetastore);
+    }
 
-        // Create FileStatus using static factory method
-        FileStatus fileStatus = FileStatus.of("s3://bucket/path/to/file.json", 100, 123);
+    private Pair<DeltaLakeFileStatus, StructType> createCheckpointCacheKey() {
+        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(
+                FileStatus.of("s3://bucket/path/to/file.parquet", 100, 123));
+        StructType structType = new StructType(Lists.newArrayList());
+        return Pair.create(deltaLakeFileStatus, structType);
+    }
 
-        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
-
-        // Put an entry into the cache - this should trigger the weigher
-        // If the weigher throws ArithmeticException due to integer overflow, this test will fail
-        try {
-            jsonCache.put(deltaLakeFileStatus, com.google.common.collect.Lists.newArrayList());
-            // If we reach here, the weigher handled the large size correctly
-            Assertions.assertTrue(true);
-        } catch (ArithmeticException e) {
-            Assertions.fail("Weigher should not throw ArithmeticException for large sizes");
-        }
+    private DeltaLakeFileStatus createJsonCacheKey() {
+        return DeltaLakeFileStatus.of(FileStatus.of("s3://bucket/path/to/file.json", 100, 123));
     }
 }

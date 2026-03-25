@@ -36,24 +36,26 @@
 #include "base/phmap/phmap.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
+#include "runtime/descriptors.h"
 #include "storage/rowset/column_reader.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/bloom_filter.h"
-#include "util/json_converter.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -371,9 +373,17 @@ StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Colu
     return total_rows - null_count;
 }
 
+JsonPathDeriver::JsonPathDeriver()
+        : _min_json_sparsity_factory(config::json_flat_sparsity_factor),
+          _max_json_null_factor(config::json_flat_null_factor),
+          _max_column(config::json_flat_column_max) {}
+
 JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                  bool has_remain)
-        : _has_remain(has_remain), _paths(std::move(paths)), _types(types) {
+        : JsonPathDeriver() {
+    _has_remain = has_remain;
+    _paths = paths;
+    _types = types;
     for (size_t i = 0; i < _paths.size(); i++) {
         auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];
@@ -787,7 +797,7 @@ JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
 
 JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                              bool has_remain)
-        : _has_remain(has_remain), _dst_paths(std::move(paths)) {
+        : _has_remain(has_remain), _dst_paths(paths) {
     _dst_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _dst_paths.size(); i++) {
@@ -972,7 +982,7 @@ MutableColumns JsonFlattener::mutable_result() {
 }
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
-        : _src_paths(std::move(paths)), _has_remain(has_remain) {
+        : _src_paths(paths), _has_remain(has_remain) {
     _src_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _src_paths.size(); i++) {
@@ -1260,7 +1270,7 @@ void JsonMerger::_check_has_non_null_values(const JsonFlatPath* root, size_t ind
 
 HyperJsonTransformer::HyperJsonTransformer(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                            bool has_remain)
-        : _dst_remain(has_remain), _dst_paths(std::move(paths)), _dst_types(types) {
+        : _dst_remain(has_remain), _dst_paths(paths), _dst_types(types) {
     for (size_t i = 0; i < _dst_paths.size(); i++) {
         _dst_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
     }

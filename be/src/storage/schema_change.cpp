@@ -40,9 +40,14 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -325,11 +330,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         return res.status();
     }
 
-    auto seg_iterators = res.value();
+    const auto& seg_iterators = res.value();
 
     // Fetch the new columns value into the new_chunk
     for (int idx = 0; idx < seg_iterators.size(); ++idx) {
-        auto seg_iterator = seg_iterators[idx];
+        const auto& seg_iterator = seg_iterators[idx];
         if (seg_iterator.get() == nullptr) {
             std::stringstream ss;
             ss << "Failed to get segment iterator, segment id: " << idx;
@@ -361,7 +366,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         }
 
         // Write cols file with current new_chunk
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(new_tablet->schema_hash_path()));
+        ASSIGN_OR_RETURN(const auto& fs, FileSystemFactory::CreateSharedFromString(new_tablet->schema_hash_path()));
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
@@ -514,13 +519,18 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (new_tschema->keys_type() == KeysType::PRIMARY_KEYS) {
+        ASSIGN_OR_RETURN(pk_encoding_type, new_tschema->primary_key_encoding_type_or_error());
+    }
+
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
     // set max memtable size to 4G since some column has limit size, it will make invalid data
     size_t max_buffer_size = std::min<size_t>(
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
                                                 CurrentThread::mem_tracker());
-    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type), alter_msg_header() + "failed to prepare mem table");
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -548,7 +558,8 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
             VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -587,13 +598,14 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             LOG(WARNING) << msg;
             return res.status();
         }
-        auto full = res.value();
+        const auto& full = res.value();
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
-            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(pk_encoding_type),
+                                      alter_msg_header() + "failed to prepare mem table");
         }
 
         mem_pool->clear();
@@ -792,8 +804,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
-                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                          chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
 
@@ -1121,6 +1133,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             // new added dcgs info for every segment in rowset.
             DeltaColumnGroupList dcgs;
             std::vector<int> last_dcg_counts;
+            last_dcg_counts.reserve(sc_params.rowsets_to_change[i]->num_segments());
             for (uint32_t j = 0; j < sc_params.rowsets_to_change[i]->num_segments(); j++) {
                 // check the lastest historical_dcgs version if it is equal to schema change version
                 // of the rowset. If it is, we should merge the dcg info.

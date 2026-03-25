@@ -20,7 +20,6 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.GracefulExitFlag;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -167,15 +166,11 @@ public class StateChangeExecutor extends Daemon {
                     break;
                 }
                 case LEADER: {
-                    if (GracefulExitFlag.isGracefulExit()) {
-                        break;
-                    } else {
-                        // exit if leader changed to any other type
-                        String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
-                        LOG.error(msg);
-                        Util.stdoutWithTime(msg);
-                        System.exit(-1);
-                    }
+                    // exit if leader changed to any other type
+                    String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
+                    LOG.error(msg);
+                    Util.stdoutWithTime(msg);
+                    System.exit(-1);
                 }
                 default:
                     break;

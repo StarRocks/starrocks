@@ -52,6 +52,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
+#include "common/util/debug_util.h"
 #include "fmt/format.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
@@ -64,7 +65,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
-#include "util/debug_util.h"
 
 namespace starrocks {
 

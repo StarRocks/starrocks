@@ -35,6 +35,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -42,7 +43,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -293,13 +294,19 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                           ConnectContext context) {
+        normal.finishSink(dbName, table, commitInfos, branch, extra, context);
+    }
+
+    @Override
     public void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         normal.abortSink(dbName, table, commitInfos);
     }
 
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
-        normal.alterTable(context, stmt);
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+        return normal.alterTable(context, stmt);
     }
 
     @Override
@@ -339,7 +346,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createMaterializedView(CreateMaterializedViewStmt stmt) throws AnalysisException, DdlException {
+    public void createMaterializedView(CreateSyncMVStmt stmt) throws AnalysisException, DdlException {
         normal.createMaterializedView(stmt);
     }
 

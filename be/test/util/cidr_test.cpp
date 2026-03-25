@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/cidr.h"
+#include "base/network/cidr.h"
 
 #include <gtest/gtest.h>
 

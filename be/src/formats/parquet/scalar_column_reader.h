@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/utils.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 

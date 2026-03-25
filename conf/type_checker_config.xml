@@ -74,6 +74,7 @@
   <type-mapping java_class="java.lang.String" display_name="String">
     <type-rule allowed_type="TYPE_CHAR" return_type="TYPE_VARCHAR"/>
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_JSON" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <!-- java.sql.Timestamp type -->
@@ -115,18 +116,27 @@
   <!-- Oracle TIMESTAMP types -->
   <type-mapping java_class="oracle.sql.TIMESTAMP" display_name="OracleTimestamp">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <type-mapping java_class="oracle.sql.TIMESTAMPLTZ" display_name="OracleTimestampLTZ">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <type-mapping java_class="oracle.sql.TIMESTAMPTZ" display_name="OracleTimestampTZ">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <!-- SQL Server DateTimeOffset type -->
   <type-mapping java_class="microsoft.sql.DateTimeOffset" display_name="DateTimeOffset">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+  </type-mapping>
+
+  <!-- PostgreSQL PGobject type (json/jsonb are reported as PGobject by PostgreSQL JDBC) -->
+  <type-mapping java_class="org.postgresql.util.PGobject" display_name="PostgreSQLPGobject">
+    <type-rule allowed_type="TYPE_JSON" return_type="TYPE_VARCHAR"/>
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   

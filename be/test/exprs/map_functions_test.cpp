@@ -23,14 +23,6 @@
 
 namespace starrocks {
 
-TypeDescriptor map_type(LogicalType key, LogicalType value) {
-    TypeDescriptor type_creator;
-    type_creator.type = LogicalType::TYPE_MAP;
-    type_creator.children.emplace_back(key);
-    type_creator.children.emplace_back(value);
-    return type_creator;
-}
-
 PARALLEL_TEST(MapFunctionsTest, test_map) {
     TypeDescriptor input_keys_type;
     input_keys_type.type = LogicalType::TYPE_ARRAY;

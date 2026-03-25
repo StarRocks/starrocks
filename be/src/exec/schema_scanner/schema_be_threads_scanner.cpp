@@ -15,10 +15,10 @@
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 
 #include "agent/master_info.h"
+#include "common/thread/thread.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/thread.h"
 
 namespace starrocks {
 

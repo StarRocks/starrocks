@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
+keywords: ['compaction']
 ---
 
 # Feature Support: Shared-data Clusters

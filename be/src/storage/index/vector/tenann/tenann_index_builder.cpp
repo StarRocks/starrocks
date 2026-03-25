@@ -19,7 +19,7 @@
 #include <tenann/util/threads.h>
 
 #include "column/array_column.h"
-#include "common/config.h"
+#include "common/config_vector_index_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "tenann/factory/index_factory.h"

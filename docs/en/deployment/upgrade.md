@@ -121,7 +121,7 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
 3. Start the BE node.
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. Check if the BE node is started successfully.
@@ -156,7 +156,7 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
 3. Start the CN node.
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. Check if the CN node is started successfully.
@@ -193,7 +193,7 @@ After upgrading all BE and CN nodes, you can then upgrade the FE nodes. You must
 3. Start the FE node.
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 4. Check if the FE node is started successfully.

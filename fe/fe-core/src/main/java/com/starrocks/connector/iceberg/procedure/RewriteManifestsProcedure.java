@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.RewriteManifests;
@@ -52,7 +53,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (!args.isEmpty()) {
             throw new StarRocksConnectorException(
                     "invalid args. rewrite_manifests operation does not support any arguments");
@@ -61,12 +62,12 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         Table icebergTable = context.table();
         Snapshot currentSnapshot = icebergTable.currentSnapshot();
         if (currentSnapshot == null) {
-            return;
+            return null;
         }
 
         List<ManifestFile> manifests = currentSnapshot.allManifests(icebergTable.io());
         if (manifests.isEmpty()) {
-            return;
+            return null;
         }
 
         long manifestTargetSizeBytes = PropertyUtil.propertyAsLong(
@@ -76,7 +77,7 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
         }
 
         if (manifests.size() == 1 && manifests.get(0).length() < manifestTargetSizeBytes) {
-            return;
+            return null;
         }
 
         long totalManifestsSize = manifests.stream().mapToLong(ManifestFile::length).sum();
@@ -97,5 +98,6 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                     return Integer.toUnsignedLong(Objects.hash(partitionWrapper)) % targetManifestClusters;
                 })
                 .commit();
+        return null;
     }
 }

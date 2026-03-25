@@ -35,9 +35,9 @@ import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -187,6 +187,8 @@ public class MergeTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
+            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getBackgroundComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -211,7 +213,7 @@ public class MergeTabletJob extends TabletReshardJob {
                         tablets.addAll(index.getTablets());
                     }
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish));
+                            tablets, commitVersion, useAggregatePublish, computeResource));
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -490,7 +492,7 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
-            boolean useAggregatePublish) {
+            boolean useAggregatePublish, ComputeResource computeResource) {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = transactionId;
@@ -501,7 +503,7 @@ public class MergeTabletJob extends TabletReshardJob {
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    WarehouseManager.DEFAULT_RESOURCE, null, useAggregatePublish);
+                    computeResource, null, useAggregatePublish);
 
             return tabletRange;
         } catch (Exception e) {

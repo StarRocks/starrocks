@@ -21,10 +21,10 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
+#include "base/string/parse_util.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
-#include "util/parse_util.h"
 
 namespace starrocks {
 

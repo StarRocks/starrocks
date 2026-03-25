@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
 #include "runtime/mem_pool.h"

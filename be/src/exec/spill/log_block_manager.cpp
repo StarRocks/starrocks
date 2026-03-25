@@ -24,21 +24,21 @@
 #include <utility>
 
 #include "base/container/raw_container.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "block_manager.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/stack_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {
@@ -245,7 +245,7 @@ private:
 };
 
 LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
-        : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
+        : _query_id(query_id), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }

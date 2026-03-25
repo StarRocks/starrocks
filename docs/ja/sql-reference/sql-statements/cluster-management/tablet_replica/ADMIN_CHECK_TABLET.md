@@ -17,7 +17,7 @@ displayed_sidebar: docs
 ## 構文
 
 ```sql
-ADMIN CHECK TABLE (tablet_id1, tablet_id2, ...)
+ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...)
 PROPERTIES("type" = "...")
 ```
 

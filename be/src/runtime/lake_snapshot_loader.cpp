@@ -15,6 +15,8 @@
 #include <runtime/lake_snapshot_loader.h>
 
 #include "base/container/raw_container.h"
+#include "base/network/network_util.h"
+#include "common/config_rpc_client_fwd.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -23,7 +25,6 @@
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
-#include "util/network_util.h"
 
 namespace starrocks {
 LakeSnapshotLoader::LakeSnapshotLoader(ExecEnv* env) : _env(env) {}

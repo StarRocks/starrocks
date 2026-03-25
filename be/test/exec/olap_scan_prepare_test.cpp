@@ -19,8 +19,11 @@
 #include "exec/tablet_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter.h"
 #include "formats/parquet/parquet_test_util/util.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "storage/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -41,6 +44,8 @@ public:
         _opts.pred_tree_params.enable_or = true;
         _opts.key_column_names = &_key_column_names;
         _opts.conjunct_ctxs_ptr = &_expr_ctxs;
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
     }
 
 protected:
@@ -53,6 +58,7 @@ protected:
 
     ScanConjunctsManagerOptions _opts;
     RuntimeState _runtime_state;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ObjectPool _pool;
     std::vector<std::string> _key_column_names;
 

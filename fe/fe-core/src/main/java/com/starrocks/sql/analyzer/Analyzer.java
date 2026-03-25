@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -67,13 +68,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -283,6 +284,12 @@ public class Analyzer {
 
         @Override
         public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
@@ -500,8 +507,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
-            statement.analyze(context);
+        public Void visitCreateSyncMVStmt(CreateSyncMVStmt statement, ConnectContext context) {
+            CreateSyncMVStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

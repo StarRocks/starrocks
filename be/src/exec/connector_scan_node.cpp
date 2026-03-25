@@ -17,14 +17,16 @@
 #include <atomic>
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

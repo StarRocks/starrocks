@@ -46,7 +46,7 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         result = GeoFunctions::st_as_wkt(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
-        ASSERT_EQ("POINT (24.7 56.7)", v->get_data()[0].to_string());
+        ASSERT_EQ("POINT (24.7 56.7)", v->get_slice(0).to_string());
     }
 
     {
@@ -62,7 +62,7 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         columns.emplace_back(std::move(str_2));
         ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
-        auto str_value = v->get_data()[0];
+        auto str_value = v->get_slice(0);
 
         GeoPoint point;
         auto res = point.decode_from(str_value.data, str_value.size);
@@ -151,7 +151,7 @@ TEST_F(geographyFunctionsTest, as_wktTest) {
     auto result = GeoFunctions::st_as_wkt(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
-    ASSERT_EQ("POINT (134 63)", v->get_data()[0].to_string());
+    ASSERT_EQ("POINT (134 63)", v->get_slice(0).to_string());
 }
 
 TEST_F(geographyFunctionsTest, st_from_wktGeneralTest) {
@@ -174,7 +174,7 @@ TEST_F(geographyFunctionsTest, st_from_wktGeneralTest) {
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     GeoPoint point;
-    auto res = point.decode_from(v->get_data()[0].data, v->get_data()[0].size);
+    auto res = point.decode_from(v->get_slice(0).data, v->get_slice(0).size);
 
     ASSERT_TRUE(res);
     ASSERT_DOUBLE_EQ(10.1, point.x());
@@ -221,7 +221,7 @@ TEST_F(geographyFunctionsTest, st_lineGeneralTest) {
     auto result = GeoFunctions::st_line(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     GeoLine line_obj;
-    auto res = line_obj.decode_from(v->get_data()[0].data, v->get_data()[0].size);
+    auto res = line_obj.decode_from(v->get_slice(0).data, v->get_slice(0).size);
     ASSERT_TRUE(res);
     GeoFunctions::st_from_wkt_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
@@ -259,7 +259,7 @@ TEST_F(geographyFunctionsTest, st_polygonGeneralTest) {
     auto str2 = GeoFunctions::st_polygon(ctx.get(), columns).value();
     auto result = ColumnHelper::as_column<BinaryColumn>(str2);
     ASSERT_FALSE(str2->is_null(0));
-    auto v = result->get_data()[0];
+    auto v = result->get_slice(0);
 
     GeoPolygon polygon;
     auto res = polygon.decode_from(v.data, v.size);
@@ -310,7 +310,7 @@ TEST_F(geographyFunctionsTest, st_circleGeneralTest) {
     ASSERT_FALSE(result->is_null(0));
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
-    auto cir_str = v->get_data()[0];
+    auto cir_str = v->get_slice(0);
 
     GeoCircle circle;
     auto res = circle.decode_from(cir_str.data, cir_str.size);
@@ -410,7 +410,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     auto varchar_column = ColumnHelper::cast_to<TYPE_VARCHAR>(result1);
     ASSERT_TRUE(varchar_column->size() == 1);
     ASSERT_FALSE(varchar_column->is_null(0));
-    auto value = varchar_column->get_data()[0];
+    auto value = varchar_column->get_slice(0);
     std::string string_value(value.get_data(), value.get_size());
     string_value.append("A");
     auto input_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(string_value), varchar_column->size());

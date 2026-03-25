@@ -19,6 +19,7 @@
 #include "base/concurrency/race_detect.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {
@@ -79,7 +80,7 @@ Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* sta
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare_local_state(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
@@ -280,14 +281,14 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_distinct(chunk->num_rows()));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

@@ -111,7 +111,7 @@ private:
     std::unique_ptr<sstable::TableBuilder> _table_builder;
     std::unique_ptr<sstable::FilterPolicy> _filter_policy;
     std::unique_ptr<WritableFile> _wf;
-    bool _finished;
+    bool _finished{false};
     std::string _encryption_meta;
     uint32_t _sst_rowid = 0;
 };

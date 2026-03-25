@@ -1,0 +1,179 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: CI - Clang Format Auto Fix
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, synchronize]
+    # Only trigger when backend C/C++ source files are touched.
+    paths:
+      - 'be/src/**'
+      - 'be/test/**'
+
+permissions:
+  contents: write
+
+jobs:
+  clang-format:
+    name: Clang-Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+
+      - name: Set up base branch reference
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          git remote add upstream "https://github.com/${BASE_REPO}.git"
+          git fetch upstream "${BASE_REF}" main
+
+      - name: Install clang-format-10
+        run: |
+          wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 -O /usr/local/bin/clang-format-10
+          chmod +x /usr/local/bin/clang-format-10
+
+      - name: Auto-fix formatting on changed C++ files
+        env:
+          CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
+          FORMAT_BASE_REF: upstream/${{ github.base_ref }}
+          BASE_REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          fetched_files=(
+            "build-support/format_changed_files.py"
+            "build-support/run_clang_format.py"
+            "build-support/lintutils.py"
+            "build-support/excludes"
+          )
+          helper_dir=$(mktemp -d)
+          cleanup() {
+            rm -rf "${helper_dir}"
+          }
+          trap cleanup EXIT
+
+          base_ref_exists=true
+          if ! git rev-parse --verify "${FORMAT_BASE_REF}" >/dev/null 2>&1; then
+            base_ref_exists=false
+          fi
+
+          pr_changed_paths=""
+          if [[ "${base_ref_exists}" == "true" ]]; then
+            pr_changed_paths=$(
+              git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD" | sort -u
+            )
+          fi
+
+          for path in "${fetched_files[@]}"; do
+            mkdir -p "$(dirname "${helper_dir}/${path}")"
+            if [[ "${HEAD_REPO}" == "${BASE_REPO}" ]] && printf '%s\n' "${pr_changed_paths}" | grep -Fxq "${path}"; then
+              if [[ -L "${path}" ]]; then
+                echo "::error::Refusing to load helper from symlinked path ${path}"
+                exit 1
+              fi
+              if [[ ! -f "${path}" ]]; then
+                echo "::error::Expected helper file ${path} to exist in the PR workspace"
+                exit 1
+              fi
+              cp "${path}" "${helper_dir}/${path}"
+            else
+              git show "upstream/main:${path}" > "${helper_dir}/${path}"
+            fi
+          done
+
+          excludes_file="${helper_dir}/build-support/excludes"
+          source_dirs="${GITHUB_WORKSPACE}/be/src,${GITHUB_WORKSPACE}/be/test"
+
+          if [[ "${base_ref_exists}" != "true" ]]; then
+            echo "${FORMAT_BASE_REF} not found; formatting all C++ files."
+            python3 "${helper_dir}/build-support/run_clang_format.py" \
+              --clang_format_binary="${CLANG_FORMAT_BINARY}" \
+              --fix \
+              --source_dirs="${source_dirs}" \
+              --exclude_globs="${excludes_file}"
+            exit 0
+          fi
+
+          changed_files=$(
+            {
+              git diff --name-only --diff-filter=ACMR "${FORMAT_BASE_REF}...HEAD"
+              git diff --name-only --diff-filter=ACMR --cached -- be
+              git diff --name-only --diff-filter=ACMR -- be
+            } | sort -u
+          )
+
+          if [[ -z "${changed_files}" ]]; then
+            echo "No files changed since ${FORMAT_BASE_REF}."
+            exit 0
+          fi
+
+          tmpfile=$(mktemp)
+          trap 'rm -f "${tmpfile}"; rm -rf "${helper_dir}"' EXIT
+
+          python3 "${helper_dir}/build-support/format_changed_files.py" \
+            --repo_root "${GITHUB_WORKSPACE}" \
+            --exclude_globs "${excludes_file}" \
+            --source_dirs "${source_dirs}" \
+            --null < <(printf '%s\n' "${changed_files}") > "${tmpfile}"
+
+          if [[ ! -s "${tmpfile}" ]]; then
+            echo "No changed C++ files to format since ${FORMAT_BASE_REF}."
+            exit 0
+          fi
+
+          echo "C++ files to format:"
+          while IFS= read -r -d '' filename; do
+            echo "${filename}"
+          done < "${tmpfile}"
+
+          xargs -0 -n 16 "${CLANG_FORMAT_BINARY}" -style=file -i < "${tmpfile}"
+
+      - name: Commit and push formatting fixes
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PAT: ${{ secrets.PAT }}
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git add -u
+          git commit -m "style: auto-fix clang-format issues"
+
+          if git push https://x-access-token:${PAT}@github.com/${HEAD_REPO}.git HEAD:${HEAD_REF}; then
+            echo "Formatting fixes pushed successfully."
+          else
+            git reset HEAD~1
+            echo "::error::Auto-push failed. Files that need formatting:"
+            git diff --name-only
+            if [ "${HEAD_REPO}" != "${{ github.repository }}" ]; then
+              echo "::error::This is a fork PR. Please enable 'Allow edits from maintainers' on your PR."
+            else
+              echo "::error::Same-repo push failed unexpectedly. Check repository permissions."
+            fi
+            echo "::error::To fix locally: CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh"
+            exit 1
+          fi

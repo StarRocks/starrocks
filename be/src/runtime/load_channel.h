@@ -41,6 +41,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -52,7 +53,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -143,7 +143,7 @@ private:
     void _check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms);
 
     LoadChannelMgr* _load_mgr;
-    LakeTabletManager* _lake_tablet_mgr;
+    [[maybe_unused]] LakeTabletManager* _lake_tablet_mgr;
     UniqueId _load_id;
     int64_t _txn_id;
     int64_t _timeout_s;

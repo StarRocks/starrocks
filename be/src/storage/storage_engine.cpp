@@ -47,10 +47,18 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
+#include "common/util/bthreads/executor.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
@@ -59,6 +67,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -78,12 +87,8 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
-#include "util/bthreads/executor.h"
-#include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -109,10 +114,8 @@ Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_
 }
 
 StorageEngine::StorageEngine(const EngineOptions& options)
-        : _effective_cluster_id(-1),
-          _options(options),
-          _available_storage_medium_type_count(0),
-          _is_all_cluster_id_exist(true),
+        : _options(options),
+
           _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _replication_txn_manager(new ReplicationTxnManager()),
@@ -1408,6 +1411,7 @@ bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id)
 void StorageEngine::increase_update_compaction_thread(const int num_threads_per_disk) {
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
+    data_dirs.reserve(_store_map.size());
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second.get());
     }

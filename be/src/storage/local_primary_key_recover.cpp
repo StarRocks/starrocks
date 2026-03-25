@@ -14,6 +14,7 @@
 
 #include "storage/local_primary_key_recover.h"
 
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
@@ -89,7 +90,7 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         // 2. get delete read files
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         std::vector<std::unique_ptr<RandomAccessFile>> del_rfs;
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
         std::vector<uint32_t> delidxs;
         for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
             auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
@@ -142,6 +143,10 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
 
 int64_t LocalPrimaryKeyRecover::tablet_id() {
     return _tablet->tablet_id();
+}
+
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyRecover::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
 }
 
 } // namespace starrocks

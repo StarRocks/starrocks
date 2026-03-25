@@ -21,10 +21,11 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
-#include "exprs/runtime_filter_bank.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 

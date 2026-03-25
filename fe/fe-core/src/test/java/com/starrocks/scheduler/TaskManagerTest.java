@@ -849,7 +849,7 @@ public class TaskManagerTest {
         taskRun1.getStatus().setPriority(0);
 
         String definition = taskRun1.getStatus().getDefinition();
-        Assertions.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4);
+        Assertions.assertTrue(definition.length() == SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1);
     }
 
     @Test

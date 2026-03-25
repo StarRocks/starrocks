@@ -22,12 +22,15 @@
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
 #include "benchgen/table.h"
-#include "common/config.h"
+#include "column/chunk.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/type_descriptor.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -36,7 +39,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
-        StarRocksMetrics::instance()->metrics()->set_collect_hook_enabled(true);
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
         _runtime_state = _create_runtime_state();

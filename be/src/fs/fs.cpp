@@ -14,25 +14,14 @@
 
 #include "fs/fs.h"
 
-#include <fmt/format.h>
+#include <ctime>
+#include <deque>
+#include <mutex>
+#include <unordered_map>
 
-#ifndef __APPLE__
-#include "fs/azure/fs_azblob.h"
-#endif
+#include "common/config_local_io_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
-#include "fs/fs_posix.h"
-#ifndef __APPLE__
-#include "fs/fs_s3.h"
-#endif
-#include "fs/fs_util.h"
-#ifndef __APPLE__
-#include "fs/hdfs/fs_hdfs.h"
-#endif
-#include "runtime/file_result_writer.h"
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-#include "fs/fs_starlet.h"
-#endif
 
 namespace starrocks {
 
@@ -57,128 +46,6 @@ std::unique_ptr<RandomAccessFile> RandomAccessFile::from(std::unique_ptr<io::See
     }
 }
 
-static thread_local std::shared_ptr<FileSystem> tls_fs_posix;
-#ifndef __APPLE__
-static thread_local std::shared_ptr<FileSystem> tls_fs_s3;
-#endif
-#ifndef __APPLE__
-static thread_local std::shared_ptr<FileSystem> tls_fs_hdfs;
-#endif
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-static thread_local std::shared_ptr<FileSystem> tls_fs_starlet;
-#endif
-
-#ifndef __APPLE__
-inline std::shared_ptr<FileSystem> get_tls_fs_hdfs() {
-    if (tls_fs_hdfs == nullptr) {
-        tls_fs_hdfs.reset(new_fs_hdfs(FSOptions()).release());
-    }
-    return tls_fs_hdfs;
-}
-#endif
-
-inline std::shared_ptr<FileSystem> get_tls_fs_posix() {
-    if (tls_fs_posix == nullptr) {
-        tls_fs_posix.reset(new_fs_posix().release());
-    }
-    return tls_fs_posix;
-}
-
-#ifndef __APPLE__
-inline std::shared_ptr<FileSystem> get_tls_fs_s3() {
-    if (tls_fs_s3 == nullptr) {
-        tls_fs_s3.reset(new_fs_s3(FSOptions()).release());
-    }
-    return tls_fs_s3;
-}
-#endif
-
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-inline std::shared_ptr<FileSystem> get_tls_fs_starlet() {
-    if (tls_fs_starlet == nullptr) {
-        tls_fs_starlet.reset(new_fs_starlet().release());
-    }
-    return tls_fs_starlet;
-}
-#endif
-
-StatusOr<std::shared_ptr<FileSystem>> FileSystem::Create(std::string_view uri, const FSOptions& options) {
-    if (!options._fs_options.empty()) {
-        return FileSystem::CreateUniqueFromString(uri, options);
-    } else {
-        return FileSystem::CreateSharedFromString(uri);
-    }
-}
-
-StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri,
-                                                                         const FSOptions& options) {
-#ifndef __APPLE__
-    if (fs::is_fallback_to_hadoop_fs(uri)) {
-        return new_fs_hdfs(options);
-    }
-#endif
-    if (fs::is_posix_uri(uri)) {
-        return new_fs_posix();
-    }
-#ifndef __APPLE__
-    if (fs::is_s3_uri(uri)) {
-        return new_fs_s3(options);
-    }
-#endif
-#ifndef __APPLE__
-    if (options.azure_use_native_sdk() && fs::is_azblob_uri(uri)) {
-        return new_fs_azblob(options);
-    }
-#endif
-#ifndef __APPLE__
-    if (fs::is_azure_uri(uri) || fs::is_gcs_uri(uri)) {
-        // TODO(SmithCruise):
-        // Now Azure storage and Google Cloud Storage both are using LibHdfs, we can use cpp sdk instead in the future.
-        return new_fs_hdfs(options);
-    }
-#endif
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (is_starlet_uri(uri)) {
-        return new_fs_starlet();
-    }
-#endif
-    // Since almost all famous storage are compatible with Hadoop FileSystem, it's always a choice to fallback using
-    // Hadoop FileSystem to access storage.
-#ifndef __APPLE__
-    return new_fs_hdfs(options);
-#else
-    return Status::NotSupported("HDFS not supported");
-#endif
-}
-
-StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
-#ifndef __APPLE__
-    if (fs::is_fallback_to_hadoop_fs(uri)) {
-        return get_tls_fs_hdfs();
-    }
-#endif
-    if (fs::is_posix_uri(uri)) {
-        return get_tls_fs_posix();
-    }
-#ifndef __APPLE__
-    if (fs::is_s3_uri(uri)) {
-        return get_tls_fs_s3();
-    }
-#endif
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (is_starlet_uri(uri)) {
-        return get_tls_fs_starlet();
-    }
-#endif
-    // Since almost all famous storage are compatible with Hadoop FileSystem, it's always a choice to fallback using
-    // Hadoop FileSystem to access storage.
-#ifndef __APPLE__
-    return get_tls_fs_hdfs();
-#else
-    return Status::NotSupported("HDFS not supported");
-#endif
-}
-
 StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_with_bundling(
         const RandomAccessFileOptions& opts, const FileInfo& file_info) {
     if (file_info.bundle_file_offset.has_value() && file_info.bundle_file_offset.value() >= 0) {
@@ -193,47 +60,6 @@ StatusOr<std::unique_ptr<RandomAccessFile>> FileSystem::new_random_access_file_w
     } else {
         return new_random_access_file(opts, file_info);
     }
-}
-
-const THdfsProperties* FSOptions::hdfs_properties() const {
-    if (scan_range_params != nullptr && scan_range_params->__isset.hdfs_properties) {
-        return &scan_range_params->hdfs_properties;
-    } else if (export_sink != nullptr && export_sink->__isset.hdfs_properties) {
-        return &export_sink->hdfs_properties;
-    } else if (result_file_options != nullptr) {
-        return &result_file_options->hdfs_properties;
-    } else if (upload != nullptr && upload->__isset.hdfs_properties) {
-        return &upload->hdfs_properties;
-    } else if (download != nullptr && download->__isset.hdfs_properties) {
-        return &download->hdfs_properties;
-    }
-    return nullptr;
-}
-
-const TCloudConfiguration* FSOptions::get_cloud_configuration() const {
-    if (cloud_configuration != nullptr) {
-        return cloud_configuration;
-    }
-
-    const THdfsProperties* t_hdfs_properties = hdfs_properties();
-    if (t_hdfs_properties != nullptr) {
-        return &(t_hdfs_properties->cloud_configuration);
-    }
-
-    return nullptr;
-}
-
-bool FSOptions::azure_use_native_sdk() const {
-#ifndef __APPLE__
-    const auto* t_cloud_configuration = get_cloud_configuration();
-    if (t_cloud_configuration == nullptr) {
-        return false;
-    }
-
-    return t_cloud_configuration->__isset.azure_use_native_sdk && t_cloud_configuration->azure_use_native_sdk;
-#else
-    return false;
-#endif
 }
 
 static std::deque<FileWriteStat> file_write_history;

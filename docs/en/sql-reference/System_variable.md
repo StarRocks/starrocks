@@ -862,6 +862,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: false
 
+### profile_log_latency_threshold_ms
+
+* **Scope**: Session
+* **Description**: Minimum query latency (milliseconds) for the FE to write a profile to `fe.profile.log`. Only queries with execution time greater than or equal to this value are logged. When set to `-1` (default), the FE config `profile_log_latency_threshold_ms` is used. When set to `0`, all profiles are logged. When set to a positive value (e.g. `1000`), only queries with latency ≥ that value (in ms) are logged. Use this session variable to override the deployment-wide config per connection.
+* **Default**: -1
+* **Data type**: long
+* **Unit**: Milliseconds
+
 ### enable_query_cache
 
 * **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios).

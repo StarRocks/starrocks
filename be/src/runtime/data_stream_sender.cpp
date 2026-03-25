@@ -42,9 +42,17 @@
 #include <memory>
 #include <random>
 
+#include "base/brpc/brpc.h"
+#include "base/brpc/ref_count_closure.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
+#include "common/system/backend_options.h"
+#include "common/util/thrift_client.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
@@ -54,15 +62,10 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
-#include "service/backend_options.h"
-#include "service/brpc.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/ref_count_closure.h"
-#include "util/thrift_client.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -365,11 +368,9 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
-          _current_channel_idx(0),
+
           _part_type(sink.output_partition.type),
-          _profile(nullptr),
-          _serialize_chunk_timer(nullptr),
-          _bytes_sent_counter(nullptr),
+
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
           _enable_exchange_pass_through(enable_exchange_pass_through),
@@ -408,8 +409,8 @@ Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
-                                                &_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                       &_partition_expr_ctxs, state));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
         // NOTE: should never go here
         return Status::NotSupported("Range partition is not supported anymore.");
@@ -452,7 +453,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -498,7 +499,7 @@ DataStreamSender::~DataStreamSender() {
 Status DataStreamSender::open(RuntimeState* state) {
     // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
-    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -604,7 +605,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+Status DataStreamSender::close(RuntimeState* state, const Status& exec_status) {
     RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors
@@ -629,7 +630,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     for (auto& _channel : _channels) {
         _channel->close_wait(state);
     }
-    Expr::close(_partition_expr_ctxs, state);
+    ExprExecutor::close(_partition_expr_ctxs, state);
 
     return _close_status;
 }

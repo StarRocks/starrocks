@@ -123,6 +123,7 @@ statement
     | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
+    | adminShowTabletStatusStatement
     | adminRepairTableStatement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
@@ -738,7 +739,7 @@ showMaterializedViewsStatement
     ;
 
 dropMaterializedViewStatement
-    : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
+    : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName FORCE?
     ;
 
 alterMaterializedViewStatement
@@ -746,8 +747,18 @@ alterMaterializedViewStatement
         refreshSchemeDesc |
         tableRenameClause |
         modifyPropertiesClause |
-        swapTableClause )
+        swapTableClause |
+        addMVColumnClause |
+        dropMVColumnClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
+    ;
+
+addMVColumnClause
+    : ADD COLUMN columnName=identifier AS aggregateExpression=expression defaultDesc? (COMMENT string)?
+    ;
+
+dropMVColumnClause
+    : DROP COLUMN columnName=identifier
     ;
 
 refreshMaterializedViewStatement
@@ -780,6 +791,10 @@ adminShowReplicaDistributionStatement
 
 adminShowReplicaStatusStatement
     : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? showPredicateClauses
+    ;
+
+adminShowTabletStatusStatement
+    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? showPredicateClauses properties?
     ;
 
 adminRepairTableStatement
@@ -979,6 +994,7 @@ alterClause
     | dropColumnClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
+    | replacePartitionColumnClause
     | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
@@ -1140,6 +1156,10 @@ dropColumnClause
 
 dropPartitionColumnClause
     : DROP PARTITION COLUMN expressionList
+    ;
+
+replacePartitionColumnClause
+    : REPLACE PARTITION COLUMN oldPartitionExpr=expression WITH newPartitionExpr=expression
     ;
 
 modifyColumnClause
@@ -2518,6 +2538,14 @@ namedArgument
     | identifier '=' expression                                                         #namedArguments
     ;
 
+functionNamedArgumentList
+    : functionNamedArgument (',' functionNamedArgument)*
+    ;
+
+functionNamedArgument
+    : identifier '=>' expression
+    ;
+
 joinRelation
     : asofJoinType bracketHint?
             rightRelation=relationPrimary joinCriteria
@@ -2758,6 +2786,7 @@ functionCall
     | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
+    | qualifiedName '(' functionNamedArgumentList ')'                                     #namedArgsFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 

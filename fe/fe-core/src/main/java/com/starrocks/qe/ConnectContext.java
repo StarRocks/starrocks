@@ -231,6 +231,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isPlanning = false;
     protected volatile boolean isForward = false;
 
     private ConnectContext parent;
@@ -238,6 +239,9 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
+    // Control whether to read Iceberg caches without populating/updating them for the current execution.
+    private boolean onlyReadIcebergCache = false;
 
     private UUID sessionId;
 
@@ -263,9 +267,6 @@ public class ConnectContext {
     // session level SPM storage
     private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
 
-    // Whether leader is transferred during executing stmt
-    private boolean isLeaderTransferred = false;
-
     private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
 
     // thread id is the thread who created this ConnectContext's id
@@ -279,6 +280,9 @@ public class ConnectContext {
 
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
+
+    // Track if current write is CTAS (Create Table As Select)
+    private boolean isCTAS = false;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -889,6 +893,16 @@ public class ConnectContext {
             return;
         }
         closed = true;
+        // Clean up explicit transaction state to prevent memory leak in explicitTxnStateMap
+        if (txnId != 0) {
+            try {
+                globalStateMgr.getGlobalTransactionMgr()
+                        .clearExplicitTxnState(txnId);
+            } catch (Exception e) {
+                // Ignore exceptions during cleanup to avoid masking the original close reason
+            }
+            txnId = 0;
+        }
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -1132,7 +1146,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();
@@ -1285,6 +1305,47 @@ public class ConnectContext {
 
     public void setQuerySource(QuerySource querySource) {
         this.querySource = querySource;
+    }
+
+    public boolean isOnlyReadIcebergCache() {
+        return onlyReadIcebergCache;
+    }
+
+    public void setOnlyReadIcebergCache(boolean onlyReadIcebergCache) {
+        this.onlyReadIcebergCache = onlyReadIcebergCache;
+    }
+
+    /**
+     * Scope helper to enable only-read-iceberg-cache semantics with automatic restore.
+     * Use in try-with-resources to mimic defer behavior.
+     */
+    public static ContextScope enterOnlyReadIcebergCacheScope(ConnectContext ctx) {
+        ConnectContext target = ctx != null ? ctx : new ConnectContext();
+        boolean originOnlyRead = target.isOnlyReadIcebergCache();
+        QuerySource originSource = target.getQuerySource();
+        target.setOnlyReadIcebergCache(true);
+        return new ContextScope(target, originOnlyRead, originSource);
+    }
+
+    public static class ContextScope implements AutoCloseable {
+        private final ConnectContext ctx;
+        private final boolean originOnlyRead;
+        private final QuerySource originSource;
+
+        ContextScope(ConnectContext ctx, boolean originOnlyRead, QuerySource originSource) {
+            this.ctx = ctx;
+            this.originOnlyRead = originOnlyRead;
+            this.originSource = originSource;
+        }
+
+        public ConnectContext getContext() {
+            return ctx;
+        }
+
+        @Override
+        public void close() {
+            ctx.setOnlyReadIcebergCache(originOnlyRead);
+        }
     }
 
     public void startAcceptQuery(ConnectProcessor connectProcessor) {
@@ -1477,6 +1538,14 @@ public class ConnectContext {
         return isPending;
     }
 
+    public void setPlanning(boolean planning) {
+        isPlanning = planning;
+    }
+
+    public boolean isPlanning() {
+        return isPlanning;
+    }
+
     public void setIsForward(boolean forward) {
         isForward = forward;
     }
@@ -1575,8 +1644,32 @@ public class ConnectContext {
         dbName = normalizeName(dbName);
 
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            // On a follower FE, the database may have been created on the leader but the
+            // corresponding journal entry has not been replayed locally yet. Wait for the
+            // local replayer to catch up to the latest committed journal before giving up.
+            // This avoids spurious "Unknown database" errors when DDL statements are issued
+            // immediately after CREATE DATABASE hits a different FE pod.
+            if (!globalStateMgr.isLeader()) {
+                try {
+                    // Fetch the leader's current max journal ID via a lightweight forward RPC.
+                    // Using the local journal.getMaxJournalId() is insufficient because BDBJE
+                    // replication itself may not have delivered the latest entries to the local
+                    // BDB database yet. The leader's value is authoritative and guaranteed to be
+                    // >= any journal ID written before this USE/COM_INIT_DB arrived.
+                    long leaderMaxJournalId = LeaderOpExecutor.fetchLeaderMaxJournalId(this);
+                    if (leaderMaxJournalId > 0) {
+                        int timeoutMs = (int) (getSessionVariable().getQueryTimeoutS() * 1000L);
+                        globalStateMgr.getJournalObservable().waitOn(leaderMaxJournalId, timeoutMs);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to wait for journal replay in changeCatalogDb, db={}: {}",
+                            dbName, e.getMessage());
+                }
+            }
+            if (metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
+                LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Here we check the request permission that sent by the mysql client or jdbc.
@@ -1645,14 +1738,6 @@ public class ConnectContext {
             getState().setOk(0L, 0,
                     String.format("set session variables from user property failed: %s", e.getMessage()));
         }
-    }
-
-    public boolean isLeaderTransferred() {
-        return isLeaderTransferred;
-    }
-
-    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
-        this.isLeaderTransferred = isLeaderTransferred;
     }
 
     /**
@@ -1783,6 +1868,14 @@ public class ConnectContext {
 
     public FinishSinkHandler getFinishSinkHandler() {
         return handler;
+    }
+
+    public void setCTAS(boolean isCTAS) {
+        this.isCTAS = isCTAS;
+    }
+
+    public boolean isCTAS() {
+        return isCTAS;
     }
 
     public interface Listener {

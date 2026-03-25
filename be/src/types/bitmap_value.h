@@ -52,7 +52,6 @@
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/string/slice.h"
-#include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
 

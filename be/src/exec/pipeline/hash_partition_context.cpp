@@ -15,13 +15,16 @@
 #include "exec/pipeline/hash_partition_context.h"
 
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
 Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profile) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -67,7 +70,7 @@ bool HashPartitionContext::is_finished() {
 StatusOr<ChunkPtr> HashPartitionContext::pull_one_chunk(RuntimeState* state) {
     if (!_chunks_partitioner->is_hash_map_eos()) {
         RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
-            _acc.push(std::move(chunk));
+            _acc.push(chunk);
             return _acc.need_input();
         }));
         if (_chunks_partitioner->is_hash_map_eos()) {

@@ -16,6 +16,8 @@
 
 #include "common/statusor.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
+#include "runtime/descriptors.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet.h"
@@ -58,7 +60,7 @@ struct SchemaChangeParams {
 
 class ChunkChanger {
 public:
-    ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+    ChunkChanger(TabletSchemaCSPtr base_schema, const TabletSchemaCSPtr& new_schema,
                  std::vector<std::string>& base_table_column_names, TAlterJobType::type alter_job_type);
     ChunkChanger(const TabletSchemaCSPtr& new_schema);
     ~ChunkChanger();
@@ -67,7 +69,7 @@ public:
 
     Status prepare_where_expr(const TExpr& where_expr) {
         VLOG(2) << "parse contain where expr";
-        RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&_obj_pool, where_expr, &_where_expr, _state));
         RETURN_IF_ERROR(_where_expr->prepare(_state));
         RETURN_IF_ERROR(_where_expr->open(_state));
         return Status::OK();

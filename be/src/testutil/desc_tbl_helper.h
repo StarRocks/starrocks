@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

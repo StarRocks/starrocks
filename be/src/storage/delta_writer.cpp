@@ -16,11 +16,17 @@
 
 #include <utility>
 
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -33,7 +39,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -47,21 +52,19 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
 }
 
 DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(std::move(opt)),
+        : _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
-          _schema_initialized(false),
+
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
-          _segment_flush_token(nullptr),
-          _with_rollback_log(true) {}
+          _segment_flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
@@ -698,7 +701,11 @@ Status DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
-    RETURN_IF_ERROR(_mem_table->prepare());
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
     return Status::OK();
@@ -882,17 +889,19 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
 Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;

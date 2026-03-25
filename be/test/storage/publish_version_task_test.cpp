@@ -27,10 +27,11 @@
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -54,7 +55,6 @@
 #include "storage/update_manager.h"
 #include "types/time_types.h"
 #include "util/logging.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

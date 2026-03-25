@@ -42,8 +42,8 @@
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "common/status.h"
+#include "common/util/debug_util.h"
 #include "gen_cpp/segment.pb.h"
-#include "util/debug_util.h"
 
 namespace starrocks {
 

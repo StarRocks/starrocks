@@ -17,11 +17,12 @@
 #include <fmt/format.h>
 
 #include <map>
+#include <utility>
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "connector/utils.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 class LoadChunkSpiller;
@@ -33,8 +34,8 @@ class SpillPartitionChunkWriter;
 
 class ConnectorSinkExecutor {
 public:
-    ConnectorSinkExecutor(const std::string& executor_name) : _executor_name(executor_name) {}
-    virtual ~ConnectorSinkExecutor() {}
+    ConnectorSinkExecutor(std::string executor_name) : _executor_name(std::move(executor_name)) {}
+    virtual ~ConnectorSinkExecutor() = default;
 
     virtual Status init() = 0;
 

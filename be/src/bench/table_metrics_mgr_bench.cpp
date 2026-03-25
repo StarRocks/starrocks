@@ -20,8 +20,8 @@
 #include <memory>
 
 #include "base/metrics.h"
-#include "common/config.h"
-#include "util/table_metrics.h"
+#include "common/config_metrics_fwd.h"
+#include "common/util/table_metrics.h"
 
 namespace starrocks {
 

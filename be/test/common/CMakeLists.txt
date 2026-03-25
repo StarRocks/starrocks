@@ -14,9 +14,17 @@
 
 set(COMMON_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    backend_options_test.cpp
     config_test.cpp
     cow_test.cpp
     process_exit_test.cpp
+    runtime_profile_test.cpp
+    stack_trace_mutex_test.cpp
+    table_metrics_mgr_test.cpp
+    thrift_client_test.cpp
+    thread/cpu_usage_info_test.cpp
+    thread/thread_test.cpp
+    thread/threadpool_test.cpp
     tracer_test.cpp
 )
 
@@ -27,7 +35,7 @@ set(COMMON_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

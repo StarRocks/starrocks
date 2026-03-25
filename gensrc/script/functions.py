@@ -442,6 +442,11 @@ vectorized_functions = [
 
     [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
+    # raise_error always throws a RuntimeException at runtime for non-null input.
+    # BOOLEAN is used as a placeholder return type (consistent with Trino); the function
+    # returns NULL for NULL input and never produces a non-null BOOLEAN value.
+    [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -888,6 +893,10 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110025, "json_set", False, False, "JSON", ["JSON", "JSON", "..."], "JsonFunctions::json_set"],
     [110026, "json_pretty", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_pretty"],
+    [110027, "get_json_scalar", False, True,  "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110028, "get_json_scalar", False, True,  "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],

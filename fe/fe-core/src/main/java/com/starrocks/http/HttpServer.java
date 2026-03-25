@@ -103,6 +103,7 @@ import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.http.rest.v2.BackendActionV2;
+import com.starrocks.http.rest.v2.ClusterSummaryActionV2;
 import com.starrocks.http.rest.v2.ComputeNodeActionV2;
 import com.starrocks.http.rest.v2.ProfileActionV2;
 import com.starrocks.http.rest.v2.QueryDetailActionV2;
@@ -246,6 +247,7 @@ public class HttpServer {
         QueryDumpAction.registerAction(controller);
         SyncCloudTableMetaAction.registerAction(controller);
         IdleAction.registerAction(controller);
+        ClusterSummaryActionV2.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);

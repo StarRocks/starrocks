@@ -34,8 +34,10 @@
 
 #include "storage/rowset/encoding_info.h"
 
+#include <cmath>
 #include <type_traits>
 
+#include "common/config_rowset_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"
@@ -48,6 +50,11 @@
 #include "storage/rowset/rle_page.h"
 
 namespace starrocks {
+
+bool enable_non_string_column_dict_encoding() {
+    static constexpr double epsilon = 0.0001;
+    return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
+}
 
 struct EncodingMapHash {
     size_t operator()(const std::pair<LogicalType, EncodingTypePB>& pair) const {

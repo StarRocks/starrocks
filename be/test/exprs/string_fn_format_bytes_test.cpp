@@ -52,7 +52,7 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesBasicTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int i = 0; i < test_cases.size(); ++i) {
-        ASSERT_EQ(std::get<1>(test_cases[i]), v->get_data()[i].to_string())
+        ASSERT_EQ(std::get<1>(test_cases[i]), v->get_slice(i).to_string())
                 << "Failed for input: " << std::get<0>(test_cases[i]);
     }
 }
@@ -189,7 +189,7 @@ TEST_F(StringFunctionFormatBytesTest, formatBytesPrecisionTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int i = 0; i < precision_cases.size(); ++i) {
-        ASSERT_EQ(std::get<1>(precision_cases[i]), v->get_data()[i].to_string())
+        ASSERT_EQ(std::get<1>(precision_cases[i]), v->get_slice(i).to_string())
                 << "Failed precision test for input: " << std::get<0>(precision_cases[i]);
     }
 }

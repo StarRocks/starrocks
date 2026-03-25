@@ -14,11 +14,18 @@
 
 #pragma once
 
+#include <unordered_map>
+
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "hive_chunk_sink.h"
+
+namespace starrocks {
+class HiveTableDescriptor;
+}
 
 namespace starrocks::connector {
 
@@ -42,7 +49,7 @@ public:
     ~HiveDataSourceProvider() override = default;
     friend class HiveDataSource;
     HiveDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    HiveDataSourceProvider(ConnectorScanNode* scan_node, const THdfsScanNode& hdfs_scan_node);
+    HiveDataSourceProvider(ConnectorScanNode* scan_node, int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
@@ -52,6 +59,7 @@ public:
     friend class HiveDataSource;
 
 protected:
+    int32_t _plan_node_id;
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
@@ -150,6 +158,9 @@ private:
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
     std::vector<int> _materialize_index_in_chunk;
+    // default values for materialize_slots that have default value defined.
+    // used when the slot doesn't exist in the data file during scanning.
+    std::unordered_map<SlotId, std::string> _materialize_slot_default_values;
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
@@ -179,6 +190,8 @@ private:
     bool _use_partition_column_value_only = false;
     // only used in global late materialization
     int32_t _scan_range_id = -1;
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
+    bool _disable_column_access_path_hints = false;
 
     // ======================================
     // The following are profile metrics

@@ -33,17 +33,18 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
 
 TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode) {
+        : PipelineNode(pool, tnode, descs), _tnode(tnode) {
     _sort_keys = tnode.sort_node.__isset.sql_sort_keys ? tnode.sort_node.sql_sort_keys : "NONE";
     _offset = tnode.sort_node.__isset.offset ? tnode.sort_node.offset : 0;
     _materialized_tuple_desc = nullptr;
-    _sort_timer = nullptr;
 }
 
 TopNNode::~TopNNode() {
@@ -58,10 +59,10 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
-                                                &_analytic_partition_exprs, state));
-        RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
-        RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
+                                                       &_analytic_partition_exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
             auto& type_desc = expr->root()->type();
             if (!type_desc.support_groupby()) {
@@ -74,7 +75,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.partition_exprs) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
+                ExprFactory::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
     }
 
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
@@ -148,67 +149,6 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     return Status::OK();
 }
 
-Status TopNNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor));
-
-    _abort_on_default_limit_exceeded = _abort_on_default_limit_exceeded && state->abort_on_default_limit_exceeded();
-
-    _sort_timer = ADD_TIMER(runtime_profile(), "ChunksSorter");
-    return Status::OK();
-}
-
-Status TopNNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Top n, before open."));
-    RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-
-    // sort all input chunk in turn, keep top N rows.
-    ExecNode* data_source = child(0);
-    RETURN_IF_ERROR(data_source->open(state));
-    Status status = _consume_chunks(state, data_source);
-    data_source->close(state);
-
-    _mem_tracker->set(_chunks_sorter->mem_usage());
-
-    return status;
-}
-
-Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Top n, before moving result to chunk."));
-
-    if (_chunks_sorter == nullptr) {
-        *eos = true;
-        *chunk = nullptr;
-        return Status::OK();
-    }
-
-    {
-        SCOPED_TIMER(_sort_timer);
-        RETURN_IF_ERROR(_chunks_sorter->get_next(chunk, eos));
-    }
-    if (*eos) {
-        _chunks_sorter = nullptr;
-    } else {
-        _num_rows_returned += (*chunk)->num_rows();
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    }
-    if (_limit > 0 && reached_limit()) {
-        _chunks_sorter = nullptr;
-    }
-
-    DCHECK_CHUNK(*chunk);
-    return Status::OK();
-}
-
 void TopNNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -217,51 +157,6 @@ void TopNNode::close(RuntimeState* state) {
 
     _sort_exec_exprs.close(state);
     ExecNode::close(state);
-}
-
-Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
-    ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
-    if (_limit > 0) {
-        // ChunksSorterHeapSort has higher performance when sorting fewer elements,
-        // after testing we think 1024 is a good threshold
-        if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
-            _chunks_sorter = std::make_unique<ChunksSorterHeapSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                    &_is_asc_order, &_is_null_first, _sort_keys,
-                                                                    _offset, _limit);
-        } else {
-            _chunks_sorter = std::make_unique<ChunksSorterTopn>(
-                    state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
-                    ChunksSorterTopn::kDefaultMaxBufferBytes, ChunksSorterTopn::max_buffered_chunks(_limit));
-        }
-
-    } else {
-        _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys, 1024000,
-                                                                16 * 1024 * 1024, _early_materialized_slots);
-    }
-
-    bool eos = false;
-    _chunks_sorter->setup_runtime(state, runtime_profile(), runtime_state()->instance_mem_tracker());
-    do {
-        RETURN_IF_CANCELLED(state);
-        ChunkPtr chunk;
-        timer.stop();
-        RETURN_IF_ERROR(child->get_next(state, &chunk, &eos));
-        if (_abort_on_default_limit_exceeded && _limit > 0 && child->rows_returned() > _limit) {
-            return Status::InternalError("DEFAULT_ORDER_BY_LIMIT has been exceeded.");
-        }
-        timer.start();
-        if (chunk != nullptr && chunk->num_rows() > 0) {
-            auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
-                                                                                 _sort_exec_exprs, _order_by_types);
-            RETURN_IF_ERROR(materialize_chunk);
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
-        }
-    } while (!eos);
-
-    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->done(state)));
-    return Status::OK();
 }
 
 template <class ContextFactory, class SinkFactory, class SourceFactory>

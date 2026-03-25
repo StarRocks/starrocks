@@ -25,10 +25,9 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/chunks_sorter_heap_sort.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_bank.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -130,7 +129,7 @@ private:
 class AggTopNRuntimeFilterBuilder {
 public:
     AggTopNRuntimeFilterBuilder(RuntimeFilterBuildDescriptor* build_desc, LogicalType type)
-            : _build_desc(build_desc), _type(type), _runtime_filter(nullptr), _heap_builder(nullptr) {}
+            : _build_desc(build_desc), _type(type) {}
     RuntimeFilter* build(Aggregator* aggretator, ObjectPool* pool);
 
     // update the topn runtime filter with the new group keys
@@ -143,9 +142,9 @@ private:
     LogicalType _type{};
 
     // the topn runtime filter
-    RuntimeFilter* _runtime_filter;
+    RuntimeFilter* _runtime_filter{nullptr};
     // the heap builder for the topn runtime filter
-    HeapBuilder* _heap_builder;
+    HeapBuilder* _heap_builder{nullptr};
 };
 
 } // namespace starrocks

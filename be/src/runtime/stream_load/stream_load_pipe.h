@@ -37,10 +37,11 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <utility>
 
 #include "base/bit/bit_util.h"
 #include "gen_cpp/Types_types.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "runtime/message_body_sink.h"
 #include "util/byte_buffer.h"
 #include "util/compression/stream_decompressor.h"
@@ -140,8 +141,8 @@ private:
 
 class StreamLoadPipeReader {
 public:
-    StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(pipe) {}
-    virtual ~StreamLoadPipeReader() {}
+    StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(std::move(pipe)) {}
+    virtual ~StreamLoadPipeReader() = default;
     virtual StatusOr<ByteBufferPtr> read() { return _pipe->read(); }
 
 private:

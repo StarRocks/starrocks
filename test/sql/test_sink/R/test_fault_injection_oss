@@ -284,3 +284,6 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0
 0
 
 -- !result
+CLEANUP {
+    admin disable failpoint 'output_stream_io_error';
+} END CLEANUP

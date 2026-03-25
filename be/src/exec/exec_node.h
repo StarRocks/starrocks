@@ -40,14 +40,14 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 
@@ -56,7 +56,6 @@ class ExprContext;
 class ObjectPool;
 class RuntimeState;
 class SlotRef;
-class TPlan;
 class DataSink;
 
 namespace pipeline {
@@ -147,28 +146,12 @@ public:
     // each implementation should start out by calling the default implementation.
     virtual void close(RuntimeState* state);
 
-    // Creates exec node tree from list of nodes contained in plan via depth-first
-    // traversal. All nodes are placed in pool.
-    // Returns error if 'plan' is corrupted, otherwise success.
-    static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
-                              ExecNode** root);
-
     // Collect all nodes of given 'node_type' that are part of this subtree, and return in
     // 'nodes'.
     void collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode*>* nodes);
 
     // Collect all scan node types.
     void collect_scan_nodes(std::vector<ExecNode*>* nodes);
-
-    // evaluate exprs over chunk to get a filter
-    // if filter_ptr is not null, save filter to filter_ptr.
-    // then running filter on chunk.
-    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr = nullptr,
-                                 bool apply_filter = true);
-    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
-                                                       Filter* filter);
-
-    static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
 
     Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
     void register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc);
@@ -243,9 +226,8 @@ public:
     void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
 
     const std::vector<ExecNode*>& children() const { return _children; }
-
-    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                         const DescriptorTbl& descs, ExecNode** node);
+    void reserve_children(size_t n) { _children.reserve(n); }
+    void add_child(ExecNode* child) { _children.emplace_back(child); }
 
 protected:
     friend class DataSink;
@@ -269,21 +251,21 @@ protected:
 
     // debug-only: if _debug_action is not INVALID, node will perform action in
     // _debug_phase
-    TExecNodePhase::type _debug_phase;
-    TDebugAction::type _debug_action;
+    TExecNodePhase::type _debug_phase{TExecNodePhase::INVALID};
+    TDebugAction::type _debug_action{TDebugAction::WAIT};
 
     int64_t _limit; // -1: no limit
-    int64_t _num_rows_returned;
+    int64_t _num_rows_returned{0};
 
     std::shared_ptr<RuntimeProfile> _runtime_profile;
 
     /// Account for peak memory used by this node
     std::shared_ptr<MemTracker> _mem_tracker;
 
-    RuntimeProfile::Counter* _rows_returned_counter;
-    RuntimeProfile::Counter* _rows_returned_rate;
+    RuntimeProfile::Counter* _rows_returned_counter{nullptr};
+    RuntimeProfile::Counter* _rows_returned_rate{nullptr};
     // Account for peak memory used by this node
-    RuntimeProfile::Counter* _memory_used_counter;
+    RuntimeProfile::Counter* _memory_used_counter{nullptr};
 
     // Mappings from input slot to output slot of ancestor nodes (include itself).
     // It is used for pipeline to rewrite runtime in filters.
@@ -297,9 +279,6 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
-    static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
-                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
-
     virtual bool is_scan_node() const { return false; }
 
     void init_runtime_profile(const std::string& name);
@@ -312,9 +291,7 @@ protected:
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
-    // TODO: delete this function if removed tupleId
-    Status static checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode);
-    RuntimeState* _runtime_state;
-    bool _is_closed;
+    RuntimeState* _runtime_state{nullptr};
+    bool _is_closed{false};
 };
 } // namespace starrocks

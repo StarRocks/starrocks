@@ -1,0 +1,251 @@
+-- name: test_sort_key_add_key_column_agg
+create database test_agg_add_key_sort_${uuid0};
+-- result:
+-- !result
+use test_agg_add_key_sort_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `agg_t` (
+    `k1` int NOT NULL,
+    `k2` int NOT NULL,
+    `v1` bigint SUM DEFAULT '0',
+    `v2` bigint SUM DEFAULT '0'
+)
+AGGREGATE KEY(k1, k2)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+ORDER BY(k2, k1)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into agg_t values (1, 3, 10, 20), (2, 1, 30, 40), (3, 2, 50, 60);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	3	10	20
+2	1	30	40
+3	2	50	60
+-- !result
+alter table agg_t add column k3 int default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	3	0	10	20
+2	1	0	30	40
+3	2	0	50	60
+-- !result
+insert into agg_t values (4, 4, 70, 80, 1);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	3	0	10	20
+2	1	0	30	40
+3	2	0	50	60
+4	4	70	80	1
+-- !result
+insert into agg_t values (1, 3, 0, 5, 5), (2, 1, 0, 10, 10);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	3	0	15	25
+2	1	0	40	50
+3	2	0	50	60
+4	4	70	80	1
+-- !result
+select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
+-- result:
+1	3	15	25
+2	1	40	50
+-- !result
+alter table agg_t add column k4 int default '0' after k1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	15	25
+2	0	1	0	40	50
+3	0	2	0	50	60
+4	0	4	70	80	1
+-- !result
+insert into agg_t values (5, 2, 90, 100, 1, 2);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	15	25
+2	0	1	0	40	50
+3	0	2	0	50	60
+4	0	4	70	80	1
+5	2	90	100	1	2
+-- !result
+insert into agg_t values (1, 0, 3, 0, 5, 5), (2, 0, 1, 0, 10, 10);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	20	30
+2	0	1	0	50	60
+3	0	2	0	50	60
+4	0	4	70	80	1
+5	2	90	100	1	2
+-- !result
+select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
+-- result:
+1	3	20	30
+2	1	50	60
+-- !result
+alter table agg_t add column k5 int default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	20	30
+2	0	1	0	0	50	60
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+-- !result
+insert into agg_t values (6, 3, 110, 120, 1, 2, 3);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	20	30
+2	0	1	0	0	50	60
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+-- !result
+insert into agg_t values (1, 0, 3, 0, 0, 5, 5), (2, 0, 1, 0, 0, 10, 10);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	25	35
+2	0	1	0	0	60	70
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+-- !result
+select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
+-- result:
+1	3	25	35
+2	1	60	70
+-- !result
+alter table agg_t order by (k1, k4, k5, k2, k3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	25	35
+2	0	1	0	0	60	70
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+-- !result
+insert into agg_t values (7, 1, 130, 140, 1, 2, 3);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	25	35
+2	0	1	0	0	60	70
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+7	1	130	140	1	2	3
+-- !result
+insert into agg_t values (1, 0, 3, 0, 0, 5, 5), (2, 0, 1, 0, 0, 10, 10);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	30	40
+2	0	1	0	0	70	80
+3	0	2	0	0	50	60
+4	0	4	70	0	80	1
+5	2	90	100	0	1	2
+6	3	110	120	1	2	3
+7	1	130	140	1	2	3
+-- !result
+select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
+-- result:
+1	3	30	40
+2	1	70	80
+-- !result
+alter table agg_t add column k6 int default '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	0	30	40
+2	0	1	0	0	0	70	80
+3	0	2	0	0	0	50	60
+4	0	4	70	0	0	80	1
+5	2	90	100	0	0	1	2
+6	3	110	120	1	0	2	3
+7	1	130	140	1	0	2	3
+-- !result
+insert into agg_t values (8, 2, 4, 1, 2, 4, 150, 160);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	0	30	40
+2	0	1	0	0	0	70	80
+3	0	2	0	0	0	50	60
+4	0	4	70	0	0	80	1
+5	2	90	100	0	0	1	2
+6	3	110	120	1	0	2	3
+7	1	130	140	1	0	2	3
+8	2	4	1	2	4	150	160
+-- !result
+insert into agg_t values (1, 0, 3, 0, 0, 0, 5, 5), (2, 0, 1, 0, 0, 0, 10, 10);
+-- result:
+-- !result
+select * from agg_t order by k1;
+-- result:
+1	0	3	0	0	0	35	45
+2	0	1	0	0	0	80	90
+3	0	2	0	0	0	50	60
+4	0	4	70	0	0	80	1
+5	2	90	100	0	0	1	2
+6	3	110	120	1	0	2	3
+7	1	130	140	1	0	2	3
+8	2	4	1	2	4	150	160
+-- !result
+select k1, k2, v1, v2 from agg_t where k1 in (1, 2) order by k1;
+-- result:
+1	3	35	45
+2	1	80	90
+-- !result
+drop database test_agg_add_key_sort_${uuid0} force;
+-- result:
+-- !result

@@ -14,12 +14,14 @@
 
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
+#include "common/config_exec_flow_fwd.h"
 #include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
@@ -84,7 +86,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     if (_stream_recvr != nullptr) {
         return _stream_recvr;
     }
-    auto query_statistic_recv = state->query_recv();
+    auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, false, query_statistic_recv, true, _degree_of_parallelism, false);

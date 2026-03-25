@@ -18,9 +18,9 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/runtime_profile.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 

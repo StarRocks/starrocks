@@ -23,6 +23,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -104,6 +105,7 @@ public:
         fe.port = 9020;
         _fragment_ctx->set_fe_addr(fe);
         _state->set_fragment_ctx(_fragment_ctx.get());
+        _state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
         _tnode = std::make_unique<TPlanNode>();

@@ -16,11 +16,12 @@
 #include <map>
 
 #include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
@@ -54,7 +55,7 @@ private:
     std::mutex _mutex;
     const TUniqueId _query_id;
     std::unordered_map<Key, PassThroughChannel*, KeyHash> _key_to_channel;
-    int _ref_count;
+    int _ref_count{1};
 };
 
 class PassThroughContext {
