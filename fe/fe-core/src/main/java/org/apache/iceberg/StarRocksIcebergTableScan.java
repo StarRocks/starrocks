@@ -252,8 +252,8 @@ public class StarRocksIcebergTableScan
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
             for (ManifestFile manifestFile : deleteManifests) {
-                Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(manifestFile.path());
-                if (deleteFiles != null && !deleteFiles.isEmpty()) {
+                Set<DeleteFile> deleteFiles = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (deleteFiles != null) {
                     scanMetrics().scannedDeleteManifests().increment();
                     int entrySize = deleteFiles.size();
                     if (filter() != null && filter() != Expressions.alwaysTrue()) {
@@ -286,10 +286,12 @@ public class StarRocksIcebergTableScan
         List<Pair<ManifestFile, Set<DataFile>>> dataManifestWithCache = new ArrayList<>();
         List<ManifestFile> dataManifestWithoutCache = new ArrayList<>();
         for (ManifestFile manifestFile : dataManifests) {
-            Set<DataFile> dataFiles = dataFileCache.getIfPresent(manifestFile.path());
-            if (dataFiles != null && !dataFiles.isEmpty()) {
-                dataManifestWithCache.add(new Pair(manifestFile, dataFiles));
+            Set<DataFile> dataFiles = getCompleteCachedFiles(dataFileCache, manifestFile);
+            if (dataFiles != null) {
                 scanMetrics().scannedDataManifests().increment();
+                if (!dataFiles.isEmpty()) {
+                    dataManifestWithCache.add(new Pair(manifestFile, dataFiles));
+                }
             } else {
                 if (!onlyReadCache) {
                     dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
@@ -401,8 +403,8 @@ public class StarRocksIcebergTableScan
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
             for (ManifestFile manifestFile : deleteManifests) {
-                Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(manifestFile.path());
-                if (deleteFiles != null && !deleteFiles.isEmpty()) {
+                Set<DeleteFile> deleteFiles = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (deleteFiles != null) {
                     deleteFiles = deleteFiles.stream()
                             .filter(f -> f.content() == fileContent)
                             .collect(Collectors.toSet());
@@ -549,5 +551,41 @@ public class StarRocksIcebergTableScan
 
     public IcebergMetricsReporter getMetricsReporter() {
         return metricsReporter;
+    }
+
+    static Integer expectedLiveFilesCount(ManifestFile manifest) {
+        Integer existingFilesCount = manifest.existingFilesCount();
+        Integer addedFilesCount = manifest.addedFilesCount();
+        if (existingFilesCount == null || addedFilesCount == null) {
+            return null;
+        }
+        return existingFilesCount + addedFilesCount;
+    }
+
+    static boolean isCompleteCachedFiles(ManifestFile manifest, Set<?> files) {
+        if (files == null) {
+            return false;
+        }
+
+        Integer expectedLiveFilesCount = expectedLiveFilesCount(manifest);
+        if (expectedLiveFilesCount == null) {
+            // Without manifest counts, keep the previous "non-empty means usable" behavior,
+            // but still reject empty placeholders so they don't look like valid cache hits.
+            return !files.isEmpty();
+        }
+
+        return files.size() == expectedLiveFilesCount;
+    }
+
+    static <F> Set<F> getCompleteCachedFiles(Cache<String, Set<F>> cache, ManifestFile manifest) {
+        Set<F> files = cache.getIfPresent(manifest.path());
+        if (isCompleteCachedFiles(manifest, files)) {
+            return files;
+        }
+
+        if (files != null) {
+            cache.invalidate(manifest.path());
+        }
+        return null;
     }
 }
