@@ -123,6 +123,21 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, passwd);
     jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
     LOCAL_REF_GUARD_ENV(env, sql);
+<<<<<<< HEAD
+=======
+    // could be deleted, only for compatibilty
+    bool needs_query_time_zone = false;
+    for (SlotDescriptor* slot_desc : _slot_descs) {
+        auto type = slot_desc->type().type;
+        if (type == TYPE_DATETIME || type == TYPE_TIME) {
+            needs_query_time_zone = true;
+            break;
+        }
+    }
+    const std::string& query_time_zone_str = needs_query_time_zone ? state->timezone() : "";
+    jstring query_time_zone = env->NewStringUTF(query_time_zone_str.c_str());
+    LOCAL_REF_GUARD_ENV(env, query_time_zone);
+>>>>>>> 7c48b046aa ([BugFix] fix compat for oracle type (#70626))
     int statement_fetch_size = state->chunk_size();
     int connection_pool_size = config::jdbc_connection_pool_size;
     if (UNLIKELY(connection_pool_size <= 0)) {
