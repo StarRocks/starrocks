@@ -42,16 +42,16 @@ displayed_sidebar: docs
 - `desc_hint_split_range` が ≤ 0 に設定された場合、降順 TopN ランタイムフィルタの範囲分割とリバーススキャン最適化を無効化できるようにしました。[#70307](https://github.com/StarRocks/starrocks/pull/70307)
 - Trino 方言の `INSERT` ステートメントに `EXPLAIN` および `EXPLAIN ANALYZE` のサポートを追加しました。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
 - ポジションデリートが存在する場合の Iceberg 読み取り性能を最適化しました。[#69717](https://github.com/StarRocks/starrocks/pull/69717)
-- 分散キーに基づくマテリアライズドビュー最適選択戦略を改善し、MV 選択の精度を向上させました。[#69679](https://github.com/StarRocks/starrocks/pull/69679)
+- 分散キーに基づくマテリアライズドビュー最適選択戦略を改善し、マテリアライズドビュー選択の精度を向上させました。[#69679](https://github.com/StarRocks/starrocks/pull/69679)
 
 ### バグ修正
 
 以下の問題を修正しました：
 
 - JDBC MySQL プッシュダウンでサポートされていないキャスト操作が失敗する問題。[#70415](https://github.com/StarRocks/starrocks/pull/70415)
-- MV リフレッシュ時のパーティションタイプ不一致を解消するため、`mv_refresh_force_partition_type` 設定項目を追加しました。[#70381](https://github.com/StarRocks/starrocks/pull/70381)
+- マテリアライズドビューリフレッシュ時のパーティションタイプ不一致を解消するため、`mv_refresh_force_partition_type` 設定項目を追加しました。[#70381](https://github.com/StarRocks/starrocks/pull/70381)
 - バックアップから復元する際に `dataVersion` が正しく設定されない問題。[#70373](https://github.com/StarRocks/starrocks/pull/70373)
-- MV リフレッシュタスクでパーティション名が重複する問題。[#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- マテリアライズドビューリフレッシュタスクでパーティション名が重複する問題。[#70354](https://github.com/StarRocks/starrocks/pull/70354)
 - SLF4J のパラメータ化ログでプレースホルダーの代わりに文字列結合が使用される問題。[#70330](https://github.com/StarRocks/starrocks/pull/70330)
 - Hive テーブル作成時にコメントが設定されない問題。[#70318](https://github.com/StarRocks/starrocks/pull/70318)
 - HDFS のクローズが遅い場合に `FileSystemExpirationChecker` がブロックされる問題。[#70311](https://github.com/StarRocks/starrocks/pull/70311)
@@ -63,7 +63,7 @@ displayed_sidebar: docs
 - `AuditEventProcessor` スレッドが `OutOfMemoryException` により終了する問題。[#70206](https://github.com/StarRocks/starrocks/pull/70206)
 - `SplitTopNRule` がパーティションプルーニングを正しく適用しない問題。[#70154](https://github.com/StarRocks/starrocks/pull/70154)
 - スキーマ変更のパブリッシュ時に `cal_new_base_version` で範囲外アクセスが発生する問題。[#70132](https://github.com/StarRocks/starrocks/pull/70132)
-- MV 書き換え時にベーステーブルから削除されたパーティションが無視される問題。[#70130](https://github.com/StarRocks/starrocks/pull/70130)
+- マテリアライズドビュー書き換え時にベーステーブルから削除されたパーティションが無視される問題。[#70130](https://github.com/StarRocks/starrocks/pull/70130)
 - 境界比較における型不一致によりパーティション述語が意図せず削除される問題。[#70097](https://github.com/StarRocks/starrocks/pull/70097)
 - `str_to_date` が BE ランタイムでマイクロ秒精度を失う問題。[#70068](https://github.com/StarRocks/starrocks/pull/70068)
 - Join スピルプロセスが `set_callback_function` でクラッシュする問題。[#70030](https://github.com/StarRocks/starrocks/pull/70030)
@@ -84,7 +84,7 @@ displayed_sidebar: docs
 - Java UDTF/UDAF でメソッドパラメータにジェネリック型を使用するとクラッシュする問題。[#69197](https://github.com/StarRocks/starrocks/pull/69197)
 - クエリ計画完了後にクエリレベルのメタデータが解放されず、同時クエリ実行時に FE の OOM が発生する問題。[#68444](https://github.com/StarRocks/starrocks/pull/68444)
 - クエリスコープの Warehouse ヒントにより `ConnectContext` 内の `ComputeResource` がリークする問題。[#70706](https://github.com/StarRocks/starrocks/pull/70706)
-- ロックフリーの MV 書き換えがライブメタデータに誤ってフォールバックする問題。[#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- ロックフリーのマテリアライズドビュー書き換えがライブメタデータに誤ってフォールバックする問題。[#70475](https://github.com/StarRocks/starrocks/pull/70475)
 - `_tablet_multi_get_rpc` にクロージャの重複参照が存在する問題。[#70657](https://github.com/StarRocks/starrocks/pull/70657)
 - `ReplaceColumnRefRewriter` で無限再帰が発生する問題。[#66974](https://github.com/StarRocks/starrocks/pull/66974)
 - `NOT NULL` 制約が `FILES()` テーブル関数のスキーマに誤ってプッシュダウンされる問題。[#70621](https://github.com/StarRocks/starrocks/pull/70621)
