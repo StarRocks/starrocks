@@ -460,13 +460,6 @@ public class InsertAnalyzer {
             Locker locker = new Locker(session.getQueryId());
             locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
             try {
-                // get target column names
-                List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-                if (targetColumnNames == null) {
-                    targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toList());
-                }
-
                 // get select column names, null if it is not slot ref column.
                 // selectColumnNames: source column names used to locate the file column to rewrite.
                 // selectOutputNames: output names (alias if present, else source name) used to look up the
@@ -496,6 +489,18 @@ public class InsertAnalyzer {
                     selectOutputNames.add(null);
                 }
 
+                // get target column names
+                List<String> targetColumnNames;
+                if (insertStmt.isColumnMatchByName()) {
+                    targetColumnNames = selectOutputNames;
+                } else {
+                    targetColumnNames = insertStmt.getTargetColumnNames();
+                    if (targetColumnNames == null) {
+                        targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                                .map(Column::getName).collect(Collectors.toList());
+                    }
+                }
+
                 if (targetColumnNames.size() != selectColumnNames.size()) {
                     return;
                 }
@@ -512,14 +517,7 @@ public class InsertAnalyzer {
                         continue;
                     }
 
-                    // In BY NAME mode the output name (alias) is what gets matched to the target column,
-                    // so use selectOutputNames to find the right target column type.
-                    String targetColumnName;
-                    if (insertStmt.isColumnMatchByName()) {
-                        targetColumnName = selectOutputNames.get(i);
-                    } else {
-                        targetColumnName = targetColumnNames.get(i);
-                    }
+                    String targetColumnName = targetColumnNames.get(i);
                     if (!targetTableColumns.containsKey(targetColumnName)) {
                         continue;
                     }
