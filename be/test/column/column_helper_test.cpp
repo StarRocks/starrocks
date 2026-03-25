@@ -143,4 +143,12 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_const_column) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(const_col.get(), 3), 42);
 }
 
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
+    // NullableColumn: get_data_column unwraps it, row index used as-is
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
 } // namespace starrocks
