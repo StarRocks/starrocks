@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 DROP MATERIALIZED VIEW drops a materialized view.
 
-You cannot drop a synchronous materialized view that is being created in process with this command. To drop a synchronous materialized view that is being created in process, see [Synchronous materialized View - Drop an unfinished materialized view](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view) for further instructions.
+You cannot drop a synchronous materialized view that is being created in process with this command unless you use the **FORCE** option. With **FORCE**, StarRocks cancels any stuck sync MV build jobs, restores the base table state to NORMAL, and then drops the materialized view. Without FORCE, see [Synchronous materialized View - Drop an unfinished materialized view](../../../using_starrocks/Materialized_view-single_table.md#drop-an-unfinished-synchronous-materialized-view) for further instructions.
 
 :::tip
 
@@ -17,10 +17,10 @@ This operation requires the DROP privilege on the target materialized view.
 ## Syntax
 
 ```SQL
-DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name [FORCE]
 ```
 
-Parameters in brackets [] is optional.
+Parameters in brackets [] are optional.
 
 ## Parameters
 
@@ -28,6 +28,7 @@ Parameters in brackets [] is optional.
 | ------------- | ------------ | ------------------------------------------------------------ |
 | IF EXISTS     | no           | If this parameter is specified, StarRocks will not throw an exception when deleting a materialized view that does not exist. If this parameter is not specified, the system will throw an exception when deleting a materialized view that does not exist. |
 | mv_name       | yes          | The name of the materialized view to delete.                 |
+| FORCE         | no           | When the base table is not in NORMAL state (e.g., a sync MV build is stuck), FORCE cancels the related alter jobs, sets the table to NORMAL, and then drops the materialized view. Omit FORCE for normal drops. |
 
 ## Examples
 
