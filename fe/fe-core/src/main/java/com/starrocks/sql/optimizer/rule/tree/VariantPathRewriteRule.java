@@ -338,7 +338,8 @@ public class VariantPathRewriteRule extends TransformationRule {
                     || type.isFloatingPointType()
                     || type.isStringType()
                     || type.isDate()
-                    || type.isDatetime();
+                    || type.isDatetime()
+                    || type.isTime();
         }
 
         private ScalarOperator rewriteVariantFunction(CallOperator call) {
