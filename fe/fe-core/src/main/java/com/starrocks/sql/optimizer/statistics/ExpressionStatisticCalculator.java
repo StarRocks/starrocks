@@ -91,7 +91,8 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
             if (operator.isNull()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+                // NULL has no distinct non-null values and is always null.
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0, 0, 0);
             }
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
@@ -122,9 +123,11 @@ public class ExpressionStatisticCalculator {
                         .setDistinctValuesCount(0) //
                         .build());
             }
-            // 2. use sum of then clause and else clause's distinct values as column distinctValues
-            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
-                    ColumnStatistic::getDistinctValuesCount).sum();
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues.
+            // NULL branches should only contribute to nullsFraction, not to distinctValues.
+            double distinctValues = childrenColumnStatistics.stream()
+                    .mapToDouble(childStat -> childStat.getNullsFraction() >= 1.0 ? 0 : childStat.getDistinctValuesCount()) //
+                    .sum();
             // 3. Use the average null fraction of all branches.
             double nullFractions = childrenColumnStatistics.stream().mapToDouble(ColumnStatistic::getNullsFraction).sum()
                     / childrenColumnStatistics.size();

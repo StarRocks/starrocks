@@ -688,6 +688,27 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCaseWhenOperatorExplicitElseNull() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN 'x' ELSE NULL END
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var thenOperator = ConstantOperator.createChar("x");
+
+        final var caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null,
+                ConstantOperator.createNull(VarcharType.VARCHAR), ImmutableList.of(whenOperator, thenOperator));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        Assertions.assertEquals(1, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0.5, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
     public void testFromDays() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, FloatType.DOUBLE,
