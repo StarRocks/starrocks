@@ -276,4 +276,8 @@ public abstract class ScanNode extends PlanNode {
     public Map<SlotId, Expr> getHeavyExprs() {
         return heavyExprs;
     }
+
+    public void prepareRetry() {
+        // default no-op: subclasses that maintain streaming scan state should override
+    }
 }
