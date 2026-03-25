@@ -797,10 +797,7 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
     }
 
     int64_t tablet_id = metadata->id();
-    size_t buf_size = 0;
-#ifdef USE_STAROS
-    buf_size = config::starlet_fs_stream_buffer_size_bytes;
-#endif
+    size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
     if (buf_size <= 0) {
         buf_size = 1048576; // 1MB
     }
