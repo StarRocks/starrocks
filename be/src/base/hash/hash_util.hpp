@@ -197,9 +197,11 @@ public:
 
     template <typename T>
     static uint64_t murmur_hash64A(const T& value, unsigned int seed) {
-        if constexpr (std::is_same_v<T, Slice>) {
+        if constexpr (std::is_same_v<std::decay_t<T>, Slice>) {
             return murmur_hash64A(value.data, value.size, seed);
         } else {
+            static_assert(std::is_trivially_copyable_v<std::decay_t<T>>,
+                          "murmur_hash64A requires trivially copyable types");
             return murmur_hash64A(&value, sizeof(T), seed);
         }
     }
