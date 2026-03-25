@@ -446,6 +446,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
     public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
+    public static final String CBO_VARIANT_PATH_REWRITE = "cbo_variant_path_rewrite";
 
     public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
 
@@ -1465,6 +1466,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
+
+    @VarAttr(name = CBO_VARIANT_PATH_REWRITE)
+    private boolean cboVariantPathRewrite = false;
 
     @VarAttr(name = ENABLE_SPLIT_TOPN_AGG)
     private boolean enableSplitTopNAgg = true;
@@ -5999,6 +6003,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
+    public boolean isEnableVariantPathRewrite() {
+        return cboVariantPathRewrite;
+    }
+
+    public void setEnableVariantPathRewrite(boolean enableVariantPathRewrite) {
+        this.cboVariantPathRewrite = enableVariantPathRewrite;
     }
 
     public boolean isEnableDropTableCheckMvDependency() {
