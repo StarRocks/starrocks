@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.thrift.TQueryOptions;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -111,6 +112,26 @@ public class SessionVariableTest {
         com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
         Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
                 sessionVariable.getConnectorSinkShuffleMode());
+    }
+
+    @Test
+    public void testLogRejectedRecordNumInToThrift() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Default value (0) should be propagated to TQueryOptions
+        TQueryOptions options = sessionVariable.toThrift();
+        Assertions.assertTrue(options.isSetLog_rejected_record_num());
+        Assertions.assertEquals(0L, options.getLog_rejected_record_num());
+
+        // Set to -1 (unlimited) and verify propagation
+        sessionVariable.setLogRejectedRecordNum(-1);
+        options = sessionVariable.toThrift();
+        Assertions.assertEquals(-1L, options.getLog_rejected_record_num());
+
+        // Set to a positive value and verify propagation
+        sessionVariable.setLogRejectedRecordNum(10000);
+        options = sessionVariable.toThrift();
+        Assertions.assertEquals(10000L, options.getLog_rejected_record_num());
     }
 
     @Test

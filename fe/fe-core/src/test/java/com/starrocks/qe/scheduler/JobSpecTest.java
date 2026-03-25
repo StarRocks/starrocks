@@ -145,6 +145,43 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
 
+    @Test
+    public void testInsertSchedulerLogRejectedRecordNum() throws Exception {
+        String sql = "select * from lineitem";
+        ExecPlan execPlan = getExecPlan(sql);
+
+        TUniqueId queryId = new TUniqueId(2, 3);
+        connectContext.setExecutionId(queryId);
+        DescriptorTable descTable = new DescriptorTable();
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+        // Default value (0) should be propagated via toThrift
+        connectContext.getSessionVariable().setLogRejectedRecordNum(0);
+        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createInsertScheduler(
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
+        JobSpec jobSpec = coordinator.getJobSpec();
+        Assertions.assertEquals(TQueryType.LOAD, jobSpec.getQueryOptions().getQuery_type());
+        Assertions.assertEquals(0L, jobSpec.getQueryOptions().getLog_rejected_record_num());
+
+        // Set to -1 (unlimited) and verify propagation through INSERT path
+        connectContext.getSessionVariable().setLogRejectedRecordNum(-1);
+        coordinator = COORDINATOR_FACTORY.createInsertScheduler(
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
+        jobSpec = coordinator.getJobSpec();
+        Assertions.assertEquals(-1L, jobSpec.getQueryOptions().getLog_rejected_record_num());
+
+        // Set to a positive value and verify propagation through INSERT path
+        connectContext.getSessionVariable().setLogRejectedRecordNum(10000);
+        coordinator = COORDINATOR_FACTORY.createInsertScheduler(
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
+        jobSpec = coordinator.getJobSpec();
+        Assertions.assertEquals(10000L, jobSpec.getQueryOptions().getLog_rejected_record_num());
+
+        // Reset to default
+        connectContext.getSessionVariable().setLogRejectedRecordNum(0);
+    }
+
     /**
      * Mock {@link ResourceGroupMgr#chooseResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType, Set)}.
      */
