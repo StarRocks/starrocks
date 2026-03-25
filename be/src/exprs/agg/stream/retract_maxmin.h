@@ -191,16 +191,7 @@ public:
         }
     }
 
-    T get_row_value(const Column* column, size_t row_num) const {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            DCHECK(column->is_binary() || column->is_large_binary());
-            return ColumnHelper::get_binary_slice(column, row_num);
-        } else {
-            DCHECK(!column->is_nullable() && !column->is_binary() && !column->is_large_binary());
-            const auto& col = down_cast<const InputColumnType&>(*column);
-            return col.immutable_data()[row_num];
-        }
-    }
+    T get_row_value(const Column* column, size_t row_num) const { return GetContainer<LT>::get_data(column, row_num); }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

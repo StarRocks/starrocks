@@ -189,11 +189,7 @@ public:
                 size_t row_num) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
-            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
             this->data(state).update_with_slice(mem_pool, slice);
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);

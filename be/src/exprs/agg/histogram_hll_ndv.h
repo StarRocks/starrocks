@@ -79,31 +79,22 @@ public:
             create_impl(ctx, state_impl);
         }
 
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& buckets = this->data(state).buckets;
         auto bucket_it{buckets.end()};
         uint64_t hash = 0;
 
+        const auto v = GetContainer<LT>::get_data(columns[0], row_num);
+        bucket_it = std::upper_bound(buckets.begin(), buckets.end(), v, [](auto& value, Bucket<LT>& bucket) {
+            return bucket.is_less_equal_to_upper(value);
+        });
+        if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v)) {
+            bucket_it = buckets.end();
+        }
         // find the correct bucket for the current value.
         if constexpr (lt_is_string_or_binary<LT>) {
-            Slice s = ColumnHelper::get_binary_slice(column, row_num);
-            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s,
-                                         [](auto& s, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(s); });
-            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s)) {
-                bucket_it = buckets.end();
-            }
-
-            hash = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+            hash = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
         } else {
-            const auto v = column->immutable_data();
-            bucket_it = std::upper_bound(
-                    buckets.begin(), buckets.end(), v[row_num],
-                    [](auto& value, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(value); });
-            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v[row_num])) {
-                bucket_it = buckets.end();
-            }
-
-            hash = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
+            hash = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
         }
 
         if (hash != 0 && bucket_it != buckets.end()) {
