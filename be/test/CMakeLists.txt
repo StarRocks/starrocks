@@ -133,6 +133,7 @@ set(EXEC_FILES
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
+        ./exprs/agg/aggregate_traits_test.cpp
         ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/decimal_binary_function_test.cpp
