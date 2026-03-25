@@ -468,7 +468,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
-                "  |  * count-->[0.0, 1.0420273298435367, 0.0, 8.0, 1.0] ESTIMATE\n" +
+                "  |  * count-->[0.0, 1.0397971264164303, 0.0, 8.0, 1.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  95:Project\n" +
                 "  |  output columns:\n" +
