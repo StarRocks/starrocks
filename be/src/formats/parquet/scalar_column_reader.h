@@ -161,6 +161,10 @@ public:
     Status rewrite_conjunct_ctxs_to_predicate(bool* is_group_filtered, const std::vector<std::string>& sub_field_path,
                                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
+        // Supply the converter so raw dict bytes (e.g. UUID) are converted to their logical string
+        // form before conjuncts are evaluated. _converter is always valid here because prepare()
+        // is guaranteed to run before rewrite_conjunct_ctxs_to_predicate().
+        _dict_filter_ctx->dict_value_converter = _converter.get();
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 

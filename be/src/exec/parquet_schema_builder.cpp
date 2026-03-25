@@ -113,10 +113,9 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
                                                               decimal_logical_type->scale());
         } else if (logical_type->is_UUID()) {
             // UUID bytes are converted to canonical string form (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-            // by FixedLenByteArrayToUUIDConverter during scan.  The dict-filter path reads raw
-            // dictionary bytes without running the converter, so ScalarColumnReader::try_to_use_dict_filter()
-            // explicitly excludes UUID-annotated columns to prevent predicate mismatch between
-            // canonical UUID strings and raw 16-byte values.
+            // by FixedLenByteArrayToUUIDConverter during scan.  Dict filtering is supported for UUID:
+            // ScalarColumnReader::rewrite_conjunct_ctxs_to_predicate() sets dict_value_converter so
+            // raw 16-byte dict entries are converted to canonical strings before predicates are applied.
             *type_desc = TypeDescriptor::create_varchar_type(UUID_VARCHAR_LENGTH);
         } else {
             // INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
