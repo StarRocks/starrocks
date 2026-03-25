@@ -343,6 +343,7 @@ public class SetStmtAnalyzer {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
+
         // check connector_sink_sort_scope
         if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {
             try {
