@@ -12,7 +12,7 @@ insert into files(
     "aws.s3.access_key" = "${oss_ak}",
     "aws.s3.secret_key" = "${oss_sk}",
     "aws.s3.endpoint" = "${oss_endpoint}")
-select "a" as k2, 1 as k1;
+select "abc" as k2, 1 as k1;
 -- result:
 -- !result
 
@@ -43,7 +43,7 @@ insert into t1 by name select * from files(
 
 select * from t1;
 -- result:
-1	a
+1	abc
 -- !result
 
 
@@ -62,7 +62,21 @@ insert into t2 by name select k2 as k1, k1 as k2 from files(
 
 select * from t2;
 -- result:
-a	1
+abc	1
+-- !result
+
+
+-- Test BY NAME with partial columns and data filter
+create table t3 (k1 int, k2 varchar(2));
+
+insert into t3 by name select k2 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*Insert has filtered data.*
 -- !result
 
 
