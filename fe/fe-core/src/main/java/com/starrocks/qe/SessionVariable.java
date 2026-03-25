@@ -709,6 +709,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
+            "enable_iceberg_compaction_with_row_lineage";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
     public static final String EXCHANGE_HASH_FUNCTION_VERSION = "exchange_hash_function_version";
 
@@ -3281,6 +3284,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
+    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergCompactionWithRowLineage = true;
+
     @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
     private boolean enablePlanSerializeConcurrently = true;
 
@@ -5574,6 +5580,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
         this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getEnableIcebergCompactionWithRowLineage() {
+        return enableIcebergCompactionWithRowLineage;
+    }
+
+    public void setEnableIcebergCompactionWithRowLineage(boolean enableIcebergCompactionWithRowLineage) {
+        this.enableIcebergCompactionWithRowLineage = enableIcebergCompactionWithRowLineage;
     }
 
     public boolean getEnablePlanSerializeConcurrently() {
