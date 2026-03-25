@@ -1242,6 +1242,7 @@ public class UtFrameUtils {
         public static synchronized void resetFollowerJournalQueue() throws InterruptedException {
             assert (followerJournalQueue != null);
             followerJournalQueue.clear();
+            masterJournalQueue.clear();
         }
 
         public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
@@ -1538,6 +1539,8 @@ public class UtFrameUtils {
                 iterator.remove();
             }
         }
+        // Reset compute resource to avoid leaking a stale warehouse binding from query-scope hints.
+        context.resetComputeResource();
     }
 
     /***

@@ -22,18 +22,22 @@ namespace starrocks {
 class EncryptionFunctions {
 public:
     /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: Int32Column
+     * @param: [data, key, iv, mode] or [data, key, iv, mode, aad]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     * 4/5-parameter version, supports IV, encryption mode, and AAD (for GCM mode)
+     * Note: FE's ExpressionAnalyzer automatically converts 2/3 params to 4 params
      */
-    DEFINE_VECTORIZED_FN(aes_encrypt);
+    DEFINE_VECTORIZED_FN(aes_encrypt_with_mode);
 
     /**
-     * @param: [json_string, tagged_value]
-     * @paramType: [BinaryColumn, BinaryColumn]
-     * @return: DoubleColumn
+     * @param: [data, key, iv, mode] or [data, key, iv, mode, aad]
+     * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn, BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     * 4/5-parameter version, supports IV, encryption mode, and AAD (for GCM mode)
+     * Note: FE's ExpressionAnalyzer automatically converts 2/3 params to 4 params
      */
-    DEFINE_VECTORIZED_FN(aes_decrypt);
+    DEFINE_VECTORIZED_FN(aes_decrypt_with_mode);
 
     /**
      * @param: [json_string, tagged_value]

@@ -376,6 +376,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(lake_metadata_fetch);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);

@@ -232,6 +232,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                                             config::transaction_publish_version_thread_pool_num_min));
         });
+        _config_callback.emplace("lake_metadata_fetch_thread_count", [&]() -> Status {
+            if (_exec_env->lake_metadata_fetch_thread_pool() != nullptr) {
+                return _exec_env->lake_metadata_fetch_thread_pool()->update_max_threads(
+                        std::max(1, config::lake_metadata_fetch_thread_count));
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("parallel_clone_task_per_path", [&]() -> Status {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);

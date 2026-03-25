@@ -2170,6 +2170,53 @@ class StarrocksSQLApiLib(object):
         plan = str(res)
         tools.assert_true(plan.find(mv_name) > 0, "assert mv %s is not found in plan: %s" % (mv_name, plan))
 
+    def check_mv_to_refresh_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh contains expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=True)
+
+    def check_mv_to_refresh_not_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh does not contain expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=False)
+
+    def _check_mv_to_refresh_partition_membership(self, mv_name, expects, should_contain) -> bool:
+        sql = f"select inspect_mv_refresh_info('{mv_name}')"
+        res = self.retry_execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        tools.assert_true(res["status"])
+        json_payload = res["result"]
+        if isinstance(json_payload, (tuple, list)):
+            # inspect_mv_refresh_info typically returns one row and one column.
+            if len(json_payload) == 0:
+                return False
+            first_row = json_payload[0]
+            if isinstance(first_row, (tuple, list)):
+                if len(first_row) == 0:
+                    return False
+                json_payload = first_row[0]
+            else:
+                json_payload = first_row
+        tools.assert_true(isinstance(json_payload, (str, bytes, bytearray)),
+                          "assert mv %s inspect result should be json string, but got: %s" % (mv_name, type(json_payload)))
+        json_result = json.loads(json_payload)
+        mv_to_refresh_partitions = json_result.get("mvToRefreshPartitions")
+        expect_no_refresh = should_contain and (len(expects) == 0 or (len(expects) == 1 and expects[0] == ""))
+        if expect_no_refresh:
+            tools.assert_true(mv_to_refresh_partitions is None or len(mv_to_refresh_partitions) == 0, "assert mv %s mvToRefreshPartitions is not empty, but expect to no refresh: %s" % (mv_name, json_result))
+            return True
+        if should_contain:
+            tools.assert_true(all(partition in mv_to_refresh_partitions for partition in expects),
+                              "assert mv %s expected partitions not all found in mvToRefreshPartitions: %s" % (mv_name, json_result))
+        else:
+            tools.assert_true(all(partition not in expects for partition in mv_to_refresh_partitions),
+                              "assert mv %s mvToRefreshPartitions should not be in plan: %s" % (mv_name, json_result))
+        return True
+
     def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query

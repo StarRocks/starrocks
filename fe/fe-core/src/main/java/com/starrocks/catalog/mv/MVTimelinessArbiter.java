@@ -327,10 +327,13 @@ public abstract class MVTimelinessArbiter {
             }
         }
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
-            adds.keySet().stream().forEach(mvPartitionName ->
-                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(adds.keySet());
+        }
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(deletes.keySet());
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
@@ -393,11 +396,14 @@ public abstract class MVTimelinessArbiter {
             }
         }
         Map<String, PCell> adds = diff.getAdds();
+        Map<String, PCell> deletes = diff.getDeletes();
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         if (!CollectionUtils.sizeIsEmpty(adds)) {
-            adds.keySet().stream().forEach(mvPartitionName ->
-                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(adds.keySet());
+        }
+        if (!CollectionUtils.sizeIsEmpty(deletes)) {
+            mvUpdateInfo.getMvToRefreshPartitionNames().addAll(deletes.keySet());
         }
         return mvUpdateInfo;
     }

@@ -20,11 +20,17 @@ import java.util.concurrent.TimeUnit;
 
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
+    private final long version;
     private int specId;
 
     @Override
     public long getModifiedTime() {
         return modifiedTime;
+    }
+
+    @Override
+    public long getVersion() {
+        return version;
     }
 
     @Override
@@ -37,12 +43,20 @@ public class Partition implements PartitionInfo {
     }
 
     public Partition(long modifiedTime) {
-        this.modifiedTime = modifiedTime;
-        this.specId = -1;
+        this(modifiedTime, modifiedTime, -1);
     }
 
     public Partition(long modifiedTime, int specId) {
+        this(modifiedTime, modifiedTime, specId);
+    }
+
+    public Partition(long modifiedTime, long version) {
+        this(modifiedTime, version, -1);
+    }
+
+    public Partition(long modifiedTime, long version, int specId) {
         this.modifiedTime = modifiedTime;
+        this.version = version;
         this.specId = specId;
     }
 }
