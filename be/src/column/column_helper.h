@@ -777,11 +777,10 @@ struct GetContainer {
     static const auto get_data(const Column* column) {
         if constexpr (lt_is_string_or_binary<ltype>) {
             using LargeColumnType = RunTimeLargeColumnType<ltype>;
-            const Column* data_column = ColumnHelper::get_data_column(column);
-            if (data_column->is_large_binary()) {
-                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            if (column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(column)->immutable_data();
             }
-            return down_cast<const ColumnType*>(data_column)->immutable_data();
+            return down_cast<const ColumnType*>(column)->immutable_data();
         } else {
             return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
         }
