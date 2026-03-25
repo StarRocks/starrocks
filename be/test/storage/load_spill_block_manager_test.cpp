@@ -122,7 +122,7 @@ TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
 
     // The parent directory should still exist — destructor no longer cleans it up
     status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
-    ASSERT_OK(status) << "Expected parent path to still exist after destroy, but got: " << status;
+    ASSERT_TRUE(status.ok()) << "Expected parent path to still exist after destroy, but got: " << status;
 }
 
 // Test that clear_parent_path() is safe to call when init() was not called.
