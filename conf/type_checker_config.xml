@@ -115,14 +115,17 @@
   <!-- Oracle TIMESTAMP types -->
   <type-mapping java_class="oracle.sql.TIMESTAMP" display_name="OracleTimestamp">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <type-mapping java_class="oracle.sql.TIMESTAMPLTZ" display_name="OracleTimestampLTZ">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <type-mapping java_class="oracle.sql.TIMESTAMPTZ" display_name="OracleTimestampTZ">
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_DATETIME" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <!-- SQL Server DateTimeOffset type -->

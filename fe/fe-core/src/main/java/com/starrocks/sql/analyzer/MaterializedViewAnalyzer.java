@@ -181,8 +181,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
-                    Table.TableType.HIVE_VIEW,
-                    Table.TableType.ICEBERG_VIEW);
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -215,6 +214,15 @@ public class MaterializedViewAnalyzer {
 
             if (table.isView()) {
                 continue;
+            }
+
+            // Check if the table is an Iceberg table with partition evolution
+            if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (icebergTable.getNativeTable().specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                            table.getName() + " has done partition evolution", tableNameInfo.getPos());
+                }
             }
 
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
@@ -1669,8 +1677,9 @@ public class MaterializedViewAnalyzer {
             stmt.setTableRef(tableRef);
             Table mvTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, stmt.getCatalogName(),
                     stmt.getDbName(), stmt.getMvName());
-            // Check mv dependency
-            if (context.getSessionVariable().isEnableDropTableCheckMvDependency() && mvTable != null) {
+            // Check mv dependency (skipped for FORCE drop: recovery path for stuck sync MV build)
+            if (!stmt.isForceDrop() && context.getSessionVariable().isEnableDropTableCheckMvDependency()
+                    && mvTable != null) {
                 Set<MvId> relatedMvIds = mvTable.getRelatedMaterializedViews();
                 if (!relatedMvIds.isEmpty()) {
                     Set<String> relatedMvNames = Sets.newHashSet();

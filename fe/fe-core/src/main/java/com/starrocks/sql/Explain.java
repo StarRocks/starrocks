@@ -86,6 +86,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
+
 public class Explain {
     public static final Explain DEFAULT_EXPLAIN = new Explain(true, false, "    ", "    ");
 
@@ -456,6 +458,10 @@ public class Explain {
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
+            if (enableCosts && !AUTO.equalsIgnoreCase(aggregate.getNeededPreaggregationMode())) {
+                buildOperatorProperty(sb,
+                        "streaming_preaggregation_mode: " + aggregate.getNeededPreaggregationMode(), context.step);
+            }
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
                 String analyticCallString =

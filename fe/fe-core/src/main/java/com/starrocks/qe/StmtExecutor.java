@@ -104,6 +104,7 @@ import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -281,6 +282,7 @@ import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -311,8 +313,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
@@ -821,8 +821,10 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
         // set true to change session variable
         boolean skipRestore = false;
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -1215,6 +1217,15 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
+
+            // Restore compute resource only when a query-scope hint changed the warehouse.
+            // For normal statements (no hint), the compute resource may have been legitimately
+            // updated during execution (e.g., reset due to unavailability), and we must not
+            // overwrite those safety updates. Restore after onQueryFinished() so that audit
+            // CN group reflects the actual execution resource.
+            if (!skipRestore && restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
             context.setOnlyReadIcebergCache(originSkipIcebergCache);
             if (cteExecutor != null) {
                 cteExecutor.finalizeRecursiveCTE();
@@ -1251,18 +1262,28 @@ public class StmtExecutor {
         }
     }
 
-    public void processQueryScopeSetVarHint() throws DdlException {
-        if (!parsedStmt.isExistQueryScopeHint()) {
-            return;
+    private Map<String, String> collectQueryScopeSetVarHints(StatementBase stmt) {
+        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (stmt == null || !stmt.isExistQueryScopeHint()) {
+            return hintSvs;
         }
 
-        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+        for (HintNode hint : stmt.getAllQueryScopeHints()) {
             if (!(hint instanceof SetVarHint)) {
                 continue;
             }
             hintSvs.putAll(hint.getValue());
         }
+        return hintSvs;
+    }
+
+    private boolean shouldRestoreComputeResourceForQueryScopeHint(StatementBase stmt) {
+        String hintedWarehouse = collectQueryScopeSetVarHints(stmt).get(SessionVariable.WAREHOUSE_NAME);
+        return hintedWarehouse != null && !StringUtils.equalsIgnoreCase(hintedWarehouse, context.getCurrentWarehouseName());
+    }
+
+    public void processQueryScopeSetVarHint() throws DdlException {
+        Map<String, String> hintSvs = collectQueryScopeSetVarHints(parsedStmt);
 
         if (hintSvs.isEmpty()) {
             return;
@@ -2249,25 +2270,7 @@ public class StmtExecutor {
     }
 
     private void handleAddSqlBlackListStmt() {
-        AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
-        Pattern sqlPattern = null;
-        String sql = addSqlBlackListStmt.getSql().trim().toLowerCase().replaceAll(" +", " ")
-                .replace("\r", " ")
-                .replace("\n", " ")
-                .replaceAll("\\s+", " ");
-        if (!sql.isEmpty()) {
-            try {
-                sqlPattern = Pattern.compile(sql);
-            } catch (PatternSyntaxException e) {
-                throw new SemanticException("Sql syntax error: %s", e.getMessage());
-            }
-        }
-
-        if (sqlPattern == null) {
-            throw new SemanticException("Sql pattern cannot be empty");
-        }
-
-        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
+        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddSqlBlackListStmt) parsedStmt);
     }
 
     private void handleDelSqlBlackListStmt() {
@@ -2292,14 +2295,22 @@ public class StmtExecutor {
     }
 
     private void handleAddBackendBlackListStmt() throws StarRocksException {
-        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddBackendBlackListStmt) parsedStmt, context);
+        AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
+        Authorizer.check(addBackendBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Long backendId : addBackendBlackListStmt.getBackendIds()) {
+            if (sis.getBackend(backendId) == null) {
+                throw new StarRocksException("Not found backend: " + backendId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(backendId);
+        }
     }
 
     private void handleDelBackendBlackListStmt() throws StarRocksException {
         DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
         Authorizer.check(delBackendBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getBackend(backendId) == null) {
                 throw new StarRocksException("Not found backend: " + backendId);
             }
@@ -2310,8 +2321,8 @@ public class StmtExecutor {
     private void handleAddComputeNodeBlackListStmt() throws StarRocksException {
         AddComputeNodeBlackListStmt addComputeNodeBlackListStmt = (AddComputeNodeBlackListStmt) parsedStmt;
         Authorizer.check(addComputeNodeBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long computeNodeId : addComputeNodeBlackListStmt.getComputeNodeIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getComputeNode(computeNodeId) == null) {
                 throw new StarRocksException("Not found compute node: " + computeNodeId);
             }
@@ -2322,8 +2333,8 @@ public class StmtExecutor {
     private void handleDelComputeNodeBlackListStmt() throws StarRocksException {
         DelComputeNodeBlackListStmt delComputeNodeBlackListStmt = (DelComputeNodeBlackListStmt) parsedStmt;
         Authorizer.check(delComputeNodeBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long computeNodeId : delComputeNodeBlackListStmt.getComputeNodeIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getComputeNode(computeNodeId) == null) {
                 throw new StarRocksException("Not found compute node: " + computeNodeId);
             }
@@ -3458,6 +3469,7 @@ public class StmtExecutor {
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                    recordExternalSinkFailure(targetTable, dmlType, t);
                 } else if (targetTable.isBlackHoleTable()) {
                     // black hole table does not need txn
                 } else {
@@ -3542,6 +3554,25 @@ public class StmtExecutor {
 
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private void recordExternalSinkFailure(Table targetTable, DmlType dmlType, Throwable t) {
+        String connectorType = null;
+        if (targetTable.isIcebergTable()) {
+            connectorType = ConnectorMetricsMgr.CONNECTOR_ICEBERG;
+        } else if (targetTable.isHiveTable()) {
+            connectorType = ConnectorMetricsMgr.CONNECTOR_HIVE;
+        }
+        if (connectorType == null) {
+            return;
+        }
+
+        if (dmlType == DmlType.DELETE) {
+            ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else {
+            String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
+            ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);
+        }
     }
 
     private void handlePlanAdvisorStmt() throws IOException {
@@ -3669,6 +3700,8 @@ public class StmtExecutor {
         }
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
         try {
             processQueryScopeSetVarHint();
         } catch (DdlException e) {
@@ -3711,6 +3744,9 @@ public class StmtExecutor {
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
         } finally {
             context.setSessionVariable(sessionVariableBackup);
+            if (restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
         }
     }
 

@@ -51,6 +51,7 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.EnumSet;
@@ -62,6 +63,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
@@ -89,6 +91,7 @@ public abstract class MVPCTRefreshPartitioner {
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPartitioner.class);
     private final Logger logger;
 
     protected final MvTaskRunContext mvContext;
@@ -281,7 +284,10 @@ public abstract class MVPCTRefreshPartitioner {
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("failed to lock database: {} in checkMvToRefreshedPartitions", db.getFullName());
-            throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire read lock on database %s within %d ms " +
+                    "when computing partitions to refresh",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
         try {
@@ -565,6 +571,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
      * - its base table is not supported refresh by partition.
      * - its base table has updated.
+     * - its base table has deleted partitions.
      */
     public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                           MaterializedView mv,
@@ -575,6 +582,10 @@ public abstract class MVPCTRefreshPartitioner {
                 return true;
             }
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+                return true;
+            }
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
                 return true;
             }
         }

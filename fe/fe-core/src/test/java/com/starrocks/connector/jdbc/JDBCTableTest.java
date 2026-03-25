@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -26,6 +28,8 @@ import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class JDBCTableTest {
@@ -56,6 +60,26 @@ public class JDBCTableTest {
             System.out.println(e.getMessage());
             Assertions.fail();
         }
+    }
+
+    private JDBCTable buildJDBCTable(String uri) throws Exception {
+        Map<String, String> props = new HashMap<>();
+        props.put(JDBCResource.URI, uri);
+        props.put(JDBCResource.USER, "root");
+        props.put(JDBCResource.PASSWORD, "");
+        props.put(JDBCResource.DRIVER_URL, "https://example.com/driver.jar");
+        props.put(JDBCResource.CHECK_SUM, "abc");
+        props.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
+        return new JDBCTable(1L, "test", null, props);
+    }
+
+    @Test
+    public void testIsMySQLCompatible() throws Exception {
+        Assertions.assertTrue(buildJDBCTable("jdbc:mysql://host:3306/db").isMySQLCompatible());
+        Assertions.assertTrue(buildJDBCTable("jdbc:mariadb://host:3306/db").isMySQLCompatible());
+        Assertions.assertFalse(buildJDBCTable("jdbc:postgresql://host:5432/db").isMySQLCompatible());
+        Assertions.assertFalse(buildJDBCTable("jdbc:oracle:thin:@host:1521:db").isMySQLCompatible());
+        Assertions.assertFalse(buildJDBCTable("jdbc:sqlserver://host:1433").isMySQLCompatible());
     }
 
     @Test

@@ -47,6 +47,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
@@ -488,8 +489,24 @@ public class HiveMetadata implements ConnectorMetadata {
 
         HiveCommitter committer = new HiveCommitter(
                 hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
+        String writeType = isOverwrite ? "overwrite" : "insert";
+        long startMs = System.currentTimeMillis();
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "HIVE.SINK.commit")) {
             committer.commit(partitionUpdates);
+            long totalRows = partitionUpdates.stream().mapToLong(PartitionUpdate::getRowCount).sum();
+            long totalBytes = partitionUpdates.stream().mapToLong(PartitionUpdate::getTotalSizeInBytes).sum();
+            long totalFiles = partitionUpdates.stream().mapToLong(PartitionUpdate::getFileCount).sum();
+            ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_HIVE, writeType);
+            ConnectorMetricsMgr.increaseWriteRows(ConnectorMetricsMgr.CONNECTOR_HIVE, totalRows, writeType);
+            ConnectorMetricsMgr.increaseWriteBytes(ConnectorMetricsMgr.CONNECTOR_HIVE, totalBytes, writeType);
+            ConnectorMetricsMgr.increaseWriteFiles(ConnectorMetricsMgr.CONNECTOR_HIVE, totalFiles, writeType);
+        } catch (Exception e) {
+            // Write failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
+            throw e;
+        } finally {
+            ConnectorMetricsMgr.increaseWriteDurationMs(ConnectorMetricsMgr.CONNECTOR_HIVE,
+                    System.currentTimeMillis() - startMs, writeType);
         }
     }
 
