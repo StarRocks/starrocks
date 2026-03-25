@@ -153,8 +153,8 @@ BUILD_TARGET=
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
-if [[ -z ${THIN_ACHIEVE} ]]; then
-    THIN_ACHIEVE=ON
+if [[ -z ${THIN_ARCHIVE} ]]; then
+    THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
 fi
 while true; do
     case "$1" in
@@ -227,6 +227,7 @@ fi
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
+starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
 
 source ${STARROCKS_HOME}/bin/common.sh
 
@@ -279,7 +280,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
-            -DTHIN_ARCHIVE=${THIN_ACHIEVE} \
+            -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
 
@@ -419,12 +420,7 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
-    | grep -v starrocks_dw_test \
-    | grep -v bench_test \
-    | grep -v builtin_functions_fuzzy_test \
-    | grep -e "$TEST_MODULE" `
+test_files=$(starrocks_collect_test_binaries "${STARROCKS_TEST_BINARY_DIR}" "${TEST_MODULE}")
 
 echo "[INFO] gtest_filter: $TEST_NAME"
 

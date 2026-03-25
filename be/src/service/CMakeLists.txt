@@ -34,9 +34,16 @@ ADD_BE_LIB(Service
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
-    add_executable(starrocks_be
+    set(STARROCKS_BE_MAIN_FILES
         starrocks_main.cpp
-        )
+    )
+    if (APPLE)
+        list(APPEND STARROCKS_BE_MAIN_FILES macos_link_stubs.cpp)
+    endif()
+
+    add_executable(starrocks_be
+        ${STARROCKS_BE_MAIN_FILES}
+    )
 
     # This permits libraries loaded by dlopen to link to the symbols in the program.
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)

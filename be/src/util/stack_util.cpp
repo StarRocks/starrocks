@@ -447,9 +447,11 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
 
 #if defined(ADDRESS_SANITIZER) && !defined(__APPLE__)
     __interceptor___cxa_throw(thrown_exception, info, dest);
+#elif defined(__APPLE__)
+    __cxxabiv1::__cxa_throw(thrown_exception, info, dest);
 #else
-    __real___cxa_throw(thrown_exception, info, dest);
+__real___cxa_throw(thrown_exception, info, dest);
 #endif
-}
+} // namespace starrocks
 
 } // namespace starrocks
