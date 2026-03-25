@@ -633,6 +633,7 @@
                 "faq/resource_isolation_faq",
                 "faq/fe_mem_faq",
                 "faq/operation_maintenance_faq",
+                "faq/starrocks-wildfly-native-ssl-fix",
                 "faq/Others"
             ]
         },
