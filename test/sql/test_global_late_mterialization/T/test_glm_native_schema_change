@@ -1,6 +1,7 @@
 -- name: test_glm_native_schema_change
 
 set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
 
 CREATE TABLE `t_json_schema_change` (
   `id` bigint(20) NOT NULL,
