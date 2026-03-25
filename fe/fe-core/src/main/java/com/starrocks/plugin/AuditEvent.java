@@ -39,6 +39,8 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /*
@@ -64,6 +66,8 @@ public class AuditEvent {
         String value() default "";
 
         boolean ignore_zero() default false;
+
+        boolean ignore_empty() default false;
     }
 
     public EventType type;
@@ -164,6 +168,9 @@ public class AuditEvent {
 
     @AuditField(value = "PreparedStmtId", ignore_zero = true)
     public String preparedStmtId = null;
+
+    @AuditField(value = "QueriedRelations", ignore_empty = true)
+    public List<String> relations = Collections.emptyList();
 
     public static class AuditEventBuilder {
 
@@ -429,6 +436,15 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
+            return this;
+        }
+
+        public AuditEventBuilder setRelations(List<String> relations) {
+            if (relations == null || relations.isEmpty()) {
+                auditEvent.relations = Collections.emptyList();
+            } else {
+                auditEvent.relations = Collections.unmodifiableList(new ArrayList<>(relations));
+            }
             return this;
         }
 

@@ -137,6 +137,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -798,9 +799,21 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
+        if (parseNode == null) {
+            return Collections.emptyMap();
+        }
+        Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
+    }
+
+    public static List<String> collectAllTableAndViewRelationNames(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
+        for (TableName tableName : allTableAndViewRelations.keySet()) {
+            relationNames.add(tableName.toString());
+        }
+        return relationNames;
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
@@ -1133,7 +1146,7 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(node.getName(), node);
+            allTableAndViewRelations.put(copyCollectedTableName(node.getName()), node);
             return null;
         }
 
@@ -1142,8 +1155,17 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(node.getName(), node);
+            allTableAndViewRelations.put(copyCollectedTableName(node.getName()), node);
             return null;
+        }
+
+        private TableName copyCollectedTableName(TableName tableName) {
+            TableName copied = new TableName(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                    tableName.getPos());
+            if (copied.getCatalog() != null && CatalogMgr.isInternalCatalog(copied.getCatalog())) {
+                copied.setShowInternalCatalog(true);
+            }
+            return copied;
         }
     }
 
