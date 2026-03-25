@@ -191,9 +191,7 @@ public:
         }
     }
 
-    T get_row_value(const Column* column, size_t row_num) const {
-        return GetContainer<LT>::get_data(column, row_num);
-    }
+    T get_row_value(const Column* column, size_t row_num) const { return GetContainer<LT>::get_data(column, row_num); }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
