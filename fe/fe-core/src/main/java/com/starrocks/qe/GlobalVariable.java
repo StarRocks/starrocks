@@ -82,8 +82,6 @@ public final class GlobalVariable {
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
     public static final String ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE =
             "enable_reduce_cast_varchar_length_inheritance";
-    public static final String ENABLE_REDUCE_CAST_VARCHAR_TYPE_LENGTH_MUTATION =
-            "enable_reduce_cast_varchar_type_length_mutation";
     public static final String ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE =
             "enable_reduce_cast_varchar_expr_sync_type";
 
@@ -253,11 +251,8 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE, flag = VariableMgr.GLOBAL)
     private static boolean enableReduceCastVarcharLengthInheritance = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_TYPE_LENGTH_MUTATION, flag = VariableMgr.GLOBAL)
-    private static boolean enableReduceCastVarcharTypeLengthMutation = true;
-
     @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE, flag = VariableMgr.GLOBAL)
-    private static boolean enableReduceCastVarcharExprSyncType = false;
+    private static boolean enableReduceCastVarcharExprSyncType = true;
 
     @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
     public static boolean enableEtlExecQueueAllWorkloads = true;
@@ -486,14 +481,6 @@ public final class GlobalVariable {
 
     public static long getCngroupLowWatermarkCPUUsedPermille() {
         return cngroupLowWatermarkCPUUsedPermille;
-    }
-
-    public static boolean isEnableReduceCastVarcharTypeLengthMutation() {
-        return enableReduceCastVarcharTypeLengthMutation;
-    }
-
-    public static void setEnableReduceCastVarcharTypeLengthMutation(boolean enableReduceCastVarcharTypeLengthMutation) {
-        GlobalVariable.enableReduceCastVarcharTypeLengthMutation = enableReduceCastVarcharTypeLengthMutation;
     }
 
     public static void setCngroupScheduleMode(String mode) {

@@ -69,7 +69,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * default_rowset_type
 * enable_reduce_cast_varchar_expr_sync_type
 * enable_reduce_cast_varchar_length_inheritance
-* enable_reduce_cast_varchar_type_length_mutation
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -575,17 +574,10 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
-### enable_reduce_cast_varchar_type_length_mutation (global)
-
-* 描述：当 `enable_reduce_cast_varchar_length_inheritance` 开启时，控制优先采用哪种修复实现。如果该变量为 `true`，FE 会在 cast 被消除后直接原地修改 child 上现有 `VARCHAR` 类型的长度；如果该变量为 `false`，FE 会将 child 的 type 引用替换为新的 `VARCHAR(N)` 类型。当前默认优先使用 mutation 方案。
-* 默认值：true
-* 数据类型：Boolean
-* 引入版本：v3.5.16、v4.0.9
-
 ### enable_reduce_cast_varchar_expr_sync_type (global)
 
-* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 后，是否将复用的 planner `Expr` 的 `type` 和 `originType` 同步为改写后的 `VARCHAR(N)` 类型。该变量主要作为在关闭 type mutation 方案时的替代修复路径。
-* 默认值：false
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 后，是否将复用的 planner `Expr` 的 `type` 和 `originType` 同步为改写后的 `VARCHAR(N)` 类型。
+* 默认值：true
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 

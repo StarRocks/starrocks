@@ -11,9 +11,6 @@ set global enable_reduce_cast_varchar_length_inheritance = false;
 set global enable_reduce_cast_varchar_expr_sync_type = false;
 -- result:
 -- !result
-set global enable_reduce_cast_varchar_type_length_mutation = false;
--- result:
--- !result
 create table t_string_meta (
     id int,
     v_mid varchar(1000),
@@ -115,9 +112,6 @@ set global enable_reduce_cast_varchar_length_inheritance = false;
 -- result:
 -- !result
 set global enable_reduce_cast_varchar_expr_sync_type = false;
--- result:
--- !result
-set global enable_reduce_cast_varchar_type_length_mutation = false;
 -- result:
 -- !result
 drop database db_prepare_stmt_varchar_metadata_off_${uuid0};

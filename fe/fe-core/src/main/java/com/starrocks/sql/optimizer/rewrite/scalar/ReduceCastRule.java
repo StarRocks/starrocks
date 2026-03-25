@@ -176,11 +176,7 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return child;
         }
 
-        if (GlobalVariable.isEnableReduceCastVarcharTypeLengthMutation()) {
-            ((ScalarType) child.getType()).setLength(((ScalarType) operator.getType()).getLength());
-        } else {
-            child.setType(operator.getType().clone());
-        }
+        child.setType(operator.getType().clone());
         return child;
     }
 

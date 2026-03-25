@@ -132,9 +132,7 @@ public class ReduceCastRuleTest {
     @Test
     public void testVarcharLengthCanBeInheritedAfterReduceCast() {
         boolean prevInheritance = GlobalVariable.isEnableReduceCastVarcharLengthInheritance();
-        boolean prevTypeLengthMutation = GlobalVariable.isEnableReduceCastVarcharTypeLengthMutation();
         GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(true);
 
         try {
             ScalarOperatorRewriteRule rule = new ReduceCastRule();
@@ -150,7 +148,6 @@ public class ReduceCastRuleTest {
             Assertions.assertSame(child, result);
         } finally {
             GlobalVariable.setEnableReduceCastVarcharLengthInheritance(prevInheritance);
-            GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(prevTypeLengthMutation);
         }
     }
 

@@ -22,22 +22,18 @@ public class ReduceCastVarcharPlanTest extends PlanTestBase {
 
     private final boolean previousLengthInheritance =
             GlobalVariable.isEnableReduceCastVarcharLengthInheritance();
-    private final boolean previousTypeLengthMutation =
-            GlobalVariable.isEnableReduceCastVarcharTypeLengthMutation();
     private final boolean previousExprSync =
             GlobalVariable.isEnableReduceCastVarcharExprSyncType();
 
     @AfterEach
     public void tearDown() {
         GlobalVariable.setEnableReduceCastVarcharLengthInheritance(previousLengthInheritance);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(previousTypeLengthMutation);
         GlobalVariable.setEnableReduceCastVarcharExprSyncType(previousExprSync);
     }
 
     @Test
     public void testOutputSlotKeepsOriginalLengthWhenInheritanceDisabled() throws Exception {
         GlobalVariable.setEnableReduceCastVarcharLengthInheritance(false);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(false);
         GlobalVariable.setEnableReduceCastVarcharExprSyncType(false);
 
         String sql = "select cast(t1a as varchar(10)) as c from test_all_type";
@@ -45,23 +41,10 @@ public class ReduceCastVarcharPlanTest extends PlanTestBase {
 
         assertContains(descTbl, "TScalarType(type:VARCHAR, len:20)");
     }
-   
-    @Test
-    public void testOutputSlotInheritsCastLengthWithTypeMutation() throws Exception {
-        GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(true);
-        GlobalVariable.setEnableReduceCastVarcharExprSyncType(false);
-
-        String sql = "select cast(t1a as varchar(10)) as c from test_all_type";
-        String descTbl = getDescTbl(sql);
-
-        assertContains(descTbl, "TScalarType(type:VARCHAR, len:10)");
-    }
 
     @Test
-    public void testOutputSlotStillKeepsOriginalLengthWithoutMutationOrExprSync() throws Exception {
+    public void testOutputSlotStillKeepsOriginalLengthWithoutExprSync() throws Exception {
         GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(false);
         GlobalVariable.setEnableReduceCastVarcharExprSyncType(false);
 
         String sql = "select cast(t1a as varchar(10)) as c from test_all_type";
@@ -73,7 +56,6 @@ public class ReduceCastVarcharPlanTest extends PlanTestBase {
     @Test
     public void testOutputSlotInheritsCastLengthWithExprSync() throws Exception {
         GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
-        GlobalVariable.setEnableReduceCastVarcharTypeLengthMutation(false);
         GlobalVariable.setEnableReduceCastVarcharExprSyncType(true);
 
         String sql = "select cast(t1a as varchar(10)) as c from test_all_type";
