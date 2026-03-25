@@ -69,16 +69,14 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
@@ -101,8 +99,13 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static AuditEventBuilder auditBuilder = new AuditEventBuilder();
     private static ConnectContext myContext;
 
-    @Mocked
     private static StreamConnection connection;
+
+    static {
+        connection = Mockito.mock(StreamConnection.class);
+        java.net.InetSocketAddress mockAddr = new java.net.InetSocketAddress("127.0.0.1", 12345);
+        Mockito.when(connection.getPeerAddress()).thenReturn(mockAddr);
+    }
 
     private static PQueryStatistics statistics = new PQueryStatistics();
 
@@ -201,14 +204,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         changeUserPacket.clear();
         resetConnectionPacket.clear();
         // Mock
-        MysqlChannel channel = new MysqlChannel(connection);
-        new Expectations(channel) {
-            {
-                channel.getRemoteHostPortString();
-                minTimes = 0;
-                result = "127.0.0.1:12345";
-            }
-        };
+        MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+        Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
         myContext = new ConnectContext(connection);
         Deencapsulation.setField(myContext, "mysqlChannel", channel);
         super.setUp();
@@ -216,27 +213,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     private static MysqlChannel mockChannel(ByteBuffer packet) {
         try {
-            MysqlChannel channel = new MysqlChannel(connection);
-            new Expectations(channel) {
-                {
-                    // Mock receive
-                    channel.fetchOnePacket();
-                    minTimes = 0;
-                    result = packet;
-
-                    // Mock reset
-                    channel.setSequenceId(0);
-                    times = 1;
-
-                    // Mock send
-                    channel.sendAndFlush((ByteBuffer) any);
-                    minTimes = 0;
-
-                    channel.getRemoteHostPortString();
-                    minTimes = 0;
-                    result = "127.0.0.1:12345";
-                }
-            };
+            MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+            Mockito.when(channel.fetchOnePacket()).thenReturn(packet);
+            Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
             return channel;
         } catch (IOException e) {
             return null;
@@ -244,7 +223,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     private static ConnectContext initMockContext(MysqlChannel channel, GlobalStateMgr globalStateMgr) {
-        ConnectContext context = new ConnectContext(connection) {
+        ConnectContext context = Mockito.spy(new ConnectContext(connection) {
             private boolean firstTimeToSetCommand = true;
 
             @Override
@@ -281,67 +260,23 @@ public class ConnectProcessorTest extends DDLTestBase {
                     super.setCommand(command);
                 }
             }
-        };
+        });
 
-        new Expectations(context) {
-            {
-                context.getMysqlChannel();
-                minTimes = 0;
-                result = channel;
-
-                context.isKilled();
-                minTimes = 0;
-                maxTimes = 3;
-                returns(false, true, false);
-
-                context.getGlobalStateMgr();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                context.getAuditEventBuilder();
-                minTimes = 0;
-                result = auditBuilder;
-
-                context.getQualifiedUser();
-                minTimes = 0;
-                result = "testCluster:user";
-
-                context.getCurrentUserIdentity();
-                minTimes = 0;
-                result = UserIdentity.ROOT;
-
-                context.getStartTime();
-                minTimes = 0;
-                result = 0L;
-
-                context.getReturnRows();
-                minTimes = 0;
-                result = 1L;
-
-                context.setStmtId(anyLong);
-                minTimes = 0;
-
-                context.getStmtId();
-                minTimes = 0;
-                result = 1L;
-
-                context.getExecutionId();
-                minTimes = 0;
-                result = new TUniqueId();
-
-                context.getCapability();
-                minTimes = 0;
-                result = MysqlCapability.DEFAULT_CAPABILITY;
-
-                context.getAccessControlContext();
-                minTimes = 0;
-                result = new AccessControlContext();
-
-                context.getAuthenticationProvider();
-                minTimes = 0;
-                result = new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD);
-            }
-        };
+        Mockito.doReturn(channel).when(context).getMysqlChannel();
+        Mockito.doReturn(false).doReturn(true).doReturn(false).when(context).isKilled();
+        Mockito.doReturn(globalStateMgr).when(context).getGlobalStateMgr();
+        Mockito.doReturn(auditBuilder).when(context).getAuditEventBuilder();
+        Mockito.doReturn("testCluster:user").when(context).getQualifiedUser();
+        Mockito.doReturn(UserIdentity.ROOT).when(context).getCurrentUserIdentity();
+        Mockito.doReturn(0L).when(context).getStartTime();
+        Mockito.doReturn(1L).when(context).getReturnRows();
+        Mockito.doNothing().when(context).setStmtId(Mockito.anyLong());
+        Mockito.doReturn(1L).when(context).getStmtId();
+        Mockito.doReturn(new TUniqueId()).when(context).getExecutionId();
+        Mockito.doReturn(MysqlCapability.DEFAULT_CAPABILITY).when(context).getCapability();
+        Mockito.doReturn(new AccessControlContext()).when(context).getAccessControlContext();
+        Mockito.doReturn(new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD))
+                .when(context).getAuthenticationProvider();
 
         return context;
     }
@@ -442,16 +377,13 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         // Mock statement executor
-        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-
-        processor.processOnce();
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(statistics);
+                })) {
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        }
     }
 
     @Test
@@ -460,20 +392,11 @@ public class ConnectProcessorTest extends DDLTestBase {
         RunMode.detectRunMode();
         Config.enable_collect_query_detail_info = true;
 
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
-        // Mock statement executor
-        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
+        WarehouseComputeResourceProvider originalProvider =
+                Deencapsulation.getField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider");
+        WarehouseComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
+        Mockito.doReturn(true).when(spyProvider).isResourceAvailable(Mockito.any());
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider", spyProvider);
 
         try {
             GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
@@ -504,6 +427,8 @@ public class ConnectProcessorTest extends DDLTestBase {
             AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
             Assertions.assertEquals("wh2", auditEvent.warehouse);
         } finally {
+            Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(),
+                    "computeResourceProvider", originalProvider);
             Config.enable_collect_query_detail_info = false;
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
@@ -516,20 +441,11 @@ public class ConnectProcessorTest extends DDLTestBase {
         RunMode.detectRunMode();
         Config.enable_collect_query_detail_info = true;
 
-        new MockUp<WarehouseComputeResourceProvider>() {
-            @Mock
-            public boolean isResourceAvailable(ComputeResource computeResource) {
-                return true;
-            }
-        };
-        // Mock statement executor
-        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
+        WarehouseComputeResourceProvider originalProvider =
+                Deencapsulation.getField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider");
+        WarehouseComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
+        Mockito.doReturn(true).when(spyProvider).isResourceAvailable(Mockito.any());
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider", spyProvider);
 
         try {
             GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
@@ -557,6 +473,8 @@ public class ConnectProcessorTest extends DDLTestBase {
             AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
             Assertions.assertEquals("wh3", auditEvent.warehouse);
         } finally {
+            Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(),
+                    "computeResourceProvider", originalProvider);
             Config.enable_collect_query_detail_info = false;
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
@@ -569,21 +487,15 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
-        // Mock statement executor using MockUp
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                throw new IOException("Fail");
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-
-        processor.processOnce();
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // Mock statement executor
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doThrow(new IOException("Fail")).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(statistics);
+                })) {
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        }
     }
 
     @Test
@@ -592,22 +504,16 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
-        // Mock statement executor using MockUp
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                throw new NullPointerException("Fail");
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-
-        processor.processOnce();
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        // Mock statement executor
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doThrow(new NullPointerException("Fail")).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(statistics);
+                })) {
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+            Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+        }
     }
 
     @Test
@@ -618,24 +524,22 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
         AtomicReference<String> customQueryId = new AtomicReference<>();
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                customQueryId.set(ctx.getCustomQueryId());
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
-        processor.processOnce();
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        // verify customQueryId is set during query execution
-        Assertions.assertEquals("a_custom_query_id", customQueryId.get());
-        // customQueryId is cleared after query finished
-        Assertions.assertEquals("", ctx.getCustomQueryId());
-        Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doAnswer(invocation -> {
+                        customQueryId.set(ctx.getCustomQueryId());
+                        return null;
+                    }).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+            // verify customQueryId is set during query execution
+            Assertions.assertEquals("a_custom_query_id", customQueryId.get());
+            // customQueryId is cleared after query finished
+            Assertions.assertEquals("", ctx.getCustomQueryId());
+            Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
+        }
     }
 
     @Test
@@ -646,24 +550,22 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectProcessor processor = new ConnectProcessor(ctx);
 
         AtomicReference<String> customSessionName = new AtomicReference<>();
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                customSessionName.set(ctx.getCustomSessionName());
-            }
-            
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
-        processor.processOnce();
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        // verify customSessionName is set during query execution
-        Assertions.assertEquals("session_name", customSessionName.get());
-        // customSessionName is NOT cleared after query finished
-        Assertions.assertEquals("session_name", ctx.getCustomSessionName());
-        Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doAnswer(invocation -> {
+                        customSessionName.set(ctx.getCustomSessionName());
+                        return null;
+                    }).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+            // verify customSessionName is set during query execution
+            Assertions.assertEquals("session_name", customSessionName.get());
+            // customSessionName is NOT cleared after query finished
+            Assertions.assertEquals("session_name", ctx.getCustomSessionName());
+            Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
+        }
     }
 
     @Test
@@ -815,17 +717,14 @@ public class ConnectProcessorTest extends DDLTestBase {
         ctx.setThreadLocalInfo();
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        new mockit.MockUp<StmtExecutor>() {
-            @mockit.Mock
-            public void execute() {}
-            @mockit.Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
-
-        TMasterOpResult result = processor.proxyExecute(request, null);
-        Assertions.assertNotNull(result);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doNothing().when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertNotNull(result);
+        }
     }
 
     @Test
@@ -843,18 +742,15 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         ConnectContext context = new ConnectContext();
         ConnectProcessor processor = new ConnectProcessor(context);
-        new mockit.MockUp<StmtExecutor>() {
-            @mockit.Mock
-            public void execute() {}
-            @mockit.Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
-
-        TMasterOpResult result = processor.proxyExecute(request, null);
-        Assertions.assertNotNull(result);
-        Assertions.assertTrue(context.getState().isError());
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doNothing().when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(context.getState().isError());
+        }
     }
 
     /**
@@ -878,43 +774,41 @@ public class ConnectProcessorTest extends DDLTestBase {
         AtomicReference<Boolean> tracersInitialized = new AtomicReference<>(false);
 
         // Mock Tracers
-        new MockUp<Tracers>() {
-            @Mock
-            public void register(ConnectContext context) {
-                tracersRegistered.set(true);
+        try (MockedStatic<Tracers> tracersMock = Mockito.mockStatic(Tracers.class, Mockito.CALLS_REAL_METHODS)) {
+            tracersMock.when(() -> Tracers.register(Mockito.any(ConnectContext.class)))
+                    .thenAnswer(invocation -> {
+                        tracersRegistered.set(true);
+                        return null;
+                    });
+            tracersMock.when(() -> Tracers.init(Mockito.any(ConnectContext.class), Mockito.any(), Mockito.any()))
+                    .thenAnswer(invocation -> {
+                        tracersInitialized.set(true);
+                        return null;
+                    });
+
+            // Mock StmtExecutor
+            try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                    (mock, mockCtx) -> {
+                        Mockito.doNothing().when(mock).execute();
+                        Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(statistics);
+                        Mockito.when(mock.getParsedStmt()).thenReturn(prepareStmt);
+                        // mockConstruction skips real constructor; replicate originStmt setup
+                        if (mockCtx.arguments().size() >= 2
+                                && mockCtx.arguments().get(1) instanceof StatementBase) {
+                            StatementBase stmt = (StatementBase) mockCtx.arguments().get(1);
+                            Deencapsulation.setField(mock, "originStmt", stmt.getOrigStmt());
+                        }
+                        Mockito.when(mock.getOriginStmtInString()).thenCallRealMethod();
+                    })) {
+                processor.processOnce();
+
+                // Verify that tracers are properly initialized for query statements
+                Assertions.assertTrue(tracersRegistered.get(), "Tracers should be registered for query statements");
+                Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
+                Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
+                Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
             }
-
-            @Mock
-            public void init(ConnectContext context, String traceMode, String traceModule) {
-                tracersInitialized.set(true);
-            }
-        };
-
-        // Mock StmtExecutor
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                // Do nothing for test
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-
-            @Mock
-            public StatementBase getParsedStmt() {
-                return prepareStmt;
-            }
-        };
-
-        processor.processOnce();
-
-        // Verify that tracers are properly initialized for query statements
-        Assertions.assertTrue(tracersRegistered.get(), "Tracers should be registered for query statements");
-        Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
-        Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
-        Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
+        }
     }
 
     /**
