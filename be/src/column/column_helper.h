@@ -624,15 +624,6 @@ public:
     // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
     static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
 
-    static inline Slice get_binary_slice(const Column* column, size_t row) {
-        const Column* data_column = get_data_column(column);
-        size_t index = column->is_constant() ? 0 : row;
-        if (data_column->is_large_binary()) {
-            return down_cast<const LargeBinaryColumn*>(data_column)->get_slice(index);
-        }
-        return down_cast<const BinaryColumn*>(data_column)->get_slice(index);
-    }
-
     static inline void append_binary_value(Column* column, const Slice& value) {
         Column* data_column = get_data_column(column);
         if (data_column->is_large_binary()) {
