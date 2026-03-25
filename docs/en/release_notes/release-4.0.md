@@ -30,27 +30,27 @@ Release Date: March 25, 2026
 ### Behavior Changes
 
 - Improved `sql_mode` handling: when `DIVISION_BY_ZERO` or `FAIL_PARSE_DATE` mode is set, division by zero and date parse failures in `str_to_date`/`str2date` now return an error instead of being silently ignored. [#70004](https://github.com/StarRocks/starrocks/pull/70004)
-- When `FORBID_INVALID_DATE` sql_mode is enabled, invalid dates in `INSERT VALUES` clauses are now correctly rejected instead of being bypassed. [#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- When `sql_mode` is set to `FORBID_INVALID_DATE`, invalid dates in `INSERT VALUES` clauses are now correctly rejected instead of being bypassed. [#69803](https://github.com/StarRocks/starrocks/pull/69803)
 - Expression partition generated columns are now hidden from `DESC` and `SHOW CREATE TABLE` output. [#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - Client ID is no longer included in audit logs. [#69383](https://github.com/StarRocks/starrocks/pull/69383)
 
 ### Improvements
 
-- Added a configuration item `local_exchange_buffer_mem_limit_per_driver` to limit the local exchange buffer size to `dop × local_exchange_buffer_mem_limit_per_driver`. [#70393](https://github.com/StarRocks/starrocks/pull/70393)
+- Added a configuration item `local_exchange_buffer_mem_limit_per_driver` to limit the local exchange buffer size to `dop * local_exchange_buffer_mem_limit_per_driver`. [#70393](https://github.com/StarRocks/starrocks/pull/70393)
 - Cached file existence check results across versions in `check_missing_files` to reduce redundant storage I/O. [#70364](https://github.com/StarRocks/starrocks/pull/70364)
 - Allowed disabling split and reverse scan ranges for descending TopN runtime filters when `desc_hint_split_range` is set to ≤ 0. [#70307](https://github.com/StarRocks/starrocks/pull/70307)
 - Added `EXPLAIN` and `EXPLAIN ANALYZE` support for `INSERT` statements in the Trino dialect. [#70174](https://github.com/StarRocks/starrocks/pull/70174)
 - Optimized Iceberg read performance when position deletes are present. [#69717](https://github.com/StarRocks/starrocks/pull/69717)
-- Optimized MV best-selector strategy based on distributed keys to improve materialized view selection accuracy. [#69679](https://github.com/StarRocks/starrocks/pull/69679)
+- Optimized materialized view best-selector strategy based on distributed keys to improve materialized view selection accuracy. [#69679](https://github.com/StarRocks/starrocks/pull/69679)
 
 ### Bug Fixes
 
 The following issues have been fixed:
 
 - JDBC MySQL pushdown failing for unsupported cast operations. [#70415](https://github.com/StarRocks/starrocks/pull/70415)
-- Added `mv_refresh_force_partition_type` configuration to force partition type in MV refresh, resolving type mismatch issues. [#70381](https://github.com/StarRocks/starrocks/pull/70381)
+- Type mismatch issues in materialized view refresh. Added `mv_refresh_force_partition_type` configuration to force partition type in materialized view refresh. [#70381](https://github.com/StarRocks/starrocks/pull/70381)
 - `dataVersion` not set correctly when restoring from backup. [#70373](https://github.com/StarRocks/starrocks/pull/70373)
-- Duplicated partition names in MV refresh tasks. [#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- Duplicated partition names in materialized view refresh tasks. [#70354](https://github.com/StarRocks/starrocks/pull/70354)
 - Incorrect SLF4J parameterized logging using string concatenation instead of placeholder arguments. [#70330](https://github.com/StarRocks/starrocks/pull/70330)
 - Comment not set when creating Hive tables. [#70318](https://github.com/StarRocks/starrocks/pull/70318)
 - `FileSystemExpirationChecker` blocking on slow HDFS close operations. [#70311](https://github.com/StarRocks/starrocks/pull/70311)
@@ -62,7 +62,7 @@ The following issues have been fixed:
 - `AuditEventProcessor` thread exiting due to `OutOfMemoryException`. [#70206](https://github.com/StarRocks/starrocks/pull/70206)
 - `SplitTopNRule` not applying partition pruning correctly. [#70154](https://github.com/StarRocks/starrocks/pull/70154)
 - Out-of-bounds access in `cal_new_base_version` during schema change publish. [#70132](https://github.com/StarRocks/starrocks/pull/70132)
-- MV rewrite ignoring dropped partitions from the base table. [#70130](https://github.com/StarRocks/starrocks/pull/70130)
+- Materialied view rewrite ignoring dropped partitions from the base table. [#70130](https://github.com/StarRocks/starrocks/pull/70130)
 - Unexpected partition predicate pruning due to type mismatch in boundary comparisons. [#70097](https://github.com/StarRocks/starrocks/pull/70097)
 - `str_to_date` losing microsecond precision in BE runtime. [#70068](https://github.com/StarRocks/starrocks/pull/70068)
 - Join spill process crashing in `set_callback_function`. [#70030](https://github.com/StarRocks/starrocks/pull/70030)
@@ -83,7 +83,7 @@ The following issues have been fixed:
 - Java UDTF/UDAF crashing when method parameters use generic types. [#69197](https://github.com/StarRocks/starrocks/pull/69197)
 - Per-query metadata not released after query planning, causing FE OOM during concurrent query execution. [#68444](https://github.com/StarRocks/starrocks/pull/68444)
 - Query-scope warehouse hint leaking `ComputeResource` in `ConnectContext`. [#70706](https://github.com/StarRocks/starrocks/pull/70706)
-- Lock-free MV rewrite incorrectly falling back to live metadata. [#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- Lock-free materialized view rewrite incorrectly falling back to live metadata. [#70475](https://github.com/StarRocks/starrocks/pull/70475)
 - Duplicate closure reference in `_tablet_multi_get_rpc`. [#70657](https://github.com/StarRocks/starrocks/pull/70657)
 - Infinite recursion in `ReplaceColumnRefRewriter`. [#66974](https://github.com/StarRocks/starrocks/pull/66974)
 - `NOT NULL` constraint incorrectly pushed down to `FILES()` table function schema. [#70621](https://github.com/StarRocks/starrocks/pull/70621)
