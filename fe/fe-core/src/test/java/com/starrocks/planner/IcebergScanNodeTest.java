@@ -848,13 +848,13 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergRewriteStmt>() {
             @Mock
-            public void $init(InsertStmt base, boolean rewriteAll) {
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) {
                 //do nothing
             }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, false, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
@@ -924,11 +924,7 @@ public class IcebergScanNodeTest {
         };
         new mockit.MockUp<IcebergRewriteStmt>() {
             @mockit.Mock
-            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
-        };
-        new mockit.MockUp<IcebergScanNode>() {
-            @mockit.Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) { /* no-op */ }
         };
 
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
@@ -950,7 +946,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, false, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "parsedStmt", parsedInsert);

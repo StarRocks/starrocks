@@ -20,6 +20,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -31,6 +33,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import org.apache.iceberg.BaseTable;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
@@ -134,21 +137,17 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
             partitionFilterSql = ExprToSql.toSql(partitionFilter);
         }
         velCtx.put("partitionFilterSql", partitionFilterSql);
-        VelocityEngine defaultVelocityEngine = new VelocityEngine();
-        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        StringWriter writer = new StringWriter();
-        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
-                "INSERT INTO $catalogName.$dbName.$tableName" +
-                        " SELECT * FROM $catalogName.$dbName.$tableName" +
-                        " #if ($partitionFilterSql)" +
-                        " WHERE $partitionFilterSql" +
-                        " #end"
-        );
-        String executeStmt = writer.toString();
-        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
-                minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
+
+        org.apache.iceberg.Table nativeTable = context.table();
+        SessionVariable sessionVariable = context.context().getSessionVariable();
+        boolean isV3Table = nativeTable instanceof BaseTable
+                && ((BaseTable) nativeTable).operations().current().formatVersion() >= 3;
+        boolean writeRowLineage = isV3Table && (sessionVariable == null
+                || sessionVariable.getEnableIcebergCompactionWithRowLineage());
         long durationMs = 0L;
         try {
+            IcebergRewriteDataJob job = newRewriteJob(velCtx, writeRowLineage, rewriteAll,
+                    minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
             job.prepare();
             metrics = job.execute();
             success = true;
@@ -163,6 +162,36 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
             recordManualCompactionMetrics(success, durationMs, metrics, failureReason);
         }
         return getRewriteResult(context, metrics, durationMs);
+    }
+
+    private IcebergRewriteDataJob newRewriteJob(VelocityContext velCtx, boolean writeRowLineage, boolean rewriteAll,
+                                                long minFileSizeBytes, long batchSize, long batchParallelism,
+                                                ConnectContext context, AlterTableStmt stmt) {
+        return new IcebergRewriteDataJob(buildInsertSelectSql(velCtx, writeRowLineage), rewriteAll,
+                minFileSizeBytes, batchSize, batchParallelism, writeRowLineage, context, stmt);
+    }
+
+    private String buildInsertSelectSql(VelocityContext velCtx, boolean writeRowLineage) {
+        VelocityEngine defaultVelocityEngine = new VelocityEngine();
+        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+        StringWriter writer = new StringWriter();
+        if (writeRowLineage) {
+            defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
+                    "INSERT INTO $catalogName.$dbName.$tableName" +
+                            " SELECT *, _row_id, _last_updated_sequence_number" +
+                            " FROM $catalogName.$dbName.$tableName" +
+                            " #if ($partitionFilterSql)" +
+                            " WHERE $partitionFilterSql" +
+                            " #end");
+        } else {
+            defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
+                    "INSERT INTO $catalogName.$dbName.$tableName" +
+                            " SELECT * FROM $catalogName.$dbName.$tableName" +
+                            " #if ($partitionFilterSql)" +
+                            " WHERE $partitionFilterSql" +
+                            " #end");
+        }
+        return writer.toString();
     }
 
     private ShowResultSet getRewriteResult(IcebergTableProcedureContext context, 

@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -252,10 +253,14 @@ public class InsertAnalyzer {
                         .collect(Collectors.toSet()));
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
+                boolean writeRowLineage = IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable);
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
                     if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&
-                            !IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())) {
+                            (!IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())
+                                    || (writeRowLineage
+                                    && (column.getName().equals(IcebergTable.ROW_ID)
+                                    || column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))))) {
                         targetColumns.add(column);
                     }
                 });
