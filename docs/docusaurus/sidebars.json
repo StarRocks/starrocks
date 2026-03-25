@@ -489,7 +489,20 @@
                                 "administration/management/FE_parameters/shared_lake_other"
                             ]
                         },
-                        "administration/management/BE_configuration"
+                        {
+                            "type": "category",
+                            "label": "BE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/BE_configuration"
+                            },
+                            "items": [
+                                "administration/management/BE_parameters/log_server_meta",
+                                "administration/management/BE_parameters/query_loading",
+                                "administration/management/BE_parameters/stats_storage",
+                                "administration/management/BE_parameters/shared_lake_other"
+                            ]
+                        }
                 ]
                 },
                 {
