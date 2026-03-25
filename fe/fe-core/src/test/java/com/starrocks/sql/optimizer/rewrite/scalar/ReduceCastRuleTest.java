@@ -119,8 +119,8 @@ public class ReduceCastRuleTest {
     public void testVarcharLengthIsNotInheritedByDefault() {
         ScalarOperatorRewriteRule rule = new ReduceCastRule();
         ScalarOperator child =
-                new ColumnRefOperator(0, ScalarType.createVarcharType(3), "id_varchar", false);
-        ScalarOperator operator = new CastOperator(ScalarType.createVarcharType(10), child);
+                new ColumnRefOperator(0, TypeFactory.createVarcharType(3), "id_varchar", false);
+        ScalarOperator operator = new CastOperator(TypeFactory.createVarcharType(10), child);
 
         ScalarOperator result = rule.apply(operator, null);
 
@@ -139,8 +139,8 @@ public class ReduceCastRuleTest {
         try {
             ScalarOperatorRewriteRule rule = new ReduceCastRule();
             ScalarOperator child =
-                    new ColumnRefOperator(0, ScalarType.createVarcharType(3), "id_varchar", false);
-            ScalarOperator operator = new CastOperator(ScalarType.createVarcharType(10), child);
+                    new ColumnRefOperator(0, TypeFactory.createVarcharType(3), "id_varchar", false);
+            ScalarOperator operator = new CastOperator(TypeFactory.createVarcharType(10), child);
 
             ScalarOperator result = rule.apply(operator, null);
 
