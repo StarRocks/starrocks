@@ -707,8 +707,8 @@ public class StatisticsCalculatorTest {
     @EnumSource(value = OuterJoin.class)
     public void testOuterJoinPreservesOuterSideNullFraction(OuterJoin outerJoin) {
         // GIVEN
-        ColumnRefOperator outerJoinKey = columnRefFactory.create("nullable_col", IntegerType.INT, true);
-        ColumnRefOperator outerOtherCol = columnRefFactory.create("other_col", IntegerType.INT, true);
+        ColumnRefOperator outerJoinKey = columnRefFactory.create("nullable_col", Type.INT, true);
+        ColumnRefOperator outerOtherCol = columnRefFactory.create("other_col", Type.INT, true);
 
         final double outerNullFraction = 0.755;
         Statistics.Builder outerBuilder = Statistics.builder();
@@ -723,8 +723,8 @@ public class StatisticsCalculatorTest {
         outerGroup.setLogicalProperty(new LogicalProperty(
                 new ColumnRefSet(Lists.newArrayList(outerJoinKey, outerOtherCol))));
 
-        ColumnRefOperator innerKey = columnRefFactory.create("dim_id", IntegerType.INT, true);
-        ColumnRefOperator innerVal = columnRefFactory.create("dim_val", IntegerType.INT, true);
+        ColumnRefOperator innerKey = columnRefFactory.create("dim_id", Type.INT, true);
+        ColumnRefOperator innerVal = columnRefFactory.create("dim_val", Type.INT, true);
 
         Statistics.Builder innerBuilder = Statistics.builder();
         innerBuilder.setOutputRowCount(200000);
