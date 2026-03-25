@@ -212,8 +212,20 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+<<<<<<< HEAD
         // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
         this->data(state).update(ctx->mem_pool(), *columns[0], row_num, 1);
+=======
+        if constexpr (lt_is_string_or_binary<LT>) {
+            MemPool* mem_pool = ctx->mem_pool();
+            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
+            this->data(state).update_with_slice(mem_pool, slice);
+        } else {
+            const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+            // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+            this->data(state).update(ctx->mem_pool(), column, row_num, 1);
+        }
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {

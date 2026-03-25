@@ -439,6 +439,7 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+<<<<<<< HEAD
     template <LogicalType LT>
     static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
         using ColumnType = RunTimeColumnType<LT>;
@@ -449,6 +450,16 @@ public:
             } else {
                 down_cast<ColumnType*>(column)->append(value);
             }
+=======
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
+
+    static inline void append_binary_value(Column* column, const Slice& value) {
+        Column* data_column = get_data_column(column);
+        if (data_column->is_large_binary()) {
+            down_cast<LargeBinaryColumn*>(data_column)->append(value);
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         } else {
             down_cast<ColumnType*>(column)->append(value);
         }
@@ -483,6 +494,16 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    static inline size_t get_binary_bytes_size(const Column* column) {
+        if (column->is_large_binary()) {
+            return down_cast<const LargeBinaryColumn*>(column)->get_immutable_bytes().size();
+        }
+        return down_cast<const BinaryColumn*>(column)->get_immutable_bytes().size();
+    }
+
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
     template <typename Func>
     static inline void with_binary_column_bytes(Column* column, Func&& func) {
         if (column->is_large_binary()) {
@@ -581,6 +602,7 @@ struct ChunkSliceTemplate {
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+<<<<<<< HEAD
     static const auto& get_data(const Column* column) {
         const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
@@ -594,6 +616,22 @@ struct GetContainer {
         }
     }
     static const auto& get_data(const ColumnPtr& column) { return get_data(column.get()); }
+=======
+    static const auto get_data(const Column* column) {
+        const auto* data_column = ColumnHelper::get_data_column(column);
+        if constexpr (lt_is_string_or_binary<ltype>) {
+            using LargeColumnType = RunTimeLargeColumnType<ltype>;
+            if (column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            }
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
+        }
+    }
+    static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
+    static const auto get_data(const MutableColumnPtr& column) { return get_data(column.get()); }
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 
     static const auto get_data(const Column* column, size_t row) {
         const Column* data_column = ColumnHelper::get_data_column(column);

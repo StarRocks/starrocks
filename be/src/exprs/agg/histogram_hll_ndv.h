@@ -84,6 +84,15 @@ public:
         });
         if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v)) {
             bucket_it = buckets.end();
+<<<<<<< HEAD
+=======
+        }
+        // find the correct bucket for the current value.
+        if constexpr (lt_is_string_or_binary<LT>) {
+            hash = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
+        } else {
+            hash = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
         // find the correct bucket for the current value.
         uint64_t hash = HashUtil::murmur_hash64A<T>(v, HashUtil::MURMUR_SEED);

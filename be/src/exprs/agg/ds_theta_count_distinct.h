@@ -54,9 +54,20 @@ public:
         // init state if needed
         _init_if_needed(state);
 
+<<<<<<< HEAD
         const auto& v = GetContainer<LT>::get_data(columns[0], row_num);
         uint64_t value = HashUtil::murmur_hash64A<T>(v, HashUtil::MURMUR_SEED);
 
+=======
+        uint64_t value = 0;
+        const auto& v = GetContainer<LT>::get_data(columns[0], row_num);
+
+        if constexpr (lt_is_string_or_binary<LT>) {
+            value = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
+        } else {
+            value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
+        }
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         update_state(ctx, state, value);
     }
 
@@ -66,10 +77,30 @@ public:
         // init state if needed
         _init_if_needed(state);
         const auto& datas = GetContainer<LT>::get_data(columns[0]);
+<<<<<<< HEAD
         for (size_t i = frame_start; i < frame_end; ++i) {
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
             if (value != 0) {
                 update_state(ctx, state, value);
+=======
+        if constexpr (lt_is_string_or_binary<LT>) {
+            uint64_t value = 0;
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                Slice s = datas[i];
+                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
+                if (value != 0) {
+                    update_state(ctx, state, value);
+                }
+            }
+        } else {
+            uint64_t value = 0;
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                value = HashUtil::murmur_hash64A(&datas[i], sizeof(datas[i]), HashUtil::MURMUR_SEED);
+
+                if (value != 0) {
+                    update_state(ctx, state, value);
+                }
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
             }
         }
     }

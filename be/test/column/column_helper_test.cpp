@@ -151,6 +151,7 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
 }
 
+<<<<<<< HEAD
 // ColumnHelper::append_column_value
 TEST_F(ColumnHelperTest, append_column_value_int32) {
     auto col = Int32Column::create();
@@ -191,4 +192,6 @@ TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
     ASSERT_EQ(typed_data->get_slice(0).to_string(), "v1");
 }
 
+=======
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 } // namespace starrocks
