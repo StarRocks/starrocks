@@ -36,6 +36,7 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
@@ -365,6 +366,11 @@ private:
     int32_t _type_length = 0;
 };
 
+// UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+static constexpr int kUUIDByteLength = 16;
+static constexpr int kUUIDStringLength = 36;
+
 Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
     auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
     auto* dst_nullable = down_cast<NullableColumn*>(dst);
@@ -379,7 +385,7 @@ Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst)
     memcpy(dst_null.data(), src_null.data(), n);
 
     static constexpr char HEX[] = "0123456789abcdef";
-    char buf[36];
+    char buf[kUUIDStringLength];
 
     for (size_t i = 0; i < n; i++) {
         if (src_null[i]) {
@@ -387,34 +393,37 @@ Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst)
             continue;
         }
         Slice s = src_col->get_slice(i);
-        DCHECK_EQ(s.size, 16);
+        if (UNLIKELY(s.size != kUUIDByteLength)) {
+            return Status::Corruption(strings::Substitute(
+                    "parquet UUID column has unexpected byte length $0, expected $1", s.size, kUUIDByteLength));
+        }
         const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
-        int p = 0;
+        int pos = 0;
         for (int j = 0; j < 4; j++) {
-            buf[p++] = HEX[bytes[j] >> 4];
-            buf[p++] = HEX[bytes[j] & 0xf];
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
         }
-        buf[p++] = '-';
+        buf[pos++] = '-';
         for (int j = 4; j < 6; j++) {
-            buf[p++] = HEX[bytes[j] >> 4];
-            buf[p++] = HEX[bytes[j] & 0xf];
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
         }
-        buf[p++] = '-';
+        buf[pos++] = '-';
         for (int j = 6; j < 8; j++) {
-            buf[p++] = HEX[bytes[j] >> 4];
-            buf[p++] = HEX[bytes[j] & 0xf];
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
         }
-        buf[p++] = '-';
+        buf[pos++] = '-';
         for (int j = 8; j < 10; j++) {
-            buf[p++] = HEX[bytes[j] >> 4];
-            buf[p++] = HEX[bytes[j] & 0xf];
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
         }
-        buf[p++] = '-';
-        for (int j = 10; j < 16; j++) {
-            buf[p++] = HEX[bytes[j] >> 4];
-            buf[p++] = HEX[bytes[j] & 0xf];
+        buf[pos++] = '-';
+        for (int j = 10; j < kUUIDByteLength; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
         }
-        dst_col->append(Slice(buf, 36));
+        dst_col->append(Slice(buf, kUUIDStringLength));
     }
     dst_nullable->set_has_null(src_nullable->has_null());
     return Status::OK();

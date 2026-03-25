@@ -160,7 +160,10 @@ public:
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         _can_lazy_convert = can_lazy_decode;
-        _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
+        // Disable lazy dict decode when a value converter is required (e.g. UUID bytes -> string),
+        // because the dict-decode path materialises values directly into dst and bypasses converters.
+        _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() &&
+                                column_all_pages_dict_encoded() && !_converter->need_convert;
     }
 
     Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,

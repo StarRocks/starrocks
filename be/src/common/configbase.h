@@ -71,7 +71,7 @@ public:
 
     operator std::string() const { return value(); }
 
-    MutableString& operator=(std::string s);
+    MutableString& operator=(const std::string& s);
 
 private:
     static bool update_value(std::string& bg, std::string new_value) {
@@ -88,7 +88,7 @@ inline std::string MutableString::value() const {
     return *ptr;
 }
 
-inline MutableString& MutableString::operator=(std::string s) {
+inline MutableString& MutableString::operator=(const std::string& s) {
     _str.Modify(update_value, s);
     return *this;
 }

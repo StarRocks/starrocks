@@ -421,8 +421,9 @@ TEST_F(ColumnConverterTest, FLBATest) {
     {
         const std::string col_name = "uuid";
         {
+            // FIXED_LEN_BYTE_ARRAY (UUID logical type) -> VARCHAR: bytes formatted as xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-            check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
+            check(file_path, col_type, col_name, "['61626344-6546-4768-696a-6b4c6d6e4f70']", expected_rows);
         }
         {
             // FIXED_LEN_BYTE_ARRAY (UUID) -> VARBINARY: raw 16 bytes pass through without conversion

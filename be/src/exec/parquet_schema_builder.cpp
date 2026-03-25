@@ -24,6 +24,9 @@ namespace starrocks {
 static constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
 // Shredded parquet variant layout: group(metadata, value, typed_value).
 static constexpr int VARIANT_SHREDDING_COUNT = 3;
+// UUID is encoded as 16 bytes in parquet but represented as a 36-character string
+// (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) in StarRocks VARCHAR.
+static constexpr int UUID_VARCHAR_LENGTH = 36;
 
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
@@ -109,7 +112,7 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
                                                               decimal_logical_type->scale());
         } else if (logical_type->is_UUID()) {
-            *type_desc = TypeDescriptor::create_varchar_type(36);
+            *type_desc = TypeDescriptor::create_varchar_type(UUID_VARCHAR_LENGTH);
         } else {
             // INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
             // VARBINARY is the correct SR type for all of these.
