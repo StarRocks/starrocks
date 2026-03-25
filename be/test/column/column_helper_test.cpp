@@ -18,8 +18,11 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "gtest/gtest.h"
+<<<<<<< HEAD
 #include "gutil/casts.h"
 #include "testutil/assert.h"
+=======
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -103,6 +106,7 @@ TEST_F(ColumnHelperTest, get_null_column) {
     ASSERT_EQ(null_column->get_name(), "integral-1");
 }
 
+<<<<<<< HEAD
 // Verify update_nested_has_null recurses into STRUCT subfield columns.
 // Mirrors the post-write step a STRUCT-returning Java UDF goes through:
 // the Java side memcpys raw null bytes into subfield bitmaps without touching
@@ -131,6 +135,58 @@ TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
 
     EXPECT_TRUE(a_col->has_null());
     EXPECT_FALSE(b_col->has_null());
+=======
+// GetContainer::get_data
+TEST_F(ColumnHelperTest, get_container_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
+    auto data = GetContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 1);
+    EXPECT_EQ(data[1], 2);
+    EXPECT_EQ(data[2], 3);
+}
+
+TEST_F(ColumnHelperTest, get_container_varchar) {
+    auto col = ColumnTestHelper::build_column<Slice>({"hello", "world"});
+    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "hello");
+    EXPECT_EQ(data[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, get_container_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("abc");
+    col->append_string("def");
+    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "abc");
+    EXPECT_EQ(data[1].to_string(), "def");
+}
+
+// GetContainer::get_data(column, row)
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_const_column) {
+    // ConstColumn: is_constant() == true, index is always 0
+    auto inner = ColumnTestHelper::build_column<int32_t>({42});
+    auto const_col = ConstColumn::create(std::move(inner), 5);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(const_col.get(), 0), 42);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(const_col.get(), 3), 42);
+}
+
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
+    // NullableColumn: get_data_column unwraps it, row index used as-is
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+>>>>>>> 9bc4fbe ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
 }
 
 } // namespace starrocks
