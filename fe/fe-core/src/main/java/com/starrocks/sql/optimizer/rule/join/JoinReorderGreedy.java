@@ -141,9 +141,11 @@ public class JoinReorderGreedy extends JoinOrder {
     }
 
     private GroupInfo getBestGroupInfo(List<GroupInfo> groupInfos) {
-        double bestCost = Double.MAX_VALUE;
-        GroupInfo bestExpr = null;
-        for (GroupInfo groupInfo : groupInfos) {
+        Preconditions.checkState(!groupInfos.isEmpty());
+        var bestExpr = groupInfos.get(0);
+        double bestCost = bestExpr.bestExprInfo.cost;
+        for (int i = 1; i < groupInfos.size(); i++) {
+            var groupInfo = groupInfos.get(i);
             if (groupInfo.bestExprInfo.cost < bestCost) {
                 bestExpr = groupInfo;
                 bestCost = groupInfo.bestExprInfo.cost;
