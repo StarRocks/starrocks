@@ -304,7 +304,8 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec for sessionVariables.
         Assertions.assertEquals(TCompressionType.NO_COMPRESSION,
                 jobSpec.getQueryOptions().getLoad_transmission_compression_type());
-        Assertions.assertFalse(jobSpec.getQueryOptions().isSetLog_rejected_record_num());
+        // log_rejected_record_num is always set via toThrift() with default value 0
+        Assertions.assertEquals(0L, jobSpec.getQueryOptions().getLog_rejected_record_num());
 
         sessionVariables = ImmutableMap.of(
                 SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, "LZ4",
@@ -374,7 +375,8 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec for sessionVariables.
         Assertions.assertEquals(TCompressionType.NO_COMPRESSION,
                 jobSpec.getQueryOptions().getLoad_transmission_compression_type());
-        Assertions.assertFalse(jobSpec.getQueryOptions().isSetLog_rejected_record_num());
+        // log_rejected_record_num is always set via toThrift() with default value 0
+        Assertions.assertEquals(0L, jobSpec.getQueryOptions().getLog_rejected_record_num());
 
         sessionVariables = ImmutableMap.of(
                 SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, "LZ4",
