@@ -476,6 +476,15 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
         return false;
     }
 
+    // UUID columns are stored as 16-byte FIXED_LEN_BYTE_ARRAY in Parquet but exposed as canonical
+    // VARCHAR(36) strings (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) after FixedLenByteArrayToUUIDConverter.
+    // The dict-filter path reads raw dictionary bytes without running the converter, so predicates
+    // comparing canonical UUID strings against 16-byte raw values would silently drop matching rows.
+    const auto& schema_elem = get_column_parquet_field()->schema_element;
+    if (schema_elem.__isset.logicalType && schema_elem.logicalType.__isset.UUID) {
+        return false;
+    }
+
     if (column_all_pages_dict_encoded()) {
         if (_dict_filter_ctx == nullptr) {
             _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
