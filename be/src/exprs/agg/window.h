@@ -775,6 +775,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
     }
 
+<<<<<<< HEAD
     // Only `lead ... IGNORE NULLS` can look past the physical frame, so it is the only variant the
     // analytor has to consult per row.
     bool needs_window_result_ready_check() const override { return ignoreNulls && !isLag; }
@@ -905,6 +906,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
     }
 
+=======
+>>>>>>> 1d8e301 ([Enhancement] AggDataTypeTraits support append_values (#70765))
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         this->get_values_helper(state, dst, start, end);
