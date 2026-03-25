@@ -193,7 +193,13 @@ public class SqlWithIdUtils {
                                 relation.getColumnOutputNames().stream().map(c -> "`" + c + "`").collect(toList())))
                         .append(")");
             }
-            sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            sqlBuilder.append(" AS ");
+            if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+                sqlBuilder.append("MATERIALIZED ");
+            } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+                sqlBuilder.append("NOT MATERIALIZED ");
+            }
+            sqlBuilder.append("(").append(visit(relation.getCteQueryStatement())).append(") ");
             return sqlBuilder.toString();
         }
 

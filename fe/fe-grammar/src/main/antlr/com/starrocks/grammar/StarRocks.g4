@@ -2464,7 +2464,9 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' queryRelation ')'
+    : name=identifier (columnAliases)? AS MATERIALIZED '(' queryRelation ')'
+    | name=identifier (columnAliases)? AS NOT MATERIALIZED '(' queryRelation ')'
+    | name=identifier (columnAliases)? AS '(' queryRelation ')'
     ;
 
 setQuantifier

@@ -290,8 +290,14 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                     .append(")");
         }
         
-        sqlBuilder.append(" AS (");
-        
+        sqlBuilder.append(" AS ");
+        if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+            sqlBuilder.append("MATERIALIZED ");
+        } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+            sqlBuilder.append("NOT MATERIALIZED ");
+        }
+        sqlBuilder.append("(");
+
         if (options.isEnablePrettyFormat()) {
             // Pretty format: CTE definition with proper indentation
             options.increaseIndent();
