@@ -18,6 +18,7 @@
 #include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
+#include "base/failpoint/fail_point.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
@@ -44,6 +45,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
 #include "util/logging.h"
@@ -613,6 +615,122 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     tablet.reset();
     EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_OK(migration_task.execute());
+}
+
+// Verifies that rapid PK tablet re-migration (disk A->B->A) preserves the
+// new tablet's rowset metadata when GC leaves a stale shutdown entry behind.
+//
+// Test flow:
+//   1. Migration A->B: V1 enters _shutdown_tablets, V2 becomes active on disk_b.
+//   2. GC sweep removes V1's on-disk meta from disk_a, but a fail point keeps
+//      the stale V1 entry in _shutdown_tablets.
+//   3. Migration B->A succeeds, and the new tablet on disk_a still has its
+//      rowset metadata.
+TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_tablet_meta) {
+    int64_t tablet_id = 77777;
+    int32_t schema_hash = 7777;
+    TabletManager* tablet_manager = StorageEngine::instance()->tablet_manager();
+
+    // Clean leftovers from previous tests so the shutdown queues start empty.
+    ASSERT_OK(tablet_manager->start_trash_sweep());
+
+    // Step 1: Create PK tablet with one committed rowset so we can verify whether
+    // metadata survives the second migration.
+    TabletSharedPtr tablet = create_pk_tablet(tablet_id, schema_hash);
+    tablet->set_enable_persistent_index(false);
+    ASSERT_TRUE(tablet != nullptr);
+    ASSERT_OK(tablet->set_tablet_state(TABLET_RUNNING));
+    tablet->save_meta();
+
+    std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+    auto rowset = create_pk_rowset(tablet, keys);
+    ASSERT_OK(tablet->rowset_commit(2, rowset));
+
+    // Ensure the first migration gets a strictly newer rowset creation time than V1.
+    sleep(1);
+
+    DataDir* disk_a = tablet->data_dir();
+    DataDir* disk_b = nullptr;
+    for (auto* store : StorageEngine::instance()->get_stores()) {
+        if (store != disk_a) {
+            disk_b = store;
+            break;
+        }
+    }
+    ASSERT_TRUE(disk_b != nullptr);
+    tablet.reset();
+
+    // Step 2: Migrate A->B. V1 goes to _shutdown_tablets, V2 becomes active on disk_b.
+    EngineStorageMigrationTask migration1(tablet_id, schema_hash, disk_b, false);
+    ASSERT_OK(migration1.execute());
+
+    tablet = tablet_manager->get_tablet(tablet_id);
+    ASSERT_TRUE(tablet != nullptr);
+    ASSERT_EQ(tablet->data_dir(), disk_b);
+    tablet.reset();
+
+    // Step 3: Run GC with a fail point so phase 1 removes V1's on-disk meta, but
+    // the shutdown queue entry for V1 remains stale in _shutdown_tablets.
+    PFailPointTriggerMode trigger_mode;
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+            "start_trash_sweep_skip_shutdown_tablets_cleanup");
+    ASSERT_TRUE(fp != nullptr);
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+
+    ASSERT_OK(tablet_manager->start_trash_sweep());
+
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    TabletMeta tmp_meta;
+    ASSERT_TRUE(TabletMetaManager::get_tablet_meta(disk_a, tablet_id, schema_hash, &tmp_meta).is_not_found());
+
+    // Ensure the second migration gets a strictly newer rowset creation time than V2.
+    sleep(1);
+
+    // Step 4: Migrate B->A. With the fix, stale V1 is detected and skipped, so V3's
+    // metadata on disk_a is preserved instead of being wiped.
+    EngineStorageMigrationTask migration2(tablet_id, schema_hash, disk_a, false);
+    ASSERT_OK(migration2.execute());
+
+    tablet = tablet_manager->get_tablet(tablet_id);
+    ASSERT_TRUE(tablet != nullptr);
+    ASSERT_EQ(tablet->data_dir(), disk_a);
+
+    // Step 5: Verify the fixed behavior. If the old bug is present, rowset_count
+    // becomes 0 after V1 clears V3's metadata by tablet_id.
+    int rowset_count = 0;
+    ASSERT_OK(TabletMetaManager::rowset_iterate(disk_a, tablet_id, [&](const RowsetMetaSharedPtr&) -> bool {
+        rowset_count++;
+        return true;
+    }));
+    ASSERT_GT(rowset_count, 0);
+
+    // Step 6: Simulate restart-time loading through the normal load path:
+    // remove the in-memory tablet while keeping on-disk meta/files, then load
+    // it back from persisted meta using the same arguments as startup loading.
+    tablet.reset();
+    ASSERT_OK(tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles));
+    ASSERT_EQ(nullptr, tablet_manager->get_tablet(tablet_id));
+
+    TabletMeta reloaded_meta;
+    ASSERT_OK(TabletMetaManager::get_tablet_meta(disk_a, tablet_id, schema_hash, &reloaded_meta));
+
+    std::string meta_binary;
+    ASSERT_OK(reloaded_meta.serialize(&meta_binary));
+
+    ASSERT_OK(tablet_manager->load_tablet_from_meta(disk_a, tablet_id, schema_hash, meta_binary, false, false, false,
+                                                    false));
+
+    TabletSharedPtr reloaded_tablet = tablet_manager->get_tablet(tablet_id);
+    ASSERT_TRUE(reloaded_tablet != nullptr);
+    ASSERT_EQ(reloaded_tablet->data_dir(), disk_a);
+    ASSERT_TRUE(reloaded_tablet->updates() != nullptr);
+    ASSERT_EQ(2, reloaded_tablet->updates()->max_version());
+
+    reloaded_tablet.reset();
+    ASSERT_OK(tablet_manager->start_trash_sweep());
 }
 
 } // namespace starrocks
