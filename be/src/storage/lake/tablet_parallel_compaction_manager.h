@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -26,6 +28,9 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/tablet_splitter.h"
+#include "storage/olap_tuple.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks {
 class ThreadPool;
@@ -45,8 +50,9 @@ struct CompactionTaskInfo;
 
 // Subtask type for parallel compaction
 enum class SubtaskType {
-    NORMAL,           // Normal subtask containing multiple complete rowsets
-    LARGE_ROWSET_PART // Subtask that is part of a large rowset split
+    NORMAL,            // Normal subtask containing multiple complete rowsets
+    LARGE_ROWSET_PART, // Subtask that is part of a large rowset split
+    RANGE_SPLIT        // Subtask processing a sort key range across all rowsets
 };
 
 // Group of rowsets/segments for a single subtask
@@ -61,6 +67,15 @@ struct SubtaskGroup {
     uint32_t large_rowset_id = 0;
     int32_t segment_start = 0;
     int32_t segment_end = 0;
+
+    // For RANGE_SPLIT type: all input rowsets (shared) and key range
+    std::vector<RowsetPtr> range_split_rowsets;
+    VariantTuple range_lower_bound;
+    VariantTuple range_upper_bound;
+    bool range_lower_inclusive = true;
+    bool range_upper_inclusive = false;
+    bool is_first_range = false;
+    bool is_last_range = false;
 
     // Total data size of this group
     int64_t total_bytes = 0;
@@ -82,6 +97,9 @@ struct SubtaskInfo {
     // For LARGE_ROWSET_PART type: segment range [segment_start, segment_end)
     int32_t segment_start = 0;
     int32_t segment_end = 0;
+    // For RANGE_SPLIT type: sort key range boundaries
+    VariantTuple range_lower_bound;
+    VariantTuple range_upper_bound;
 };
 
 // Single tablet's parallel compaction state
@@ -129,6 +147,17 @@ struct TabletParallelCompactionState {
     // If large_rowset_split_groups[rowset_id].size() != expected_large_rowset_split_counts[rowset_id],
     // the split is incomplete and should be treated as failed.
     std::unordered_map<uint32_t, int32_t> expected_large_rowset_split_counts;
+
+    // For RANGE_SPLIT: all subtasks share the same input rowsets.
+    // All subtasks must succeed for the output to be non-overlapping.
+    bool is_range_split = false;
+    std::vector<uint32_t> range_split_input_rowset_ids;
+
+    // Expected number of range split subtasks. Recorded BEFORE subtask creation
+    // to detect incomplete splits (when submit_func fails after some subtasks
+    // are already submitted). If completed_subtasks.size() != expected_range_split_count,
+    // the split is incomplete and must be treated as failed.
+    int32_t expected_range_split_count = 0;
 
     // Mutex for thread-safe access
     mutable std::mutex mutex;
@@ -250,6 +279,13 @@ private:
                                        int32_t segment_end, int64_t version, bool force_base_compaction,
                                        const ReleaseTokenFunc& release_token);
 
+    // Execute a single subtask for range split (sort key range mode)
+    void execute_subtask_range_split(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
+                                     std::vector<RowsetPtr> all_rowsets, const VariantTuple& range_lower,
+                                     const VariantTuple& range_upper, bool lower_inclusive, bool upper_inclusive,
+                                     bool is_first_range, bool is_last_range, int64_t version,
+                                     bool force_base_compaction, const ReleaseTokenFunc& release_token);
+
     // Generate state key from tablet_id and txn_id
     static std::string make_state_key(int64_t tablet_id, int64_t txn_id) {
         return std::to_string(tablet_id) + "_" + std::to_string(txn_id);
@@ -336,6 +372,41 @@ private:
     Status _merge_subtask_lcrm_files(int64_t tablet_id, int64_t txn_id, const std::vector<FileMetaPB>& lcrm_files,
                                      const std::vector<int64_t>& num_rows_per_subtask,
                                      TxnLogPB_OpCompaction* merged_compaction);
+
+    // ================================================================================
+    // Range split related functions
+    // ================================================================================
+
+    // Check if range split is applicable for the given rowsets.
+    // All segments must have sort_key_min/max metadata.
+    static bool _can_use_range_split(const std::vector<RowsetPtr>& rowsets);
+
+    // Collect sort key bounds from all segments across all rowsets.
+    // Returns SegmentSplitInfo (defined in tablet_splitter.h) for each segment.
+    static StatusOr<std::vector<SegmentSplitInfo>> _collect_segment_key_bounds(const std::vector<RowsetPtr>& rowsets);
+
+    // Create SubtaskGroups using range split strategy.
+    // Uses calculate_range_split_boundaries() from tablet_splitter to calculate boundaries.
+    std::vector<SubtaskGroup> _create_range_split_groups(int64_t tablet_id, const std::vector<RowsetPtr>& rowsets,
+                                                         int32_t max_parallel, int64_t max_bytes_per_subtask);
+
+    // Convert VariantTuple to OlapTuple for TabletReaderParams.
+    static OlapTuple _variant_tuple_to_olap_tuple(const VariantTuple& vt);
+
+    // Test access to private methods
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_can_use_range_split);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_variant_tuple_to_olap_tuple);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_range_split_groups);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_basic);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_empty);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_group_small_rowsets_single_large);
+    FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_is_large_rowset_next_compaction_offset);
+    FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_merge_with_previous);
+    FRIEND_TEST(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_too_few_segments);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_range_split_groups_error_paths);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_range_split_vlog_paths);
+    FRIEND_TEST(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_split);
 
     TabletManager* _tablet_mgr;
 

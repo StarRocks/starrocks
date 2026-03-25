@@ -294,6 +294,12 @@ message TxnLogPB {
         // Only set for LARGE_ROWSET_PART type subtasks.
         optional int32 segment_range_start = 13;
         optional int32 segment_range_end = 14;
+        // For RANGE_SPLIT type: the sort key range this subtask processed.
+        // All subtask ranges are non-overlapping, so merged output is non-overlapping.
+        optional TuplePB range_split_lower_bound = 15;
+        optional TuplePB range_split_upper_bound = 16;
+        optional bool range_split_lower_inclusive = 17;
+        optional bool range_split_upper_inclusive = 18;
     }
 
     // Parallel compaction operation: contains multiple subtask compaction results.
@@ -315,6 +321,9 @@ message TxnLogPB {
         // When large rowset split subtasks are merged, their individual lcrm_files
         // are no longer valid (segment IDs change after merge) and must be cleaned.
         repeated FileMetaPB orphan_lcrm_files = 6;
+        // Whether this parallel compaction uses range-split strategy.
+        // When true, the merged output rowset is non-overlapping.
+        optional bool is_range_split = 7;
     }
 
     message OpSchemaChange {

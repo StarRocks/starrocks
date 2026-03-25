@@ -22,6 +22,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/olap_tuple.h"
 
 namespace starrocks {
 struct OlapReaderStatistics;
@@ -121,6 +122,22 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     // Flag to indicate this is a merged context from parallel compaction.
     // When true, cleanup_tablet should be called in remove_states after RPC response is sent.
     bool is_parallel_merged = false;
+
+    // Range split: sort key range for this subtask.
+    // When set, the compaction task only reads/writes data within this range.
+    bool has_range_split = false;
+    std::vector<OlapTuple> range_start_key;
+    std::vector<OlapTuple> range_end_key;
+    bool range_lower_inclusive = true;
+    bool range_upper_inclusive = false;
+    // Explicit bound presence flags. When has_lower_bound is false, the lower bound
+    // is unbounded (scan from the beginning). When has_upper_bound is false, the upper
+    // bound is unbounded (scan to the end). This avoids relying on empty OlapTuple
+    // semantics in the segment iterator for open-ended ranges.
+    bool has_lower_bound = false;
+    bool has_upper_bound = false;
+    bool is_first_range = false;
+    bool is_last_range = false;
 };
 
 } // namespace starrocks::lake
