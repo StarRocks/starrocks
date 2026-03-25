@@ -2030,6 +2030,15 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
 
+### Iceberg query FE metrics
+
+#### iceberg_time_travel_query_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `time_travel_type` (`branch`, `tag`, `snapshot`, or `timestamp`) for the categorized series.
+- Description: Total number of Iceberg time travel queries. The unlabeled series counts each time travel query once. The labeled series count each distinct time travel type used by the query. `snapshot` means `FOR VERSION AS OF <snapshot_id>`, `branch` and `tag` mean `FOR VERSION AS OF <reference_name>`, and `timestamp` means `FOR TIMESTAMP AS OF ...`.
+
 ### Iceberg delete FE metrics
 
 #### iceberg_delete_total

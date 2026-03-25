@@ -2029,6 +2029,15 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
 
+### Iceberg 查询 FE 指标
+
+#### iceberg_time_travel_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：分类序列包含 `time_travel_type`，取值为 `branch`、`tag`、`snapshot` 或 `timestamp`。
+- 描述：Iceberg time travel 查询总数。无标签序列对每条 time travel 查询只计一次；带标签序列按查询中使用到的 time travel 类型分别计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
+
 ### Iceberg 删除 FE 指标
 
 #### iceberg_delete_total
