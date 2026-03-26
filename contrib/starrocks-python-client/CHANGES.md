@@ -1,6 +1,10 @@
 Version history
 ===============
 
+**1.3.4**
+
+- Optimize StarRocks `run_mode` resolution by making it lazy and cached, avoiding unnecessary `run_mode` lookups on common table read/write and reflection paths.
+
 **1.3.3**
 
 - Add back support for SQLAlchemy 1.4 (#65976 by @rad-pat)

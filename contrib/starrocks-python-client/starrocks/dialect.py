@@ -35,7 +35,7 @@ from sqlalchemy import (
     types as sqltypes,
     util,
 )
-from sqlalchemy.engine import Connection
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.dialects.mysql.base import (
     MySQLCompiler,
     MySQLDDLCompiler,
@@ -1275,7 +1275,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     def __init__(self, *args, **kwargs):
         super(StarRocksDialect, self).__init__(*args, **kwargs)
-        self.run_mode: Optional[str] = None
+        self._run_mode: Optional[str] = None
+        self._bind_engine: Optional[Engine] = None
         # It may be error to explicitly instantiate the preparer here, `initialize` method will instance it.
         # self.preparer = self.preparer(self)
 
@@ -1298,12 +1299,27 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     def initialize(self, connection: Connection) -> None:
         super().initialize(connection)
-        self._init_run_mode(connection)
+        # Cache an engine reference for deferred run_mode lookup.
+        self._bind_engine = connection.engine
 
-    def _init_run_mode(self, connection: Connection) -> None:
-        if self.run_mode is None:
-            self.run_mode = self._get_run_mode(connection)
-            logger.debug("system run mode: %s" % self.run_mode)
+    @property
+    def run_mode(self) -> str:
+        """Lazily get and cache StarRocks run_mode.
+
+        Keep the public attribute name for backward compatibility.
+        """
+        if self._run_mode is not None:
+            return self._run_mode
+
+        if self._bind_engine is not None:
+            with self._bind_engine.connect() as conn:
+                self._run_mode = self._get_run_mode(conn)
+                logger.debug("system run mode: %s", self._run_mode)
+                return self._run_mode
+
+        # No usable connection context: return conservative default without caching.
+        logger.warning("No connection context for run_mode lookup, fallback to shared_nothing")
+        return SystemRunMode.SHARED_NOTHING
 
     def _get_server_version_info(self, connection: Connection) -> Tuple[int, ...]:
         # get database server version info explicitly over the wire
@@ -1346,15 +1362,28 @@ class StarRocksDialect(MySQLDialect_pymysql):
             rows = result.fetchall()
             if rows and len(rows) > 0:
                 # The result format is: | Key | AliasNames | Value | Type | IsMutable | Comment |
-                return rows[0][2].lower()  # Value column
-            else:
-                # Default to shared_nothing if not found
-                return SystemRunMode.SHARED_NOTHING
+                value = str(rows[0][2]).lower()
+                if value in (SystemRunMode.SHARED_DATA, SystemRunMode.SHARED_NOTHING):
+                    return value
+                else:
+                    logger.warning(f"The run_mode gotten via frontend config is incorrect. run_mode: {value}")
         except exc.DBAPIError as e:
-            # Log the error but don't fail the entire operation
-            logger.warning(f"Failed to get run_mode: {e}")
-            # Default to shared_nothing if query fails
-            return SystemRunMode.SHARED_NOTHING
+            logger.warning("Failed to get run_mode via frontend config: %s", e)
+
+        try:
+            result = connection.execute(text("SHOW STORAGE VOLUMES"))
+            rows = result.fetchall()
+            # Shared-data mode exposes storage volumes.
+            if rows and len(rows) > 0:
+                return SystemRunMode.SHARED_DATA
+            else:
+                logger.warning("Nothing gotten via storage volumes.")
+        except exc.DBAPIError as e:
+            logger.warning("Failed to infer run_mode via storage volumes: %s", e)
+
+        # Conservative fallback.
+        logger.warning("Starrocks, set run_mode to shared_nothing, because it failed to infer run_mode.")
+        return SystemRunMode.SHARED_NOTHING
 
     def _show_create_table(
         self,
