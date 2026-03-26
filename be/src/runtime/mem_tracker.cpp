@@ -135,9 +135,9 @@ MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> att
                        MemTracker* parent)
         : _limit(byte_limit), _label(std::move(label)), _parent(parent) {
     if (std::get<0>(attaching_info)) {
-        _consumption = profile->AddHighWaterMarkCounter(
-                counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
-                RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+        _consumption =
+                profile->AddHighWaterMarkCounter(counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
+                                                 RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
     } else {
         _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
         _consumption = _local_consumption_holder.get();
