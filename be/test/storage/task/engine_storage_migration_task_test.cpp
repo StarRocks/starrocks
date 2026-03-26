@@ -20,6 +20,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/path/file_util.h"
+#include "base/utility/defer_op.h"
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
 #include "common/config_exec_fwd.h"
@@ -677,11 +678,12 @@ TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_t
     ASSERT_TRUE(fp != nullptr);
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
     fp->setMode(trigger_mode);
+    DeferOp defer_disable_fp([&]() {
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    });
 
     ASSERT_OK(tablet_manager->start_trash_sweep());
-
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
 
     TabletMeta tmp_meta;
     ASSERT_TRUE(TabletMetaManager::get_tablet_meta(disk_a, tablet_id, schema_hash, &tmp_meta).is_not_found());

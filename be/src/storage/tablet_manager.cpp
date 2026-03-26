@@ -1931,7 +1931,7 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
                 // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
                 st = _remove_tablet_meta(tablet);
                 if (!st.ok()) {
-                    LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+                    LOG(WARNING) << "Fail to remove previous tablet meta, id: " << tablet_id << " status: " << st;
                 }
             }
         }
