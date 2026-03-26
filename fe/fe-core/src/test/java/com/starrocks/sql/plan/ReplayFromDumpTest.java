@@ -669,12 +669,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = replayPair.second;
 
         // tbl_mock_015
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 3, probe_expr = (64: mock_004)\n"), plan);
-
-        // table: tbl_mock_001, rollup: tbl_mock_001
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 1, probe_expr = (118: mock_004)"), plan);
+        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 4, probe_expr = (<slot 79> 79: mock_004)"), plan);
+        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 3, probe_expr = (<slot 62> 62: mock_004)"), plan);
     }
 
     @Test

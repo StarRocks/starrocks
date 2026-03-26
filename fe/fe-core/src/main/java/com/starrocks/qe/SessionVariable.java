@@ -959,6 +959,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
+    public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1967,6 +1968,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
+
+    @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
+    private boolean enableDeferProjectAfterTopN = true;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5311,6 +5315,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
+    }
+
+    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
+        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
+    }
+
+    public boolean isEnableDeferProjectAfterTopN() {
+        return enableDeferProjectAfterTopN;
     }
 
     public void setArrowFlightProxy(String proxy) {
