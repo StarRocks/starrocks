@@ -406,14 +406,24 @@ inline size_t BinaryDataProxyContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
 }
 
+<<<<<<< HEAD
 inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
+=======
+inline size_t BinaryImmContainer::immutable_bytes_size() const {
+>>>>>>> d1099e5 ([Enhancement] And function append_column_value to handle large binary column append (#70805))
     if (_column == nullptr) {
         return 0;
     }
     if (_is_large) {
+<<<<<<< HEAD
         return down_cast<const LargeBinaryColumn*>(_column)->get_bytes().size();
     }
     return down_cast<const BinaryColumn*>(_column)->get_bytes().size();
+=======
+        return down_cast<const LargeBinaryColumn*>(_column)->get_immutable_bytes().size();
+    }
+    return down_cast<const BinaryColumn*>(_column)->get_immutable_bytes().size();
+>>>>>>> d1099e5 ([Enhancement] And function append_column_value to handle large binary column append (#70805))
 }
 
 template <typename T>
