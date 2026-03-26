@@ -17,7 +17,10 @@ package com.starrocks.planner;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -25,6 +28,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExplainLevel;
 import io.delta.kernel.Snapshot;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -53,12 +58,12 @@ public class DeltaLakeScanNodeTest {
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX");
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX", null, null, null);
     }
 
     @Test
     public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
-                            @Mocked DeltaLakeTable table) {
+                                @Mocked DeltaLakeTable table) {
         String catalogName = "delta0";
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForStorage(new HashMap<>());
@@ -83,7 +88,7 @@ public class DeltaLakeScanNodeTest {
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
         Assertions.assertFalse(scanNode.getNodeExplainString("", TExplainLevel.NORMAL).contains("partitions"));
         Assertions.assertTrue(scanNode.getNodeExplainString("", TExplainLevel.VERBOSE).contains("partitions"));
     }
@@ -97,38 +102,72 @@ public class DeltaLakeScanNodeTest {
                 buildCloudConfigurationForStorage(new HashMap<>());
 
         new Expectations() {{
-                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-                result = connector;
-                minTimes = 0;
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
 
-                connector.getMetadata().getCloudConfiguration();
-                result = cloudConfiguration;
-                minTimes = 0;
+            connector.getMetadata().getCloudConfiguration();
+            result = cloudConfiguration;
+            minTimes = 0;
 
-                table.getCatalogName();
-                result = catalogName;
-                minTimes = 0;
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
 
-                table.getName();
-                result = "table0";
-                minTimes = 0;
+            table.getName();
+            result = "table0";
+            minTimes = 0;
 
-                table.getDeltaSnapshot();
-                result = snapshot;
-                minTimes = 0;
+            table.getDeltaSnapshot();
+            result = snapshot;
+            minTimes = 0;
 
-                table.getDeltaEngine();
-                result = engine;
-                minTimes = 0;
+            table.getDeltaEngine();
+            result = engine;
+            minTimes = 0;
 
-                snapshot.getVersion(engine);
-                result = 123L;
-                minTimes = 0;
-            }};
+            snapshot.getVersion(engine);
+            result = 123L;
+            minTimes = 0;
+        }};
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
         String explainString = scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         assertThat(explainString, containsString("TABLE VERSION: 123"));
+    }
+
+    @Test
+    public void testPrepareRetry(@Mocked GlobalStateMgr globalStateMgr,
+                                 @Mocked CatalogConnector connector,
+                                 @Mocked DeltaLakeTable table,
+                                 @Mocked DeltaConnectorScanRangeSource mockSource) {
+        String catalog = "delta_cat";
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+            result = connector;
+            connector.getMetadata().getCloudConfiguration();
+            result = cc;
+            table.getCatalogName();
+            result = catalog;
+        }};
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+
+        // Stub setupScanRangeSource so it does not invoke real Delta kernel objects
+        new MockUp<DeltaLakeScanNode>() {
+            @Mock
+            public void setupScanRangeSource(boolean enableIncrementalScanRanges) throws StarRocksException {
+                // no-op
+            }
+        };
+
+        // Simulate partially consumed state
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+        scanNode.prepareRetry();
+        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
+                "scanRangeSource should be cleared by clear()");
     }
 }

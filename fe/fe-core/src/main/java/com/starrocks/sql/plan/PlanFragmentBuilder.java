@@ -600,7 +600,6 @@ public class PlanFragmentBuilder {
                 predicateColumns.union(predicate.getUsedColumns());
             }
 
-
             // ------------------------------------------------------------------------------------
             // unused Columns = required columns - predicate columns.
             // be will prune columns by predicate push down
@@ -1265,9 +1264,12 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDescriptor);
 
             PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
-
+            List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toList());
             DeltaLakeScanNode deltaLakeScanNode =
-                    new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
+                    new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode",
+                            node.getPredicate(), fieldNames, partitionIdGenerator);
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
             deltaLakeScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             currentExecGroup.add(deltaLakeScanNode, true);
@@ -1281,10 +1283,7 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
-                List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
-                        .map(ColumnRefOperator::getName)
-                        .collect(Collectors.toList());
-                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames, partitionIdGenerator,
+                deltaLakeScanNode.setupScanRangeSource(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
@@ -1458,7 +1457,6 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, ExecPlan context) {
             return buildIcebergScanNode(optExpression, context);
         }
-
 
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
@@ -2022,7 +2020,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.computeMemLayout();
 
             RawValuesNode rawValuesNode = new RawValuesNode(
-                    context.getNextNodeId(), 
+                    context.getNextNodeId(),
                     tupleDescriptor.getId(),
                     rawValuesOperator.getConstantType(),
                     rawValuesOperator.getRawText(),
@@ -3431,7 +3429,6 @@ public class PlanFragmentBuilder {
 
             Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 
-
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3572,8 +3569,6 @@ public class PlanFragmentBuilder {
                     .map(v -> ((ColumnRefOperator) v).getId()).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
-
-
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
