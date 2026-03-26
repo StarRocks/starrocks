@@ -237,7 +237,11 @@ public:
     // helper class to access RowsetMeta
     int64_t start_version() const override { return rowset_meta()->version().first; }
     int64_t end_version() const override { return rowset_meta()->version().second; }
-    // Segment (column) data bytes only; excludes rowset-embedded indexes (see index_disk_size / total_disk_size).
+    // Segment file size in bytes as recorded in RowsetMeta::data_disk_size().
+    // This includes data pages and embedded index pages (ordinal, zone-map, bloom-filter)
+    // that are written into the segment files. For finer-grained sizing, such as separating
+    // data bytes from index bytes or total rowset size, use rowset_meta()->index_disk_size()
+    // and rowset_meta()->total_disk_size() directly.
     size_t data_disk_size() const { return rowset_meta()->data_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
     int64_t num_rows() const override { return rowset_meta()->num_rows(); }
