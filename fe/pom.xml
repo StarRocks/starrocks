@@ -45,8 +45,15 @@ under the License.
         <maven.compiler.target>11</maven.compiler.target>
         <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
+<<<<<<< HEAD
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
+=======
+        <jackson.version>2.21.1</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.1 version released -->
+        <jackson-annotations.version>2.21</jackson-annotations.version>
+        <spark.version>3.5.7</spark.version>
+>>>>>>> 39446e7d7b ([BugFix][CVE-2025-54920] upgrade spark-core_2.12 to 3.5.7 (#70862))
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.15.2</parquet.version>
         <hadoop.version>3.4.2</hadoop.version>
