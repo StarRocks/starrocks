@@ -14,8 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 
 #include "runtime/runtime_state.h"
 
