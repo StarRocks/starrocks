@@ -387,6 +387,82 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testQueryDetailForMultiStatement() throws Exception {
+        boolean enableCollectQueryDetail = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        QueryDetailQueue.TOTAL_QUERIES.clear();
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+
+            List<QueryDetail> details = QueryDetailQueue.getQueryDetailsAfterTime(0);
+            int runningCount = 0;
+            int finishedCount = 0;
+            for (QueryDetail detail : details) {
+                if (detail.getState() == QueryDetail.QueryMemState.RUNNING) {
+                    runningCount++;
+                    Assertions.assertFalse(detail.getSql().contains(";"));
+                } else if (detail.getState() == QueryDetail.QueryMemState.FINISHED) {
+                    finishedCount++;
+                    Assertions.assertFalse(detail.getSql().contains(";"));
+                }
+            }
+            Assertions.assertEquals(2, details.size());
+            Assertions.assertEquals(1, runningCount);
+            Assertions.assertEquals(1, finishedCount);
+        } finally {
+            Config.enable_collect_query_detail_info = enableCollectQueryDetail;
+            QueryDetailQueue.TOTAL_QUERIES.clear();
+        }
+    }
+
+    @Test
+    public void testSingleStatementQueryDetailKeepsOriginalSql() throws Exception {
+        boolean enableCollectQueryDetail = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        QueryDetailQueue.TOTAL_QUERIES.clear();
+        try {
+            ByteBuffer packet = createQueryPacket("select 1 /*keep*/");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+
+            List<QueryDetail> details = QueryDetailQueue.getQueryDetailsAfterTime(0);
+            Assertions.assertFalse(details.isEmpty());
+            Assertions.assertTrue(details.get(0).getSql().contains("/*keep*/"));
+        } finally {
+            Config.enable_collect_query_detail_info = enableCollectQueryDetail;
+            QueryDetailQueue.TOTAL_QUERIES.clear();
+        }
+    }
+
+    @Test
     public void testQueryWithInlineWarehouse() throws Exception {
         Config.run_mode = RunMode.SHARED_DATA.getName();
         RunMode.detectRunMode();
@@ -842,6 +918,13 @@ public class ConnectProcessorTest extends DDLTestBase {
         }
 
         return serializer.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    private ByteBuffer createQueryPacket(String sql) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString(sql);
+        return serializer.toByteBuffer();
     }
 
     /**
