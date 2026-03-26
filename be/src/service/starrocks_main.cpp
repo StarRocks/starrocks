@@ -68,6 +68,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -124,6 +125,11 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
 extern int meta_tool_main(int argc, char** argv);
 
 int main(int argc, char** argv) {
+    // Record the TP-relative offset of tls_thread_status as early as possible,
+    // before any thread is created (so the main thread's TLS layout is canonical).
+    // External profilers read g_tls_thread_status_tpoff from /proc/PID/mem.
+    starrocks::init_tls_thread_status_offset();
+
     if (argc > 1 && strcmp(argv[1], "meta_tool") == 0) {
         return meta_tool_main(argc - 1, argv + 1);
     }
