@@ -185,6 +185,11 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                             .filter(Optional::isPresent) //
                             .map(Optional::get) //
                             .collect(Collectors.toList());
+
+                    if (skewValues.isEmpty()) {
+                        // If all explicit casts failed.
+                        continue;
+                    }
                 } else {
                     throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
                 }
