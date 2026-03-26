@@ -280,8 +280,7 @@ Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* sta
 
 std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_build_spill_task(
         RuntimeState* state, bool should_spill_hash_table) {
-    return [this, state, should_spill_hash_table,
-            iterator_initialized = false]() mutable -> StatusOr<ChunkPtr> {
+    return [this, state, should_spill_hash_table, iterator_initialized = false]() mutable -> StatusOr<ChunkPtr> {
         if (!_streaming_chunks.empty()) {
             auto chunk = _streaming_chunks.front();
             _streaming_chunks.pop();
