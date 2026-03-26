@@ -74,7 +74,7 @@ subprojects {
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
-        set("spark.version", "3.5.5")
+        set("spark.version", "3.5.7")
         set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
