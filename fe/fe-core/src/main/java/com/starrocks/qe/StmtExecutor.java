@@ -986,6 +986,7 @@ public class StmtExecutor {
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
                             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+                            retryContext.prepareRetry();
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());

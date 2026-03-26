@@ -158,4 +158,9 @@ public class HudiScanNode extends ScanNode {
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+
+    @Override
+    public void prepareRetry() {
+        this.scanRangeSource.reset();
+    }
 }
