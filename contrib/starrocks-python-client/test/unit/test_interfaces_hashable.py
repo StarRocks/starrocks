@@ -93,6 +93,20 @@ class TestReflectedTableKeyInfoHashable:
         b = ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")
         assert hash(a) == hash(b)
 
+    def test_hashable_with_list_columns(self):
+        info = ReflectedTableKeyInfo(type="PRIMARY KEY", columns=["id", "name"])
+        assert hash(info) == hash(info)
+
+    def test_usable_as_dict_key_with_list_columns(self):
+        info = ReflectedTableKeyInfo(type="PRIMARY KEY", columns=["id", "name"])
+        d = {info: "value"}
+        assert d[info] == "value"
+
+    def test_equal_instances_with_list_columns_have_equal_hash(self):
+        a = ReflectedTableKeyInfo(type="PRIMARY KEY", columns=["id", "name"])
+        b = ReflectedTableKeyInfo(type="PRIMARY KEY", columns=["id", "name"])
+        assert hash(a) == hash(b)
+
 
 class TestReflectedRefreshInfoHashable:
 
