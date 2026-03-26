@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Logging, Server, and Metadata"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -10,19 +11,18 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE Configuration
+# BE Configuration - Logging, Server, and Metadata
 
 <BEConfigMethod />
 
 <CNConfigMethod />
-
 
 ## View BE configuration items
 
 You can view the BE configuration items using the following command:
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## Configure BE parameters

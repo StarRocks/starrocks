@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -10,7 +11,7 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE 設定
+# BE 設定 - ログ、サーバー、およびメタデータ
 
 <BEConfigMethod />
 
@@ -21,7 +22,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 次のコマンドを使用して BE の設定項目を表示できます。
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## BE パラメータを設定する

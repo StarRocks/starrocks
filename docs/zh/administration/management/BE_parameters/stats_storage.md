@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
 ---
 
@@ -11,7 +12,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 
 import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
-# BE 配置项
+# BE 配置项 - 统计报告和存储
 
 <BEConfigMethod />
 
