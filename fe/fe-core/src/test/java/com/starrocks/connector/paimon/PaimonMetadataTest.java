@@ -146,6 +146,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -223,7 +224,7 @@ public class PaimonMetadataTest {
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        org.junit.jupiter.api.Assertions.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
+        assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         assertEquals("db1", paimonTable.getCatalogDBName());
         assertEquals("tbl1", paimonTable.getCatalogTableName());
         assertEquals("CREATE TABLE `tbl1` (\n" +
@@ -236,9 +237,9 @@ public class PaimonMetadataTest {
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
+        assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
         assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
-        org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
+        assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
         assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
     }
