@@ -80,13 +80,18 @@ public class AstToSQLBuilder {
     }
 
     public static String toDigest(StatementBase statement) {
+        return toDigest(statement, false);
+    }
+
+    public static String toDigest(StatementBase statement, boolean excludeDb) {
         return AST2SQLVisitor.withOptions(FormatOptions.allEnable()
                         .setColumnSimplifyTableName(false)
                         .setColumnWithTableName(false)
                         .setEnableNewLine(false)
                         .setEnableMassiveExpr(false)
                         .setPrintActualSelectItem(false)
-                        .setPrintLevelCompound(false))
+                        .setPrintLevelCompound(false)
+                        .setExcludeDbFromDigest(excludeDb))
                 .visit(statement);
     }
 }

@@ -76,11 +76,19 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     // --------------------------------------- Statement -------------------------------------------------
+    @Override
+    protected String tableNameToSql(TableName tableName) {
+        if (options.isExcludeDbFromDigest()) {
+            return tableName.toSqlWithoutDb();
+        }
+        return tableName.toSql();
+    }
+
     private String buildColumnName(TableName tableName, String fieldName, String columnName) {
         String res = "";
         if (tableName != null && options.isColumnWithTableName()) {
             if (!options.isColumnSimplifyTableName()) {
-                res = tableName.toSql();
+                res = tableNameToSql(tableName);
             } else {
                 res = "`" + tableName.getTbl() + "`";
             }
@@ -98,7 +106,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         String res = "";
         if (tableName != null) {
             if (!options.isColumnSimplifyTableName()) {
-                res = tableName.toSql();
+                res = tableNameToSql(tableName);
             } else {
                 res = "`" + tableName.getTbl() + "`";
             }
@@ -377,7 +385,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitView(ViewRelation node, Void context) {
         StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append(node.getName().toSql());
+        sqlBuilder.append(tableNameToSql(node.getName()));
 
         if (node.getAlias() != null) {
             sqlBuilder.append(" AS ");
@@ -389,7 +397,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitTable(TableRelation node, Void outerScope) {
         StringBuilder sqlBuilder = new StringBuilder();
-        sqlBuilder.append(node.getName().toSql());
+        sqlBuilder.append(tableNameToSql(node.getName()));
 
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
