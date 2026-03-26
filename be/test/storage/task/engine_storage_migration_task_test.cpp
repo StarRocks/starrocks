@@ -18,8 +18,9 @@
 #include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
-#include "base/failpoint/fail_point.h"
 #include "base/path/file_util.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "base/testutil/assert.h"
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
@@ -619,24 +620,31 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
 }
 
 // Verifies that rapid PK tablet re-migration (disk A->B->A) preserves the
-// new tablet's rowset metadata when GC leaves a stale shutdown entry behind.
+// new tablet's rowset metadata when GC and migration race concurrently.
 //
 // Test flow:
-//   1. Migration A->B: V1 enters _shutdown_tablets, V2 becomes active on disk_b.
-//   2. GC sweep removes V1's on-disk meta from disk_a, but a fail point keeps
-//      the stale V1 entry in _shutdown_tablets.
-//   3. Migration B->A succeeds, and the new tablet on disk_a still has its
-//      rowset metadata.
+//   1. Create PK tablet with rowset on disk_a, migrate A->B.
+//   2. GC sweep phase 1 clears V1's meta from disk_a; a sync point callback
+//      runs migration B->A before phase 2 removes the stale queue entry.
+//   3. Verify V3's rowset metadata on disk_a is intact.
 TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_tablet_meta) {
+    // Migration's assign_new_rowset_id sets creation_time = UnixSeconds().
+    // _add_tablet_unlocked requires new_time > old_time for same-version replacement.
+    // Poll at 10ms until UnixSeconds() passes the reference time (max 30s).
+    auto wait_until_after = [](int64_t ref_time) {
+        for (int i = 0; i < 3000 && UnixSeconds() <= ref_time; i++) {
+            usleep(10000);
+        }
+        CHECK_GT(UnixSeconds(), ref_time);
+    };
+
     int64_t tablet_id = 77777;
     int32_t schema_hash = 7777;
     TabletManager* tablet_manager = StorageEngine::instance()->tablet_manager();
 
-    // Clean leftovers from previous tests so the shutdown queues start empty.
     ASSERT_OK(tablet_manager->start_trash_sweep());
 
-    // Step 1: Create PK tablet with one committed rowset so we can verify whether
-    // metadata survives the second migration.
+    // Step 1: Create PK tablet with one committed rowset.
     TabletSharedPtr tablet = create_pk_tablet(tablet_id, schema_hash);
     tablet->set_enable_persistent_index(false);
     ASSERT_TRUE(tablet != nullptr);
@@ -645,10 +653,8 @@ TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_t
 
     std::vector<int64_t> keys = {1, 2, 3, 4, 5};
     auto rowset = create_pk_rowset(tablet, keys);
+    int64_t rowset_time = rowset->creation_time();
     ASSERT_OK(tablet->rowset_commit(2, rowset));
-
-    // Ensure the first migration gets a strictly newer rowset creation time than V1.
-    sleep(1);
 
     DataDir* disk_a = tablet->data_dir();
     DataDir* disk_b = nullptr;
@@ -661,47 +667,40 @@ TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_t
     ASSERT_TRUE(disk_b != nullptr);
     tablet.reset();
 
-    // Step 2: Migrate A->B. V1 goes to _shutdown_tablets, V2 becomes active on disk_b.
-    EngineStorageMigrationTask migration1(tablet_id, schema_hash, disk_b, false);
-    ASSERT_OK(migration1.execute());
+    // Step 2: Migrate A->B. Wait until clock passes rowset_time so migration1 wins.
+    wait_until_after(rowset_time);
+    ASSERT_OK(EngineStorageMigrationTask(tablet_id, schema_hash, disk_b, false).execute());
 
     tablet = tablet_manager->get_tablet(tablet_id);
     ASSERT_TRUE(tablet != nullptr);
     ASSERT_EQ(tablet->data_dir(), disk_b);
+    int64_t v2_time = tablet->updates()->max_rowset_creation_time();
     tablet.reset();
 
-    // Step 3: Run GC with a fail point so phase 1 removes V1's on-disk meta, but
-    // the shutdown queue entry for V1 remains stale in _shutdown_tablets.
-    PFailPointTriggerMode trigger_mode;
-    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
-            "start_trash_sweep_skip_shutdown_tablets_cleanup");
-    ASSERT_TRUE(fp != nullptr);
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fp->setMode(trigger_mode);
-    DeferOp defer_disable_fp([&]() {
-        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-        fp->setMode(trigger_mode);
+    // Step 3: GC runs synchronously. A sync point callback injects migration B->A
+    // between phase 1 (sweep) and phase 2 (cleanup), reproducing the real race
+    // window where a stale V1 entry is still in _shutdown_tablets.
+    Status migration2_status;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::start_trash_sweep:1", [&](void*) {
+        wait_until_after(v2_time);
+        EngineStorageMigrationTask migration2(tablet_id, schema_hash, disk_a, false);
+        migration2_status = migration2.execute();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer_sync([&]() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->ClearTrace();
     });
 
     ASSERT_OK(tablet_manager->start_trash_sweep());
+    ASSERT_OK(migration2_status);
 
-    TabletMeta tmp_meta;
-    ASSERT_TRUE(TabletMetaManager::get_tablet_meta(disk_a, tablet_id, schema_hash, &tmp_meta).is_not_found());
-
-    // Ensure the second migration gets a strictly newer rowset creation time than V2.
-    sleep(1);
-
-    // Step 4: Migrate B->A. With the fix, stale V1 is detected and skipped, so V3's
-    // metadata on disk_a is preserved instead of being wiped.
-    EngineStorageMigrationTask migration2(tablet_id, schema_hash, disk_a, false);
-    ASSERT_OK(migration2.execute());
-
+    // Step 4: Verify V3 on disk_a has its rowset metadata intact.
     tablet = tablet_manager->get_tablet(tablet_id);
     ASSERT_TRUE(tablet != nullptr);
     ASSERT_EQ(tablet->data_dir(), disk_a);
 
-    // Step 5: Verify the fixed behavior. If the old bug is present, rowset_count
-    // becomes 0 after V1 clears V3's metadata by tablet_id.
     int rowset_count = 0;
     ASSERT_OK(TabletMetaManager::rowset_iterate(disk_a, tablet_id, [&](const RowsetMetaSharedPtr&) -> bool {
         rowset_count++;
@@ -709,29 +708,24 @@ TEST_F(EngineStorageMigrationTaskTest, test_pk_migration_gc_race_preserves_new_t
     }));
     ASSERT_GT(rowset_count, 0);
 
-    // Step 6: Simulate restart-time loading through the normal load path:
-    // remove the in-memory tablet while keeping on-disk meta/files, then load
-    // it back from persisted meta using the same arguments as startup loading.
+    // Step 5: Verify restart-loading works — proves on-disk meta is complete.
     tablet.reset();
     ASSERT_OK(tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles));
-    ASSERT_EQ(nullptr, tablet_manager->get_tablet(tablet_id));
 
     TabletMeta reloaded_meta;
     ASSERT_OK(TabletMetaManager::get_tablet_meta(disk_a, tablet_id, schema_hash, &reloaded_meta));
 
     std::string meta_binary;
     ASSERT_OK(reloaded_meta.serialize(&meta_binary));
-
     ASSERT_OK(tablet_manager->load_tablet_from_meta(disk_a, tablet_id, schema_hash, meta_binary, false, false, false,
                                                     false));
 
-    TabletSharedPtr reloaded_tablet = tablet_manager->get_tablet(tablet_id);
-    ASSERT_TRUE(reloaded_tablet != nullptr);
-    ASSERT_EQ(reloaded_tablet->data_dir(), disk_a);
-    ASSERT_TRUE(reloaded_tablet->updates() != nullptr);
-    ASSERT_EQ(2, reloaded_tablet->updates()->max_version());
+    TabletSharedPtr reloaded = tablet_manager->get_tablet(tablet_id);
+    ASSERT_TRUE(reloaded != nullptr);
+    ASSERT_EQ(reloaded->data_dir(), disk_a);
+    ASSERT_EQ(2, reloaded->updates()->max_version());
 
-    reloaded_tablet.reset();
+    reloaded.reset();
     ASSERT_OK(tablet_manager->start_trash_sweep());
 }
 

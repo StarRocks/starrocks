@@ -41,8 +41,8 @@
 #include <ctime>
 #include <memory>
 
-#include "base/failpoint/fail_point.h"
 #include "base/path/path_util.h"
+#include "base/testutil/sync_point.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -1187,9 +1187,7 @@ Status TabletManager::start_trash_sweep() {
         sweep_shutdown_tablet(info, finished_tablets_redundant);
     }
 
-    // Test hook: keep finished shutdown entries in the queues after phase 1 has already
-    // removed their on-disk meta/files, so migration can observe a stale shutdown entry.
-    FAIL_POINT_TRIGGER_RETURN(start_trash_sweep_skip_shutdown_tablets_cleanup, Status::OK());
+    TEST_SYNC_POINT("TabletManager::start_trash_sweep:1");
 
     if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
@@ -1942,7 +1940,5 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     }
     _shutdown_tablets.emplace(tablet_id, drop_info);
 }
-
-DEFINE_FAIL_POINT(start_trash_sweep_skip_shutdown_tablets_cleanup);
 
 } // end namespace starrocks
