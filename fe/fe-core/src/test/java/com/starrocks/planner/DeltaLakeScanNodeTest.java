@@ -18,11 +18,8 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
-<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
-=======
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
->>>>>>> 7d1ae56da78... [BugFix] Reset scan range source on query retry for connector scan nodes (backport #70762) (#70809)
 import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;

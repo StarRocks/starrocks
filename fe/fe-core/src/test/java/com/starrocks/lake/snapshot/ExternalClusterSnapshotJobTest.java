@@ -113,10 +113,6 @@ public class ExternalClusterSnapshotJobTest {
         };
 
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
 
             @Mock
             public ClusterSnapshotMgr getClusterSnapshotMgr() {
