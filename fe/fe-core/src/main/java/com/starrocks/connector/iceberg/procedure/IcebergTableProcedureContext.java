@@ -22,11 +22,14 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
 
+import java.util.concurrent.ExecutorService;
+
 public record IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
                                            Table table,
                                            ConnectContext context,
                                            Transaction transaction,
                                            HdfsEnvironment hdfsEnvironment,
                                            AlterTableStmt stmt,
-                                           AlterTableOperationClause clause) {
+                                           AlterTableOperationClause clause,
+                                           ExecutorService executorService) {
 }

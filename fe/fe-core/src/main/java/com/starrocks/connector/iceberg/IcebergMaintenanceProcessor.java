@@ -61,8 +61,11 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
     // Per-table timeout in seconds for maintenance tasks. Default 10 minutes.
     private static final long PER_TABLE_TIMEOUT_SECONDS = 600;
 
+    private static final int ICEBERG_PLAN_WORKER_THREAD_NUM = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
+
     private final ConcurrentHashMap<String, IcebergMaintenanceInfo> maintenanceInfoMap = new ConcurrentHashMap<>();
     private final ExecutorService maintenanceExecutor;
+    private final ExecutorService icebergPlanWorkerExecutor;
 
     public IcebergMaintenanceProcessor() {
         super(IcebergMaintenanceProcessor.class.getName(),
@@ -73,21 +76,31 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                 MAINTENANCE_QUEUE_SIZE,
                 "iceberg-maintenance-pool",
                 true);
+        this.icebergPlanWorkerExecutor = ThreadPoolManager.newDaemonFixedThreadPool(
+                ICEBERG_PLAN_WORKER_THREAD_NUM,
+                ICEBERG_PLAN_WORKER_THREAD_NUM,
+                "iceberg-plan-worker-pool",
+                true);
     }
 
     public void shutdown() {
         setStop();
-        maintenanceExecutor.shutdown();
+        shutdownExecutor(maintenanceExecutor, "iceberg-maintenance-pool");
+        shutdownExecutor(icebergPlanWorkerExecutor, "iceberg-plan-worker-pool");
+    }
+
+    private void shutdownExecutor(ExecutorService executor, String name) {
+        executor.shutdown();
         try {
-            if (!maintenanceExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
-                LOG.warn("Executor for auto maintenance did not terminate in time, forcing shutdown");
-                maintenanceExecutor.shutdownNow();
-                if (!maintenanceExecutor.awaitTermination(60, TimeUnit.SECONDS)) {
-                    LOG.warn("Executor for auto maintenance did not terminate after forced shutdown");
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                LOG.warn("Executor {} did not terminate in time, forcing shutdown", name);
+                executor.shutdownNow();
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    LOG.warn("Executor {} did not terminate after forced shutdown", name);
                 }
             }
         } catch (InterruptedException e) {
-            maintenanceExecutor.shutdownNow();
+            executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -335,7 +348,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                                     HdfsEnvironment hdfsEnvironment) {
         Transaction txn = table.newTransaction();
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null);
+                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor);
         ExpireSnapshotsProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
     }
 
@@ -343,7 +356,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                                       HdfsEnvironment hdfsEnvironment) {
         Transaction txn = table.newTransaction();
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null);
+                catalog, table, null, txn, hdfsEnvironment, null, null, null);
         RemoveOrphanFilesProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
     }
 
@@ -351,7 +364,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                                     HdfsEnvironment hdfsEnvironment) {
         Transaction txn = table.newTransaction();
         IcebergTableProcedureContext procedureContext = new IcebergTableProcedureContext(
-                catalog, table, null, txn, hdfsEnvironment, null, null);
+                catalog, table, null, txn, hdfsEnvironment, null, null, icebergPlanWorkerExecutor);
         RewriteManifestsProcedure.getInstance().execute(procedureContext, Collections.emptyMap());
     }
 }

@@ -32,10 +32,13 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
@@ -147,16 +150,60 @@ public class ExpireSnapshotsProcedureTest {
         verify(expireSnapshots).commit();
     }
 
+    @Test
+    void testPlanWithCalledWhenExecutorServiceProvided() {
+        ExpireSnapshotsProcedure procedure = ExpireSnapshotsProcedure.getInstance();
+        ExpireSnapshots expireSnapshots = Mockito.mock(ExpireSnapshots.class);
+        when(expireSnapshots.planWith(any(ExecutorService.class))).thenReturn(expireSnapshots);
+        doNothing().when(expireSnapshots).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.expireSnapshots()).thenReturn(expireSnapshots);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            IcebergTableProcedureContext context = createContextWithTransaction(txn, executor);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            verify(expireSnapshots).planWith(executor);
+            verify(expireSnapshots).commit();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    void testPlanWithNotCalledWhenExecutorServiceNull() {
+        ExpireSnapshotsProcedure procedure = ExpireSnapshotsProcedure.getInstance();
+        ExpireSnapshots expireSnapshots = Mockito.mock(ExpireSnapshots.class);
+        doNothing().when(expireSnapshots).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.expireSnapshots()).thenReturn(expireSnapshots);
+
+        IcebergTableProcedureContext context = createContextWithTransaction(txn, null);
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        verify(expireSnapshots, never()).planWith(any());
+        verify(expireSnapshots).commit();
+    }
+
     private IcebergTableProcedureContext createContextWithTransaction() {
-        return createContextWithTransaction(Mockito.mock(Transaction.class));
+        return createContextWithTransaction(Mockito.mock(Transaction.class), null);
     }
 
     private IcebergTableProcedureContext createContextWithTransaction(Transaction transaction) {
+        return createContextWithTransaction(transaction, null);
+    }
+
+    private IcebergTableProcedureContext createContextWithTransaction(Transaction transaction,
+                                                                      ExecutorService executorService) {
         IcebergHiveCatalog catalog = Mockito.mock(IcebergHiveCatalog.class);
         Table table = Mockito.mock(Table.class);
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause);
+        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause,
+                executorService);
     }
 }

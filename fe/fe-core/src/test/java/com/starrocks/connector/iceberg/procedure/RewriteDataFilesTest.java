@@ -86,7 +86,7 @@ public class RewriteDataFilesTest {
 
         IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
         IcebergTableProcedureContext procedureContext =
-                new IcebergTableProcedureContext(icebergHiveCatalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause);
+                new IcebergTableProcedureContext(icebergHiveCatalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause, null);
         procedure.execute(procedureContext, Map.of("rewrite_all", ConstantOperator.createBoolean(true),
                 "min_file_size_bytes", ConstantOperator.createBigint(128L),
                 "batch_size", ConstantOperator.createBigint(10L)));
@@ -138,7 +138,7 @@ public class RewriteDataFilesTest {
 
         IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
         IcebergTableProcedureContext procedureContext =
-                new IcebergTableProcedureContext(icebergHiveCatalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause);
+                new IcebergTableProcedureContext(icebergHiveCatalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause, null);
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class, () ->
                 procedure.execute(procedureContext, Map.of("rewrite_all", ConstantOperator.createBoolean(true),

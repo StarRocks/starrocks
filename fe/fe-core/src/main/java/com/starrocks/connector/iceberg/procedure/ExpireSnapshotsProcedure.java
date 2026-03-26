@@ -82,6 +82,9 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
         }
 
         ExpireSnapshots expireSnapshots = context.transaction().expireSnapshots();
+        if (context.executorService() != null) {
+            expireSnapshots = expireSnapshots.planWith(context.executorService());
+        }
         if (olderThanMillis != -1) {
             expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
         }

@@ -88,6 +88,9 @@ public class RewriteManifestsProcedure extends IcebergTableProcedure {
                 MAX_MANIFEST_CLUSTERS));
 
         RewriteManifests rewriteManifests = context.transaction().rewriteManifests();
+        if (context.executorService() != null) {
+            rewriteManifests = rewriteManifests.scanManifestsWith(context.executorService());
+        }
         Types.StructType structType = icebergTable.spec().partitionType();
 
         rewriteManifests

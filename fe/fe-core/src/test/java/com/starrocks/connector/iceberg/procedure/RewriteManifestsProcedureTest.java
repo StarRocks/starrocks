@@ -35,6 +35,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -190,11 +192,87 @@ public class RewriteManifestsProcedureTest {
         verify(rewriteManifests).commit();
     }
 
+    @Test
+    void testScanManifestsWithCalledWhenExecutorServiceProvided() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.scanManifestsWith(any(ExecutorService.class))).thenReturn(rewriteManifests);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            IcebergTableProcedureContext context = createContext(table, txn, executor);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+            verify(rewriteManifests).scanManifestsWith(executor);
+            verify(rewriteManifests).clusterBy(any());
+            verify(rewriteManifests).commit();
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    void testScanManifestsWithNotCalledWhenExecutorServiceNull() {
+        RewriteManifestsProcedure procedure = RewriteManifestsProcedure.getInstance();
+
+        ManifestFile m1 = Mockito.mock(ManifestFile.class);
+        ManifestFile m2 = Mockito.mock(ManifestFile.class);
+        when(m1.length()).thenReturn(10 * 1024 * 1024L);
+        when(m2.length()).thenReturn(10 * 1024 * 1024L);
+
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        when(snapshot.allManifests(any())).thenReturn(List.of(m1, m2));
+
+        Table table = Mockito.mock(Table.class);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.properties()).thenReturn(Collections.emptyMap());
+        when(table.spec()).thenReturn(PartitionSpec.unpartitioned());
+
+        RewriteManifests rewriteManifests = Mockito.mock(RewriteManifests.class);
+        when(rewriteManifests.clusterBy(any())).thenReturn(rewriteManifests);
+        doNothing().when(rewriteManifests).commit();
+
+        Transaction txn = Mockito.mock(Transaction.class);
+        when(txn.rewriteManifests()).thenReturn(rewriteManifests);
+
+        IcebergTableProcedureContext context = createContext(table, txn, null);
+        assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+
+        verify(rewriteManifests, never()).scanManifestsWith(any());
+        verify(rewriteManifests).clusterBy(any());
+        verify(rewriteManifests).commit();
+    }
+
     private IcebergTableProcedureContext createContext(Table table, Transaction transaction) {
+        return createContext(table, transaction, null);
+    }
+
+    private IcebergTableProcedureContext createContext(Table table, Transaction transaction,
+                                                       ExecutorService executorService) {
         IcebergHiveCatalog catalog = Mockito.mock(IcebergHiveCatalog.class);
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause);
+        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause,
+                executorService);
     }
 }

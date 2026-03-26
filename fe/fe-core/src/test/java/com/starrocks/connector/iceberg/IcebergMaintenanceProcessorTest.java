@@ -620,6 +620,62 @@ public class IcebergMaintenanceProcessorTest extends TableTestBase {
         return ctor.newInstance(catalogName, icebergCatalog, hdfs, cleanupHours, rewriteHours);
     }
 
+    @Test
+    public void testIcebergPlanWorkerExecutorIsNotNull() throws Exception {
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Field f = IcebergMaintenanceProcessor.class.getDeclaredField("icebergPlanWorkerExecutor");
+        f.setAccessible(true);
+        ExecutorService executor = (ExecutorService) f.get(processor);
+        Assertions.assertNotNull(executor);
+        Assertions.assertFalse(executor.isShutdown());
+    }
+
+    @Test
+    public void testShutdownClosesIcebergPlanWorkerExecutor() throws Exception {
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Field f = IcebergMaintenanceProcessor.class.getDeclaredField("icebergPlanWorkerExecutor");
+        f.setAccessible(true);
+        ExecutorService planExecutor = (ExecutorService) f.get(processor);
+
+        processor.shutdown();
+        Assertions.assertTrue(planExecutor.isShutdown());
+    }
+
+    @Test
+    public void testRunExpireSnapshotsPassesExecutorViaContext() throws Exception {
+        TestTables.TestTable icebergTable = create(SCHEMA_A, SPEC_A, "maint_exec_expire", 2);
+        icebergTable.newFastAppend().appendFile(FILE_A).commit();
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Mockito.when(hdfs.getConfiguration()).thenReturn(new Configuration());
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Field f = IcebergMaintenanceProcessor.class.getDeclaredField("icebergPlanWorkerExecutor");
+        f.setAccessible(true);
+        ExecutorService planExecutor = (ExecutorService) f.get(processor);
+        Assertions.assertNotNull(planExecutor);
+
+        Method expire = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runExpireSnapshots", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+        expire.setAccessible(true);
+        expire.invoke(processor, catalog, icebergTable, hdfs);
+    }
+
+    @Test
+    public void testRunRewriteManifestsPassesExecutorViaContext() throws Exception {
+        TestTables.TestTable icebergTable = create(SCHEMA_A, SPEC_A, "maint_exec_rewrite", 2);
+        icebergTable.newFastAppend().appendFile(FILE_A).commit();
+        IcebergCatalog catalog = Mockito.mock(IcebergCatalog.class);
+        HdfsEnvironment hdfs = Mockito.mock(HdfsEnvironment.class);
+        Mockito.when(hdfs.getConfiguration()).thenReturn(new Configuration());
+
+        IcebergMaintenanceProcessor processor = new IcebergMaintenanceProcessor();
+        Method rewrite = IcebergMaintenanceProcessor.class.getDeclaredMethod(
+                "runRewriteManifests", IcebergCatalog.class, Table.class, HdfsEnvironment.class);
+        rewrite.setAccessible(true);
+        rewrite.invoke(processor, catalog, icebergTable, hdfs);
+    }
+
     @SuppressWarnings("unchecked")
     private static void setLastMaintenanceTimes(IcebergMaintenanceProcessor p, long cleanup, long rewrite)
             throws Exception {
