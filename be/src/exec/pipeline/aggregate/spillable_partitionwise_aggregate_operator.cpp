@@ -314,7 +314,7 @@ std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator:
         _streaming_bytes = 0;
         return Status::EndOfFile("no more data in current aggregator");
     };
-    return [this, chunk_provider]() -> StatusOr<ChunkPtr> {
+    return [this, chunk_provider]() mutable -> StatusOr<ChunkPtr> {
         auto maybe_chunk = chunk_provider();
         if (maybe_chunk.ok()) {
             auto chunk = std::move(maybe_chunk.value());
