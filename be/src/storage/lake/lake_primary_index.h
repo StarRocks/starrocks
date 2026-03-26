@@ -112,6 +112,11 @@ public:
     // Flush memtable data into sstable.
     Status flush_memtable(bool force = false);
 
+    // Publish-phase SST flush stats (for cloud native persistent index)
+    void reset_publish_sst_stats();
+    int32_t publish_sst_flush_count() const;
+    int64_t publish_sst_flush_bytes() const;
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
