@@ -187,10 +187,6 @@ public interface ConnectorMetadata {
         return RemoteFileInfoDefaultSource.EMPTY;
     }
 
-    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        return Lists.newArrayList();
-    }
-
     /**
      * Get table meta serialized specification
      *
