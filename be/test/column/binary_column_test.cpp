@@ -669,4 +669,67 @@ PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
+<<<<<<< HEAD
+=======
+class BinaryColumnAppendSelectiveTestFixture : public ::testing::TestWithParam<std::tuple<uint32_t>> {};
+
+TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
+    const uint32_t num_rows = std::get<0>(GetParam());
+
+    auto src_col = BinaryColumn::create();
+    for (uint32_t i = 0; i < num_rows; i++) {
+        const size_t str_len = i % 16 + 8; // Length between 8 and 23
+        std::string str(str_len, 'a' + (i % 26));
+        src_col->append(str);
+    }
+
+    std::vector<uint32_t> indexes;
+    indexes.reserve(num_rows / 16);
+    for (uint32_t i = 0; i < num_rows; i++) {
+        if (i % 16 == 0) {
+            indexes.emplace_back(i);
+        }
+    }
+
+    auto dst_col = BinaryColumn::create();
+
+    dst_col->append_selective(*src_col, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
+    const size_t num_dst_rows = dst_col->size();
+    ASSERT_EQ(indexes.size(), num_dst_rows);
+    for (uint32_t i = 0; i < num_dst_rows; i++) {
+        ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(i));
+    }
+
+    dst_col->append_selective(*src_col, indexes.data(), 10, static_cast<uint32_t>(indexes.size()) - 10);
+    ASSERT_EQ(num_dst_rows + indexes.size() - 10, dst_col->size());
+    for (uint32_t i = 10; i < indexes.size(); i++) {
+        ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(num_dst_rows + i - 10));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
+                         ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
+                                           std::make_tuple(4 * 1024 * 1024 + 10)));
+
+// BinaryImmContainer::immutable_bytes_size
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_empty) {
+    auto col = BinaryColumn::create();
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 0);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
+    auto col = BinaryColumn::create();
+    col->append_string("hello"); // 5 bytes
+    col->append_string("world"); // 5 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("foo"); // 3 bytes
+    col->append_string("bar"); // 3 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
+}
+
+>>>>>>> d1099e5b2e ([Enhancement] And function append_column_value to handle large binary column append (#70805))
 } // namespace starrocks

@@ -439,12 +439,29 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+<<<<<<< HEAD
     static inline void append_binary_value(Column* column, const Slice& value) {
         Column* data_column = get_data_column(column);
         if (data_column->is_large_binary()) {
             down_cast<LargeBinaryColumn*>(data_column)->append(value);
+=======
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
+
+    template <LogicalType LT>
+    static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if constexpr (lt_is_string_or_binary<LT>) {
+            using LargeColumnType = RunTimeLargeColumnType<LT>;
+            if (column->is_large_binary()) {
+                down_cast<LargeColumnType*>(column)->append(value);
+            } else {
+                down_cast<ColumnType*>(column)->append(value);
+            }
+>>>>>>> d1099e5b2e ([Enhancement] And function append_column_value to handle large binary column append (#70805))
         } else {
-            down_cast<BinaryColumn*>(data_column)->append(value);
+            down_cast<ColumnType*>(column)->append(value);
         }
     }
 
@@ -477,6 +494,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     static inline size_t get_binary_bytes_size(const Column* column) {
         if (column->is_large_binary()) {
             return down_cast<const LargeBinaryColumn*>(column)->get_bytes().size();
@@ -484,6 +502,8 @@ public:
         return down_cast<const BinaryColumn*>(column)->get_bytes().size();
     }
 
+=======
+>>>>>>> d1099e5b2e ([Enhancement] And function append_column_value to handle large binary column append (#70805))
     template <typename Func>
     static inline void with_binary_column_bytes(Column* column, Func&& func) {
         if (column->is_large_binary()) {
