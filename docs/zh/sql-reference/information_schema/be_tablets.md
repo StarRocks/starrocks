@@ -19,7 +19,7 @@ displayed_sidebar: docs
 | MIN_VERSION   | Tablet 的最小版本。                              |
 | NUM_ROWSET    | Tablet 中的 Rowset 数量。                        |
 | NUM_ROW       | Tablet 中的行数。                                |
-| DATA_SIZE     | Rowset **数据**的磁盘占用（Segment 列数据，字节）。不包括记录在 Rowset 元数据中的行内嵌索引（如 Short Key、Zone Map、Bloom Filter 等）。 |
+| DATA_SIZE     | Rowset 段文件的磁盘占用（Segment 文件大小总和，字节）。包含写入 Segment 文件内部的列数据及其内嵌索引（如 Short Key、Zone Map、Bloom Filter 等），但不包含单独持久化的主键索引文件（该部分计入 INDEX_DISK）。 |
 | INDEX_MEM     | Tablet 的索引内存使用量（字节）。                |
 | CREATE_TIME   | Tablet 的创建时间（Unix 时间戳，秒）。           |
 | STATE         | Tablet 的状态（例如，`NORMAL`、`REPLICA_MISSING`）。 |
