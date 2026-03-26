@@ -116,6 +116,8 @@ public final class MetricRepo {
 
     public static final String TABLET_NUM = "tablet_num";
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
+    private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
+    private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
 
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
@@ -123,7 +125,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_TIMEOUT;
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
-
+    public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -134,6 +136,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
+            new MetricWithLabelGroup<>("time_travel_type",
+                    () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,
@@ -576,6 +582,9 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
         COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
+        COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
+                MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
