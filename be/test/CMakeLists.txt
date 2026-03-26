@@ -22,6 +22,7 @@ set(EXEC_FILES
         ./common/uri_test.cpp
         ./connector/benchmark_connector_test.cpp
         ./connector/hive_connector_test.cpp
+        ./connector/jdbc_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
