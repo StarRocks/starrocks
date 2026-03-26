@@ -301,4 +301,10 @@ public class HdfsScanNode extends ScanNode {
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
         scanRangeSource.setSampleStrategy(strategy);
     }
+
+    @Override
+    public void prepareRetry() {
+        reachLimit = false;
+        this.scanRangeSource.reset();
+    }
 }
