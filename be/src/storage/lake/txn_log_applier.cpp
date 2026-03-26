@@ -31,8 +31,8 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/sync_point.h"
 #include "util/dynamic_cache.h"
-#include "util/time.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
