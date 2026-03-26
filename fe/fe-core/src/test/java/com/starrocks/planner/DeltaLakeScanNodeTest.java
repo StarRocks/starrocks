@@ -58,17 +58,12 @@ public class DeltaLakeScanNodeTest {
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-<<<<<<< HEAD
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX");
-=======
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX", null, null, null);
-        scanNode.setReachLimit();
->>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
     }
 
     @Test
     public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
-                            @Mocked DeltaLakeTable table) {
+                                @Mocked DeltaLakeTable table) {
         String catalogName = "delta0";
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForStorage(new HashMap<>());
@@ -107,34 +102,34 @@ public class DeltaLakeScanNodeTest {
                 buildCloudConfigurationForStorage(new HashMap<>());
 
         new Expectations() {{
-                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-                result = connector;
-                minTimes = 0;
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
 
-                connector.getMetadata().getCloudConfiguration();
-                result = cloudConfiguration;
-                minTimes = 0;
+            connector.getMetadata().getCloudConfiguration();
+            result = cloudConfiguration;
+            minTimes = 0;
 
-                table.getCatalogName();
-                result = catalogName;
-                minTimes = 0;
+            table.getCatalogName();
+            result = catalogName;
+            minTimes = 0;
 
-                table.getName();
-                result = "table0";
-                minTimes = 0;
+            table.getName();
+            result = "table0";
+            minTimes = 0;
 
-                table.getDeltaSnapshot();
-                result = snapshot;
-                minTimes = 0;
+            table.getDeltaSnapshot();
+            result = snapshot;
+            minTimes = 0;
 
-                table.getDeltaEngine();
-                result = engine;
-                minTimes = 0;
+            table.getDeltaEngine();
+            result = engine;
+            minTimes = 0;
 
-                snapshot.getVersion(engine);
-                result = 123L;
-                minTimes = 0;
-            }};
+            snapshot.getVersion(engine);
+            result = 123L;
+            minTimes = 0;
+        }};
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);

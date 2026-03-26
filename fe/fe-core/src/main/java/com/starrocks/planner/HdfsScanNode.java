@@ -289,7 +289,6 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public void prepareRetry() {
-        reachLimit = false;
         this.scanRangeSource.reset();
     }
 }

@@ -236,7 +236,6 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public void prepareRetry() {
         clear();
-        reachLimit = false;
         try {
             setupScanRangeSource(enableIncrementalScanRanges);
         } catch (StarRocksException e) {

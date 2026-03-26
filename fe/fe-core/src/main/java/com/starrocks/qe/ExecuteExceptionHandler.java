@@ -15,12 +15,8 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
-<<<<<<< HEAD
 import com.starrocks.analysis.SlotId;
-import com.starrocks.catalog.HiveTable;
-=======
 import com.starrocks.catalog.Table;
->>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Pair;
