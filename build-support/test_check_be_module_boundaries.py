@@ -56,6 +56,69 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         architecture_suffixes = {pattern.removeprefix("be/**/*") for pattern in architecture_patterns}
         self.assertEqual(MODULE.CODE_EXTENSIONS, architecture_suffixes)
 
+    def test_find_baseline_expansions_allows_deletions_only(self) -> None:
+        previous = {
+            "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/compiler_util.h")},
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+        current = {
+            "include_violations": set(),
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+
+        self.assertEqual(
+            {
+                "include_violations": set(),
+                "target_link_violations": set(),
+                "test_link_violations": set(),
+            },
+            MODULE.find_baseline_expansions(previous, current),
+        )
+
+    def test_find_baseline_expansions_rejects_added_entries(self) -> None:
+        previous = {
+            "include_violations": set(),
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+        current = {
+            "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/compiler_util.h")},
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+
+        self.assertEqual(
+            {
+                "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/compiler_util.h")},
+                "target_link_violations": set(),
+                "test_link_violations": set(),
+            },
+            MODULE.find_baseline_expansions(previous, current),
+        )
+
+    def test_find_baseline_expansions_treats_edits_as_additions(self) -> None:
+        previous = {
+            "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/compiler_util.h")},
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+        current = {
+            "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/new_header.h")},
+            "target_link_violations": set(),
+            "test_link_violations": set(),
+        }
+
+        self.assertEqual(
+            {
+                "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/new_header.h")},
+                "target_link_violations": set(),
+                "test_link_violations": set(),
+            },
+            MODULE.find_baseline_expansions(previous, current),
+        )
+
     def test_collects_include_violation_and_allows_exact_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -125,9 +188,25 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
 
             self.assertEqual({"columncore"}, selected)
 
+    def test_changed_paths_include_target_definition_cmakelists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            selected = MODULE.select_modules_for_changed_paths(
+                manifest=manifest,
+                cmake_state=cmake_state,
+                changed_paths={"be/src/io/CMakeLists.txt", "be/src/column/hash_set.h"},
+            )
+
+            self.assertEqual({"columncore", "iocore"}, selected)
+
     def _write_sample_repo(self, repo: Path) -> None:
         (repo / "build-support").mkdir(parents=True)
         (repo / "be" / "src" / "column").mkdir(parents=True)
+        (repo / "be" / "src" / "io").mkdir(parents=True)
         (repo / "be" / "src" / "types").mkdir(parents=True)
         (repo / "be" / "test" / "column").mkdir(parents=True)
         (repo / "be").mkdir(exist_ok=True)
@@ -160,6 +239,21 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                                 "StarRocksGen",
                             ],
                             "remediation": "Move code down or add an interface instead of pulling runtime into ColumnCore.",
+                        },
+                        {
+                            "id": "iocore",
+                            "doc_label": "IOCore",
+                            "owned_targets": ["IOCore"],
+                            "allowed_include_prefixes": [
+                                "io/",
+                                "common/",
+                                "base/",
+                                "gutil/",
+                            ],
+                            "allowed_target_deps": ["Common", "Base", "Gutil"],
+                            "allowed_test_targets": [],
+                            "allowed_test_link_deps": [],
+                            "remediation": "Move code into IOCore or add an interface instead of pulling unrelated dependencies into IO.",
                         }
                     ]
                 },
@@ -174,6 +268,15 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 ADD_BE_LIB(ColumnCore
                     column.cpp
                     hash_set.cpp
+                )
+                """
+            )
+        )
+        (repo / "be" / "src" / "io" / "CMakeLists.txt").write_text(
+            textwrap.dedent(
+                """\
+                ADD_BE_LIB(IOCore
+                    io.cpp
                 )
                 """
             )
@@ -196,6 +299,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         )
         (repo / "be" / "src" / "column" / "column.cpp").write_text('#include "column/column.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.cpp").write_text('#include "column/hash_set.h"\n')
+        (repo / "be" / "src" / "io" / "io.cpp").write_text('#include "io/io.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.h").write_text(
             textwrap.dedent(
                 """\

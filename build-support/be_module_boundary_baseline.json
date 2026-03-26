@@ -1,34 +1,14 @@
 {
   "include_violations": [
     {
-      "module": "base",
-      "path": "be/src/base/orlp/pdqsort.h",
-      "edge": "common/compiler_util.h"
-    },
-    {
       "module": "columncore",
       "path": "be/src/column/hash_set.h",
       "edge": "runtime/memory/counting_allocator.h"
     },
     {
-      "module": "fscore",
-      "path": "be/src/fs/bundle_file.cpp",
-      "edge": "fs/fs_util.h"
-    },
-    {
-      "module": "gutil",
-      "path": "be/src/gutil/port.h",
-      "edge": "base/port_hash.h"
-    },
-    {
       "module": "runtimecore",
       "path": "be/src/runtime/memory/counting_allocator.h",
       "edge": "exprs/expr_context.h"
-    },
-    {
-      "module": "runtimecore",
-      "path": "be/src/runtime/runtime_state.cpp",
-      "edge": "exec/pipeline/fragment_context.h"
     }
   ],
   "target_link_violations": [],

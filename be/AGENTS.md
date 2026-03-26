@@ -7,7 +7,7 @@ Backend operating contract for agentic work in `be/`.
 - The BE module boundary source of truth is [`be/module_boundary_manifest.json`](./module_boundary_manifest.json).
 - The harness is enforced by [`build-support/check_be_module_boundaries.py`](../build-support/check_be_module_boundaries.py).
 - The generated module section in this file is enforced by [`build-support/render_be_agents.py`](../build-support/render_be_agents.py).
-- Reviewed legacy violations are frozen in [`build-support/be_module_boundary_baseline.json`](../build-support/be_module_boundary_baseline.json). Do not add new entries casually.
+- Reviewed legacy violations are frozen in [`build-support/be_module_boundary_baseline.json`](../build-support/be_module_boundary_baseline.json). Only the deferred allocator-related entries should remain, and the baseline must only shrink.
 
 ## Harness Commands
 
@@ -17,6 +17,9 @@ python3 build-support/check_be_module_boundaries.py --mode full
 
 # PR-style changed-files check
 python3 build-support/check_be_module_boundaries.py --mode changed --base origin/main
+
+# PR-style check plus baseline shrink-only guard
+python3 build-support/check_be_module_boundaries.py --mode changed --base origin/main --enforce-baseline-shrink
 
 # Verify this file matches the manifest
 python3 build-support/render_be_agents.py --check
@@ -64,6 +67,7 @@ Useful core binaries for fast iterations:
 - Before finishing BE work, run `python3 build-support/check_be_module_boundaries.py --mode full`.
 - If the check fails on a pre-existing edge, confirm it is already listed in `build-support/be_module_boundary_baseline.json`.
 - If the check fails on a new edge, fix the code or update the manifest. Do not add to the baseline unless the debt is deliberate and reviewed.
+- If you touch the baseline file, run the changed-files check with `--enforce-baseline-shrink`; fixed entries should be deleted, never rewritten into new debt.
 
 <!-- BEGIN GENERATED: BE MODULE HARNESSES -->
 ## Module Harness

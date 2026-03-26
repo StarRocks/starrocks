@@ -57,11 +57,13 @@ CODE_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".i
 LINK_SCOPE_KEYWORDS = {"PUBLIC", "PRIVATE", "INTERFACE"}
 DEFAULT_MANIFEST = "be/module_boundary_manifest.json"
 DEFAULT_BASELINE = "build-support/be_module_boundary_baseline.json"
+BASELINE_VIOLATION_KEYS = ("include_violations", "target_link_violations", "test_link_violations")
 DEFAULT_CHANGED_FULL_CHECK_PATHS = {
     "AGENTS.md",
     "be/AGENTS.md",
     "be/src/common/AGENTS.md",
     "be/module_boundary_manifest.json",
+    "build-support/be_module_boundary_baseline.json",
     "build-support/check_be_module_boundaries.py",
     "build-support/render_be_agents.py",
 }
@@ -89,6 +91,7 @@ class ModuleSpec:
 @dataclass
 class CMakeState:
     target_sources: dict[str, list[str]]
+    target_definition_paths: dict[str, str]
     target_links: dict[str, list[str]]
     test_target_links: dict[str, list[str]]
 
@@ -143,23 +146,23 @@ def load_manifest(path: Path) -> dict:
 
 def load_baseline(path: Path) -> dict[str, set[tuple[str, str, str]]]:
     if not path.exists():
-        return {
-            "include_violations": set(),
-            "target_link_violations": set(),
-            "test_link_violations": set(),
-        }
-    payload = json.loads(path.read_text())
-    normalized: dict[str, set[tuple[str, str, str]]] = {}
-    for key in ("include_violations", "target_link_violations", "test_link_violations"):
-        normalized[key] = {
-            (item["module"], item["path"], item["edge"])
-            for item in payload.get(key, [])
-        }
-    return normalized
+        return _empty_baseline()
+    return _normalize_baseline_payload(json.loads(path.read_text()))
+
+
+def find_baseline_expansions(
+    previous: dict[str, set[tuple[str, str, str]]],
+    current: dict[str, set[tuple[str, str, str]]],
+) -> dict[str, set[tuple[str, str, str]]]:
+    return {
+        key: current.get(key, set()) - previous.get(key, set())
+        for key in BASELINE_VIOLATION_KEYS
+    }
 
 
 def parse_cmake_state(repo_root: Path) -> CMakeState:
     target_sources: dict[str, list[str]] = {}
+    target_definition_paths: dict[str, str] = {}
     raw_target_links: dict[str, list[str]] = {}
     raw_test_links: dict[str, list[str]] = {}
     cmake_files = sorted(repo_root.glob("be/src/**/CMakeLists.txt")) + sorted(repo_root.glob("be/test/**/CMakeLists.txt"))
@@ -180,6 +183,7 @@ def parse_cmake_state(repo_root: Path) -> CMakeState:
                 target_name = tokens[0]
                 source_tokens = _expand_tokens(tokens[1:], variables)
                 target_sources[target_name] = _resolve_source_tokens(source_tokens, cmake_path.parent, repo_root)
+                target_definition_paths[target_name] = cmake_path.relative_to(repo_root).as_posix()
                 continue
             if lower_name == "target_link_libraries":
                 target_name = tokens[0]
@@ -196,7 +200,12 @@ def parse_cmake_state(repo_root: Path) -> CMakeState:
         for target, links in raw_test_links.items()
         if target.endswith("_test")
     }
-    return CMakeState(target_sources=target_sources, target_links=target_links, test_target_links=test_target_links)
+    return CMakeState(
+        target_sources=target_sources,
+        target_definition_paths=target_definition_paths,
+        target_links=target_links,
+        test_target_links=test_target_links,
+    )
 
 
 def select_modules_for_changed_paths(
@@ -220,6 +229,12 @@ def select_modules_for_changed_paths(
     for module in manifest["modules"]:
         owned = owned_files_by_module[module.id]
         if any(path in owned for path in changed_paths):
+            selected.add(module.id)
+            continue
+        if any(
+            cmake_state.target_definition_paths.get(target_name) in changed_paths
+            for target_name in module.owned_targets
+        ):
             selected.add(module.id)
             continue
         if any(path.startswith(root.rstrip("/") + "/") or path == root.rstrip("/") for root in module.owned_roots for path in changed_paths):
@@ -396,6 +411,20 @@ def _filter_violations(violations: list[Violation], allowed: set[tuple[str, str,
     return [violation for violation in violations if (violation.module, violation.path, violation.edge) not in allowed]
 
 
+def _empty_baseline() -> dict[str, set[tuple[str, str, str]]]:
+    return {key: set() for key in BASELINE_VIOLATION_KEYS}
+
+
+def _normalize_baseline_payload(payload: dict) -> dict[str, set[tuple[str, str, str]]]:
+    normalized = _empty_baseline()
+    for key in BASELINE_VIOLATION_KEYS:
+        normalized[key] = {
+            (item["module"], item["path"], item["edge"])
+            for item in payload.get(key, [])
+        }
+    return normalized
+
+
 def _iter_cmake_commands(path: Path) -> Iterable[tuple[str, list[str]]]:
     lines = path.read_text().splitlines()
     current: list[str] = []
@@ -508,6 +537,30 @@ def _git_changed_paths(repo_root: Path, base: str) -> set[str]:
     return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
+def _git_read_text(repo_root: Path, ref: str, repo_path: str) -> str | None:
+    command = ["git", "show", f"{ref}:{repo_path}"]
+    result = subprocess.run(command, cwd=repo_root, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        return result.stdout
+    missing_markers = (
+        "exists on disk, but not in",
+        "does not exist in",
+        "pathspec",
+    )
+    if any(marker in result.stderr for marker in missing_markers):
+        return None
+    result.check_returncode()
+    return None
+
+
+def _load_baseline_from_git(repo_root: Path, ref: str, baseline_path: Path) -> dict[str, set[tuple[str, str, str]]]:
+    repo_path = baseline_path.as_posix()
+    text = _git_read_text(repo_root, ref, repo_path)
+    if text is None:
+        return _empty_baseline()
+    return _normalize_baseline_payload(json.loads(text))
+
+
 def _print_violations(violations: Violations) -> None:
     for label, items in (
         ("include", violations.include_violations),
@@ -522,12 +575,24 @@ def _print_violations(violations: Violations) -> None:
             )
 
 
+def _print_baseline_expansions(expansions: dict[str, set[tuple[str, str, str]]]) -> None:
+    print("Reviewed baseline entries may only shrink. Remove fixed debt instead of adding or editing baseline entries.")
+    for label in BASELINE_VIOLATION_KEYS:
+        for module, path, edge in sorted(expansions[label]):
+            print(f"[baseline] kind={label} module={module} path={path} edge={edge}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check BE module boundary rules from the manifest.")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST, help="Path to be/module_boundary_manifest.json")
     parser.add_argument("--baseline", default=DEFAULT_BASELINE, help="Path to the reviewed baseline JSON")
     parser.add_argument("--mode", choices=("full", "changed"), default="full", help="Check the whole repo or only changed modules")
     parser.add_argument("--base", help="Git base ref for --mode changed")
+    parser.add_argument(
+        "--enforce-baseline-shrink",
+        action="store_true",
+        help="Fail if the baseline file adds or edits entries relative to --base; only deletions are allowed.",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -541,6 +606,15 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--base is required when --mode changed")
         changed_paths = _git_changed_paths(repo_root, args.base)
         selected_modules = select_modules_for_changed_paths(manifest, cmake_state, changed_paths, repo_root)
+
+    if args.enforce_baseline_shrink:
+        if not args.base:
+            parser.error("--base is required when --enforce-baseline-shrink is set")
+        previous_baseline = _load_baseline_from_git(repo_root, args.base, Path(args.baseline))
+        expansions = find_baseline_expansions(previous_baseline, baseline)
+        if any(expansions[key] for key in BASELINE_VIOLATION_KEYS):
+            _print_baseline_expansions(expansions)
+            return 1
 
     violations = collect_violations(repo_root, manifest, cmake_state, selected_modules=selected_modules)
     violations = apply_baseline(violations, baseline)

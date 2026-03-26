@@ -372,7 +372,7 @@ jobs:
 
       - name: BE Boundary Check
         run: |
-          python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }}
+          python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }} --enforce-baseline-shrink
 
   thirdparty-info:
     runs-on: ubuntu-latest
