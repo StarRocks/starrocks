@@ -4342,4 +4342,177 @@ TEST_P(LakeVacuumTest, test_delete_tablets_txnlog_retains_shared_files_from_meta
     }
 }
 
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_txnlog_data_files) {
+    // Simulate deleting old range distribution tablets after tablet split.
+    // Txn logs of the old tablet reference data files that have been applied to new split tablets,
+    // so those data files must NOT be deleted.
+    const std::string segment1 = "00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat";
+    const std::string del_file1 = "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del";
+    const std::string compaction_segment = "00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat";
+    const std::string schema_change_segment = "00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat";
+    create_data_file(segment1);
+    create_data_file(del_file1);
+    create_data_file(compaction_segment);
+    create_data_file(schema_change_segment);
+
+    // Tablet metadata with range field (range distribution tablet)
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6000,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Txn log with op_write
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 7000,
+            "op_write": {
+                "rowset": {
+                    "segments": ["00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat"]
+                },
+                "dels": [
+                    "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del"
+                ]
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_compaction
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 8000,
+            "op_compaction": {
+                "output_rowset": {
+                    "segments": ["00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat"]
+                }
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_schema_change
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 9000,
+            "op_schema_change": {
+                "rowsets": [
+                    {
+                        "segments": ["00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat"]
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data files referenced by txn logs should be retained (not deleted).
+        EXPECT_TRUE(file_exist(segment1));
+        EXPECT_TRUE(file_exist(del_file1));
+        EXPECT_TRUE(file_exist(compaction_segment));
+        EXPECT_TRUE(file_exist(schema_change_segment));
+
+        // Txn log files themselves should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 7000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 8000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 9000)));
+
+        // Metadata file should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6000, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_combined_txnlog_data_files) {
+    // Simulate deleting range distribution tablets with combined txn logs after tablet split.
+    const std::string segment1 = "00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat";
+    create_data_file(segment1);
+
+    // Tablet metadata with range field for both tablets
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6100,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6101,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Combined txn log referencing data file from both tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+               {
+                    "tablet_id": 6100,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 6101,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    {
+        // Delete both tablets
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6100);
+        request.add_tablet_ids(6101);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data file should be retained.
+        EXPECT_TRUE(file_exist(segment1));
+
+        // Combined txn log file should be deleted.
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(7100)));
+
+        // Metadata files should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6100, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6101, 2)));
+    }
+}
+
 } // namespace starrocks::lake
