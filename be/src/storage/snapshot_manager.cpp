@@ -36,12 +36,11 @@
 
 #include <fmt/format.h>
 
-#include "base/testutil/sync_point.h"
-
 #include <iterator>
 #include <map>
 #include <set>
 
+#include "base/testutil/sync_point.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"

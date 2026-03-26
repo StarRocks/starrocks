@@ -19,9 +19,8 @@
 #include <gtest/gtest.h>
 
 #include "base/path/file_util.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_fwd.h"
