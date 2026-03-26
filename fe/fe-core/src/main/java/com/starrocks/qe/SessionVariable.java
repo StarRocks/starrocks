@@ -949,8 +949,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
 
-<<<<<<< HEAD
-
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
@@ -960,11 +958,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
-=======
-    public static final String COLUMN_VIEW_CONCAT_ROWS_LIMIT = "column_view_concat_rows_limit";
-    public static final String COLUMN_VIEW_CONCAT_BYTES_LIMIT = "column_view_concat_bytes_limit";
     public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1937,7 +1931,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = COLUMN_VIEW_CONCAT_BYTES_LIMIT)
     private long columnViewConcatBytesLimit = 4294967296L;
 
-<<<<<<< HEAD
     // When this variable is enabled, the limits of consumers a CTE are pushed down to the producer of the CTE.
     // The limits can then be applied before the exchange.
     // For example:
@@ -1974,10 +1967,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
-=======
+
     @VarAttr(name = ENABLE_DEFER_PROJECT_AFTER_TOPN)
     private boolean enableDeferProjectAfterTopN = true;
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5320,12 +5312,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableInsertSelectExternalAutoRefresh;
     }
 
-<<<<<<< HEAD
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
-=======
-    public void setColumnViewConcatBytesLimit(long value) {
-        this.columnViewConcatBytesLimit = value;
     }
 
     public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
@@ -5334,11 +5322,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableDeferProjectAfterTopN() {
         return enableDeferProjectAfterTopN;
-    }
-
-    public boolean isEnableSPMRewrite() {
-        return enableSPMRewrite;
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
     }
 
     public void setArrowFlightProxy(String proxy) {
