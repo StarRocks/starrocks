@@ -81,7 +81,6 @@ public:
 
         auto& buckets = this->data(state).buckets;
         auto bucket_it{buckets.end()};
-        uint64_t hash = 0;
 
         const auto v = GetContainer<LT>::get_data(columns[0], row_num);
         bucket_it = std::upper_bound(buckets.begin(), buckets.end(), v, [](auto& value, Bucket<LT>& bucket) {
@@ -91,11 +90,7 @@ public:
             bucket_it = buckets.end();
         }
         // find the correct bucket for the current value.
-        if constexpr (lt_is_string_or_binary<LT>) {
-            hash = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
-        } else {
-            hash = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
-        }
+        uint64_t hash = HashUtil::murmur_hash64A<T>(v, HashUtil::MURMUR_SEED);
 
         if (hash != 0 && bucket_it != buckets.end()) {
             int index = std::distance(buckets.begin(), bucket_it);
