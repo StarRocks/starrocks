@@ -252,7 +252,7 @@ public final class GlobalVariable {
     private static boolean enableReduceCastVarcharLengthInheritance = false;
 
     @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE, flag = VariableMgr.GLOBAL)
-    private static boolean enableReduceCastVarcharExprSyncType = true;
+    private static boolean enableReduceCastVarcharExprSyncType = false;
 
     @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
     public static boolean enableEtlExecQueueAllWorkloads = true;
