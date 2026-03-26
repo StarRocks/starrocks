@@ -1,6 +1,10 @@
 Version history
 ===============
 
+**Unreleased**
+
+- Fix parsing of reflected nested `STRUCT` / `ARRAY` / `MAP` column types when inline field comments are present (#69817)
+
 **1.3.3**
 
 - Add back support for SQLAlchemy 1.4 (#65976 by @rad-pat)
