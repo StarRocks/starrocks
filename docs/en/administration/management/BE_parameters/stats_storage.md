@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Statistics and Storage"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -12,7 +13,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 
 import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
-# BE Configuration
+# BE Configuration - Statistics and Storage
 
 <BEConfigMethod />
 
@@ -23,7 +24,7 @@ import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Speci
 You can view the BE configuration items using the following command:
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## Configure BE parameters
