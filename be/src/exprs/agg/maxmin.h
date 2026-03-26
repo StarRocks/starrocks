@@ -131,17 +131,17 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
     // final result. If retract's row is greater or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) <= 0;
+        return !state.has_value() || state.get_result().compare(right) <= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+        if (!state.has_value() || memcompare_padded(state.get_result().get_data(), state.get_result().get_size(),
                                                     right.get_data(), right.get_size()) < 0) {
             state.assign(right);
         }
     }
 
     static bool equals(const State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) == 0;
+        return !state.has_value() || state.get_result().compare(right) == 0;
     }
 };
 
@@ -151,7 +151,7 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
     // final result. If retract's row is smaller or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) >= 0;
+        return !state.has_value() || state.get_result().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || memcompare_padded(state.get_result().get_data(), state.get_result().get_size(),
@@ -161,7 +161,7 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
     }
 
     static bool equals(const State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) == 0;
+        return !state.has_value() || state.get_result().compare(right) == 0;
     }
 };
 
@@ -333,7 +333,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        column->append(this->data(state).get_result());
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -344,14 +344,14 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        column->append(this->data(state).get_result());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
         for (size_t i = start; i < end; ++i) {
-            ColumnHelper::append_column_value<LT>(dst, this->data(state).slice());
+            ColumnHelper::append_column_value<LT>(dst, this->data(state).get_result());
         }
     }
 
