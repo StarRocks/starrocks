@@ -633,7 +633,7 @@ public class ExpressionStatisticsCalculatorTest {
     public void testCaseWhenOperatorNullFractionWithoutElse() {
         // GIVEN
         // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' END  (no ELSE)
-        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
         final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                 ConstantOperator.createInt(1));
         final var constantOperator1 = ConstantOperator.createChar("1");
@@ -642,7 +642,7 @@ public class ExpressionStatisticsCalculatorTest {
         final var constantOperator2 = ConstantOperator.createChar("2");
 
         // No ELSE clause: elseClause = null
-        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null, null,
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(Type.VARCHAR, null, null,
                 ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         // WHEN
@@ -659,7 +659,7 @@ public class ExpressionStatisticsCalculatorTest {
     public void testCaseWhenOperatorNullFractionWithElse() {
         // GIVEN
         // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' ELSE 'others' END
-        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
         final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                 ConstantOperator.createInt(1));
         final var constantOperator1 = ConstantOperator.createChar("1");
@@ -668,7 +668,7 @@ public class ExpressionStatisticsCalculatorTest {
         final var constantOperator2 = ConstantOperator.createChar("2");
 
         final var caseWhenOperator =
-                new CaseWhenOperator(VarcharType.VARCHAR, null, ConstantOperator.createChar("others", VarcharType.VARCHAR),
+                new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         // WHEN
@@ -685,13 +685,13 @@ public class ExpressionStatisticsCalculatorTest {
     public void testCaseWhenOperatorExplicitElseNull() {
         // GIVEN
         // CASE WHEN col = 1 THEN 'x' ELSE NULL END
-        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
         final var whenOperator = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                 ConstantOperator.createInt(1));
         final var thenOperator = ConstantOperator.createChar("x");
 
-        final var caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null,
-                ConstantOperator.createNull(VarcharType.VARCHAR), ImmutableList.of(whenOperator, thenOperator));
+        final var caseWhenOperator = new CaseWhenOperator(Type.VARCHAR, null,
+                ConstantOperator.createNull(Type.VARCHAR), ImmutableList.of(whenOperator, thenOperator));
 
         // WHEN
         final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
