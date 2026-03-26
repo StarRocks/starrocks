@@ -154,14 +154,17 @@ public class ExpressionStatisticCalculator {
                 // Calculate amount of rows satisfying / not satisfying the predicate
                 long nullRows = Math.round(rowCount * inputNullFraction);
                 long nonNullRows = Math.round(rowCount * (1.0 - inputNullFraction));
+
+                long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
+                long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
                 // Add MCV for each branch
-                if (nullRows > 0) {
+                if (trueRows > 0) {
                     final var castedMcv = ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR);
-                    castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), nullRows));
+                    castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
                 }
-                if (nonNullRows > 0) {
+                if (falseRows > 0) {
                     final var castedMcv = ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR);
-                    castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), nonNullRows));
+                    castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
                 }
             }
 

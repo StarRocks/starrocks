@@ -1137,6 +1137,9 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(0, isNotNullStat.getMinValue(), 0.001);
         Assertions.assertEquals(1, isNotNullStat.getMaxValue(), 0.001);
         Assertions.assertEquals(2, isNotNullStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNotNullStat.getHistogram());
+        Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
     }
 }
 
