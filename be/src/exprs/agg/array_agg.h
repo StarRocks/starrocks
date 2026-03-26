@@ -28,11 +28,18 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
+<<<<<<< HEAD
 
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
+=======
+// Primary template: non-string-or-binary types
+template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
 struct ArrayAggAggregateState {
+    virtual ~ArrayAggAggregateState() = default;
     using ColumnType = RunTimeColumnType<PT>;
     using CppType = RunTimeCppType<PT>;
+<<<<<<< HEAD
     using KeyType = typename SliceHashSet::key_type;
     void update(MemPool* mem_pool, const ColumnType& column, size_t offset, size_t count) {
         if constexpr (is_distinct) {
@@ -55,6 +62,14 @@ struct ArrayAggAggregateState {
                 for (int i = 0; i < count; i++) {
                     set.emplace(column.get_data()[offset + i]);
                 }
+=======
+
+    virtual void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
+        if constexpr (is_distinct) {
+            const auto& datas = GetContainer<PT>::get_data(&column);
+            for (int i = 0; i < count; i++) {
+                set.emplace(datas[offset + i]);
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
             }
         } else {
             data_column.append(column, offset, count);
@@ -78,26 +93,6 @@ struct ArrayAggAggregateState {
         }
     }
 
-    void update_with_slice(MemPool* mem_pool, const Slice& slice) {
-        if constexpr (is_distinct) {
-            if constexpr (lt_is_string_or_binary<PT>) {
-                KeyType key(slice);
-#if defined(__clang__) && (__clang_major__ >= 16)
-                set.lazy_emplace(key, [&](const auto& ctor) {
-#else
-                set.template lazy_emplace(key, [&](const auto& ctor) {
-#endif
-                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    assert(pos != nullptr);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
-            }
-        } else {
-            data_column.append(slice);
-        }
-    }
-
     ColumnType* get_data_column() {
         auto size = set.size();
         if (data_column.size() > 0 || size == 0) {
@@ -105,14 +100,8 @@ struct ArrayAggAggregateState {
         }
         data_column.get_data().reserve(size);
         if constexpr (is_distinct) {
-            if constexpr (lt_is_string<PT>) {
-                for (auto& key : set) {
-                    data_column.append(Slice(key.data, key.size));
-                }
-            } else {
-                for (auto& key : set) {
-                    data_column.append(key);
-                }
+            for (auto& key : set) {
+                data_column.append(key);
             }
         }
         return &data_column;
@@ -129,29 +118,157 @@ struct ArrayAggAggregateState {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    virtual void reset() {
+        data_column.resize(0);
+        null_count = 0;
+        set.clear();
+    }
+
     ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
     MyHashSet set;
 };
 
+// Specialization: string-or-binary types
+template <LogicalType PT, bool is_distinct, typename MyHashSet>
+struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT>> {
+    virtual ~ArrayAggAggregateState() = default;
+    using ColumnType = RunTimeColumnType<PT>;
+    using CppType = RunTimeCppType<PT>;
+    using KeyType = typename SliceHashSet::key_type;
+
+    virtual void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
+        if constexpr (is_distinct) {
+            const auto& datas = GetContainer<PT>::get_data(&column);
+            for (int i = 0; i < count; i++) {
+                auto raw_key = datas[offset + i];
+                KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                set.lazy_emplace(key, [&](const auto& ctor) {
+#else
+                set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                    uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                    assert(pos != nullptr);
+                    memcpy(pos, key.data, key.size);
+                    ctor(pos, key.size, key.hash);
+                });
+            }
+        } else {
+            data_column.append(column, offset, count);
+        }
+    }
+
+    void append_null() {
+        if constexpr (is_distinct) {
+            null_count = 1;
+        } else {
+            null_count++;
+        }
+    }
+
+    void append_null(size_t count) {
+        if constexpr (is_distinct) {
+            if (count > 0) {
+                null_count = 1;
+            }
+        } else {
+            null_count += count;
+        }
+    }
+
+    ColumnType* get_data_column() {
+        auto size = set.size();
+        if (data_column.size() > 0 || size == 0) {
+            return &data_column;
+        }
+        data_column.reserve(size);
+        if constexpr (is_distinct) {
+            for (auto& key : set) {
+                data_column.append(Slice(key.data, key.size));
+            }
+        }
+        return &data_column;
+    }
+
+    bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
+
+    static bool check_overflow(const Column& col, FunctionContext* ctx) {
+        Status st = col.capacity_limit_reached();
+        if (!st.ok()) {
+            ctx->set_error(fmt::format("The column generated by array_agg is overflow: {}", st.message()).c_str());
+            return true;
+        }
+        return false;
+    }
+
+    virtual void reset() {
+        data_column.resize(0);
+        null_count = 0;
+        set.clear();
+    }
+
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
+    ColumnType data_column; // Aggregated elements for array_agg
+    size_t null_count = 0;
+    MyHashSet set;
+};
+
+<<<<<<< HEAD
 template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
 class ArrayAggAggregateFunction final
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState<LT, is_distinct, MyHashSet>,
                                               ArrayAggAggregateFunction<LT, is_distinct, MyHashSet>> {
+=======
+template <LogicalType PT, typename = guard::Guard>
+struct WithMemPool {};
+
+template <LogicalType PT>
+struct WithMemPool<PT, StringLTGuard<PT>> {
+    MemPool mem_pool{};
+};
+
+template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
+struct ArrayAggWindowState final : ArrayAggAggregateState<PT, is_distinct, MyHashSet>, WithMemPool<PT> {
+    using Base = ArrayAggAggregateState<PT, is_distinct, MyHashSet>;
+    using Self = ArrayAggWindowState;
+    using CppType = typename Base::CppType;
+    using ColumnType = typename Base::ColumnType;
+    using Base::update;
+    using Base::append_null;
+    using Base::reset;
+
+    void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) override {
+        if constexpr (lt_is_string<PT>) {
+            this->Base::update(&this->mem_pool, column, offset, count);
+        } else {
+            this->Base::update(nullptr, column, offset, count);
+        }
+    }
+
+    void reset() override {
+        this->Base::reset();
+        if constexpr (lt_is_string<PT>) {
+            this->mem_pool.clear();
+        }
+    }
+};
+
+template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename> typename State,
+          typename MyHashSet = std::set<int>>
+class ArrayAggAggregateFunctionBase final
+        : public AggregateFunctionBatchHelper<State<LT, is_distinct, MyHashSet>,
+                                              ArrayAggAggregateFunctionBase<LT, is_distinct, State, MyHashSet>> {
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            MemPool* mem_pool = ctx->mem_pool();
-            const auto slice = GetContainer<LT>::get_data(columns[0], row_num);
-            this->data(state).update_with_slice(mem_pool, slice);
-        } else {
-            const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-            this->data(state).update(ctx->mem_pool(), column, row_num, 1);
-        }
+        // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+        this->data(state).update(ctx->mem_pool(), *columns[0], row_num, 1);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -163,6 +280,7 @@ public:
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto offset_size = input_column->get_element_offset_size(row_num);
         auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
+<<<<<<< HEAD
         if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
             size_t end = offset_size.first + offset_size.second;
@@ -180,11 +298,16 @@ public:
                     down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
             size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
             DCHECK_LE(element_null_count, offset_size.second);
+=======
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
 
-            this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
-                                     offset_size.second - element_null_count);
-            this->data(state).append_null(element_null_count);
-        }
+        const auto* element_data_column = ColumnHelper::get_data_column(&array_element);
+        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+        DCHECK_LE(element_null_count, offset_size.second);
+
+        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
+                                 offset_size.second - element_null_count);
+        this->data(state).append_null(element_null_count);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -219,6 +342,44 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        const auto& data_column = state_impl.get_data_column();
+        auto* array_column = down_cast<ArrayColumn*>(dst);
+        for (auto i = start; i < end; i++) {
+            array_column->append_array_element(*data_column, state_impl.null_count);
+            if (UNLIKELY(state_impl.check_overflow(*array_column, ctx))) {
+                return;
+            }
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        // For distinct mode, data_column used as a result cache for get_values method, any updates to
+        // this state should invalidate the cache.
+        this->data(state).data_column.resize(0);
+        this->data(state).update(ctx->mem_pool(), *columns[0], frame_start, frame_end - frame_start);
+        this->data(state).check_overflow(ctx);
+    }
+
+    void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
+                                  int64_t peer_group_end) const override {
+        // For distinct mode, data_column used as a result cache for get_values method, any updates to
+        // this state should invalidate the cache.
+        this->data(state).data_column.resize(0);
+        this->data(state).append_null(peer_group_end - peer_group_start);
+    }
+
+>>>>>>> b927469062 ([Refactor] Split ArrayAggAggregateState to ArrayAggAggregateState<Fixedlength> and ArrayAggAggregateState<String> (#70826))
     std::string get_name() const override { return is_distinct ? "array_agg_distinct" : "array_agg"; }
 };
 
