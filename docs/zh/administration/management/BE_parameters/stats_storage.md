@@ -10,13 +10,7 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-<<<<<<< HEAD
-# BE 配置项
-=======
-import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
-
 # BE 配置项 - 统计报告和存储
->>>>>>> 83fd374067 ([Doc] Add Sidebar Label for BE Config Docs (#70834))
 
 <BEConfigMethod />
 
