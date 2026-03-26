@@ -40,7 +40,6 @@
 #include <map>
 #include <set>
 
-#include "base/testutil/sync_point.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
@@ -839,9 +838,7 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
         // reset rowsetid means that it is different from the rowset in snapshot meta.
         // It is reasonable that reset the creation time here.
-        int64_t new_creation_time = UnixSeconds();
-        TEST_SYNC_POINT_CALLBACK("SnapshotManager::assign_new_rowset_id:creation_time", &new_creation_time);
-        rowset_meta_pb.set_creation_time(new_creation_time);
+        rowset_meta_pb.set_creation_time(UnixSeconds());
     }
     return Status::OK();
 }
