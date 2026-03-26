@@ -573,7 +573,11 @@ public:
         if (data_column->is_array()) {
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
+<<<<<<< HEAD
             const auto& off = array_column->offsets().get_data();
+=======
+            const auto off = array_column->offsets().immutable_data();
+>>>>>>> 18240c9 ([Refactor] Add template function: murmur_hash64A (#70789))
             const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(column);
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {

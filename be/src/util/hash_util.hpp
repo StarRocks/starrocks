@@ -36,9 +36,15 @@
 
 #include <type_traits>
 
+<<<<<<< HEAD:be/src/util/hash_util.hpp
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "util/slice.h"
+=======
+#include "base/compiler_util.h"
+#include "base/logging.h"
+#include "base/string/slice.h"
+>>>>>>> 18240c9 ([Refactor] Add template function: murmur_hash64A (#70789)):be/src/base/hash/hash_util.hpp
 
 // For cross compiling with clang, we need to be able to generate an IR file with
 // no sse instructions.  Attempting to load a precompiled IR file that contains
