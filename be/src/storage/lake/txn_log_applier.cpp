@@ -18,6 +18,7 @@
 
 #include <climits>
 
+#include "agent/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -30,6 +31,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/sync_point.h"
 #include "util/dynamic_cache.h"
+#include "util/time.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/trace.h"
 
