@@ -37,7 +37,7 @@ struct ArrayAggAggregateState {
 
     void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
         if constexpr (is_distinct) {
-            const auto datas = down_cast<const ColumnType&>(column).immutable_data();
+            const auto& datas = GetContainer<PT>::get_data(&column);
             for (int i = 0; i < count; i++) {
                 set.emplace(datas[offset + i]);
             }
