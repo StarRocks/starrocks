@@ -360,6 +360,15 @@ jobs:
           git fetch origin ${{ github.base_ref }} --depth=1
           echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
 
+      - name: Determine Baseline Enforcement
+        id: baseline_shrink
+        run: |
+          if git cat-file -e "${{ steps.merge_base.outputs.base }}:build-support/be_module_boundary_baseline.json" 2>/dev/null; then
+            echo "enforce_baseline_shrink=true" >> $GITHUB_OUTPUT
+          else
+            echo "enforce_baseline_shrink=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Boundary Tool Tests
         run: |
           python3 -m unittest \
@@ -372,7 +381,11 @@ jobs:
 
       - name: BE Boundary Check
         run: |
-          python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }} --enforce-baseline-shrink
+          args=(python3 build-support/check_be_module_boundaries.py --mode changed --base "${{ steps.merge_base.outputs.base }}")
+          if [[ "${{ steps.baseline_shrink.outputs.enforce_baseline_shrink }}" == "true" ]]; then
+            args+=(--enforce-baseline-shrink)
+          fi
+          "${args[@]}"
 
   thirdparty-info:
     runs-on: ubuntu-latest

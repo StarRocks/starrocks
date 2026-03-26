@@ -56,6 +56,23 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         architecture_suffixes = {pattern.removeprefix("be/**/*") for pattern in architecture_patterns}
         self.assertEqual(MODULE.CODE_EXTENSIONS, architecture_suffixes)
 
+    def test_ci_baseline_shrink_is_gated_on_base_has_baseline_file(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn('name: Determine Baseline Enforcement', workflow_text)
+        self.assertIn(
+            'if git cat-file -e "${{ steps.merge_base.outputs.base }}:build-support/be_module_boundary_baseline.json" 2>/dev/null; then',
+            workflow_text,
+        )
+        self.assertIn(
+            'if [[ "${{ steps.baseline_shrink.outputs.enforce_baseline_shrink }}" == "true" ]]; then',
+            workflow_text,
+        )
+        self.assertNotIn(
+            'python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }} --enforce-baseline-shrink',
+            workflow_text,
+        )
+
     def test_find_baseline_expansions_allows_deletions_only(self) -> None:
         previous = {
             "include_violations": {("base", "be/src/base/orlp/pdqsort.h", "common/compiler_util.h")},
