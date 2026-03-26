@@ -151,4 +151,22 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
 }
 
+TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
+    auto data_column = BinaryColumn::create();
+    data_column->append(Slice("v1"));
+    auto null_column = NullColumn::create();
+    null_column->append(0);
+    ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    ColumnPtr const_nullable_column = ConstColumn::create(nullable_column, 4);
+
+    const Column* const_data = ColumnHelper::get_data_column(const_nullable_column.get());
+    ASSERT_FALSE(const_data->is_nullable());
+    ASSERT_FALSE(const_data->is_constant());
+    ASSERT_TRUE(const_data->is_binary());
+
+    const auto* typed_data = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(const_nullable_column.get());
+    ASSERT_TRUE(typed_data->is_binary());
+    ASSERT_EQ(typed_data->get_slice(0).to_string(), "v1");
+}
+
 } // namespace starrocks
