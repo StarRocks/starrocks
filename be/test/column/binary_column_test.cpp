@@ -668,4 +668,24 @@ INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSele
                          ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
                                            std::make_tuple(4 * 1024 * 1024 + 10)));
 
+// BinaryImmContainer::immutable_bytes_size
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_empty) {
+    auto col = BinaryColumn::create();
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 0);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
+    auto col = BinaryColumn::create();
+    col->append_string("hello"); // 5 bytes
+    col->append_string("world"); // 5 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("foo"); // 3 bytes
+    col->append_string("bar"); // 3 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
+}
+
 } // namespace starrocks
