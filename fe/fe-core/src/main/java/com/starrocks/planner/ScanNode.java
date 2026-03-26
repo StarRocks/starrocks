@@ -230,4 +230,19 @@ public abstract class ScanNode extends PlanNode {
         }
         return output.toString();
     }
+<<<<<<< HEAD
+=======
+
+    public void setHeavyExprs(Map<SlotId, Expr> heavyExprs) {
+        this.heavyExprs = heavyExprs;
+    }
+
+    public Map<SlotId, Expr> getHeavyExprs() {
+        return heavyExprs;
+    }
+
+    public void prepareRetry() {
+        // default no-op: subclasses that maintain streaming scan state should override
+    }
+>>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
 }

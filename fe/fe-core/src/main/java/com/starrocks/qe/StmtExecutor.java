@@ -793,8 +793,13 @@ public class StmtExecutor {
                             uuid = UUID.randomUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
+<<<<<<< HEAD
                             context.setExecutionId(
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+=======
+                            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+                            retryContext.prepareRetry();
+>>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());
