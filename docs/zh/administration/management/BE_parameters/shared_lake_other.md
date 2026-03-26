@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
 ---
 
@@ -9,7 +10,7 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE 配置项
+# BE 配置项 - 存算分离、数据湖和其他
 
 <BEConfigMethod />
 
@@ -18,7 +19,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 您可以通过以下命令查看 BE 配置项：
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## 配置 BE 参数
