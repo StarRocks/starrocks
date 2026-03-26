@@ -73,8 +73,13 @@ subprojects {
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
+<<<<<<< HEAD
         set("spark.version", "3.5.5")
         set("staros.version", "3.5-rc3")
+=======
+        set("spark.version", "3.5.7")
+        set("staros.version", "4.0.0")
+>>>>>>> 39446e7d7b ([BugFix][CVE-2025-54920] upgrade spark-core_2.12 to 3.5.7 (#70862))
         set("tomcat.version", "8.5.70")
         // var sync end
     }
