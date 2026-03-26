@@ -16,16 +16,12 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_index.h"
->>>>>>> aa8cedb312 ([Enhancement] Add PK index SST file statistics to be_tablet_write_log system table (#69860))
 
         namespace starrocks::lake {
 

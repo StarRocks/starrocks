@@ -33,7 +33,6 @@ enum class LogType : uint8_t {
 
 // Single log entry
 struct TabletWriteLogEntry {
-<<<<<<< HEAD
     int64_t begin_time;          // Begin timestamp (ms)
     int64_t finish_time;         // Finish timestamp (ms)
     int64_t backend_id;          // Backend ID
@@ -51,6 +50,10 @@ struct TabletWriteLogEntry {
     std::string label;           // Load label (For Load)
     int64_t compaction_score;    // Compaction score (For Compaction)
     std::string compaction_type; // Compaction type (For Compaction)
+    int32_t sst_input_files;     // PK index SST input file count (For Compaction)
+    int64_t sst_input_bytes;     // PK index SST input bytes (For Compaction)
+    int32_t sst_output_files;    // PK index SST output file count
+    int64_t sst_output_bytes;    // PK index SST output bytes
 
     TabletWriteLogEntry()
             : begin_time(0),
@@ -67,30 +70,11 @@ struct TabletWriteLogEntry {
               output_bytes(0),
               input_segments(0),
               output_segments(0),
-              compaction_score(0) {}
-=======
-    int64_t begin_time{0};           // Begin timestamp (ms)
-    int64_t finish_time{0};          // Finish timestamp (ms)
-    int64_t backend_id{0};           // Backend ID
-    int64_t txn_id{0};               // Transaction ID
-    int64_t tablet_id{0};            // Tablet ID
-    int64_t table_id{0};             // Table ID
-    int64_t partition_id{0};         // Partition ID
-    LogType log_type{LogType::LOAD}; // Log Type
-    int64_t input_rows{0};           // Input rows
-    int64_t input_bytes{0};          // Input bytes
-    int64_t output_rows{0};          // Output rows
-    int64_t output_bytes{0};         // Output bytes
-    int32_t input_segments{0};       // Input segment count (For Compaction)
-    int32_t output_segments{0};      // Output segment count
-    std::string label;               // Load label (For Load)
-    int64_t compaction_score{0};     // Compaction score (For Compaction)
-    std::string compaction_type;     // Compaction type (For Compaction)
-    int32_t sst_input_files{0};      // PK index SST input file count (For Compaction)
-    int64_t sst_input_bytes{0};      // PK index SST input bytes (For Compaction)
-    int32_t sst_output_files{0};     // PK index SST output file count
-    int64_t sst_output_bytes{0};     // PK index SST output bytes
->>>>>>> aa8cedb312 ([Enhancement] Add PK index SST file statistics to be_tablet_write_log system table (#69860))
+              compaction_score(0),
+              sst_input_files(0),
+              sst_input_bytes(0),
+              sst_output_files(0),
+              sst_output_bytes(0) {}
 };
 
 // TabletWriteLogManager: Manages write logs in memory

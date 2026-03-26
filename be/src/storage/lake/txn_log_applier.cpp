@@ -18,18 +18,6 @@
 
 #include <climits>
 
-<<<<<<< HEAD
-=======
-#include "agent/master_info.h"
-#include "base/debug/trace.h"
-#include "base/phmap/phmap_fwd_decl.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_storage_fwd.h"
->>>>>>> aa8cedb312 ([Enhancement] Add PK index SST file statistics to be_tablet_write_log system table (#69860))
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
