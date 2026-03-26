@@ -828,6 +828,7 @@ INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSele
                          ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
                                            std::make_tuple(4 * 1024 * 1024 + 10)));
 
+<<<<<<< HEAD
 // Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
 //   BinaryColumn::deserialize_and_append_batch_nullable() <- NullableColumn::
 //   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
@@ -861,6 +862,26 @@ PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_siz
     nullable_column->deserialize_and_append_batch(srcs, 0);
     ASSERT_EQ(0u, nullable_column->size());
     ASSERT_FALSE(nullable_column->has_null());
+=======
+// BinaryImmContainer::immutable_bytes_size
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_empty) {
+    auto col = BinaryColumn::create();
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 0);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
+    auto col = BinaryColumn::create();
+    col->append_string("hello"); // 5 bytes
+    col->append_string("world"); // 5 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("foo"); // 3 bytes
+    col->append_string("bar"); // 3 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
+>>>>>>> d1099e5 ([Enhancement] And function append_column_value to handle large binary column append (#70805))
 }
 
 } // namespace starrocks
