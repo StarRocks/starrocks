@@ -949,6 +949,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
 
+
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
