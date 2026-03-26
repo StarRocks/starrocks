@@ -586,8 +586,13 @@ struct GetContainer {
         const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
             using LargeColumnType = RunTimeLargeColumnType<ltype>;
+<<<<<<< HEAD
             if (column->is_large_binary()) {
                 return down_cast<const LargeColumnType*>(data_column)->get_proxy_data();
+=======
+            if (data_column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+>>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
             }
             return down_cast<const ColumnType*>(data_column)->get_proxy_data();
         } else {

@@ -573,9 +573,14 @@ public:
         if (data_column->is_array()) {
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
+<<<<<<< HEAD
             const auto& off = array_column->offsets().get_data();
             const auto* binary_column = ColumnHelper::get_data_column(column);
             const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(binary_column);
+=======
+            const auto off = array_column->offsets().immutable_data();
+            const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(column);
+>>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {
                     agg_state.update(mem_pool, datas[i]);
