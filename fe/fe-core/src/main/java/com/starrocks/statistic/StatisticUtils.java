@@ -608,6 +608,10 @@ public class StatisticUtils {
     }
 
     public static Type getQueryStatisticsColumnType(Table table, String column) {
+        Column directMatch = table.getColumn(column);
+        if (directMatch != null) {
+            return directMatch.getType();
+        }
         String[] parts = column.split("\\.");
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
