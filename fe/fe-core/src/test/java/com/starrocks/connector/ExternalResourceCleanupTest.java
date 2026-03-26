@@ -23,7 +23,6 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorScanRangeSource;
 import com.starrocks.connector.ConnectorType;
@@ -31,11 +30,6 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.TableVersionRange;
-=======
-import com.starrocks.common.tvr.TvrTableDelta;
-import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.common.tvr.TvrVersionRange;
->>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaLakeAddFileStatsSerDe;
 import com.starrocks.connector.delta.DeltaLakeMetadata;

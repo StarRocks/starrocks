@@ -1339,13 +1339,9 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDescriptor);
 
             PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
-<<<<<<< HEAD
-
-=======
             List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
->>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode",
                             node.getPredicate(), fieldNames, partitionIdGenerator);
