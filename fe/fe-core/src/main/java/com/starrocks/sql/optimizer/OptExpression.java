@@ -77,6 +77,29 @@ public class OptExpression {
     public static OptExpression create(Operator op, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
+<<<<<<< HEAD
+=======
+        expr.tvrOptMeta = tvrOptMeta;
+        return expr;
+    }
+
+    public static OptExpression createWithoutTvr(Operator op, OptExpression... inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression createWithoutTvr(Operator op, List<OptExpression> inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression create(Operator op, OptExpression... inputs) {
+        return create(op, null, inputs);
+    }
+
+    public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, List<OptExpression> inputs) {
+        OptExpression expr = new OptExpression(op);
+        expr.inputs = Lists.newArrayList(inputs);
+        expr.tvrOptMeta = tvrOptMeta;
+>>>>>>> f0a623ddf2 ([BugFix] Fix UnsupportedOperationException in ApplyTuningGuideRule caused by immutable inputs list in OptExpression (#70785))
         return expr;
     }
 
@@ -286,7 +309,7 @@ public class OptExpression {
         }
 
         public Builder setInputs(List<OptExpression> inputs) {
-            optExpression.inputs = inputs;
+            optExpression.inputs = Lists.newArrayList(inputs);
             return this;
         }
 
