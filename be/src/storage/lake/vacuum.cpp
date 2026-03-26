@@ -821,6 +821,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     // ensures shared files are collected into retained_files and not accidentally deleted
     // when processing txn logs.
     std::unordered_set<std::string> retained_files;
+    bool is_range_distribution = false;
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
@@ -916,6 +917,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
 
         if (latest_metadata != nullptr) {
+            if (latest_metadata->has_range()) {
+                is_range_distribution = true;
+            }
             const bool allow_delete_shared_files =
                     can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
             for (const auto& rowset : latest_metadata->rowsets()) {
@@ -978,8 +982,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             return res.status();
         } else {
             auto log_ptr = std::move(res).value();
-            // delete files under txnlog
-            RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter, retained_files));
+            // For range distribution tablets, skip deleting data files referenced by txn logs
+            // because they may have been applied to new tablets after tablet split.
+            if (!is_range_distribution) {
+                RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter, retained_files));
+            }
             // delete txnlog
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
@@ -1004,7 +1011,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
-                if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
+                if (!is_range_distribution &&
+                    std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
                     RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter,
                                                               retained_files));
                 }
