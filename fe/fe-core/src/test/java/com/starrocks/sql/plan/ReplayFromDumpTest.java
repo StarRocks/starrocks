@@ -669,26 +669,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = replayPair.second;
 
         // tbl_mock_015
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 3, probe_expr = (64: mock_004)\n"), plan);
-
-        // table: tbl_mock_001, rollup: tbl_mock_001
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 1, probe_expr = (118: mock_004)"), plan);
-=======
-        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (<slot 79> 79: mock_004)"));
-        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (<slot 62> 62: mock_004)"));
-
-        // table: tbl_mock_001, rollup: tbl_mock_001
-        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (<slot 110> 110: mock_004)"));
-        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (<slot 96> 96: mock_004)\n"));
-
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
+        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 4, probe_expr = (<slot 79> 79: mock_004)"), plan);
+        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 3, probe_expr = (<slot 62> 62: mock_004)"), plan);
     }
 
     @Test

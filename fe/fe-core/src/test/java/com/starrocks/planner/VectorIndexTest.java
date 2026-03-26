@@ -385,9 +385,9 @@ public class VectorIndexTest extends PlanTestBase {
                 "  |  5 <-> [12: cast, DOUBLE, true] + 1.0\n" +
                 "  |  6 <-> [12: cast, DOUBLE, true] + 2.0\n" +
                 "  |  7 <-> cast([11: approx_cosine_similarity, FLOAT, true] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  8 <-> cast(approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
                 "  |  common expressions:\n" +
-                "  |  11 <-> approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
+                "  |  11 <-> approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [2: c1, ARRAY<FLOAT>, false]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true]\n" +
                 "  |  12 <-> cast([11: approx_cosine_similarity, FLOAT, true] as DOUBLE)\n" +
                 "  |  limit: 10\n" +
                 "  |  cardinality: 1\n" +
@@ -404,16 +404,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-<<<<<<< HEAD
-                "  |  5 <-> [11: cast, DOUBLE, true] + 1.0\n" +
-                "  |  6 <-> [11: cast, DOUBLE, true] + 2.0\n" +
-                "  |  7 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[([1.1,2.2,3.3,4.4,5.5], [3: c2, ARRAY<FLOAT>, true]);" +
-                " args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] " +
-                "as DOUBLE) + 2.0\n" +
-=======
                 "  |  3 <-> [3: c2, ARRAY<FLOAT>, true]\n" +
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
                 "  |  9 <-> [10: __vector_approx_cosine_similarity, FLOAT, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +

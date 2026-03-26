@@ -281,15 +281,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "from s2 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
 
         String plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])"), plan);
-=======
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
@@ -306,7 +297,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  2:MERGING-EXCHANGE");
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
     }
 
     @Test
@@ -314,12 +304,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "explain verbose  select lower(upper(array_min(reverse(array_sort(a1)))))      \n" +
                 "    from s2 where a2[2] = 'GD' order by v1 limit 2; ";
         String plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("  1:Project\n" +
-                "  |  output columns:\n" +
-                "  |  1 <-> [1: v1, BIGINT, true]\n" +
-                "  |  8 <-> DictDefine(6: a1, [lower(upper(<place-holder>))], array_min(reverse(array_sort(6: a1))))"), plan);
-=======
         assertContains(plan, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> DictDecode(6: a1, [lower(upper(<place-holder>))], array_min(reverse(array_sort(6: a1))))\n" +
@@ -327,7 +311,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:MERGING-EXCHANGE");
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
     }
 
     @Test
@@ -748,15 +731,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s4 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         String plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])"), plan);
-=======
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
@@ -773,21 +747,11 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  2:MERGING-EXCHANGE");
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
 
         sql = "select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),\n" +
                 "       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)\n" +
                 "from s5 where a1[1] = 'Jiangsu' and a2[2] = 'GD' order by v1 limit 2;";
         plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("  Global Dict Exprs:\n" +
-                "    19: DictDefine(18: a2, [<place-holder>])\n" +
-                "    20: DictDefine(17: a1, [<place-holder>])\n" +
-                "    21: DictDefine(17: a1, [<place-holder>])\n" +
-                "    22: DictDefine(18: a2, [<place-holder>])\n" +
-                "    23: DictDefine(17: a1, [<place-holder>])\n" +
-                "    24: DictDefine(18: a2, [<place-holder>])"), plan);
-=======
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> array_length[([17: a1, ARRAY<INT>, true]); " +
@@ -804,7 +768,6 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  2:MERGING-EXCHANGE");
->>>>>>> 365cf49755 ([Enhancement] support defer project after top n  (#58345))
     }
 
     @Test
