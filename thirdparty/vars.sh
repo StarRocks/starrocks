@@ -344,10 +344,10 @@ OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
 OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
 
 # benchmark
-BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.5.5.tar.gz"
-BENCHMARK_NAME=google_benchmark-1.5.5.tar.gz
-BENCHMARK_SOURCE=benchmark-1.5.5
-BENCHMARK_MD5SUM="6f852815d48db788f5bb87e2e561dc5e"
+BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
+BENCHMARK_NAME=google_benchmark-1.9.5.tar.gz
+BENCHMARK_SOURCE=benchmark-1.9.5
+BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
 FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
