@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+
+MODULE_PATH = Path(__file__).resolve().parent / "check_be_module_boundaries.py"
+SPEC = importlib.util.spec_from_file_location("check_be_module_boundaries", MODULE_PATH)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError(f"failed to load {MODULE_PATH}")
+MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
+SPEC.loader.exec_module(MODULE)
+
+
+class CheckBeModuleBoundariesTest(unittest.TestCase):
+    def test_collects_include_violation_and_allows_exact_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            baseline_path = repo / "build-support" / "be_module_boundary_baseline.json"
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            violations = MODULE.collect_violations(repo, manifest, cmake_state)
+
+            self.assertEqual(1, len(violations.include_violations))
+            violation = violations.include_violations[0]
+            self.assertEqual("columncore", violation.module)
+            self.assertEqual("be/src/column/hash_set.h", violation.path)
+            self.assertEqual("runtime/exec_env.h", violation.edge)
+
+            baseline_path.write_text(
+                json.dumps(
+                    {
+                        "include_violations": [
+                            {
+                                "module": "columncore",
+                                "path": "be/src/column/hash_set.h",
+                                "edge": "runtime/exec_env.h",
+                            }
+                        ]
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+            baseline = MODULE.load_baseline(baseline_path)
+            filtered = MODULE.apply_baseline(violations, baseline)
+            self.assertEqual([], filtered.include_violations)
+
+    def test_parses_target_sources_and_test_link_deps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            cmake_state = MODULE.parse_cmake_state(repo)
+
+            self.assertEqual(
+                {
+                    "be/src/column/column.cpp",
+                    "be/src/column/hash_set.cpp",
+                },
+                set(cmake_state.target_sources["ColumnCore"]),
+            )
+            self.assertEqual(
+                ["ColumnCore", "TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                cmake_state.test_target_links["column_test"],
+            )
+
+    def test_changed_paths_limit_checked_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            selected = MODULE.select_modules_for_changed_paths(
+                manifest=manifest,
+                cmake_state=cmake_state,
+                changed_paths={"be/src/column/hash_set.h"},
+            )
+
+            self.assertEqual({"columncore"}, selected)
+
+    def _write_sample_repo(self, repo: Path) -> None:
+        (repo / "build-support").mkdir(parents=True)
+        (repo / "be" / "src" / "column").mkdir(parents=True)
+        (repo / "be" / "src" / "types").mkdir(parents=True)
+        (repo / "be" / "test" / "column").mkdir(parents=True)
+        (repo / "be").mkdir(exist_ok=True)
+
+        (repo / "be" / "module_boundary_manifest.json").write_text(
+            json.dumps(
+                {
+                    "modules": [
+                        {
+                            "id": "columncore",
+                            "doc_label": "ColumnCore",
+                            "owned_targets": ["ColumnCore"],
+                            "additional_owned_globs": ["be/src/column/hash_set.h"],
+                            "allowed_include_prefixes": [
+                                "column/",
+                                "types/",
+                                "common/",
+                                "base/",
+                                "gutil/",
+                                "gen_cpp/",
+                            ],
+                            "allowed_target_deps": ["TypesCore", "Common", "Base", "Gutil", "StarRocksGen"],
+                            "allowed_test_targets": ["column_test"],
+                            "allowed_test_link_deps": [
+                                "ColumnCore",
+                                "TypesCore",
+                                "Common",
+                                "Base",
+                                "Gutil",
+                                "StarRocksGen",
+                            ],
+                            "remediation": "Move code down or add an interface instead of pulling runtime into ColumnCore.",
+                        }
+                    ]
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        (repo / "build-support" / "be_module_boundary_baseline.json").write_text("{}\n")
+        (repo / "be" / "src" / "column" / "CMakeLists.txt").write_text(
+            textwrap.dedent(
+                """\
+                ADD_BE_LIB(ColumnCore
+                    column.cpp
+                    hash_set.cpp
+                )
+                """
+            )
+        )
+        (repo / "be" / "test" / "column" / "CMakeLists.txt").write_text(
+            textwrap.dedent(
+                """\
+                set(COLUMN_TEST_LINK_LIBS
+                    ColumnCore
+                    TypesCore
+                    Common
+                    Base
+                    Gutil
+                    StarRocksGen
+                )
+
+                target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
+                """
+            )
+        )
+        (repo / "be" / "src" / "column" / "column.cpp").write_text('#include "column/column.h"\n')
+        (repo / "be" / "src" / "column" / "hash_set.cpp").write_text('#include "column/hash_set.h"\n')
+        (repo / "be" / "src" / "column" / "hash_set.h").write_text(
+            textwrap.dedent(
+                """\
+                #pragma once
+
+                #include "runtime/exec_env.h"
+                """
+            )
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
