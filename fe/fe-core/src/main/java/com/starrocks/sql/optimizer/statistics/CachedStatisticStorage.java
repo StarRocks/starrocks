@@ -253,6 +253,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute connectorTableCachedStatistics.getAll", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultConnectorTableStatistics(columns);
         }
     }
@@ -358,6 +361,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistic", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return ColumnStatistic.unknown();
         }
     }
@@ -407,6 +413,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultColumnStatisticList(columns);
         }
     }
@@ -560,6 +569,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
@@ -594,6 +606,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getConnectorHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
