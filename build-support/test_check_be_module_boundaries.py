@@ -35,6 +35,27 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CheckBeModuleBoundariesTest(unittest.TestCase):
+    def test_ci_architecture_filter_covers_checker_code_extensions(self) -> None:
+        workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml"
+        workflow_lines = workflow_path.read_text().splitlines()
+
+        architecture_patterns = []
+        in_architecture_filter = False
+        for line in workflow_lines:
+            stripped = line.strip()
+            if stripped == "architecture:":
+                in_architecture_filter = True
+                continue
+            if not in_architecture_filter:
+                continue
+            if line.startswith("            ") and not stripped.startswith("- "):
+                break
+            if stripped.startswith("- 'be/**/*."):
+                architecture_patterns.append(stripped.split("'")[1])
+
+        architecture_suffixes = {pattern.removeprefix("be/**/*") for pattern in architecture_patterns}
+        self.assertEqual(MODULE.CODE_EXTENSIONS, architecture_suffixes)
+
     def test_collects_include_violation_and_allows_exact_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)

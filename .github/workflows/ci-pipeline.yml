@@ -243,6 +243,7 @@ jobs:
               - 'be/**/*.hh'
               - 'be/**/*.hpp'
               - 'be/**/*.hxx'
+              - 'be/**/*.inl'
               - 'be/**/CMakeLists.txt'
               - 'be/test/**'
               - 'build-support/README.md'
