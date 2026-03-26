@@ -124,9 +124,12 @@ public class SelectAnalyzer {
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
         if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
+            boolean isGroupByAll = groupByClause != null
+                    && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
             if (!groupByExpressions.isEmpty() &&
                     selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
-                    !selectList.isDistinct()) {
+                    !selectList.isDistinct() &&
+                    !isGroupByAll) {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
@@ -381,7 +384,6 @@ public class SelectAnalyzer {
             return Collections.emptyList();
         }
 
-
         // Expand ORDER BY ALL to individual columns
         if (orderByElements.size() == 1 && orderByElements.get(0).isOrderByAll()) {
             orderByElements = expandOrderByAll(orderByElements.get(0), outputExpressions);
@@ -606,6 +608,22 @@ public class SelectAnalyzer {
                             .mapToObj(i -> rewriteOriGrouping.subList(0, i)).collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
+                } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL)) {
+                    // filter other agg columns, all the remain is group by columns
+                    for (Expr outputExpr : outputExpressions) {
+                        if (!ExprUtils.containsAggregate(outputExpr)) {
+                            if (groupByExpressions.contains(outputExpr)) {
+                                continue;
+                            }
+                            analyzeExpression(outputExpr, analyzeState, sourceScope);
+                            if (!outputExpr.getType().canGroupBy()) {
+                                throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
+                            }
+                            AnalyzerUtils.verifyNoWindowFunctions(outputExpr, "GROUP BY");
+                            AnalyzerUtils.verifyNoGroupingFunctions(outputExpr, "GROUP BY");
+                            groupByExpressions.add(outputExpr);
+                        }
+                    }
                 } else {
                     throw new StarRocksPlannerException("unknown grouping type", INTERNAL_ERROR);
                 }
@@ -1019,4 +1037,3 @@ public class SelectAnalyzer {
         return result;
     }
 }
-

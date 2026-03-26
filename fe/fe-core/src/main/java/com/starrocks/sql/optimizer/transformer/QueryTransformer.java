@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.type.IntegerType;
@@ -496,6 +497,14 @@ public class QueryTransformer {
             // the output key -> value pair must use the original aggregate expr as key, because
             // the top node may ref the original aggregate expr
             groupingTranslations.put(aggregates.get(i), colRef);
+        }
+
+        if (groupingSetsList == null) {
+            for (Expr groupingFunction : groupingFunctionCallExprs) {
+                ColumnRefOperator grouping = columnRefFactory.create(GROUPING, IntegerType.BIGINT, false);
+                groupingTranslations.put(groupingFunction, grouping);
+                groupingTranslations.putConstOperator(grouping, ConstantOperator.createBigint(0));
+            }
         }
 
         //Add repeatOperator to support grouping sets
