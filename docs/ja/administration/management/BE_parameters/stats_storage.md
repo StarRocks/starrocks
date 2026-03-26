@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "統計とストレージ"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -12,7 +13,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 
 import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
 
-# BE 設定
+# BE 設定 - 統計とストレージ
 
 <BEConfigMethod />
 
@@ -23,7 +24,7 @@ import EditionSpecificBEItem from '../../../_assets/commonMarkdown/Edition_Speci
 次のコマンドを使用して BE の設定項目を表示できます。
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## BE パラメータを設定する
