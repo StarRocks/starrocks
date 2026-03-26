@@ -33,7 +33,7 @@ displayed_sidebar: docs
 ### 行为变更
 
 - 优化了 `sql_mode` 的处理逻辑：当设置了 `DIVISION_BY_ZERO` 或 `FAIL_PARSE_DATE` 模式时，`str_to_date`/`str2date` 中的除零操作和日期解析失败现在将返回错误，而不是被静默忽略。[#70004](https://github.com/StarRocks/starrocks/pull/70004)
-- 当启用 `FORBID_INVALID_DATE` sql_mode 时，`INSERT VALUES` 语句中的无效日期现在将被正确拒绝，而不是被绕过。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- 当 `sql_mode` 为 `FORBID_INVALID_DATE` 时，`INSERT VALUES` 语句中的无效日期现在将被正确拒绝，而不是被绕过。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
 - 表达式分区生成列现在在 `DESC` 和 `SHOW CREATE TABLE` 的输出中被隐藏。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
 - 审计日志中不再包含 Client ID 信息。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
 - `REFRESH EXTERNAL TABLE` 的 `FORCE` 选项已回滚，不再支持。[#70428](https://github.com/StarRocks/starrocks/pull/70428)
