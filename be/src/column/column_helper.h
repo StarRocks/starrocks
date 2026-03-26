@@ -626,17 +626,16 @@ public:
 
     template <LogicalType LT>
     static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
-        Column* data_column = get_data_column(column);
         using ColumnType = RunTimeColumnType<LT>;
         if constexpr (lt_is_string_or_binary<LT>) {
             using LargeColumnType = RunTimeLargeColumnType<LT>;
-            if (data_column->is_large_binary()) {
-                down_cast<LargeColumnType*>(data_column)->append(value);
+            if (column->is_large_binary()) {
+                down_cast<LargeColumnType*>(column)->append(value);
             } else {
-                down_cast<ColumnType*>(data_column)->append(value);
+                down_cast<ColumnType*>(column)->append(value);
             }
         } else {
-            down_cast<ColumnType*>(data_column)->append(value);
+            down_cast<ColumnType*>(column)->append(value);
         }
     }
 

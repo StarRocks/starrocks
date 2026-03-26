@@ -191,11 +191,4 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
 }
 
-TEST_F(ColumnHelperTest, append_column_value_nullable_int32) {
-    auto col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2});
-    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 3);
-    EXPECT_EQ(col->size(), 3);
-    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 3);
-}
-
 } // namespace starrocks
