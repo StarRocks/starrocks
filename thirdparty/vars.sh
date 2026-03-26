@@ -476,10 +476,10 @@ FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
 FLAMEGRAPH_SOURCE="FlameGraph"
 FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
-HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-src.tar.gz"
-HADOOPSRC_NAME="hadoop-3.4.2-src.tar.gz"
-HADOOPSRC_SOURCE="hadoop-3.4.2-src"
-HADOOPSRC_MD5SUM="7fa559909899a2e45bcd2e192358d93b"
+HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.3/hadoop-3.4.3-src.tar.gz"
+HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
+HADOOPSRC_SOURCE="hadoop-3.4.3-src"
+HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"

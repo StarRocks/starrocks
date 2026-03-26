@@ -11,7 +11,7 @@ index 00000000..27f89af7
 +++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/Makefile
 @@ -0,0 +1,52 @@
 +# ==========================
-+# Makefile for libhdfs.a (Linux, static library, no JVM link)
++# Makefile for libhdfs.a (static library, no JVM link)
 +# ==========================
 +
 +# Get JAVA_HOME from environment variable
@@ -19,13 +19,15 @@ index 00000000..27f89af7
 +$(error JAVA_HOME is not set)
 +endif
 +
++JNI_PLATFORM_INCLUDE ?= linux
++
 +CC      := gcc
 +CFLAGS  := -O2 -Wall -fPIC \
 +	   -I ./include/\
 +           -I ./ \
 +	   -I ./os/posix/\
 +           -I$(JAVA_HOME)/include \
-+           -I$(JAVA_HOME)/include/linux
++           -I$(JAVA_HOME)/include/$(JNI_PLATFORM_INCLUDE)
 +
 +# Automatically collect source files
 +SRC := $(wildcard *.c os/posix/*.c)
