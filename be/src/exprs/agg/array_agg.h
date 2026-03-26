@@ -307,7 +307,7 @@ public:
         // For distinct mode, data_column used as a result cache for get_values method, any updates to
         // this state should invalidate the cache.
         this->data(state).data_column.resize(0);
-        this->data(state).update(ctx->mem_pool(), columns[0], frame_start, frame_end - frame_start);
+        this->data(state).update(ctx->mem_pool(), *columns[0], frame_start, frame_end - frame_start);
         this->data(state).check_overflow(ctx);
     }
 
