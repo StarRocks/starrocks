@@ -297,6 +297,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
@@ -5290,6 +5291,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.DropPartitionColumnClauseContext context) {
         List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
         return new DropPartitionColumnClause(partitionExprList, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitReplacePartitionColumnClause(
+            com.starrocks.sql.parser.StarRocksParser.ReplacePartitionColumnClauseContext context) {
+        Expr oldPartitionExpr = (Expr) visit(context.oldPartitionExpr);
+        Expr newPartitionExpr = (Expr) visit(context.newPartitionExpr);
+        return new ReplacePartitionColumnClause(oldPartitionExpr, newPartitionExpr, createPos(context));
     }
 
     @Override

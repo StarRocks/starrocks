@@ -848,13 +848,13 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergRewriteStmt>() {
             @Mock
-            public void $init(InsertStmt base, boolean rewriteAll) {
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) {
                 //do nothing
             }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, false, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
@@ -924,11 +924,7 @@ public class IcebergScanNodeTest {
         };
         new mockit.MockUp<IcebergRewriteStmt>() {
             @mockit.Mock
-            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
-        };
-        new mockit.MockUp<IcebergScanNode>() {
-            @mockit.Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
+            public void $init(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) { /* no-op */ }
         };
 
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
@@ -950,7 +946,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, false, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "parsedStmt", parsedInsert);
@@ -962,6 +958,29 @@ public class IcebergScanNodeTest {
 
         Assertions.assertEquals("Failed to compact files", ex.getMessage());
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
+    }
+
+    @Test
+    public void testPrepareRetry(@Mocked IcebergTable table,
+                                 @Mocked IcebergConnectorScanRangeSource mockSource) throws Exception {
+        // setupCloudCredential returns early when catalogName is null (mocked default)
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        // Set empty snapshot so setupScanRangeLocations returns early
+        scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
+        // Simulate partially consumed state
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+        Deencapsulation.setField(scanNode, "reachLimit", true);
+
+        scanNode.prepareRetry();
+
+        Assertions.assertFalse((boolean) Deencapsulation.getField(scanNode, "reachLimit"),
+                "reachLimit should be reset to false");
+        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
+                "scanRangeSource should be cleared");
     }
 
     @Test

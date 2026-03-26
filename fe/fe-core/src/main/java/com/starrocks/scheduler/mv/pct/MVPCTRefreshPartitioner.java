@@ -284,7 +284,10 @@ public abstract class MVPCTRefreshPartitioner {
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             logger.warn("failed to lock database: {} in checkMvToRefreshedPartitions", db.getFullName());
-            throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire read lock on database %s within %d ms " +
+                    "when computing partitions to refresh",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
         try {

@@ -166,7 +166,7 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(THIN_ACHIEVE "Build binary with thin archive" OFF)
+option(THIN_ARCHIVE "Build binary with thin archive" OFF)
 
 set(WITH_STARCACHE_DEFAULT ON)
 if (APPLE)
@@ -710,7 +710,16 @@ if (WITH_PCH)
     endif()
 endif()
 
-if (THIN_ACHIEVE)
+if (APPLE)
+    if (CMAKE_CXX_COMPILER_AR)
+        set(CMAKE_AR "${CMAKE_CXX_COMPILER_AR}" CACHE FILEPATH "Archiver" FORCE)
+    endif()
+    if (CMAKE_CXX_COMPILER_RANLIB)
+        set(CMAKE_RANLIB "${CMAKE_CXX_COMPILER_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    endif()
+endif()
+
+if (THIN_ARCHIVE)
     set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
     set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
     set(CMAKE_C_ARCHIVE_APPEND   "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
@@ -813,8 +822,11 @@ if (APPLE)
         "-framework ApplicationServices"
         "-framework SystemConfiguration"
     )
-    find_library(MIMALLOC_LIB NAMES mimalloc PATHS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
-    if (MIMALLOC_LIB)
+    find_library(MIMALLOC_LIB
+        NAMES mimalloc
+        HINTS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 /opt/homebrew/lib /usr/local/lib
+    )
+    if (MIMALLOC_LIB AND NOT "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
         list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
     endif()
 else()
@@ -863,7 +875,7 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DFIU_ENABLE)
 else()
     if (BUILD_FORMAT_LIB)
-        set(THIN_ACHIEVE OFF)
+        set(THIN_ARCHIVE OFF)
         # output *.a, *.so, *.dylib to output/format-lib-tmp
         set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})

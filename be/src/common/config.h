@@ -218,6 +218,9 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Minimum number of files required to enable parallel copy in lake-to-lake replication.
+// Set to 0 to force disable parallel copy.
+CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -1857,6 +1860,9 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// If turned on, parallel compaction will split by sort key range instead of segment index.
+// This produces non-overlapping output rowsets, improving subsequent query performance.
+CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 

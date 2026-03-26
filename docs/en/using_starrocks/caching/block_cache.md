@@ -4,6 +4,8 @@ sidebar_position: 20
 toc_max_heading_level: 2
 ---
 
+import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
+
 # Data Cache
 
 From v3.1.7 and v3.2.3 onwards, StarRocks introduced Data Cache to accelerate queries in shared-data clusters, replacing File Cache in earlier versions. Data Cache loads data from remote storage in blocks (on the order of MBs) as needed, while File Cache loads entire data files each time in the background, regardless of how many data rows are actually needed.
@@ -109,6 +111,8 @@ Follow these steps to clear the cached data on a CN node:
 
 - If the `datacache.enable` property is set to `false` for a cloud-native table, Data Cache will not be enabled for the table.
 - If the `datacache.partition_duration` property is set to a specific time range, data beyond the time range will not be cached.
+
+<CacheStats />
 
 ## Known issues
 

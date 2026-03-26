@@ -2,6 +2,9 @@
 set enable_global_late_materialization = true;
 -- result:
 -- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(20) NULL COMMENT "",

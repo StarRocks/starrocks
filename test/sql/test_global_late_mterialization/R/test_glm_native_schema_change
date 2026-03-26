@@ -2,6 +2,9 @@
 set enable_global_late_materialization = true;
 -- result:
 -- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
 CREATE TABLE `t_json_schema_change` (
   `id` bigint(20) NOT NULL,
   `data` json NULL,

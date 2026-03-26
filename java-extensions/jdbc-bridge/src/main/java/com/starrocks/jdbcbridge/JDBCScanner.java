@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 
 public class JDBCScanner {
@@ -62,9 +63,12 @@ public class JDBCScanner {
     private ResultSet resultSet;
     private ResultSetMetaData resultSetMetaData;
     private List<String> resultColumnClassNames;
+    private List<Boolean> postgresTimeWithTimezoneColumns;
+    private List<Boolean> postgresTimestampWithTimezoneColumns;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
     private final boolean isOracleDriver;
+    private final boolean isPostgresDriver;
     private final ZoneId queryTimeZone;
     private ZoneId oracleSessionTimeZone;
     ClassLoader classLoader;
@@ -73,6 +77,7 @@ public class JDBCScanner {
         this.driverLocation = driverLocation;
         this.scanContext = scanContext;
         this.isOracleDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("oracle");
+        this.isPostgresDriver = scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("postgresql");
         this.queryTimeZone = resolveQueryTimeZone(scanContext.getQueryTimeZone());
     }
 
@@ -121,15 +126,30 @@ public class JDBCScanner {
         resultSet = statement.getResultSet();
         resultSetMetaData = resultSet.getMetaData();
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
+        postgresTimeWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
+        postgresTimestampWithTimezoneColumns = new ArrayList<>(resultSetMetaData.getColumnCount());
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+            String typeName = resultSetMetaData.getColumnTypeName(i);
             String className = resultSetMetaData.getColumnClassName(i);
+            boolean isPostgresTimeWithTimezone = isPostgresTimeWithTimezoneTypeName(typeName);
+            boolean isPostgresTimestampWithTimezone = isPostgresTimestampWithTimezoneTypeName(typeName);
+            postgresTimeWithTimezoneColumns.add(isPostgresTimeWithTimezone);
+            postgresTimestampWithTimezoneColumns.add(isPostgresTimestampWithTimezone);
+            // Keep the original className for type checking (getResultColumnClassNames),
+            // but use the appropriate array type for data storage.
             resultColumnClassNames.add(className);
-            if (className.equals("byte[]") || className.equals("[B")) {
+            String arrayClassName = className;
+            if (isPostgresTimestampWithTimezone) {
+                arrayClassName = Timestamp.class.getName();
+            } else if (isPostgresTimeWithTimezone) {
+                arrayClassName = Time.class.getName();
+            }
+            if (arrayClassName.equals("byte[]") || arrayClassName.equals("[B")) {
                 resultChunk.add((Object[]) Array.newInstance(byte[].class, scanContext.getStatementFetchSize()));
                 continue;
             }
-            Class<?> clazz = classLoader.loadClass(className);
+            Class<?> clazz = classLoader.loadClass(arrayClassName);
             if (isGeneralJDBCClassType(clazz)) {
                 resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
             } else if (null != mapEngineSpecificClassType(clazz)) {
@@ -164,6 +184,56 @@ public class JDBCScanner {
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
+    }
+
+    private static final Set<String> POSTGRES_TIME_WITH_TIMEZONE_TYPE_NAMES = new HashSet<>(Arrays.asList(
+            "timetz",
+            "time with time zone"));
+
+    private static final Set<String> POSTGRES_TIMESTAMP_WITH_TIMEZONE_TYPE_NAMES = new HashSet<>(Arrays.asList(
+            "timestamptz",
+            "timestamp with time zone"));
+
+    private String normalizeTypeName(String typeName) {
+        if (typeName == null) {
+            return "";
+        }
+        String normalizedTypeName = typeName.toLowerCase(Locale.ROOT).trim();
+        int precisionStartIndex = normalizedTypeName.indexOf('(');
+        if (precisionStartIndex > 0) {
+            normalizedTypeName = normalizedTypeName.substring(0, precisionStartIndex).trim();
+        }
+        return normalizedTypeName;
+    }
+
+    private boolean isPostgresTimeWithTimezoneTypeName(String typeName) {
+        if (!isPostgresDriver || typeName == null) {
+            return false;
+        }
+        return POSTGRES_TIME_WITH_TIMEZONE_TYPE_NAMES.contains(normalizeTypeName(typeName));
+    }
+
+    private boolean isPostgresTimestampWithTimezoneTypeName(String typeName) {
+        if (!isPostgresDriver || typeName == null) {
+            return false;
+        }
+        return POSTGRES_TIMESTAMP_WITH_TIMEZONE_TYPE_NAMES.contains(normalizeTypeName(typeName));
+    }
+
+    private boolean shouldConvertPostgresTimestampWithTimezoneColumn(int columnIndex) {
+        if (!isPostgresDriver || queryTimeZone == null || postgresTimestampWithTimezoneColumns == null) {
+            return false;
+        }
+        return columnIndex >= 0 && columnIndex < postgresTimestampWithTimezoneColumns.size()
+                && postgresTimestampWithTimezoneColumns.get(columnIndex);
+    }
+
+    private boolean shouldConvertPostgresTimeWithTimezoneColumn(int columnIndex) {
+        if (!isPostgresDriver || postgresTimeWithTimezoneColumns == null) {
+            return false;
+        }
+        return columnIndex >= 0 && columnIndex < postgresTimeWithTimezoneColumns.size()
+                && postgresTimeWithTimezoneColumns.get(columnIndex);
     }
 
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
@@ -214,6 +284,21 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
+                } else if (dataColumn instanceof Time[]) {
+                    if (shouldConvertPostgresTimeWithTimezoneColumn(i)) {
+                        Time timeValue = resultObject instanceof Time ? (Time) resultObject : resultSet.getTime(i + 1);
+                        dataColumn[resultNumRows] = convertPostgresTimeWithTimezoneValue(timeValue);
+                    } else {
+                        dataColumn[resultNumRows] = resultObject;
+                    }
+                } else if (dataColumn instanceof Timestamp[]) {
+                    if (shouldConvertPostgresTimestampWithTimezoneColumn(i)) {
+                        Timestamp timestampValue =
+                                resultObject instanceof Timestamp ? (Timestamp) resultObject : resultSet.getTimestamp(i + 1);
+                        dataColumn[resultNumRows] = convertPostgresTimestampWithTimezoneValue(timestampValue);
+                    } else {
+                        dataColumn[resultNumRows] = resultObject;
+                    }
                 } else if (resultObject instanceof byte[]) {
                     dataColumn[resultNumRows] = resultObject;
                 } else if (resultObject instanceof Blob) {
@@ -276,7 +361,7 @@ public class JDBCScanner {
             .toFormatter();
 
     private ZoneId resolveQueryTimeZone(String queryTimeZoneValue) {
-        if (!isOracleDriver || queryTimeZoneValue == null || queryTimeZoneValue.isEmpty()) {
+        if ((!isOracleDriver && !isPostgresDriver) || queryTimeZoneValue == null || queryTimeZoneValue.isEmpty()) {
             return null;
         }
         try {
@@ -310,6 +395,29 @@ public class JDBCScanner {
                 throw new IllegalArgumentException("invalid oracle session time zone: " + sessionTimeZoneValue, ex);
             }
         }
+    }
+
+    private Time convertPostgresTimeWithTimezoneValue(Time sourceValue) {
+        if (sourceValue == null || queryTimeZone == null) {
+            return sourceValue;
+        }
+        // java.sql.Time.toInstant() throws UnsupportedOperationException,
+        // so convert via epoch millis manually.
+        // Avoid Time.valueOf(LocalTime) as it drops sub-second precision.
+        long sourceMillis = sourceValue.getTime();
+        long offsetMillis = TimeZone.getTimeZone(queryTimeZone).getOffset(sourceMillis)
+                - TimeZone.getDefault().getOffset(sourceMillis);
+        return new Time(sourceMillis + offsetMillis);
+    }
+
+    private Timestamp convertPostgresTimestampWithTimezoneValue(Timestamp sourceValue) {
+        if (sourceValue == null || queryTimeZone == null) {
+            return sourceValue;
+        }
+        // Timestamp.toInstant() returns the absolute instant.
+        // Convert directly to the target timezone without relying on JVM/PG session timezone.
+        LocalDateTime converted = sourceValue.toInstant().atZone(queryTimeZone).toLocalDateTime();
+        return Timestamp.valueOf(converted);
     }
 
     private boolean isOracleTimestampWithLocalTimeZoneClass(String className) {

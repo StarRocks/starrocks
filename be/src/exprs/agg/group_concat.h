@@ -60,8 +60,8 @@ public:
         DCHECK(columns[0]->is_binary() || columns[0]->is_large_binary());
         if (ctx->get_num_args() > 1) {
             if (!ctx->is_notnull_constant_column(1)) {
-                const auto val = ColumnHelper::get_binary_slice(columns[0], row_num);
-                const auto sep = ColumnHelper::get_binary_slice(columns[1], row_num);
+                const auto val = GetContainer<LT>::get_data(columns[0], row_num);
+                const auto sep = GetContainer<LT>::get_data(columns[1], row_num);
 
                 std::string& result = this->data(state).intermediate_string;
 
@@ -80,7 +80,7 @@ public:
                 auto const_column_sep = ctx->get_constant_column(1);
                 std::string& result = this->data(state).intermediate_string;
 
-                Slice val = ColumnHelper::get_binary_slice(columns[0], row_num);
+                Slice val = GetContainer<LT>::get_data(columns[0], row_num);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
 
                 if (!this->data(state).initial) {
@@ -98,7 +98,7 @@ public:
         } else {
             std::string& result = this->data(state).intermediate_string;
 
-            Slice val = ColumnHelper::get_binary_slice(columns[0], row_num);
+            Slice val = GetContainer<LT>::get_data(columns[0], row_num);
             //DEFAULT sep_length.
             if (!this->data(state).initial) {
                 this->data(state).initial = true;
