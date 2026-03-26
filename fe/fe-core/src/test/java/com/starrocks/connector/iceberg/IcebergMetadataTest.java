@@ -58,6 +58,9 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.planner.DescriptorTable;
@@ -2345,6 +2348,54 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testIcebergMetadataTableQueryMetric(@Mocked LocalMetastore localMetastore,
+                                                    @Mocked TemporaryTableMgr temporaryTableMgr) {
+        mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+        mockedNativeTableG.refresh();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableG;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(0, dbName);
+            }
+        };
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(
+                CATALOG_NAME, icebergHiveCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
+                new IcebergCatalogProperties(DEFAULT_CONFIG));
+        ConnectContext.set(connectContext);
+        ConnectContext.get().setMetadataContext(false);
+
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, null, null);
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+                return Optional.of(metadata);
+            }
+        };
+
+        long before = getMetricValue("iceberg_metadata_table_query_total", "logical_iceberg_metadata");
+        metadataMgr.getSerializedMetaSpec("catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA);
+        long after = getMetricValue("iceberg_metadata_table_query_total", "logical_iceberg_metadata");
+
+        Assertions.assertEquals(before + 1, after);
+
+        ConnectContext.get().setMetadataContext(true);
+        metadataMgr.getSerializedMetaSpec("catalog", "db", "tg", -1, null, MetadataTableType.LOGICAL_ICEBERG_METADATA);
+        long internalQueryAfter = getMetricValue("iceberg_metadata_table_query_total", "logical_iceberg_metadata");
+        Assertions.assertEquals(after, internalQueryAfter);
+        ConnectContext.get().setMetadataContext(false);
+    }
+
+    @Test
     public void testIcebergMetadataCollectJob() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -2389,6 +2440,22 @@ public class IcebergMetadataTest extends TableTestBase {
         collectJob.asyncCollectMetadata();
         Assertions.assertNotNull(collectJob.getMetadataJobCoord());
         Assertions.assertTrue(collectJob.getResultQueue().isEmpty());
+    }
+
+    private long getMetricValue(String name, String metadataTable) {
+        for (Metric<?> metric : MetricRepo.getMetricsByName(name)) {
+            boolean matched = false;
+            for (MetricLabel label : metric.getLabels()) {
+                if ("metadata_table".equals(label.getKey()) && metadataTable.equals(label.getValue())) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) {
+                return (Long) metric.getValue();
+            }
+        }
+        return 0L;
     }
 
     @Test

@@ -2039,6 +2039,13 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `time_travel_type` (`branch`, `tag`, `snapshot`, or `timestamp`) for the categorized series.
 - Description: Total number of Iceberg time travel queries. The unlabeled series counts each time travel query once. The labeled series count each distinct time travel type used by the query. `snapshot` means `FOR VERSION AS OF <snapshot_id>`, `branch` and `tag` mean `FOR VERSION AS OF <reference_name>`, and `timestamp` means `FOR TIMESTAMP AS OF ...`.
 
+#### iceberg_metadata_table_query_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `metadata_table` (`refs`, `history`, `metadata_log_entries`, `snapshots`, `manifests`, `files`, `partitions`, or `properties`)
+- Description: Total number of SQL queries that access Iceberg metadata tables. Each query is counted under the `metadata_table` label that identifies the metadata table being accessed.
+
 ### Iceberg delete FE metrics
 
 #### iceberg_delete_total
