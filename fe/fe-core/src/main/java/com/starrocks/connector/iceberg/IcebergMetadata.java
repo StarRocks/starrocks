@@ -779,6 +779,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
         for (Snapshot snapshot : snapshots) {
+            // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
+            // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
+            if (DataOperations.REPLACE.equals(snapshot.operation())) {
+                lastSnapshotId = snapshot.snapshotId();
+                continue;
+            }
             long currentSnapshotId = snapshot.snapshotId();
             TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot);
