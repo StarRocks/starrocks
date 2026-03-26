@@ -610,6 +610,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, StarRocks sets the socket option to allow local address reuse for client sockets created by the brpc RpcClient (via RpcClientOptions.setReuseAddress). Enabling this reduces bind failures and allows faster rebinding of local ports after sockets are closed, which is helpful for high-rate connection churn or rapid restarts. When false, address/port reuse is disabled, which can reduce the chance of unintended port sharing but may increase transient bind errors. This option interacts with connection behavior configured by `brpc_connection_pool_size` and `brpc_short_connection` because it affects how rapidly client sockets can be rebound and reused.
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- Default: 10
+- Type: Int
+- Unit: ms
+- Is mutable: Yes
+- Description: The wait time before retrying when a bRPC connection pool exception occurs (e.g. SYN packet loss during TCP handshake). When `ChannelPool.getChannel()` throws a `NoSuchElementException` (directly or wrapped in a `RuntimeException`), the retry logic sleeps for this duration before attempting to reconnect.
+- Introduced in: -
+
 ### `cluster_name`
 
 - Default: StarRocks Cluster

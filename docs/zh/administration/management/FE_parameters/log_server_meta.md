@@ -609,6 +609,15 @@ import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Speci
 - 描述: 当为 true 时，StarRocks 会设置 socket 选项，允许 brpc RpcClient 创建的客户端 socket（通过 RpcClientOptions.setReuseAddress）重用本地地址。启用此选项可减少绑定失败，并允许在套接字关闭后更快地重新绑定本地端口，这对于高速率连接 churn 或快速重启非常有用。当为 false 时，地址/端口重用被禁用，这可以降低意外端口共享的可能性，但可能会增加瞬时绑定错误。此选项与 `brpc_connection_pool_size` 和 `brpc_short_connection` 配置的连接行为交互，因为它会影响客户端套接字可以多快地重新绑定和重用。
 - 引入版本: v3.3.11, v3.4.1, v3.5.0
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: bRPC 连接池异常时的重试等待时间。当 `ChannelPool.getChannel()` 抛出 `NoSuchElementException`（直接抛出或被 `RuntimeException` 包装）时，重试逻辑会等待该时间后再尝试重新连接。典型场景如 TCP 握手期间 SYN 包丢失导致的瞬时连接池故障。
+- 引入版本: -
+
 ### `cluster_name`
 
 - 默认值: StarRocks Cluster

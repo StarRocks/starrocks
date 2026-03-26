@@ -610,6 +610,15 @@ import EditionSpecificFEItem from '../../../_assets/commonMarkdown/Edition_Speci
 - 説明：true の場合、StarRocks は、brpc RpcClient によって作成されたクライアントソケットにローカルアドレスの再利用を許可するソケットオプションを設定します (RpcClientOptions.setReuseAddress 経由)。これを有効にすると、バインドの失敗が減り、ソケットが閉じられた後にローカルポートの再バインドが高速化され、高レートの接続チャーンや迅速な再起動に役立ちます。false の場合、アドレス/ポートの再利用は無効になり、意図しないポート共有の可能性を減らすことができますが、一時的なバインドエラーが増加する可能性があります。このオプションは、`brpc_connection_pool_size` および `brpc_short_connection` によって設定される接続動作と相互作用します。これは、クライアントソケットを再バインドして再利用できる速度に影響するためです。
 - 導入時期：v3.3.11, v3.4.1, v3.5.0
 
+##### `brpc_connection_pool_retry_wait_time_ms`
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: ms
+- 変更可能: Yes
+- 説明: bRPC 接続プール例外（例: TCP ハンドシェイク時の SYN パケットロス）が発生した場合のリトライ待機時間。`ChannelPool.getChannel()` が `NoSuchElementException`（直接、または `RuntimeException` でラップされた形で）をスローした場合、リトライロジックはこの時間だけスリープしてから再接続を試みます。
+- 導入時期: -
+
 ### `cluster_name`
 
 - デフォルト：StarRocks Cluster
