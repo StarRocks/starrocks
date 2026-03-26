@@ -18,6 +18,7 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
@@ -129,6 +130,7 @@ Status SpillMemTableSink::_prepare(const ChunkPtr& chunk_ptr) {
         // 1. alloc & prepare spiller
         spill::SpilledOptions options;
         options.encode_level = 7;
+        options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "SpillMemTableSink profile is null";
