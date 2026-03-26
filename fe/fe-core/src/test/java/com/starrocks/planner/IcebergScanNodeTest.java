@@ -1225,6 +1225,7 @@ public class IcebergScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     void rewriteDataFiles_shouldBuildSQL_andRunJob(@Mocked org.apache.iceberg.Table table,
             @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
         // --- arrange
@@ -1323,6 +1324,28 @@ public class IcebergScanNodeTest {
                 Assertions.assertThrows(StarRocksConnectorException.class, () -> target.rewriteDataFiles(clause, ctx));
         Assertions.assertTrue(ex.getMessage().contains("db.table"));
         Assertions.assertTrue(ex.getMessage().contains("boom"));
+=======
+    public void testPrepareRetry(@Mocked IcebergTable table,
+                                 @Mocked IcebergConnectorScanRangeSource mockSource) throws Exception {
+        // setupCloudCredential returns early when catalogName is null (mocked default)
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        // Set empty snapshot so setupScanRangeLocations returns early
+        scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
+        // Simulate partially consumed state
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+        Deencapsulation.setField(scanNode, "reachLimit", true);
+
+        scanNode.prepareRetry();
+
+        Assertions.assertFalse((boolean) Deencapsulation.getField(scanNode, "reachLimit"),
+                "reachLimit should be reset to false");
+        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
+                "scanRangeSource should be cleared");
+>>>>>>> ae607f54ad ([BugFix] Reset scan range source on query retry for connector scan nodes (#70762))
     }
 
     @Test
