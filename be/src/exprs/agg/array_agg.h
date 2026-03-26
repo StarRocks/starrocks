@@ -32,10 +32,11 @@ namespace starrocks {
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
 struct ArrayAggAggregateState {
+    virtual ~ArrayAggAggregateState() = default;
     using ColumnType = RunTimeColumnType<PT>;
     using CppType = RunTimeCppType<PT>;
 
-    void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
+    virtual void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
         if constexpr (is_distinct) {
             const auto& datas = GetContainer<PT>::get_data(&column);
             for (int i = 0; i < count; i++) {
@@ -89,7 +90,7 @@ struct ArrayAggAggregateState {
         return false;
     }
 
-    void reset() {
+    virtual void reset() {
         data_column.resize(0);
         null_count = 0;
         set.clear();
@@ -103,11 +104,12 @@ struct ArrayAggAggregateState {
 // Specialization: string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet>
 struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT>> {
+    virtual ~ArrayAggAggregateState() = default;
     using ColumnType = RunTimeColumnType<PT>;
     using CppType = RunTimeCppType<PT>;
     using KeyType = typename SliceHashSet::key_type;
 
-    void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
+    virtual void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) {
         if constexpr (is_distinct) {
             const auto& datas = GetContainer<PT>::get_data(&column);
             for (int i = 0; i < count; i++) {
@@ -172,7 +174,7 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         return false;
     }
 
-    void reset() {
+    virtual void reset() {
         data_column.resize(0);
         null_count = 0;
         set.clear();
@@ -192,16 +194,16 @@ struct WithMemPool<PT, StringLTGuard<PT>> {
 };
 
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>>
-struct ArrayAggWindowState : public ArrayAggAggregateState<PT, is_distinct, MyHashSet>, WithMemPool<PT> {
+struct ArrayAggWindowState final : ArrayAggAggregateState<PT, is_distinct, MyHashSet>, WithMemPool<PT> {
     using Base = ArrayAggAggregateState<PT, is_distinct, MyHashSet>;
-    using Self = ArrayAggWindowState<PT, is_distinct, MyHashSet>;
+    using Self = ArrayAggWindowState;
     using CppType = typename Base::CppType;
     using ColumnType = typename Base::ColumnType;
     using Base::update;
     using Base::append_null;
     using Base::reset;
 
-    void update(MemPool* mem_pool, const ColumnType& column, size_t offset, size_t count) {
+    void update(MemPool* mem_pool, const Column& column, size_t offset, size_t count) override {
         if constexpr (lt_is_string<PT>) {
             this->Base::update(&this->mem_pool, column, offset, count);
         } else {
@@ -209,7 +211,7 @@ struct ArrayAggWindowState : public ArrayAggAggregateState<PT, is_distinct, MyHa
         }
     }
 
-    void reset() {
+    void reset() override {
         this->Base::reset();
         if constexpr (lt_is_string<PT>) {
             this->mem_pool.clear();
