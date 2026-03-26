@@ -85,13 +85,8 @@ private:
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-<<<<<<< HEAD
-        EndpointCleanupTask<BrpcStubCache>* _cleanup_task = nullptr;
         int64_t _idx = -1;
-=======
-        int64_t _idx;
         std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
->>>>>>> 3f7f871dce ([BugFix] Fix some use-after-free issues (backport #62917) (backport #69926) (#69968))
     };
 
     SpinLock _lock;
