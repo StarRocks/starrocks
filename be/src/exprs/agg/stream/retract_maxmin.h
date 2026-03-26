@@ -42,6 +42,7 @@ struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
     T result = RunTimeTypeLimits<LT>::min_value();
     void reset_result() { result = RunTimeTypeLimits<LT>::min_value(); }
+    const T& get_result() const { return result; }
 
     void reset() {
         StreamDetailState<LT>::reset();
@@ -60,7 +61,7 @@ struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailS
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice get_result() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
         _buffer.clear();
@@ -151,7 +152,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        ColumnHelper::append_column_value<T>(to, this->data(state).get_result());
+        ColumnHelper::append_column_value<LT>(to, this->data(state).get_result());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
