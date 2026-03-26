@@ -2538,7 +2538,7 @@ public class Config extends ConfigBase {
             "the partition_id filter will be skipped to avoid performance overhead. Default 1000.")
     public static int statistic_load_max_partition_filter_num = 1000;
 
-    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    @ConfField(mutable = true, comment = "Synchronously load statistics (may cause query delay)")
     public static boolean enable_sync_statistics_load = false;
 
     /**
