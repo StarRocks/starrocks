@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.CatalogConnector;
@@ -229,7 +228,7 @@ public class IcebergScanNode extends ScanNode {
         return scanNodePredicates;
     }
 
-    public Table getIcebergTable() {
+    public IcebergTable getIcebergTable() {
         return icebergTable;
     }
 

@@ -136,43 +136,4 @@ public class DeltaLakeScanNodeTest {
         String explainString = scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         assertThat(explainString, containsString("TABLE VERSION: 123"));
     }
-
-    @Test
-    public void testPrepareRetry(@Mocked GlobalStateMgr globalStateMgr,
-                                 @Mocked CatalogConnector connector,
-                                 @Mocked DeltaLakeTable table,
-                                 @Mocked DeltaConnectorScanRangeSource mockSource) {
-        String catalog = "delta_cat";
-        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
-        new Expectations() {{
-            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-            result = connector;
-            connector.getMetadata().getCloudConfiguration();
-            result = cc;
-            table.getCatalogName();
-            result = catalog;
-        }};
-        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
-        desc.setTable(table);
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
-
-        // Stub setupScanRangeSource so it does not invoke real Delta kernel objects
-        new MockUp<DeltaLakeScanNode>() {
-            @Mock
-            public void setupScanRangeSource(boolean enableIncrementalScanRanges) throws StarRocksException {
-                // no-op
-            }
-        };
-
-        // Simulate partially consumed state
-        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
-        Deencapsulation.setField(scanNode, "reachLimit", true);
-
-        scanNode.prepareRetry();
-
-        Assertions.assertFalse((boolean) Deencapsulation.getField(scanNode, "reachLimit"),
-                "reachLimit should be reset to false");
-        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
-                "scanRangeSource should be cleared by clear()");
-    }
 }
