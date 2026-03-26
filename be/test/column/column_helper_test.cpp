@@ -151,6 +151,7 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
 }
 
+<<<<<<< HEAD
 // ColumnHelper::append_column_value
 TEST_F(ColumnHelperTest, append_column_value_int32) {
     auto col = Int32Column::create();
@@ -173,6 +174,8 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
 }
 
+=======
+>>>>>>> db79975 ([BugFix] Fix column_helper get_data_column is const bug (#70772))
 TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
     auto data_column = BinaryColumn::create();
     data_column->append(Slice("v1"));

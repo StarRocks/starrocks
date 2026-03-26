@@ -385,10 +385,17 @@ public:
     static Column* get_data_column(Column* column) {
         if (column->is_constant()) {
             auto* const_column = down_cast<ConstColumn*>(column);
+<<<<<<< HEAD
             return get_data_column(const_column->mutable_data_column());
         } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(column);
             return nullable_column->mutable_data_column();
+=======
+            return get_data_column(const_column->data_column_raw_ptr());
+        } else if (column->is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(column);
+            return nullable_column->data_column_raw_ptr();
+>>>>>>> db79975 ([BugFix] Fix column_helper get_data_column is const bug (#70772))
         } else {
             return column;
         }
