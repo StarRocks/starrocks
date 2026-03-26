@@ -19,7 +19,7 @@ The following fields are provided in `be_tablets`:
 | MIN_VERSION   | Minimum version of the tablet.                               |
 | NUM_ROWSET    | Number of rowsets in the tablet.                             |
 | NUM_ROW       | Number of rows in the tablet.                                |
-| DATA_SIZE     | On-disk size of rowset **data** (segment column data, in bytes). Excludes rowset-embedded indexes (for example short key, zone map, bloom filter) recorded in rowset metadata. |
+| DATA_SIZE     | On-disk size of rowset segment files (column data **plus rowset-embedded indexes** such as short key, zone map, and bloom filter, in bytes). Does **not** include any external persistent primary-key index bytes, which are reported in `INDEX_DISK`. |
 | INDEX_MEM     | Index memory usage of the tablet (in bytes).                 |
 | CREATE_TIME   | Creation time of the tablet (Unix timestamp in seconds).     |
 | STATE         | State of the tablet (e.g., `NORMAL`, `REPLICA_MISSING`).     |
