@@ -37,6 +37,7 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
     T result = RunTimeTypeLimits<LT>::min_value();
 
     void reset() { result = RunTimeTypeLimits<LT>::min_value(); }
+    const T& get_result() const { return result; }
 };
 
 // TODO(murphy) refactor the guard with AggDataTypeTraits
@@ -51,7 +52,7 @@ struct MaxAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
+    Slice get_result() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -72,6 +73,7 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
     T result = RunTimeTypeLimits<LT>::max_value();
 
     void reset() { result = RunTimeTypeLimits<LT>::max_value(); }
+    const T& get_result() const { return result; }
 };
 
 template <LogicalType LT>
@@ -85,7 +87,7 @@ struct MinAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
+    Slice get_result() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -152,7 +154,7 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+        if (!state.has_value() || memcompare_padded(state.get_result().get_data(), state.get_result().get_size(),
                                                     right.get_data(), right.get_size()) > 0) {
             state.assign(right);
         }
