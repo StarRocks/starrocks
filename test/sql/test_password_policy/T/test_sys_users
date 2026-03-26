@@ -21,3 +21,46 @@ select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED from sys.users w
 alter system unset password policy;
 
 drop password policy pp1;
+
+-- name: test_sys_users_user_level_password_policy
+alter system unset password policy;
+
+drop user if exists sys_user_${uuid0};
+
+create password policy sys_global_pp_${uuid0}
+properties (
+    "PASSWORD_MIN_LENGTH" = "8"
+);
+
+create password policy sys_user_pp_${uuid1}
+properties (
+    "PASSWORD_MIN_LENGTH" = "3"
+);
+
+alter system set password policy sys_global_pp_${uuid0};
+
+create user sys_user_${uuid0} identified by "12345678";
+
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+
+alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = 'sys_user_pp_${uuid1}');
+
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+
+alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = '');
+
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+
+CLEANUP {
+    alter system unset password policy;
+    alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = '');
+    drop user if exists sys_user_${uuid0};
+    drop password policy sys_user_pp_${uuid1};
+    drop password policy sys_global_pp_${uuid0};
+} END CLEANUP

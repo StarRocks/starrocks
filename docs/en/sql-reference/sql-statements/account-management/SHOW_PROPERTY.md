@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # SHOW PROPERTY
 
-SHOW PROPERTY displays properties of a user, including the maximum number of connections, the default catalog, and the default database.
+SHOW PROPERTY displays properties of a user, including the maximum number of connections, password policy, the default catalog, and the default database.
 
 :::tip
 The current user can view their own properties. Only users with the `user_admin` role can view the properties of other users.
@@ -12,7 +12,7 @@ The current user can view their own properties. Only users with the `user_admin`
 :::
 
 :::info
-To set properties such as `database` or `catalog`, use the [ALTER USER](./ALTER_USER.md) command with `SET PROPERTIES`.
+To set properties such as `database`, `catalog`, or `PASSWORD_POLICY`, use the [ALTER USER](./ALTER_USER.md) command with `SET PROPERTIES`.
 For `max_user_connections`, you can use the `SET PROPERTY` syntax.
 :::
 
@@ -42,6 +42,7 @@ SHOW PROPERTY;
 | Key                  | Value           |
 +----------------------+-----------------+
 | max_user_connections | 1024            |
+| PASSWORD_POLICY      |                 |
 | catalog              | default_catalog |
 | database             |                 |
 +----------------------+-----------------+
@@ -58,6 +59,7 @@ SHOW PROPERTY FOR 'jack';
 | Key                  | Value            |
 +----------------------+------------------+
 | max_user_connections | 100              |
+| PASSWORD_POLICY      | pwd_policy_1     |
 | catalog              | default_catalog  |
 | database             | sales_db         |
 +----------------------+------------------+
@@ -66,15 +68,15 @@ SHOW PROPERTY FOR 'jack';
 Example 3: Filter properties using `LIKE`.
 
 ```SQL
-SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+SHOW PROPERTY FOR 'jack' LIKE 'PASSWORD_POLICY';
 ```
 
 ```Plain
-+----------------------+-------+
-| Key                  | Value |
-+----------------------+-------+
-| max_user_connections | 100   |
-+----------------------+-------+
++-----------------+--------------+
+| Key             | Value        |
++-----------------+--------------+
+| PASSWORD_POLICY | pwd_policy_1 |
++-----------------+--------------+
 ```
 
 ## See also

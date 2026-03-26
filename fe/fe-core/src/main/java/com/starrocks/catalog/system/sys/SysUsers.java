@@ -62,7 +62,7 @@ public class SysUsers {
             item.setHost(userAuthenticationInfo.getOrigHost());
             item.setUser(userAuthenticationInfo.getOrigUser());
             item.setPassword_expired(userAuthenticationInfo.isPasswordExpired());
-            item.setPassword_policy("");
+            item.setPassword_policy(authenticationMgr.getPasswordPolicyByUserName(userAuthenticationInfo.getOrigUser()));
 
             String passwordLastModifiedDate = LocalDateTime.ofInstant(
                     Instant.ofEpochSecond(userAuthenticationInfo.getPasswordLastModifiedTimestamp() / 1000),

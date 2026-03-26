@@ -63,17 +63,21 @@ ALTER USER user_identity
 
     通过 ALTER 命令更改用户默认角色前请确保对应角色已经赋予给用户。设置后，用户再次登录时会默认激活对应角色。
 
-- `SET PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
+- `SET PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`）、密码策略、Catalog、数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
 
   ```SQL
   -- 设置用户最大连接数。
   SET PROPERTIES ("max_user_connections" = "<Integer>")
+  -- 为用户绑定密码策略。
+  SET PROPERTIES ("PASSWORD_POLICY" = "<password_policy_name>")
   -- 设置 Catalog。
   SET PROPERTIES ("catalog" = "<catalog_name>")
   -- 设置数据库。
   SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
   -- 设置 Session 变量。
   SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  -- 解绑用户密码策略，重新使用系统级密码策略。
+  SET PROPERTIES ("PASSWORD_POLICY" = "")
   -- 清空用户所有属性设置。
   SET PROPERTIES ("catalog" = "", "database" = "", "session.<variable_name>" = "");
   ```
@@ -82,6 +86,9 @@ ALTER USER user_identity
   - `SET PROPERTIES` 作用于用户本身而非用户标识。当您在 `ALTER USER` 语句中使用 `SET PROPERTIES` 关键字修改用户属性时，必须指定 `username` 而非 `user_identity`。
   - 全局变量和只读变量无法为单个用户设置。
   - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
+  - `PASSWORD_POLICY` 只能通过 `ALTER USER ... SET PROPERTIES` 设置，不支持在 `CREATE USER` 中指定。
+  - 如果用户未设置 `PASSWORD_POLICY`，则继续使用系统级密码策略；如果用户设置了 `PASSWORD_POLICY`，则该策略会覆盖系统级密码策略，并用于密码复杂度校验、密码过期和密码重试锁定。
+  - 已绑定到用户的密码策略无法被删除，必须先解绑。
   - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
   :::
 
@@ -167,6 +174,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ```SQL
 ALTER USER 'jack' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
+```
+
+示例十三：为用户绑定密码策略 `pwd_policy_1`。
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = 'pwd_policy_1');
+```
+
+示例十四：解绑用户密码策略，并回退到系统级密码策略。
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = '');
 ```
 
 ## 相关文档

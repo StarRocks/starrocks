@@ -69,6 +69,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
         rows.add(Lists.newArrayList(UserProperty.PROP_MAX_USER_CONNECTIONS, String.valueOf(userProperty.getMaxConn())));
         rows.add(Lists.newArrayList(UserProperty.PROP_CATALOG, userProperty.getCatalog()));
         rows.add(Lists.newArrayList(UserProperty.PROP_DATABASE, userProperty.getDatabase()));
+        rows.add(Lists.newArrayList(UserProperty.PROP_PASSWORD_POLICY, userProperty.getPasswordPolicy()));
         for (Map.Entry<String, String> entry : userProperty.getSessionVariables().entrySet()) {
             rows.add(Lists.newArrayList(String.format("%s.%s", "session", entry.getKey()), entry.getValue()));
         }

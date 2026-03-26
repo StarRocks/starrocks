@@ -3,6 +3,7 @@
 package com.starrocks.epack.authorization;
 
 import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -675,37 +676,57 @@ public class SecurityPolicyMgr {
     }
 
     public void dropPasswordPolicy(DropPasswordPolicyStmt stmt) throws DdlException {
-        String policyName = stmt.getPolicyName();
-        Long passwordPolicyId = passwordPolicyNameToId.get(policyName);
-        if (passwordPolicyId == null) {
-            throw new DdlException("policy " + policyName + " not exists");
-        }
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        final DropPasswordPolicyLog[] dropPasswordPolicyLogHolder = new DropPasswordPolicyLog[1];
+        authenticationMgr.withReadLock(() -> {
+            passwordPolicyLock.writeLock().lock();
+            try {
+                String policyName = stmt.getPolicyName();
+                Long passwordPolicyId = passwordPolicyNameToId.get(policyName);
+                if (passwordPolicyId == null) {
+                    throw new DdlException("policy " + policyName + " not exists");
+                }
 
-        DropPasswordPolicyLog dropPasswordPolicyLog = new DropPasswordPolicyLog(passwordPolicyId, policyName);
-        doDropPasswordPolicy(dropPasswordPolicyLog);
+                List<String> boundUsers = authenticationMgr.getUserNamesByPasswordPolicy(policyName);
+                if (!boundUsers.isEmpty()) {
+                    throw new DdlException("Policy " + policyName + " cannot be dropped as it is associated with users: "
+                            + String.join(", ", boundUsers));
+                }
+
+                DropPasswordPolicyLog dropPasswordPolicyLog = new DropPasswordPolicyLog(passwordPolicyId, policyName);
+                doDropPasswordPolicyUnlocked(dropPasswordPolicyLog);
+                dropPasswordPolicyLogHolder[0] = dropPasswordPolicyLog;
+            } finally {
+                passwordPolicyLock.writeLock().unlock();
+            }
+        });
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-        editLogEPack.logDropPasswordPolicy(dropPasswordPolicyLog);
+        editLogEPack.logDropPasswordPolicy(dropPasswordPolicyLogHolder[0]);
     }
 
     public void doDropPasswordPolicy(DropPasswordPolicyLog log) throws DdlException {
         passwordPolicyLock.writeLock().lock();
         try {
-            Long passwordPolicyId = log.getPolicyId();
-            PasswordPolicy passwordPolicy = passwordPolicyMap.get(passwordPolicyId);
-            if (passwordPolicy == null) {
-                throw new DdlException("Password Policy " + log.getPolicyName() + " is not exist");
-            }
-
-            if (passwordPolicyId == globalPasswordPolicy) {
-                throw new DdlException("Policy " + passwordPolicy.getPolicyName() +
-                        " cannot be dropped as it is associated with the current system.");
-            }
-
-            passwordPolicyMap.remove(passwordPolicyId);
-            passwordPolicyNameToId.remove(passwordPolicy.getPolicyName());
+            doDropPasswordPolicyUnlocked(log);
         } finally {
             passwordPolicyLock.writeLock().unlock();
         }
+    }
+
+    private void doDropPasswordPolicyUnlocked(DropPasswordPolicyLog log) throws DdlException {
+        Long passwordPolicyId = log.getPolicyId();
+        PasswordPolicy passwordPolicy = passwordPolicyMap.get(passwordPolicyId);
+        if (passwordPolicy == null) {
+            throw new DdlException("Password Policy " + log.getPolicyName() + " is not exist");
+        }
+
+        if (passwordPolicyId == globalPasswordPolicy) {
+            throw new DdlException("Policy " + passwordPolicy.getPolicyName() +
+                    " cannot be dropped as it is associated with the current system.");
+        }
+
+        passwordPolicyMap.remove(passwordPolicyId);
+        passwordPolicyNameToId.remove(passwordPolicy.getPolicyName());
     }
 
     public List<PasswordPolicy> getAllPasswordPolicies() {

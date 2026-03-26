@@ -57,11 +57,13 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: このパラメータが指定されている場合、ロールはユーザーに自動的に割り当てられ、ユーザーがログインするとデフォルトで有効になります。指定されていない場合、このユーザーには特権がありません。指定されたすべてのロールが既に存在していることを確認してください。
 
-- `PROPERTIES` はユーザープロパティを設定し、最大ユーザー接続数 (`max_user_connections`)、catalog、データベースまたはセッション変数をユーザーレベルで設定します。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
+- `PROPERTIES` はユーザープロパティを設定し、最大ユーザー接続数 (`max_user_connections`)、パスワードポリシー (`PASSWORD_POLICY`)、catalog、データベースまたはセッション変数をユーザーレベルで設定します。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
 
   ```SQL
   -- 最大ユーザー接続数を設定します。
   PROPERTIES ("max_user_connections" = "<Integer>")
+  -- 既存のパスワードポリシーをユーザーにバインドします。
+  PROPERTIES ("PASSWORD_POLICY" = "<policy_name>")
   -- catalog を設定します。
   PROPERTIES ("catalog" = "<catalog_name>")
   -- データベースを設定します。
@@ -72,6 +74,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   :::tip
   - `PROPERTIES` はユーザーに対して機能し、ユーザーアイデンティティには機能しません。
+  - `PASSWORD_POLICY` には既存のパスワードポリシーを指定する必要があります。設定すると、そのユーザーではシステムレベルのパスワードポリシーより優先されます。
   - グローバル変数と読み取り専用変数は特定のユーザーに設定することはできません。
   - 変数は次の順序で有効になります: SET_VAR > セッション > ユーザープロパティ > グローバル。
   - 特定のユーザーのプロパティを表示するには、[SHOW PROPERTY](./SHOW_PROPERTY.md) を使用できます。
@@ -148,7 +151,13 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
-例 12: JSON Web Token 認証を使用したユーザーを作成します。
+例 12: ユーザーを作成し、既存のパスワードポリシーをバインドします。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' IDENTIFIED BY '123456Ab!' PROPERTIES ('PASSWORD_POLICY' = 'app_password_policy');
+```
+
+例 13: JSON Web Token 認証を使用したユーザーを作成します。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_jwt AS
@@ -160,7 +169,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-例 12: OAuth 2.0 認証を使用したユーザーを作成します。
+例 14: OAuth 2.0 認証を使用したユーザーを作成します。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 

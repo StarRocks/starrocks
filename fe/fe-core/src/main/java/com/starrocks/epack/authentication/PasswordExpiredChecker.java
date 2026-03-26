@@ -18,7 +18,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.authorization.PasswordPolicy;
-import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserLockOption;
 import com.starrocks.sql.ast.UserPasswordOption;
@@ -43,11 +42,6 @@ public class PasswordExpiredChecker extends FrontendDaemon {
     public void checkPasswordExpiredAndLock(long currentTs) {
         AuthenticationMgrEPack authenticationMgrEPack =
                 (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getServingState().getSecurityPolicyManager();
-        PasswordPolicy passwordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();
-        if (passwordPolicy == null) {
-            return;
-        }
 
         Map<UserIdentity, UserAuthenticationInfo> userAuthenticationInfoMap
                 = authenticationMgrEPack.getUserToAuthenticationInfo();
@@ -55,6 +49,10 @@ public class PasswordExpiredChecker extends FrontendDaemon {
         for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userAuthenticationInfoMap.entrySet()) {
             UserIdentity userIdentity = entry.getKey();
             UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
+            PasswordPolicy passwordPolicy = authenticationMgrEPack.getEffectivePasswordPolicy(userIdentity);
+            if (passwordPolicy == null) {
+                continue;
+            }
 
             if (passwordPolicy.getPasswordMaxAgeDays() != null) {
                 long lastModifiedTs = userAuthenticationInfo.getPasswordLastModifiedTimestamp();

@@ -36,3 +36,60 @@ alter system unset password policy;
 drop password policy pp1;
 -- result:
 -- !result
+
+-- name: test_sys_users_user_level_password_policy
+alter system unset password policy;
+-- result:
+-- !result
+drop user if exists sys_user_${uuid0};
+-- result:
+-- !result
+create password policy sys_global_pp_${uuid0}
+properties (
+    "PASSWORD_MIN_LENGTH" = "8"
+);
+-- result:
+-- !result
+create password policy sys_user_pp_${uuid1}
+properties (
+    "PASSWORD_MIN_LENGTH" = "3"
+);
+-- result:
+-- !result
+alter system set password policy sys_global_pp_${uuid0};
+-- result:
+-- !result
+create user sys_user_${uuid0} identified by "12345678";
+-- result:
+-- !result
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+-- result:
+[REGEX]^%\tsys_user_[0-9a-f]+\t0\t\t0$
+-- !result
+alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = 'sys_user_pp_${uuid1}');
+-- result:
+-- !result
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+-- result:
+[REGEX]^%\tsys_user_[0-9a-f]+\t0\tsys_user_pp_[0-9a-f]+\t0$
+-- !result
+alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = '');
+-- result:
+-- !result
+select HOST, USER, PASSWORD_EXPIRED, PASSWORD_POLICY, IS_LOCKED
+from sys.users
+where USER = "sys_user_${uuid0}";
+-- result:
+[REGEX]^%\tsys_user_[0-9a-f]+\t0\t\t0$
+-- !result
+CLEANUP {
+    alter system unset password policy;
+    alter user 'sys_user_${uuid0}' set properties ('PASSWORD_POLICY' = '');
+    drop user if exists sys_user_${uuid0};
+    drop password policy sys_user_pp_${uuid1};
+    drop password policy sys_global_pp_${uuid0};
+} END CLEANUP

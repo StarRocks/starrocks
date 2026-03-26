@@ -18,7 +18,6 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.epack.authorization.PasswordPolicy;
-import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,6 +29,12 @@ import java.util.Arrays;
 
 public class UserAuthOptionAnalyzer {
     public static void analyzeAuthOption(UserRef user, UserAuthOption userAuthOption, UserPasswordOption passwordOption) {
+        analyzeAuthOption(user, userAuthOption, passwordOption,
+                GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getGlobalPasswordPolicy());
+    }
+
+    public static void analyzeAuthOption(UserRef user, UserAuthOption userAuthOption,
+                                         UserPasswordOption passwordOption, PasswordPolicy passwordPolicy) {
         String authPluginUsing;
         if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
             authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
@@ -58,7 +63,7 @@ public class UserAuthOptionAnalyzer {
                         }
                     }
 
-                    validatePassword(user, userAuthOption);
+                    validatePassword(userAuthOption, passwordPolicy);
                 }
             } catch (AuthenticationException e) {
                 throw new SemanticException(e.getMessage());
@@ -69,11 +74,8 @@ public class UserAuthOptionAnalyzer {
         PatternMatcher.createMysqlPattern(user.getHost(), CaseSensibility.HOST.getCaseSensibility());
     }
 
-    private static void validatePassword(UserRef userIdentity, UserAuthOption userAuthOption)
+    private static void validatePassword(UserAuthOption userAuthOption, PasswordPolicy passwordPolicy)
             throws AuthenticationException {
-        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
-        PasswordPolicy passwordPolicy = securityPolicyMgr.getGlobalPasswordPolicy();
-
         if (passwordPolicy != null) {
             String password;
             if (userAuthOption == null) {

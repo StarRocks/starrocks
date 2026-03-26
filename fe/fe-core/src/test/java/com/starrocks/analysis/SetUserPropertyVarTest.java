@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SetUserPropertyVarTest {
@@ -42,6 +43,14 @@ public class SetUserPropertyVarTest {
             SetUserPropertyVar var = new SetUserPropertyVar("unknown_property", "1000");
             SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
             Assertions.fail("No exception throws.");
+        });
+    }
+
+    @Test
+    public void testPasswordPolicyProperty() {
+        assertDoesNotThrow(() -> {
+            SetUserPropertyVar var = new SetUserPropertyVar("PASSWORD_POLICY", "pp1");
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(var)), null);
         });
     }
 }

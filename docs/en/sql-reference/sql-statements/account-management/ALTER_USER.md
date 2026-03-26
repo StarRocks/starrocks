@@ -58,17 +58,21 @@ ALTER USER user_identity
 
   Before you run ALTER USER to set default roles, make sure that all the roles have been assigned to users. The roles are automatically activated after the user logs in again.
 
-- `SET PROPERTIES` sets user properties, including the maximum user connection number (`max_user_connections`), catalog, database or session variables on the user level. User-level session variables take effect as the user logs in. This feature is supported from v3.3.3.
+- `SET PROPERTIES` sets user properties, including the maximum user connection number (`max_user_connections`), password policy, catalog, database, or session variables on the user level. User-level session variables take effect as the user logs in. This feature is supported from v3.3.3.
 
   ```SQL
   -- Set the maximum user connection number.
   SET PROPERTIES ("max_user_connections" = "<Integer>")
+  -- Bind a password policy to the user.
+  SET PROPERTIES ("PASSWORD_POLICY" = "<password_policy_name>")
   -- Set the catalog.
   SET PROPERTIES ("catalog" = "<catalog_name>")
   -- Set the database.
   SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
   -- Set session variables.
   SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  -- Unbind the password policy from the user. The system-level password policy takes effect again.
+  SET PROPERTIES ("PASSWORD_POLICY" = "")
   -- Clear the properties set for the user.
   SET PROPERTIES ("catalog" = "", "database" = "", "session.<variable_name>" = "");
   ```
@@ -77,6 +81,9 @@ ALTER USER user_identity
   - `SET PROPERTIES` works on user instead of user identity. Therefore, when modifying the user properties, you must specify the `username` instead of `user_identity` in the `ALTER USER` statement.
   - Global variables and read-only variables cannot be set for a specific user.
   - Variables take effect in the following order: SET_VAR > Session > User property > Global.
+  - `PASSWORD_POLICY` can be set only by `ALTER USER ... SET PROPERTIES`. It is not supported in `CREATE USER`.
+  - If a user does not have `PASSWORD_POLICY` configured, the system-level password policy is used. If `PASSWORD_POLICY` is configured for the user, it overrides the system-level password policy for password validation, password expiration, and password retry lockout.
+  - A password policy that is still bound to users cannot be dropped.
   - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
   :::
 
@@ -158,6 +165,18 @@ Example 12: Clear the properties set for the user.
 
 ```SQL
 ALTER USER 'jack' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
+```
+
+Example 13: Bind the password policy `pwd_policy_1` to the user.
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = 'pwd_policy_1');
+```
+
+Example 14: Unbind the password policy from the user and fall back to the system-level password policy.
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = '');
 ```
 
 ## References
