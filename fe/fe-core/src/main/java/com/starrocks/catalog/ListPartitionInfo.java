@@ -387,8 +387,9 @@ public class ListPartitionInfo extends PartitionInfo {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY ");
         if (!isAutomaticPartition) {
-            sb.append("LIST(");
+            sb.append("LIST");
         }
+        sb.append("(");
         sb.append(MetaUtils.getColumnsByColumnIds(table, partitionColumnIds).stream()
                 .map(item -> {
                     if (useGeneratedColumnNameAsExpr) {
@@ -398,9 +399,9 @@ public class ListPartitionInfo extends PartitionInfo {
                         return MetaUtils.getPartitionColumnToSql(item);
                     }
                 })
-                .collect(Collectors.joining(", ")));
+                .collect(Collectors.joining(",")));
+        sb.append(")");
         if (!isAutomaticPartition) {
-            sb.append(")");
             List<Long> partitionIds = getPartitionIds(false);
             sb.append("(\n");
             if (!idToValues.isEmpty()) {

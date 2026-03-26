@@ -299,8 +299,8 @@ public class CreateTableLikeTest {
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\"\n" +
                     ");";
-        String createTableLikeSql11a = "create table test.multi_level_expr_par_tbl_like like test.multi_level_expr_par_tbl;";
-        checkCreateOlapTableLike(multiExprPartitionSql, createTableLikeSql11a, "test", "test",
+        String createTableLikeSql11 = "create table test.multi_level_expr_par_tbl_like like test.multi_level_expr_par_tbl;";
+        checkCreateOlapTableLike(multiExprPartitionSql, createTableLikeSql11, "test", "test",
                     "multi_level_expr_par_tbl_like", "multi_level_expr_par_tbl");
 
         // 12. create table like with primary key and double quotation in column comment
