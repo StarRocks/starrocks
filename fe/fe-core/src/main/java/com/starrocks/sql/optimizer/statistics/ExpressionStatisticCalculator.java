@@ -94,7 +94,9 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
             if (operator.isNull()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+                // NULL has no distinct non-null values and is always null.
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
+                        operator.getType().getTypeSize(), 0);
             }
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
@@ -118,14 +120,25 @@ public class ExpressionStatisticCalculator {
             }
             if (caseWhenOperator.hasElse()) {
                 childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            } else {
+                // A missing ELSE is an implicit ELSE that returns NULL.
+                childrenColumnStatistics.add(ColumnStatistic.builder() //
+                        .setNullsFraction(1.0) //
+                        .setDistinctValuesCount(0) //
+                        .build());
             }
-            // 2. use sum of then clause and else clause's distinct values as column distinctValues
-            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
-                    ColumnStatistic::getDistinctValuesCount).sum();
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues.
+            // NULL branches should only contribute to nullsFraction, not to distinctValues.
+            double distinctValues = childrenColumnStatistics.stream()
+                    .mapToDouble(childStat -> childStat.getNullsFraction() >= 1.0 ? 0 : childStat.getDistinctValuesCount()) //
+                    .sum();
+            // 3. Use the average null fraction of all branches.
+            double nullFractions = childrenColumnStatistics.stream().mapToDouble(ColumnStatistic::getNullsFraction).sum()
+                    / childrenColumnStatistics.size();
             return ColumnStatistic.builder()
                     .setMinValue(Double.NEGATIVE_INFINITY)
                     .setMaxValue(Double.POSITIVE_INFINITY)
-                    .setNullsFraction(0)
+                    .setNullsFraction(nullFractions)
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .build();
