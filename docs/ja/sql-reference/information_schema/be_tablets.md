@@ -19,7 +19,7 @@ displayed_sidebar: docs
 | MIN_VERSION   | タブレットの最小バージョン。                     |
 | NUM_ROWSET    | タブレット内の Rowset 数。                       |
 | NUM_ROW       | タブレット内の行数。                             |
-| DATA_SIZE     | Rowset **データ**のディスクサイズ（セグメント列データ、バイト）。Rowset メタデータに記録される行内埋め込みインデックス（Short Key、Zone Map、Bloom Filter など）は含みません。 |
+| DATA_SIZE     | Rowset **データ**のディスクサイズ（セグメントファイルサイズに基づく列データ、バイト）。Short Key、Zone Map、Bloom Filter などの Rowset 内埋め込みインデックスも含みますが、クラウドネイティブ PK の SSTable など別ファイルとして管理される永続化主キーインデックスは含みません。 |
 | INDEX_MEM     | タブレットのインデックスメモリ使用量（バイト）。 |
 | CREATE_TIME   | タブレットの作成時刻（Unix タイムスタンプ、秒）。 |
 | STATE         | タブレットの状態（例: `NORMAL`、`REPLICA_MISSING`）。 |
