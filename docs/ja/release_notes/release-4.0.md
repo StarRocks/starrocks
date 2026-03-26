@@ -24,6 +24,76 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.8
+
+リリース日：2026 年 3 月 25 日
+
+### 動作変更
+
+- `sql_mode` の処理を改善しました：`DIVISION_BY_ZERO` または `FAIL_PARSE_DATE` モードが設定されている場合、`str_to_date`/`str2date` 関数でのゼロ除算および日付パース失敗が暗黙的に無視されるのではなく、エラーを返すようになりました。[#70004](https://github.com/StarRocks/starrocks/pull/70004)
+- `FORBID_INVALID_DATE` sql_mode が有効な場合、`INSERT VALUES` 句の無効な日付がバイパスされずに正しく拒否されるようになりました。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- 式パーティションの生成列が `DESC` および `SHOW CREATE TABLE` の出力に表示されなくなりました。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
+- 監査ログにクライアント ID が含まれなくなりました。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
+
+### 改善点
+
+- ローカルエクスチェンジバッファサイズを `dop × local_exchange_buffer_mem_limit_per_driver` に制限する設定項目 `local_exchange_buffer_mem_limit_per_driver` を追加しました。[#70393](https://github.com/StarRocks/starrocks/pull/70393)
+- `check_missing_files` において、バージョン間のファイル存在チェック結果をキャッシュし、冗長なストレージ I/O を削減しました。[#70364](https://github.com/StarRocks/starrocks/pull/70364)
+- `desc_hint_split_range` が ≤ 0 に設定された場合、降順 TopN ランタイムフィルタの範囲分割とリバーススキャン最適化を無効化できるようにしました。[#70307](https://github.com/StarRocks/starrocks/pull/70307)
+- Trino 方言の `INSERT` ステートメントに `EXPLAIN` および `EXPLAIN ANALYZE` のサポートを追加しました。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
+- ポジションデリートが存在する場合の Iceberg 読み取り性能を最適化しました。[#69717](https://github.com/StarRocks/starrocks/pull/69717)
+- 分散キーに基づくマテリアライズドビュー最適選択戦略を改善し、マテリアライズドビュー選択の精度を向上させました。[#69679](https://github.com/StarRocks/starrocks/pull/69679)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- JDBC MySQL プッシュダウンでサポートされていないキャスト操作が失敗する問題。[#70415](https://github.com/StarRocks/starrocks/pull/70415)
+- マテリアライズドビューリフレッシュ時のパーティションタイプ不一致を解消するため、`mv_refresh_force_partition_type` 設定項目を追加しました。[#70381](https://github.com/StarRocks/starrocks/pull/70381)
+- バックアップから復元する際に `dataVersion` が正しく設定されない問題。[#70373](https://github.com/StarRocks/starrocks/pull/70373)
+- マテリアライズドビューリフレッシュタスクでパーティション名が重複する問題。[#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- SLF4J のパラメータ化ログでプレースホルダーの代わりに文字列結合が使用される問題。[#70330](https://github.com/StarRocks/starrocks/pull/70330)
+- Hive テーブル作成時にコメントが設定されない問題。[#70318](https://github.com/StarRocks/starrocks/pull/70318)
+- HDFS のクローズが遅い場合に `FileSystemExpirationChecker` がブロックされる問題。[#70311](https://github.com/StarRocks/starrocks/pull/70311)
+- `OlapTableSink` において異なるパーティション間で分散列の検証が行われない問題。[#70310](https://github.com/StarRocks/starrocks/pull/70310)
+- 定数畳み込みで倍精度浮点数の加算がオーバーフローした際にエラーではなく INF が返される問題。[#70309](https://github.com/StarRocks/starrocks/pull/70309)
+- Iceberg テーブル作成時のフィールド名のタイポ：`common` の代わりに `comment` が使用される問題。[#70267](https://github.com/StarRocks/starrocks/pull/70267)
+- 一部のシナリオで root ユーザーが全 Ranger 権限チェックをバイパスできない問題。[#70254](https://github.com/StarRocks/starrocks/pull/70254)
+- データ取り込み中に `query_pool` メモリトラッカーが負の値になる問題。[#70228](https://github.com/StarRocks/starrocks/pull/70228)
+- `AuditEventProcessor` スレッドが `OutOfMemoryException` により終了する問題。[#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- `SplitTopNRule` がパーティションプルーニングを正しく適用しない問題。[#70154](https://github.com/StarRocks/starrocks/pull/70154)
+- スキーマ変更のパブリッシュ時に `cal_new_base_version` で範囲外アクセスが発生する問題。[#70132](https://github.com/StarRocks/starrocks/pull/70132)
+- マテリアライズドビュー書き換え時にベーステーブルから削除されたパーティションが無視される問題。[#70130](https://github.com/StarRocks/starrocks/pull/70130)
+- 境界比較における型不一致によりパーティション述語が意図せず削除される問題。[#70097](https://github.com/StarRocks/starrocks/pull/70097)
+- `str_to_date` が BE ランタイムでマイクロ秒精度を失う問題。[#70068](https://github.com/StarRocks/starrocks/pull/70068)
+- Join スピルプロセスが `set_callback_function` でクラッシュする問題。[#70030](https://github.com/StarRocks/starrocks/pull/70030)
+- `gcs-connector` をバージョン 3.0.13 にアップグレード後、Broker Load の GCS 認証が失敗する問題。[#70012](https://github.com/StarRocks/starrocks/pull/70012)
+- `DeltaWriter::close()` が bthread コンテキストから呼び出された際に DCHECK が失敗する問題。[#69960](https://github.com/StarRocks/starrocks/pull/69960)
+- `AsyncDeltaWriter` のクローズ/完了ライフサイクルにおける use-after-free 競合状態。[#69940](https://github.com/StarRocks/starrocks/pull/69940)
+- 競合状態により書き込みトランザクションの EditLog エントリが欠落する問題。[#69899](https://github.com/StarRocks/starrocks/pull/69899)
+- 既知の CVE 脆弱性。[#69863](https://github.com/StarRocks/starrocks/pull/69863)
+- フォロワー FE が `changeCatalogDb` でジャーナルのリプレイを待機しない問題。[#69834](https://github.com/StarRocks/starrocks/pull/69834)
+- バックスラッシュエスケープシーケンスを含む `LIKE` パターンマッチングの結果が不正確な問題。[#69775](https://github.com/StarRocks/starrocks/pull/69775)
+- パーティション列のリネーム後に式分析が失敗する問題。[#69771](https://github.com/StarRocks/starrocks/pull/69771)
+- `AsyncDeltaWriter::close` における use-after-free クラッシュ。[#69770](https://github.com/StarRocks/starrocks/pull/69770)
+- ローカルパーティション TopN 実行時のクラッシュ。[#69752](https://github.com/StarRocks/starrocks/pull/69752)
+- `Partition.hasStorageData` に起因する `PartitionColumnMinMaxRewriteRule` の不正な動作。[#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- ファイルシンクの出力ファイル名に CSV 圧縮サフィックスが重複する問題。[#69749](https://github.com/StarRocks/starrocks/pull/69749)
+- `lake_capture_tablet_and_rowsets` 操作が実験的な設定フラグで制御されていない問題。[#69748](https://github.com/StarRocks/starrocks/pull/69748)
+- シャドウパーティションが存在する場合のパーティション最小値プルーニングが不正確な問題。[#69641](https://github.com/StarRocks/starrocks/pull/69641)
+- Java UDTF/UDAF でメソッドパラメータにジェネリック型を使用するとクラッシュする問題。[#69197](https://github.com/StarRocks/starrocks/pull/69197)
+- クエリ計画完了後にクエリレベルのメタデータが解放されず、同時クエリ実行時に FE の OOM が発生する問題。[#68444](https://github.com/StarRocks/starrocks/pull/68444)
+- クエリスコープの Warehouse ヒントにより `ConnectContext` 内の `ComputeResource` がリークする問題。[#70706](https://github.com/StarRocks/starrocks/pull/70706)
+- ロックフリーのマテリアライズドビュー書き換えがライブメタデータに誤ってフォールバックする問題。[#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- `_tablet_multi_get_rpc` にクロージャの重複参照が存在する問題。[#70657](https://github.com/StarRocks/starrocks/pull/70657)
+- `ReplaceColumnRefRewriter` で無限再帰が発生する問題。[#66974](https://github.com/StarRocks/starrocks/pull/66974)
+- `NOT NULL` 制約が `FILES()` テーブル関数のスキーマに誤ってプッシュダウンされる問題。[#70621](https://github.com/StarRocks/starrocks/pull/70621)
+- 部分タブレットスキーマで `num_short_key_columns` が一致しない問題。[#70586](https://github.com/StarRocks/starrocks/pull/70586)
+- 共有データクラスタでの `COLUMN_UPSERT_MODE` チェックサムエラー。[#65320](https://github.com/StarRocks/starrocks/pull/65320)
+- `__iceberg_transform_bucket` の列型不一致。[#70443](https://github.com/StarRocks/starrocks/pull/70443)
+- Starlet の設定項目が反映されない問題。[#70482](https://github.com/StarRocks/starrocks/pull/70482)
+- 部分更新で列モードから行モードに切り替えた際に DCG データが正しく読み取られない問題。[#61529](https://github.com/StarRocks/starrocks/pull/61529)
+
 ## 4.0.7
 
 リリース日：2026年3月12日

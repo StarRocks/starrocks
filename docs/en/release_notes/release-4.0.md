@@ -23,6 +23,76 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.8
+
+Release Date: March 25, 2026
+
+### Behavior Changes
+
+- Improved `sql_mode` handling: when `DIVISION_BY_ZERO` or `FAIL_PARSE_DATE` mode is set, division by zero and date parse failures in `str_to_date`/`str2date` now return an error instead of being silently ignored. [#70004](https://github.com/StarRocks/starrocks/pull/70004)
+- When `sql_mode` is set to `FORBID_INVALID_DATE`, invalid dates in `INSERT VALUES` clauses are now correctly rejected instead of being bypassed. [#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- Expression partition generated columns are now hidden from `DESC` and `SHOW CREATE TABLE` output. [#69793](https://github.com/StarRocks/starrocks/pull/69793)
+- Client ID is no longer included in audit logs. [#69383](https://github.com/StarRocks/starrocks/pull/69383)
+
+### Improvements
+
+- Added a configuration item `local_exchange_buffer_mem_limit_per_driver` to limit the local exchange buffer size to `dop * local_exchange_buffer_mem_limit_per_driver`. [#70393](https://github.com/StarRocks/starrocks/pull/70393)
+- Cached file existence check results across versions in `check_missing_files` to reduce redundant storage I/O. [#70364](https://github.com/StarRocks/starrocks/pull/70364)
+- Allowed disabling split and reverse scan ranges for descending TopN runtime filters when `desc_hint_split_range` is set to ≤ 0. [#70307](https://github.com/StarRocks/starrocks/pull/70307)
+- Added `EXPLAIN` and `EXPLAIN ANALYZE` support for `INSERT` statements in the Trino dialect. [#70174](https://github.com/StarRocks/starrocks/pull/70174)
+- Optimized Iceberg read performance when position deletes are present. [#69717](https://github.com/StarRocks/starrocks/pull/69717)
+- Optimized materialized view best-selector strategy based on distributed keys to improve materialized view selection accuracy. [#69679](https://github.com/StarRocks/starrocks/pull/69679)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- JDBC MySQL pushdown failing for unsupported cast operations. [#70415](https://github.com/StarRocks/starrocks/pull/70415)
+- Type mismatch issues in materialized view refresh. Added `mv_refresh_force_partition_type` configuration to force partition type in materialized view refresh. [#70381](https://github.com/StarRocks/starrocks/pull/70381)
+- `dataVersion` not set correctly when restoring from backup. [#70373](https://github.com/StarRocks/starrocks/pull/70373)
+- Duplicated partition names in materialized view refresh tasks. [#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- Incorrect SLF4J parameterized logging using string concatenation instead of placeholder arguments. [#70330](https://github.com/StarRocks/starrocks/pull/70330)
+- Comment not set when creating Hive tables. [#70318](https://github.com/StarRocks/starrocks/pull/70318)
+- `FileSystemExpirationChecker` blocking on slow HDFS close operations. [#70311](https://github.com/StarRocks/starrocks/pull/70311)
+- Distribute column validation not applied across different partitions in `OlapTableSink`. [#70310](https://github.com/StarRocks/starrocks/pull/70310)
+- Constant folding producing INF instead of an error when double addition overflows. [#70309](https://github.com/StarRocks/starrocks/pull/70309)
+- Typo in Iceberg table creation: field `common` was used instead of `comment`. [#70267](https://github.com/StarRocks/starrocks/pull/70267)
+- Root user not bypassing all Ranger permission checks in some scenarios. [#70254](https://github.com/StarRocks/starrocks/pull/70254)
+- `query_pool` memory tracker going negative during data ingestion. [#70228](https://github.com/StarRocks/starrocks/pull/70228)
+- `AuditEventProcessor` thread exiting due to `OutOfMemoryException`. [#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- `SplitTopNRule` not applying partition pruning correctly. [#70154](https://github.com/StarRocks/starrocks/pull/70154)
+- Out-of-bounds access in `cal_new_base_version` during schema change publish. [#70132](https://github.com/StarRocks/starrocks/pull/70132)
+- Materialied view rewrite ignoring dropped partitions from the base table. [#70130](https://github.com/StarRocks/starrocks/pull/70130)
+- Unexpected partition predicate pruning due to type mismatch in boundary comparisons. [#70097](https://github.com/StarRocks/starrocks/pull/70097)
+- `str_to_date` losing microsecond precision in BE runtime. [#70068](https://github.com/StarRocks/starrocks/pull/70068)
+- Join spill process crashing in `set_callback_function`. [#70030](https://github.com/StarRocks/starrocks/pull/70030)
+- Broker Load failing GCS authentication after `gcs-connector` upgrade to version 3.0.13. [#70012](https://github.com/StarRocks/starrocks/pull/70012)
+- DCHECK failure in `DeltaWriter::close()` when called from a bthread context. [#69960](https://github.com/StarRocks/starrocks/pull/69960)
+- Use-after-free race condition in `AsyncDeltaWriter` close/finish lifecycle. [#69940](https://github.com/StarRocks/starrocks/pull/69940)
+- Race condition causing write transaction edit log entry to be missed. [#69899](https://github.com/StarRocks/starrocks/pull/69899)
+- Known CVE vulnerabilities. [#69863](https://github.com/StarRocks/starrocks/pull/69863)
+- Follower FE not waiting for journal replay in `changeCatalogDb`. [#69834](https://github.com/StarRocks/starrocks/pull/69834)
+- Incorrect `LIKE` pattern matching with backslash escape sequences. [#69775](https://github.com/StarRocks/starrocks/pull/69775)
+- Expression analysis failure after renaming a partition column. [#69771](https://github.com/StarRocks/starrocks/pull/69771)
+- Use-after-free crash in `AsyncDeltaWriter::close`. [#69770](https://github.com/StarRocks/starrocks/pull/69770)
+- Crash in local partition TopN execution. [#69752](https://github.com/StarRocks/starrocks/pull/69752)
+- Incorrect behavior in `PartitionColumnMinMaxRewriteRule` caused by `Partition.hasStorageData`. [#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- Duplicated CSV compression suffix in file sink output filenames. [#69749](https://github.com/StarRocks/starrocks/pull/69749)
+- `lake_capture_tablet_and_rowsets` not gated behind an experimental configuration flag. [#69748](https://github.com/StarRocks/starrocks/pull/69748)
+- Incorrect partition min pruning with shadow partitions. [#69641](https://github.com/StarRocks/starrocks/pull/69641)
+- Java UDTF/UDAF crashing when method parameters use generic types. [#69197](https://github.com/StarRocks/starrocks/pull/69197)
+- Per-query metadata not released after query planning, causing FE OOM during concurrent query execution. [#68444](https://github.com/StarRocks/starrocks/pull/68444)
+- Query-scope warehouse hint leaking `ComputeResource` in `ConnectContext`. [#70706](https://github.com/StarRocks/starrocks/pull/70706)
+- Lock-free materialized view rewrite incorrectly falling back to live metadata. [#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- Duplicate closure reference in `_tablet_multi_get_rpc`. [#70657](https://github.com/StarRocks/starrocks/pull/70657)
+- Infinite recursion in `ReplaceColumnRefRewriter`. [#66974](https://github.com/StarRocks/starrocks/pull/66974)
+- `NOT NULL` constraint incorrectly pushed down to `FILES()` table function schema. [#70621](https://github.com/StarRocks/starrocks/pull/70621)
+- `num_short_key_columns` mismatch in partial tablet schema. [#70586](https://github.com/StarRocks/starrocks/pull/70586)
+- `COLUMN_UPSERT_MODE` checksum error in shared-data clusters. [#65320](https://github.com/StarRocks/starrocks/pull/65320)
+- Column type mismatch for `__iceberg_transform_bucket`. [#70443](https://github.com/StarRocks/starrocks/pull/70443)
+- Starlet configuration items not taking effect. [#70482](https://github.com/StarRocks/starrocks/pull/70482)
+- DCG data not read correctly when switching from column mode to row mode in partial update. [#61529](https://github.com/StarRocks/starrocks/pull/61529)
+
 ## 4.0.7
 
 Release Date: March 12, 2026
