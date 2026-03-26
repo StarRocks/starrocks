@@ -42,6 +42,7 @@ struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
     T result = RunTimeTypeLimits<LT>::min_value();
     void reset_result() { result = RunTimeTypeLimits<LT>::min_value(); }
+    const T& get_result() const { return result; }
 
     void reset() {
         StreamDetailState<LT>::reset();
@@ -60,7 +61,7 @@ struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailS
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice get_result() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
         _buffer.clear();
@@ -88,6 +89,7 @@ struct MinAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
         StreamDetailState<LT>::reset();
         reset_result();
     }
+    const T& get_result() const { return result; }
 };
 
 template <LogicalType LT>
@@ -101,7 +103,7 @@ struct MinAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailS
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice get_result() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
         _buffer.clear();
@@ -141,13 +143,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            DCHECK(to->is_binary() || to->is_large_binary());
-            ColumnHelper::append_binary_value(to, this->data(state).slice());
-        } else {
-            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
-            down_cast<InputColumnType*>(to)->append(this->data(state).result);
-        }
+        ColumnHelper::append_column_value<LT>(to, this->data(state).get_result());
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -156,27 +152,20 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            DCHECK(to->is_binary() || to->is_large_binary());
-            ColumnHelper::append_binary_value(to, this->data(state).slice());
-        } else {
-            DCHECK(!to->is_nullable() && !to->is_binary() && !to->is_large_binary());
-            down_cast<InputColumnType*>(to)->append(this->data(state).result);
-        }
+        ColumnHelper::append_column_value<LT>(to, this->data(state).get_result());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
         if constexpr (lt_is_string_or_binary<LT>) {
-            auto* column = ColumnHelper::get_data_column(dst);
             for (size_t i = start; i < end; ++i) {
-                ColumnHelper::append_binary_value(column, this->data(state).slice());
+                ColumnHelper::append_column_value<LT>(dst, this->data(state).get_result());
             }
         } else {
             auto* column = down_cast<InputColumnType*>(dst);
             for (size_t i = start; i < end; ++i) {
-                column->get_data()[i] = this->data(state).result;
+                column->get_data()[i] = this->data(state).get_result();
             }
         }
     }
@@ -263,11 +252,11 @@ public:
     void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
-            DCHECK((*to[0]).is_binary() || (*to[0]).is_large_binary());
+            DCHECK(to[0]->is_binary() || to[0]->is_large_binary());
         } else {
-            DCHECK((*to[0]).is_numeric());
+            DCHECK(to[0]->is_numeric());
         }
-        DCHECK((*to[1]).is_numeric());
+        DCHECK(to[1]->is_numeric());
         auto* column0 = down_cast<InputColumnType*>(to[0]->as_mutable_raw_ptr());
         auto* column1 = down_cast<Int64Column*>(to[1]->as_mutable_raw_ptr());
         auto& detail_state = this->data(state).detail_state();
