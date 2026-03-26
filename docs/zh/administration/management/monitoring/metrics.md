@@ -2038,6 +2038,13 @@ displayed_sidebar: docs
 - 标签：分类序列包含 `time_travel_type`，取值为 `branch`、`tag`、`snapshot` 或 `timestamp`。
 - 描述：Iceberg time travel 查询总数。无标签序列对每条 time travel 查询只计一次；带标签序列按查询中使用到的 time travel 类型分别计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
 
+#### iceberg_metadata_table_query_total
+
+- 单位：个
+- 类型：累积值
+- 标签：`metadata_table`（`refs`、`history`、`metadata_log_entries`、`snapshots`、`manifests`、`files`、`partitions` 或 `properties`）
+- 描述：访问 Iceberg metadata table 的 SQL 查询总数。每次查询都会按照实际访问的 metadata table 类型记录到对应的 `metadata_table` 标签下。
+
 ### Iceberg 删除 FE 指标
 
 #### iceberg_delete_total

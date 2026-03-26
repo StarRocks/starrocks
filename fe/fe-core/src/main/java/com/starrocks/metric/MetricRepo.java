@@ -164,6 +164,10 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL =
+            new MetricWithLabelGroup<>("metadata_table",
+                    () -> new LongCounterMetric("iceberg_metadata_table_query_total", MetricUnit.REQUESTS,
+                            "the total number of iceberg metadata table queries by metadata table"));
 
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_RUNNING_STATS_COLLECT_JOB =
