@@ -1324,6 +1324,9 @@ build_benchmark() {
           -DBENCHMARK_INSTALL_TOOLS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
+          -DRUN_HAVE_STD_REGEX=0 \
+          -DRUN_HAVE_POSIX_REGEX=0 \
+          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
