@@ -31,7 +31,9 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "exec/pipeline/scan/morsel.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
@@ -1131,4 +1133,34 @@ TEST_F(LakeDuplicateTablet10kColumnReaderTest, DISABLED_test_bench_5kcolumn_init
                  << "ns. Perf diff times: " << std::setprecision(3) << (double)total_time_ns_false / total_time_ns_true
                  << "x";
 }
+
+// Test case for issue: PhysicalSplitMorselQueue crashes when tablet has no rowsets
+// This test verifies that TabletReader::open correctly handles empty rowsets
+// when need_split is true, preventing SIGSEGV in PhysicalSplitMorselQueue::_cur_rowset
+TEST_F(LakeDuplicateTabletReaderTest, test_read_empty_tablet_with_split) {
+    // Create a tablet metadata without any rowsets (empty tablet)
+    // Do not add any rowsets to _tablet_metadata
+
+    // write tablet metadata (version 2, but no rowsets)
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // test reader with need_split = true
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(reader->prepare());
+
+    TabletReaderParams params;
+    params.splitted_scan_rows = 16384; // Set a non-zero value
+    // This should not crash even with need_split=true and empty rowsets
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    read_chunk_ptr->reset();
+    // Should return end of file immediately for empty tablet
+    ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+    reader->close();
+}
+
 } // namespace starrocks::lake

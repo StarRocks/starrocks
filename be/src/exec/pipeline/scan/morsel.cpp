@@ -515,11 +515,22 @@ rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const S
 }
 
 BaseRowset* PhysicalSplitMorselQueue::_cur_rowset() {
+    // Boundary check to prevent out-of-bounds access when tablet has no rowsets
+    if (_tablet_idx >= _tablet_rowsets.size()) {
+        return nullptr;
+    }
+    if (_rowset_idx >= _tablet_rowsets[_tablet_idx].size()) {
+        return nullptr;
+    }
     return _tablet_rowsets[_tablet_idx][_rowset_idx].get();
 }
 
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
-    const auto& segments = _cur_rowset()->get_segments();
+    auto* rowset = _cur_rowset();
+    if (rowset == nullptr) {
+        return nullptr;
+    }
+    const auto& segments = rowset->get_segments();
     return _segment_idx >= segments.size() ? nullptr : segments[_segment_idx].get();
 }
 
@@ -544,7 +555,11 @@ bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     }
 
     // Check if reach the last segment of the current rowset.
-    const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->get_segments().size();
+    auto* rowset = _cur_rowset();
+    if (rowset == nullptr) {
+        return true;
+    }
+    const size_t num_segments = rowset->get_segments().size();
     if (_segment_idx + 1 < num_segments) {
         return false;
     }
@@ -558,7 +573,13 @@ bool PhysicalSplitMorselQueue::_next_segment() {
         _has_init_any_segment = true;
     } else {
         // Read the next segment of the current rowset.
-        if (++_segment_idx >= _cur_rowset()->get_segments().size()) {
+        auto* rowset = _cur_rowset();
+        // If current tablet has no rowsets, skip to next tablet
+        if (rowset == nullptr) {
+            _segment_idx = 0;
+            _rowset_idx = 0;
+            ++_tablet_idx;
+        } else if (++_segment_idx >= rowset->get_segments().size()) {
             _segment_idx = 0;
             // Read the next rowset of the current tablet.
             if (++_rowset_idx >= _tablet_rowsets[_tablet_idx].size()) {
@@ -596,7 +617,12 @@ Status PhysicalSplitMorselQueue::_init_segment() {
             }
         }
         // Read a new rowset.
-        RETURN_IF_ERROR(_cur_rowset()->load());
+        auto* rowset = _cur_rowset();
+        // If current tablet has no rowsets, return early
+        if (rowset == nullptr) {
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(rowset->load());
     }
 
     _num_segment_rest_rows = 0;
