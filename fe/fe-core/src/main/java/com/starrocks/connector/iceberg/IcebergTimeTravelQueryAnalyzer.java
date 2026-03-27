@@ -14,6 +14,9 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.metadata.iceberg.IcebergFilesTable;
@@ -21,9 +24,6 @@ import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import org.apache.iceberg.SnapshotRef;
 
 import java.util.EnumSet;
