@@ -117,6 +117,7 @@ set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 # objects built against an older Thrift header ABI cannot be reused after
 # a runtime upgrade.
 set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
 if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
     file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
          REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
