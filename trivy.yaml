@@ -15,4 +15,4 @@ scan:
     # aws sdk bundle
     - "**/bundle-2.29.52.jar"
     # spark core
-    - "**/spark-core_2.12-3.5.5.jar"
+    - "**/spark-core_2.12-3.5.7.jar"
