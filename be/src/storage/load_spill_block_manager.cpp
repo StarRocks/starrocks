@@ -111,22 +111,29 @@ spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
 LoadSpillBlockManager::~LoadSpillBlockManager() {
     // release blocks before block manager
     _block_container.reset();
+}
+
+Status LoadSpillBlockManager::clear_parent_path() {
     // _remote_dir_manager is initialized in init(), skip cleanup if init() was not called or failed
+    Status status = Status::OK();
     if (_remote_dir_manager != nullptr) {
-        auto status = clear_parent_path();
+        spill::AcquireDirOptions acquire_dir_opts;
+        acquire_dir_opts.data_size = 1; // just need acquire a dir
+        auto dir_st = _remote_dir_manager->acquire_writable_dir(acquire_dir_opts);
+        if (!dir_st.ok()) {
+            LOG(WARNING) << "Failed to acquire dir for clearing load spill parent path, load_id=" << print_id(_load_id)
+                         << ", error=" << dir_st.status();
+            return dir_st.status();
+        }
+        auto dir = std::move(dir_st).value();
+        std::string parent_path = dir->dir() + "/" + print_id(_load_id);
+        status = dir->fs()->delete_dir(parent_path);
         if (!status.ok() && !status.is_not_found()) {
             LOG(WARNING) << "Failed to clear load spill parent path, load_id=" << print_id(_load_id)
                          << ", error=" << status;
         }
     }
-}
-
-Status LoadSpillBlockManager::clear_parent_path() {
-    spill::AcquireDirOptions acquire_dir_opts;
-    acquire_dir_opts.data_size = 1; // just need acquire a dir
-    ASSIGN_OR_RETURN(auto dir, _remote_dir_manager->acquire_writable_dir(acquire_dir_opts));
-    std::string parent_path = dir->dir() + "/" + print_id(_load_id);
-    return dir->fs()->delete_dir(parent_path);
+    return status;
 }
 
 Status LoadSpillBlockManager::init() {
