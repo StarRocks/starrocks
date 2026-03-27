@@ -110,6 +110,40 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("SampleService.ping(params)", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
+    def test_changed_mode_rejects_idless_thrift_rpc_param_change(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "service.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    service SampleService {
+                      void ping(string request)
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    service SampleService {
+                      void ping(i64 request)
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
+            self.assertEqual("gensrc/thrift/service.thrift", issues[0].path)
+            self.assertIn("omit field ids", issues[0].detail)
+
     def test_changed_mode_allows_same_number_rename(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -496,6 +496,16 @@ def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw
     )
 
 
+def _looks_like_idless_thrift_argument(argument: str) -> bool:
+    return (
+        re.match(
+            r"^(?:(required|optional)\s+)?(.+?)\s+([A-Za-z_]\w*)\s*(?:=\s*[^,;]+)?\s*$",
+            argument,
+        )
+        is not None
+    )
+
+
 def _parse_thrift_method_signature(
     path: str,
     service_name: str,
@@ -532,9 +542,24 @@ def _parse_thrift_arguments(
 ) -> list[FieldDecl]:
     parsed = []
     for part in _split_top_level(arguments, ","):
-        field = _parse_thrift_field_line(path, container, container_kind, part, line_number)
+        stripped = part.strip()
+        if not stripped:
+            continue
+        field = _parse_thrift_field_line(path, container, container_kind, stripped, line_number)
         if field is not None:
             parsed.append(field)
+            continue
+        if _looks_like_idless_thrift_argument(stripped):
+            raise UnsupportedSyntaxError(
+                path,
+                f"thrift service arguments that omit field ids are not supported by the schema compatibility harness: "
+                f"{container} line {line_number}: {stripped}",
+            )
+        raise UnsupportedSyntaxError(
+            path,
+            f"unsupported thrift service argument syntax in the schema compatibility harness: "
+            f"{container} line {line_number}: {stripped}",
+        )
     return parsed
 
 
