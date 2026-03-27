@@ -367,12 +367,13 @@ public:
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout = true;
 
         // timeout check
         if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
             return false;
         }
+
+        bool all_ready = true;
         // check if all the remote RFs are ready.
         for (auto* rf_desc : _global_rf_descriptors) {
             if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
@@ -381,9 +382,10 @@ public:
             if (rf_waiting_set != nullptr) {
                 rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
             }
-            _all_global_rf_ready_or_timeout = false;
+            all_ready = false;
         }
-        return !_all_global_rf_ready_or_timeout;
+        _all_global_rf_ready_or_timeout = _all_global_rf_ready_or_timeout || all_ready;
+        return !all_ready;
     }
 
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
