@@ -25,6 +25,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * An independent thread to write journals by batch asynchronously.
@@ -33,6 +37,36 @@ import java.util.concurrent.BlockingQueue;
  * After committing, JournalWriter will notify the caller thread for consistency.
  */
 public class JournalWriter {
+    private enum WriterState {
+        RUNNING,
+        SEALING,
+        CLOSED
+    }
+
+    public static class DrainResult {
+        public enum Status {
+            BARRIER_REACHED,
+            LEADER_LOST,
+            TIMEOUT
+        }
+
+        private final Status status;
+        private final long lastCommittedJournalId;
+
+        public DrainResult(Status status, long lastCommittedJournalId) {
+            this.status = status;
+            this.lastCommittedJournalId = lastCommittedJournalId;
+        }
+
+        public Status getStatus() {
+            return status;
+        }
+
+        public long getLastCommittedJournalId() {
+            return lastCommittedJournalId;
+        }
+    }
+
     public static final Logger LOG = LogManager.getLogger(JournalWriter.class);
     // other threads can put log to this queue by calling Editlog.logEdit()
     private final BlockingQueue<JournalTask> journalQueue;
@@ -43,6 +77,7 @@ public class JournalWriter {
     // increment journal id
     // this is the persisted journal id
     protected long nextVisibleJournalId = -1;
+    private volatile long lastCommittedJournalId = -1L;
 
     // belows are variables that will reset every batch
     // store journal tasks of this batch
@@ -65,6 +100,9 @@ public class JournalWriter {
     private long lastLogTimeForDelayTriggeredCommit = -1;
 
     private long lastSlowEditLogTimeNs = -1L;
+    private final AtomicReference<WriterState> writerState = new AtomicReference<>(WriterState.RUNNING);
+    private volatile DrainResult latestDrainResult;
+    private volatile JournalTask activeDrainBarrierTask;
 
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
@@ -76,6 +114,10 @@ public class JournalWriter {
      */
     public void init(long maxJournalId) throws JournalException {
         this.nextVisibleJournalId = maxJournalId + 1;
+        this.lastCommittedJournalId = maxJournalId;
+        this.latestDrainResult = null;
+        this.activeDrainBarrierTask = null;
+        this.writerState.set(WriterState.RUNNING);
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
 
@@ -103,7 +145,20 @@ public class JournalWriter {
         // waiting if necessary until an element becomes available
         currentJournal = journalQueue.take();
 
+        if (writerState.get() == WriterState.CLOSED) {
+            drainClosedTasks(currentJournal);
+            return;
+        }
+
+        if (currentJournal.isBarrierTask()) {
+            completeBarrier(currentJournal, DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId, null);
+            writerState.set(WriterState.CLOSED);
+            drainClosedTasks(journalQueue.poll());
+            return;
+        }
+
         long nextJournalId = nextVisibleJournalId;
+        JournalTask barrierTask = null;
         initBatch();
 
         try {
@@ -119,6 +174,10 @@ public class JournalWriter {
                 }
 
                 currentJournal = journalQueue.take();
+                if (currentJournal.isBarrierTask()) {
+                    barrierTask = currentJournal;
+                    break;
+                }
             }
         } catch (JournalException e) {
             // abort current task
@@ -130,7 +189,12 @@ public class JournalWriter {
                 journal.batchWriteCommit();
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
+                lastCommittedJournalId = nextJournalId - 1;
                 markCurrentBatchSucceed();
+                if (barrierTask != null) {
+                    completeBarrier(barrierTask, DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId, null);
+                    writerState.set(WriterState.CLOSED);
+                }
             } catch (JournalException e) {
                 // abort
                 LOG.warn("failed to commit batch, will abort current {} journals.",
@@ -140,8 +204,31 @@ public class JournalWriter {
                 } catch (JournalException e2) {
                     LOG.warn("failed to abort batch, will ignore and continue.", e);
                 }
-                abortCurrentBatch(e.getMessage());
+                if (writerState.get() == WriterState.SEALING) {
+                    JournalWriteException abortException = new JournalWriteException(
+                            JournalWriteException.Reason.WRITER_ABORTED,
+                            "journal commit failed while sealing", e);
+                    abortCurrentBatch(e.getMessage(), abortException);
+                    latestDrainResult = new DrainResult(DrainResult.Status.LEADER_LOST, lastCommittedJournalId);
+                    if (barrierTask != null) {
+                        completeBarrier(barrierTask, DrainResult.Status.LEADER_LOST, lastCommittedJournalId,
+                                abortException);
+                    }
+                    writerState.set(WriterState.CLOSED);
+                } else {
+                    abortCurrentBatch(e.getMessage());
+                }
             }
+        }
+
+        if (writerState.get() == WriterState.CLOSED) {
+            drainClosedTasks(journalQueue.poll());
+            return;
+        }
+
+        if (writerState.get() != WriterState.RUNNING) {
+            updateBatchMetrics();
+            return;
         }
 
         rollJournalAfterBatch();
@@ -167,6 +254,12 @@ public class JournalWriter {
         }
     }
 
+    private void abortCurrentBatch(String errMsg, Exception cause) {
+        for (JournalTask t : currentBatchTasks) {
+            abortJournalTask(t, errMsg, cause);
+        }
+    }
+
     /**
      * We should notify the caller to rollback or report error on abort, like this.
      * task.markAbort();
@@ -174,6 +267,17 @@ public class JournalWriter {
      * Note that if we exit here, the final clause(commit current batch) will not be executed.
      */
     protected void abortJournalTask(JournalTask task, String msg) {
+        abortJournalTask(task, msg, null);
+    }
+
+    protected void abortJournalTask(JournalTask task, String msg, Exception cause) {
+        if (writerState.get() != WriterState.RUNNING) {
+            if (task != null) {
+                task.markAbort(cause != null ? cause : new JournalWriteException(
+                        JournalWriteException.Reason.WRITER_ABORTED, msg));
+            }
+            return;
+        }
         LOG.error(msg);
         Util.stdoutWithTime(msg);
         System.exit(-1);
@@ -249,6 +353,26 @@ public class JournalWriter {
         forceRollJournal = true;
     }
 
+    public long getLastCommittedJournalId() {
+        return lastCommittedJournalId;
+    }
+
+    public synchronized DrainResult sealAndGetCommittedWatermark(long timeoutMs) throws InterruptedException {
+        if (writerState.get() == WriterState.CLOSED) {
+            return latestDrainResult != null
+                    ? latestDrainResult
+                    : new DrainResult(DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId);
+        }
+
+        if (activeDrainBarrierTask == null) {
+            writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
+            activeDrainBarrierTask = JournalTask.createBarrierTask();
+            journalQueue.put(activeDrainBarrierTask);
+        }
+
+        return waitForDrainResult(activeDrainBarrierTask, timeoutMs);
+    }
+
     private boolean needForceRollJournal() {
         if (forceRollJournal) {
             // Reset flag, alter system create image only trigger new image once
@@ -280,6 +404,67 @@ public class JournalWriter {
             }
             LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
+        }
+    }
+
+    private DrainResult waitForDrainResult(JournalTask barrierTask, long timeoutMs) throws InterruptedException {
+        try {
+            if (timeoutMs < 0) {
+                barrierTask.get();
+            } else {
+                barrierTask.get(timeoutMs, TimeUnit.MILLISECONDS);
+            }
+            return buildDrainResult(barrierTask, DrainResult.Status.BARRIER_REACHED);
+        } catch (ExecutionException e) {
+            return buildDrainResult(barrierTask, DrainResult.Status.LEADER_LOST);
+        } catch (TimeoutException e) {
+            return new DrainResult(DrainResult.Status.TIMEOUT, lastCommittedJournalId);
+        }
+    }
+
+    private DrainResult buildDrainResult(JournalTask barrierTask, DrainResult.Status fallbackStatus) {
+        DrainResult.Status status = barrierTask.getDrainStatus() == null ? fallbackStatus : barrierTask.getDrainStatus();
+        DrainResult result = new DrainResult(status,
+                barrierTask.getCommittedJournalId() >= 0 ? barrierTask.getCommittedJournalId() : lastCommittedJournalId);
+        if (status != DrainResult.Status.TIMEOUT) {
+            latestDrainResult = result;
+        }
+        return result;
+    }
+
+    private void completeBarrier(JournalTask barrierTask, DrainResult.Status status,
+                                 long committedJournalId, Exception cause) {
+        if (barrierTask == null) {
+            return;
+        }
+        if (status == DrainResult.Status.BARRIER_REACHED) {
+            barrierTask.markBarrierReached(committedJournalId);
+        } else {
+            barrierTask.markBarrierFailed(status, committedJournalId, cause);
+        }
+        activeDrainBarrierTask = null;
+        latestDrainResult = new DrainResult(status, committedJournalId);
+    }
+
+    private void drainClosedTasks(JournalTask firstTask) {
+        JournalTask task = firstTask;
+        while (task != null) {
+            if (task.isBarrierTask()) {
+                DrainResult result = latestDrainResult != null
+                        ? latestDrainResult
+                        : new DrainResult(DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId);
+                Exception cause = null;
+                if (result.getStatus() == DrainResult.Status.LEADER_LOST) {
+                    cause = new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                            "journal writer already closed after sealing");
+                }
+                completeBarrier(task, result.getStatus(), result.getLastCommittedJournalId(), cause);
+            } else {
+                abortJournalTask(task, "journal writer is closed after sealing",
+                        new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                                "journal writer is closed after sealing"));
+            }
+            task = journalQueue.poll();
         }
     }
 }

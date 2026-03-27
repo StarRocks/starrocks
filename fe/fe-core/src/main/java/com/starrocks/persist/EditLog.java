@@ -61,6 +61,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalWriteException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -120,6 +121,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -1371,6 +1374,20 @@ public class EditLog {
         walApplier.apply(writable);
     }
 
+    public void logJsonObjectOrThrow(short op, Object obj, WALApplier applier)
+            throws JournalWriteException, InterruptedException {
+        JournalTask task = submitLogOrThrow(op, new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, GsonUtils.GSON.toJson(obj));
+            }
+        }, -1);
+        waitOrThrow(task, -1);
+        if (applier != null) {
+            applier.apply(obj);
+        }
+    }
+
     public void logJsonObject(short op, Object obj) {
         logEdit(op, new Writable() {
             @Override
@@ -1441,6 +1458,25 @@ public class EditLog {
         return task;
     }
 
+    public JournalTask submitLogOrThrow(short op, Writable writable, long maxWaitIntervalMs)
+            throws JournalWriteException, InterruptedException {
+        ensureLeaderWorkAdmission(op);
+        long startTimeNano = System.nanoTime();
+        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+
+        try {
+            buffer.writeShort(op);
+            writable.write(buffer);
+        } catch (IOException | JsonParseException e) {
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
+        }
+
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
+        this.journalQueue.put(task);
+        return task;
+    }
+
     /**
      * wait for JournalWriter commit all logs
      */
@@ -1469,6 +1505,55 @@ public class EditLog {
         if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
+    }
+
+    public static void waitOrThrow(JournalTask task, long timeoutMs) throws JournalWriteException, InterruptedException {
+        long startTimeNano = task.getStartTimeNano();
+        boolean result;
+        try {
+            if (timeoutMs < 0) {
+                result = task.get();
+            } else {
+                result = task.get(timeoutMs, TimeUnit.MILLISECONDS);
+            }
+        } catch (ExecutionException e) {
+            throw toJournalWriteException(e.getCause());
+        } catch (TimeoutException e) {
+            throw new JournalWriteException(JournalWriteException.Reason.TIMEOUT, "timed out waiting for journal task",
+                    e);
+        }
+
+        if (!result) {
+            throw new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                    "journal task aborted without detailed cause");
+        }
+        if (MetricRepo.hasInit) {
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
+        }
+    }
+
+    private void ensureLeaderWorkAdmission(short op) throws JournalWriteException {
+        if (op == OperationType.OP_STARMGR) {
+            return;
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.isLeader()) {
+            throw new JournalWriteException(JournalWriteException.Reason.NOT_LEADER,
+                    String.format("Current node is not leader, but %s, submit log is not allowed",
+                            globalStateMgr.getFeType()));
+        }
+        if (!globalStateMgr.isLeaderWorkAdmissionOpen()) {
+            throw new JournalWriteException(JournalWriteException.Reason.ADMISSION_CLOSED,
+                    "leader work admission is closed");
+        }
+    }
+
+    private static JournalWriteException toJournalWriteException(Throwable cause) {
+        if (cause instanceof JournalWriteException) {
+            return (JournalWriteException) cause;
+        }
+        return new JournalWriteException(JournalWriteException.Reason.WRITER_ABORTED,
+                "journal task aborted", cause);
     }
 
     public void logSaveNextId(long nextId, WALApplier walApplier) {

@@ -25,8 +25,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
+    public enum TaskKind {
+        APPEND,
+        BARRIER
+    }
+
     // serialized JournalEntity
     private final DataOutputBuffer buffer;
+    private final TaskKind taskKind;
     // write result
     private Boolean isSucceed = null;
     // count down latch, the producer which called logEdit() will wait on it.
@@ -36,10 +42,17 @@ public class JournalTask implements Future<Boolean> {
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
     private final long startTimeNano;
+    private volatile JournalWriter.DrainResult.Status drainStatus;
+    private volatile long committedJournalId = -1L;
 
     public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
+        this(startTimeNano, buffer, maxWaitIntervalMs, TaskKind.APPEND);
+    }
+
+    private JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs, TaskKind taskKind) {
         this.startTimeNano = startTimeNano;
         this.buffer = buffer;
+        this.taskKind = taskKind;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
             this.betterCommitBeforeTimeInNano = System.nanoTime() + maxWaitIntervalMs * 1000000;
@@ -48,8 +61,20 @@ public class JournalTask implements Future<Boolean> {
         }
     }
 
+    public static JournalTask createBarrierTask() {
+        return new JournalTask(System.nanoTime(), null, -1, TaskKind.BARRIER);
+    }
+
     public long getStartTimeNano() {
         return startTimeNano;
+    }
+
+    public TaskKind getTaskKind() {
+        return taskKind;
+    }
+
+    public boolean isBarrierTask() {
+        return taskKind == TaskKind.BARRIER;
     }
 
     public void markSucceed() {
@@ -67,17 +92,40 @@ public class JournalTask implements Future<Boolean> {
         latch.countDown();
     }
 
+    public void markBarrierReached(long committedJournalId) {
+        this.committedJournalId = committedJournalId;
+        this.drainStatus = JournalWriter.DrainResult.Status.BARRIER_REACHED;
+        markSucceed();
+    }
+
+    public void markBarrierFailed(JournalWriter.DrainResult.Status drainStatus, long committedJournalId, Exception e) {
+        this.committedJournalId = committedJournalId;
+        this.drainStatus = drainStatus;
+        markAbort(e);
+    }
+
     public long getBetterCommitBeforeTimeInNano() {
         return betterCommitBeforeTimeInNano;
     }
 
     public long estimatedSizeByte() {
+        if (buffer == null) {
+            return 0L;
+        }
         // journal id + buffer
         return Long.SIZE / 8 + (long) buffer.getLength();
     }
 
     public DataOutputBuffer getBuffer() {
         return buffer;
+    }
+
+    public JournalWriter.DrainResult.Status getDrainStatus() {
+        return drainStatus;
+    }
+
+    public long getCommittedJournalId() {
+        return committedJournalId;
     }
 
     @Override
@@ -98,7 +146,7 @@ public class JournalTask implements Future<Boolean> {
     public Boolean get(long timeout, @NotNull TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
         if (!latch.await(timeout, unit)) {
-            return false;
+            throw new TimeoutException("journal task wait timed out");
         }
         if (executeException != null) {
             throw new ExecutionException(executeException);
