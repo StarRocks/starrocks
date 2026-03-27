@@ -5,6 +5,7 @@ Backend operating contract for agentic work in `be/`.
 ## Read This First
 
 - Repo-wide topology and active engineering plans live in [`handbook/index.md`](../handbook/index.md).
+- The backend domain map lives in [`handbook/domains/backend.md`](../handbook/domains/backend.md).
 - The BE harness overview lives in [`handbook/architecture/be-boundary-harness.md`](../handbook/architecture/be-boundary-harness.md).
 - The BE module boundary source of truth is [`be/module_boundary_manifest.json`](./module_boundary_manifest.json).
 - The harness is enforced by [`build-support/check_be_module_boundaries.py`](../build-support/check_be_module_boundaries.py).

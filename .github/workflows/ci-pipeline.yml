@@ -400,9 +400,16 @@ jobs:
           filters: |
             handbook:
               - '.github/workflows/ci-pipeline.yml'
+              - '.github/workflows/ci-pipeline-branch.yml'
               - 'AGENTS.md'
               - 'CLAUDE.md'
               - 'be/AGENTS.md'
+              - 'be/src/common/AGENTS.md'
+              - 'docs/AGENTS.md'
+              - 'fe/AGENTS.md'
+              - 'gensrc/AGENTS.md'
+              - 'java-extensions/AGENTS.md'
+              - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
               - 'build-support/check_repo_handbook.py'
