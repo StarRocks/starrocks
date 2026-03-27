@@ -238,6 +238,22 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
 
             self.assertEqual({"columncore", "iocore"}, selected)
 
+    def test_changed_paths_include_cross_module_test_target_definition_cmakelists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            selected = MODULE.select_modules_for_changed_paths(
+                manifest=manifest,
+                cmake_state=cmake_state,
+                changed_paths={"be/src/column/hash_set.h", "be/test/runtime/CMakeLists.txt"},
+                repo_root=repo,
+            )
+
+            self.assertEqual({"columncore", "runtimecore"}, selected)
+
     def test_collect_owned_files_expands_recursive_manifest_globs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -256,8 +272,10 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "build-support").mkdir(parents=True)
         (repo / "be" / "src" / "column").mkdir(parents=True)
         (repo / "be" / "src" / "io").mkdir(parents=True)
+        (repo / "be" / "src" / "runtime").mkdir(parents=True)
         (repo / "be" / "src" / "types").mkdir(parents=True)
         (repo / "be" / "test" / "column").mkdir(parents=True)
+        (repo / "be" / "test" / "runtime").mkdir(parents=True)
         (repo / "be").mkdir(exist_ok=True)
 
         (repo / "be" / "module_boundary_manifest.json").write_text(
@@ -303,6 +321,22 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "allowed_test_targets": [],
                             "allowed_test_link_deps": [],
                             "remediation": "Move code into IOCore or add an interface instead of pulling unrelated dependencies into IO.",
+                        },
+                        {
+                            "id": "runtimecore",
+                            "doc_label": "RuntimeCore",
+                            "owned_targets": ["RuntimeCore"],
+                            "allowed_include_prefixes": [
+                                "runtime/",
+                                "column/",
+                                "common/",
+                                "base/",
+                                "gutil/",
+                            ],
+                            "allowed_target_deps": ["ColumnCore", "Common", "Base", "Gutil"],
+                            "allowed_test_targets": ["runtime_core_test"],
+                            "allowed_test_link_deps": ["RuntimeCore", "ColumnCore", "Common", "Base", "Gutil"],
+                            "remediation": "Move code down or add an interface instead of pulling unrelated dependencies into RuntimeCore.",
                         }
                     ]
                 },
@@ -330,6 +364,15 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 """
             )
         )
+        (repo / "be" / "src" / "runtime" / "CMakeLists.txt").write_text(
+            textwrap.dedent(
+                """\
+                ADD_BE_LIB(RuntimeCore
+                    runtime.cpp
+                )
+                """
+            )
+        )
         (repo / "be" / "test" / "column" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
@@ -346,9 +389,25 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 """
             )
         )
+        (repo / "be" / "test" / "runtime" / "CMakeLists.txt").write_text(
+            textwrap.dedent(
+                """\
+                set(RUNTIME_CORE_TEST_LINK_LIBS
+                    RuntimeCore
+                    ColumnCore
+                    Common
+                    Base
+                    Gutil
+                )
+
+                target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+                """
+            )
+        )
         (repo / "be" / "src" / "column" / "column.cpp").write_text('#include "column/column.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.cpp").write_text('#include "column/hash_set.h"\n')
         (repo / "be" / "src" / "io" / "io.cpp").write_text('#include "io/io.h"\n')
+        (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text('#include "runtime/runtime_state.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.h").write_text(
             textwrap.dedent(
                 """\
