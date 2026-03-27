@@ -400,6 +400,7 @@ jobs:
           filters: |
             handbook:
               - '.github/workflows/ci-pipeline.yml'
+              - '.github/workflows/ci-pipeline-branch.yml'
               - 'AGENTS.md'
               - 'CLAUDE.md'
               - 'be/AGENTS.md'
