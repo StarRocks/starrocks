@@ -468,6 +468,25 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testIcebergTimeTravelQueryMetric() {
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric("snapshot").increase(1L);
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric("branch").increase(1L);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_time_travel_query_total"),
+                "iceberg_time_travel_query_total should be exposed");
+        Assertions.assertTrue(output.contains("time_travel_type=\"snapshot\""),
+                "iceberg_time_travel_query_total should contain time_travel_type=snapshot");
+        Assertions.assertTrue(output.contains("time_travel_type=\"branch\""),
+                "iceberg_time_travel_query_total should contain time_travel_type=branch");
+    }
+
+    @Test
     public void testDeleteFailReasonClassification() {
         // Test error classification from error message
         Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("connection timeout"));

@@ -2029,8 +2029,6 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
 
-<<<<<<< HEAD
-=======
 ### Iceberg 查询 FE 指标
 
 #### iceberg_time_travel_query_total
@@ -2047,7 +2045,6 @@ displayed_sidebar: docs
 - 标签：`metadata_table`（`refs`、`history`、`metadata_log_entries`、`snapshots`、`manifests`、`files`、`partitions` 或 `properties`）
 - 描述：访问 Iceberg metadata table 的 SQL 查询总数。每次查询都会按照实际访问的 metadata table 类型记录到对应的 `metadata_table` 标签下。
 
->>>>>>> 4d6435b25a ([Enhancement] Add iceberg metadata table query metric (#70825))
 ### Iceberg 删除 FE 指标
 
 #### iceberg_delete_total

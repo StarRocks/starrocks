@@ -49,6 +49,10 @@ public class BeTabletWriteLogSystemTable {
                         .column("LABEL", TypeFactory.createVarcharType(1024))
                         .column("COMPACTION_SCORE", IntegerType.BIGINT)
                         .column("COMPACTION_TYPE", TypeFactory.createVarcharType(64))
+                        .column("SST_INPUT_FILES", IntegerType.INT)
+                        .column("SST_INPUT_BYTES", IntegerType.BIGINT)
+                        .column("SST_OUTPUT_FILES", IntegerType.INT)
+                        .column("SST_OUTPUT_BYTES", IntegerType.BIGINT)
                         .build(),
                 TSchemaTableType.SCH_BE_TABLET_WRITE_LOG);
     }

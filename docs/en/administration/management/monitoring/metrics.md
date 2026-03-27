@@ -2030,8 +2030,6 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
 
-<<<<<<< HEAD
-=======
 ### Iceberg query FE metrics
 
 #### iceberg_time_travel_query_total
@@ -2048,7 +2046,6 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `metadata_table` (`refs`, `history`, `metadata_log_entries`, `snapshots`, `manifests`, `files`, `partitions`, or `properties`)
 - Description: Total number of SQL queries that access Iceberg metadata tables. Each query is counted under the `metadata_table` label that identifies the metadata table being accessed.
 
->>>>>>> 4d6435b25a ([Enhancement] Add iceberg metadata table query metric (#70825))
 ### Iceberg delete FE metrics
 
 #### iceberg_delete_total
