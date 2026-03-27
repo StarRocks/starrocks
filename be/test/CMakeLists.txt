@@ -65,6 +65,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
