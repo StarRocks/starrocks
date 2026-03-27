@@ -411,6 +411,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: RocksDB の meta 用 write buffer に割り当てるメモリの割合です。デフォルトはシステムメモリの 5% です。ただし、これに加えて、最終的に算出される write buffer メモリのサイズは 64MB 未満にならず、1G を超えません（rocksdb_max_write_buffer_memory_bytes）。
 - 導入バージョン: v3.5.0
 
+##### lake_balance_tablets_threshold
+
+- デフォルト: 0.15
+- タイプ: Double
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
+- 導入バージョン: v3.3.4
+
 ## その他
 
 ### default_mv_resource_group_concurrency_limit
