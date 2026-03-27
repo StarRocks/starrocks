@@ -4,10 +4,11 @@ Agent entrypoint for this repository. Start with the nearest nested `AGENTS.md`;
 
 ## Read Order
 
-1. Read the nearest nested `AGENTS.md`.
-2. For Backend work, read [`be/AGENTS.md`](./be/AGENTS.md).
-3. For Frontend work, read [`fe/AGENTS.md`](./fe/AGENTS.md).
-4. For SQL tests, docs, generated code, or Java extensions, read the matching nested guide.
+1. Read [`handbook/index.md`](./handbook/index.md) for repo topology, architecture entrypoints, and active engineering plans.
+2. Read the nearest nested `AGENTS.md`.
+3. For Backend work, read [`be/AGENTS.md`](./be/AGENTS.md).
+4. For Frontend work, read [`fe/AGENTS.md`](./fe/AGENTS.md).
+5. For SQL tests, docs, generated code, or Java extensions, read the matching nested guide.
 
 ## Repo Map
 
@@ -49,6 +50,7 @@ cd test && python3 run.py -v
 
 ## Nested Guides
 
+- [`handbook/index.md`](./handbook/index.md)
 - [`be/AGENTS.md`](./be/AGENTS.md)
 - [`fe/AGENTS.md`](./fe/AGENTS.md)
 - [`docs/AGENTS.md`](./docs/AGENTS.md)
