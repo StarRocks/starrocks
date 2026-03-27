@@ -74,6 +74,7 @@ class ContainerDecl:
 class UnsupportedConstruct:
     kind: str
     scope: str
+    construct: str
     detail: str
 
     @property
@@ -114,11 +115,12 @@ class Violation:
 
 
 class UnsupportedSyntaxError(RuntimeError):
-    def __init__(self, path: str, detail: str, kind: str, scope: str):
+    def __init__(self, path: str, detail: str, kind: str, scope: str, construct: str):
         self.path = path
         self.detail = detail
         self.kind = kind
         self.scope = scope
+        self.construct = construct
         super().__init__(detail)
 
 
@@ -280,7 +282,7 @@ def _compare_unsupported_constructs(
     for key in sorted(set(base_by_key) | set(head_by_key)):
         base_item = base_by_key.get(key)
         head_item = head_by_key.get(key)
-        if base_item is not None and head_item is not None and base_item.detail == head_item.detail:
+        if base_item is not None and head_item is not None and base_item.construct == head_item.construct:
             continue
         item = head_item or base_item
         issues.append(
@@ -425,6 +427,7 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                 UnsupportedConstruct(
                     kind="thrift_union",
                     scope=union_name,
+                    construct=line,
                     detail="thrift union parsing is not supported by the schema compatibility harness",
                 )
             )
@@ -476,7 +479,12 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                         _parse_thrift_method_signature(path, service_name, signature, current_start, containers, fields)
                     except UnsupportedSyntaxError as error:
                         unsupported.append(
-                            UnsupportedConstruct(kind=error.kind, scope=error.scope, detail=error.detail)
+                            UnsupportedConstruct(
+                                kind=error.kind,
+                                scope=error.scope,
+                                construct=error.construct,
+                                detail=error.detail,
+                            )
                         )
                     current = []
                     balance = 0
@@ -534,6 +542,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
                 UnsupportedConstruct(
                     kind="proto_oneof",
                     scope=scope,
+                    construct=line,
                     detail="proto oneof parsing is not supported by the schema compatibility harness",
                 )
             )
@@ -641,6 +650,7 @@ def _parse_thrift_arguments(
                 f"{container} line {line_number}: {stripped}",
                 kind="thrift_service_arguments",
                 scope=container,
+                construct=stripped,
             )
         raise UnsupportedSyntaxError(
             path,
@@ -648,6 +658,7 @@ def _parse_thrift_arguments(
             f"{container} line {line_number}: {stripped}",
             kind="thrift_service_arguments",
             scope=container,
+            construct=stripped,
         )
     return parsed
 
