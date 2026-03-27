@@ -19,6 +19,7 @@
 
 #include "column/chunk.h"
 #include "common/global_types.h"
+#include "common/statusor.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline_node.h"
 #include "runtime/global_dict/decoder.h"
@@ -41,8 +42,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 protected:
     void debug_string(int indentation_level, std::stringstream* out) const override { *out << "DictDecodeNode"; }

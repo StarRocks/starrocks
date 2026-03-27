@@ -16,6 +16,7 @@
 
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "exprs/expr.h"
 #include "exprs/table_function/table_function_factory.h"
@@ -33,8 +34,7 @@ public:
     Status reset(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     const TPlanNode& _tnode;

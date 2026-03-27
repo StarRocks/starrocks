@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/pipeline/set/raw_values_source_operator.h"
 #include "exec/pipeline_node.h"
 #include "types/type_descriptor.h"
@@ -31,7 +32,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     const int _tuple_id;

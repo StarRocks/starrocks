@@ -23,6 +23,7 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/statusor.h"
 #include "exec/intersect_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline_node.h"
@@ -49,7 +50,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
     int64_t mem_usage() const {
         int64_t usage = 0;
         if (_hash_set != nullptr) {

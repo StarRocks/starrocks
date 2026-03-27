@@ -39,6 +39,7 @@ public:
 
     Operators create_operators(int32_t degree_of_parallelism, int32_t i) {
         Operators operators;
+        operators.reserve(_op_factories.size());
         for (const auto& factory : _op_factories) {
             operators.emplace_back(factory->create(degree_of_parallelism, i));
         }
