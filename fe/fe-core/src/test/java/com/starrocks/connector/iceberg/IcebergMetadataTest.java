@@ -1485,13 +1485,12 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableG.refresh();
         new MockUp<IcebergHiveCatalog>() {
             @Mock
-            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
-                    throws StarRocksConnectorException {
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableG;
             }
 
             @Mock
-            Database getDB(ConnectContext context, String dbName) {
+            Database getDB(String dbName) {
                 return new Database(0, dbName);
             }
         };
