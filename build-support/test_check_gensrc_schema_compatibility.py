@@ -231,6 +231,80 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
+    def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "legacy.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    union TLegacyUnion {
+                      1: string name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    union TLegacyUnion {
+                      1: i64 name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
+            self.assertEqual("TLegacyUnion", issues[0].container)
+
+    def test_changed_mode_rejects_unsupported_proto_oneof_change(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "sample.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto3";
+
+                    message SamplePB {
+                      oneof payload {
+                        string name = 1;
+                      }
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto3";
+
+                    message SamplePB {
+                      oneof payload {
+                        int64 name = 1;
+                      }
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
+            self.assertEqual("SamplePB.payload", issues[0].container)
+
     def test_changed_mode_allows_same_number_rename(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

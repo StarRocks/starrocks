@@ -423,19 +423,29 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
         union_match = re.match(r"union\s+([A-Za-z_]\w*)\s*\{", line)
         if union_match:
             union_name = union_match.group(1)
+            block_lines = [line]
             unsupported.append(
                 UnsupportedConstruct(
                     kind="thrift_union",
                     scope=union_name,
-                    construct=line,
+                    construct="",
                     detail="thrift union parsing is not supported by the schema compatibility harness",
                 )
             )
             index += 1
             while index < len(lines):
-                if lines[index].strip() == "}":
+                body_line = lines[index].strip()
+                if body_line:
+                    block_lines.append(body_line)
+                if body_line == "}":
                     break
                 index += 1
+            unsupported[-1] = UnsupportedConstruct(
+                kind="thrift_union",
+                scope=union_name,
+                construct="\n".join(block_lines),
+                detail="thrift union parsing is not supported by the schema compatibility harness",
+            )
             index += 1
             continue
 
@@ -505,6 +515,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
     fields: dict[str, dict[int, FieldDecl]] = defaultdict(dict)
     unsupported: list[UnsupportedConstruct] = []
     block_stack: list[tuple[str, str]] = []
+    oneof_capture_stack: list[tuple[str, list[str]]] = []
     message_stack: list[str] = []
 
     for line_number, raw_line in enumerate(lines, start=1):
@@ -538,21 +549,17 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
             current_message = message_stack[-1] if message_stack else ""
             oneof_name = oneof_match.group(1)
             scope = f"{current_message}.{oneof_name}" if current_message else oneof_name
-            unsupported.append(
-                UnsupportedConstruct(
-                    kind="proto_oneof",
-                    scope=scope,
-                    construct=line,
-                    detail="proto oneof parsing is not supported by the schema compatibility harness",
-                )
-            )
             block_stack.append(("oneof", scope))
+            oneof_capture_stack.append((scope, [line]))
             continue
 
         enum_match = re.match(r"enum\s+([A-Za-z_]\w*)\s*\{", line)
         if enum_match:
             block_stack.append(("enum", enum_match.group(1)))
             continue
+
+        if oneof_capture_stack:
+            oneof_capture_stack[-1][1].append(line)
 
         current_message = message_stack[-1] if message_stack else None
         if current_message and block_stack and block_stack[-1][0] == "message":
@@ -564,6 +571,16 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
         for _ in range(close_count):
             if block_stack:
                 kind, _ = block_stack.pop()
+                if kind == "oneof":
+                    scope, capture_lines = oneof_capture_stack.pop()
+                    unsupported.append(
+                        UnsupportedConstruct(
+                            kind="proto_oneof",
+                            scope=scope,
+                            construct="\n".join(capture_lines),
+                            detail="proto oneof parsing is not supported by the schema compatibility harness",
+                        )
+                    )
                 if kind == "message" and message_stack:
                     message_stack.pop()
 
