@@ -61,13 +61,9 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
-<<<<<<< HEAD
-=======
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
->>>>>>> 4d6435b25a ([Enhancement] Add iceberg metadata table query metric (#70825))
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

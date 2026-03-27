@@ -64,11 +64,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
-<<<<<<< HEAD
-=======
-import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
->>>>>>> 4d6435b25a ([Enhancement] Add iceberg metadata table query metric (#70825))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
