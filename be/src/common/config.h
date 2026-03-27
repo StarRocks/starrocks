@@ -264,6 +264,8 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+// If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
+CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 // Acceleration of LZ4 Compression, the larger the acceleration value, the faster the algorithm, but also the lesser the compression.
 // Default 1, MIN=1, MAX=65537
 CONF_mInt32(lz4_acceleration, "1");
