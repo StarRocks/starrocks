@@ -201,6 +201,11 @@ message ColumnMetaPB {
     optional int32 compression_level = 34;
 }
 
+enum VectorIndexStorageTypePB {
+    VECTOR_INDEX_STORAGE_NONE = 0;          // no vector index generated
+    VECTOR_INDEX_STORAGE_STANDALONE = 1;    // standalone .vi file
+}
+
 message SegmentFooterPB {
     optional uint32 version = 1 [default = 1]; // file version
     repeated ColumnMetaPB columns = 2;         // tablet schema
@@ -214,6 +219,8 @@ message SegmentFooterPB {
 
     // Short key index's page
     optional PagePointerPB short_key_index_page = 9;
+    // vector index storage type
+    optional VectorIndexStorageTypePB vector_index_storage_type = 10;
 }
 
 message BTreeMetaPB {
