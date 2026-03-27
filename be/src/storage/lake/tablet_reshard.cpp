@@ -263,6 +263,9 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     new_tablet_new_metadata->set_version(new_version);
     new_tablet_new_metadata->set_commit_time(txn_info.commit_time());
     new_tablet_new_metadata->set_gtid(txn_info.gtid());
+    new_tablet_new_metadata->clear_compaction_inputs();
+    new_tablet_new_metadata->clear_orphan_files();
+    new_tablet_new_metadata->clear_prev_garbage_version();
     new_metadatas.emplace(identical_tablet.new_tablet_id(), std::move(new_tablet_new_metadata));
     return Status::OK();
 }
