@@ -2000,8 +2000,6 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
 
-<<<<<<< HEAD
-=======
 ### Iceberg 查询 FE 指标
 
 #### iceberg_time_travel_query_total
@@ -2011,40 +2009,6 @@ displayed_sidebar: docs
 - 标签：分类序列包含 `time_travel_type`，取值为 `branch`、`tag`、`snapshot` 或 `timestamp`。
 - 描述：Iceberg time travel 查询总数。无标签序列对每条 time travel 查询只计一次；带标签序列按查询中使用到的 time travel 类型分别计数。`snapshot` 表示 `FOR VERSION AS OF <snapshot_id>`，`branch` 和 `tag` 表示 `FOR VERSION AS OF <reference_name>`，`timestamp` 表示 `FOR TIMESTAMP AS OF ...`。
 
-### Iceberg 删除 FE 指标
-
-#### iceberg_delete_total
-
-- 单位：个
-- 类型：累积值
-- 标签：
-  - `status`（`success` 或 `failed`）
-  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
-  - `delete_type`（`position` 或 `metadata`）
-- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
-
-#### iceberg_delete_duration_ms_total
-
-- 单位：毫秒
-- 类型：累积值
-- 标签：`delete_type`（`position` 或 `metadata`）
-- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
-
-#### iceberg_delete_bytes
-
-- 单位：字节
-- 类型：累积值
-- 标签：`delete_type`（`position` 或 `metadata`）
-- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
-
-#### iceberg_delete_rows
-
-- 单位：行
-- 类型：累积值
-- 标签：`delete_type`（`position` 或 `metadata`）
-- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
-
->>>>>>> 1effe5da83 ([Enhancement] Add categorized metrics for Iceberg time travel queries (#70788))
 #### iceberg_compaction_total
 
 - 单位：Count

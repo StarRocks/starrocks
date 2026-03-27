@@ -423,53 +423,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testIcebergDeleteMetrics() {
-        // Test position delete metrics using basic method
-        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "success", "none", "position");
-        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "failed", "timeout", "position");
-        ConnectorMetricsMgr.increaseDeleteDurationMs("iceberg", 123L, "position");
-        ConnectorMetricsMgr.increaseDeleteRows("iceberg", 10L, "position");
-        ConnectorMetricsMgr.increaseDeleteBytes("iceberg", 1000L, "position");
-
-        // Test metadata delete metrics using basic method
-        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "success", "none", "metadata");
-        ConnectorMetricsMgr.increaseDeleteDurationMs("iceberg", 456L, "metadata");
-
-        // Test convenience methods for success/failure
-        ConnectorMetricsMgr.increaseDeleteTotalSuccess("iceberg", "position");
-        ConnectorMetricsMgr.increaseDeleteTotalFail("iceberg", "out of memory", "position");
-        ConnectorMetricsMgr.increaseDeleteTotalFail("iceberg", new RuntimeException("timeout"), "metadata");
-
-        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
-        MetricRepo.getMetric(visitor, params);
-        String output = visitor.build();
-
-        Assertions.assertTrue(output.contains("ut_iceberg_delete_total{"),
-                "iceberg_delete_total should be exposed");
-        Assertions.assertTrue(output.contains("status=\"success\""),
-                "iceberg_delete_total should contain status=success");
-        Assertions.assertTrue(output.contains("status=\"failed\""),
-                "iceberg_delete_total should contain status=failed");
-        Assertions.assertTrue(output.contains("reason=\"timeout\""),
-                "iceberg_delete_total should contain reason=timeout");
-        Assertions.assertTrue(output.contains("reason=\"oom\""),
-                "iceberg_delete_total should contain reason=oom");
-        Assertions.assertTrue(output.contains("delete_type=\"position\""),
-                "iceberg_delete_total should contain delete_type=position");
-        Assertions.assertTrue(output.contains("delete_type=\"metadata\""),
-                "iceberg_delete_total should contain delete_type=metadata");
-        Assertions.assertTrue(output.contains("ut_iceberg_delete_duration_ms_total"),
-                "iceberg_delete_duration_ms_total should be exposed");
-        Assertions.assertTrue(output.contains("ut_iceberg_delete_rows"),
-                "iceberg_delete_rows should be exposed");
-        Assertions.assertTrue(output.contains("ut_iceberg_delete_bytes"),
-                "iceberg_delete_bytes should be exposed");
-    }
-
-    @Test
     public void testIcebergTimeTravelQueryMetric() {
         MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
         MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric("snapshot").increase(1L);
@@ -489,26 +442,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-    public void testDeleteFailReasonClassification() {
-        // Test error classification from error message
-        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("connection timeout"));
-        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("request timed out"));
-        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason("java.lang.OutOfMemoryError"));
-        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason("out of memory"));
-        Assertions.assertEquals("access_denied", ConnectorMetricsMgr.classifyFailReason("access denied"));
-        Assertions.assertEquals("access_denied", ConnectorMetricsMgr.classifyFailReason("permission denied"));
-        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason("some other error"));
-        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason((String) null));
-
-        // Test error classification from throwable
-        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason(new OutOfMemoryError()));
-        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason(new java.util.concurrent.TimeoutException()));
-        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
-        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason((Throwable) null));
-    }
-
-    @Test
->>>>>>> 1effe5da83 ([Enhancement] Add categorized metrics for Iceberg time travel queries (#70788))
     public void testIcebergCompactionMetrics() {
         // manual compaction success
         IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
