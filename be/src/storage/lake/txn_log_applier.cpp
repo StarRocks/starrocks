@@ -169,13 +169,15 @@ std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplic
     std::unordered_map<uint32_t, uint32_t> rssid_remap;
     uint32_t target_id = start_target_id;
     for (const auto& op_write : op_replication.op_writes()) {
+        if (!op_write.has_rowset()) {
+            continue;
+        }
         bool included = false;
         if (is_pk) {
             included = op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
                        op_write.rowset().has_delete_predicate();
         } else {
-            included = op_write.has_rowset() &&
-                       (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate());
+            included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
         }
         if (included) {
             uint32_t source_id = op_write.rowset().id();
