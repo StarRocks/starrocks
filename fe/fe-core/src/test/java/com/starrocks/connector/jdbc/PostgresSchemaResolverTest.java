@@ -56,16 +56,21 @@ public class PostgresSchemaResolverTest {
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
         columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY));
+                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY,
+                Types.TIME, Types.TIME_WITH_TIMEZONE, Types.OTHER, Types.OTHER));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
-                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6, 0));
-        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"));
+                "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID",
+                "TIME", "TIMETZ", "JSON", "JSONB"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36,
+                15, 21, 2147483647, 2147483647));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6, 0,
+                0, 0, 0, 0));
+        columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+                "m", "n", "o", "p"));
+        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO",
+                "NO", "NO", "YES", "YES", "YES", "YES"));
         columnResult.addColumn("REMARKS", Arrays.asList("comment-a", null, null, null, null, null, null, null, null, null,
                 null, null));
-        columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "YES", "NO", "NO",
-                "NO", "NO"));
         properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "org.postgresql.Driver");
         properties.put(JDBCResource.URI, "jdbc:postgresql://127.0.0.1:5432/t1");
@@ -172,11 +177,15 @@ public class PostgresSchemaResolverTest {
             Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
             Assertions.assertEquals("tbl1", table.getName());
             Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
-            Assertions.assertEquals(12, table.getColumns().size());
+            Assertions.assertEquals(16, table.getColumns().size());
             Assertions.assertTrue(table.getColumn("h").getType().isStringType());
             Assertions.assertTrue(table.getColumn("l").getType().isBinaryType());
             Assertions.assertEquals("comment-a", table.getColumn("a").getComment());
             Assertions.assertEquals("", table.getColumn("b").getComment());
+            Assertions.assertTrue(table.getColumn("m").getType().isTime());
+            Assertions.assertTrue(table.getColumn("n").getType().isTime());
+            Assertions.assertTrue(table.getColumn("o").getType().isJsonType());
+            Assertions.assertTrue(table.getColumn("p").getType().isJsonType());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assertions.fail();
@@ -190,5 +199,41 @@ public class PostgresSchemaResolverTest {
                 Table.TableType.JDBC, Lists.newArrayList()));
         Assertions.assertEquals(partitions.size(), 1);
         Assertions.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
+    }
+
+    @Test
+    public void testConvertOtherTypeForTimeAndJson() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "time", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "time without time zone", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timetz", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "time with time zone", 0, 0).isTime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timestamptz", 0, 0).isDatetime());
+        Assertions.assertTrue(
+                postgresSchemaResolver.convertColumnType(Types.OTHER, "timestamp with time zone", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "json", 0, 0).isJsonType());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.OTHER, "jsonb", 0, 0).isJsonType());
+    }
+
+    @Test
+    public void testConvertWithTimezoneTypeName() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.TIME, "time", 0, 0).isTime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(Types.TIME, "timetz", 0, 0).isTime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIME, "time with time zone", 0, 0).isTime());
+
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamp", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamptz", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP, "timestamp with time zone", 0, 0).isDatetime());
+        Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
+                Types.TIMESTAMP_WITH_TIMEZONE, "timestamp with time zone", 0, 0).isDatetime());
     }
 }

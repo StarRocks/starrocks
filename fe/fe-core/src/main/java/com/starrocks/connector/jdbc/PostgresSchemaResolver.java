@@ -128,9 +128,9 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             case Types.CHAR:
                 return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
-                if (typeName.equalsIgnoreCase("varchar")) {
+                if ("varchar".equalsIgnoreCase(typeName)) {
                     return TypeFactory.createVarcharType(columnSize);
-                } else if (typeName.equalsIgnoreCase("text")) {
+                } else if ("text".equalsIgnoreCase(typeName)) {
                     return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
                 }
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
@@ -141,15 +141,39 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
+            case Types.TIME:
+            case Types.TIME_WITH_TIMEZONE:
+                primitiveType = PrimitiveType.TIME;
+                break;
             case Types.TIMESTAMP:
+            case Types.TIMESTAMP_WITH_TIMEZONE:
                 primitiveType = PrimitiveType.DATETIME;
+                break;
+            case Types.OTHER:
+                if ("json".equalsIgnoreCase(typeName) || "jsonb".equalsIgnoreCase(typeName)) {
+                    primitiveType = PrimitiveType.JSON;
+                    break;
+                } else if ("uuid".equalsIgnoreCase(typeName)) {
+                    return TypeFactory.createVarbinary(columnSize);
+                } else if ("time".equalsIgnoreCase(typeName)
+                        || "time without time zone".equalsIgnoreCase(typeName)) {
+                    primitiveType = PrimitiveType.TIME;
+                    break;
+                } else if (isTimeWithTimezoneTypeName(typeName)) {
+                    primitiveType = PrimitiveType.TIME;
+                    break;
+                } else if (isTimestampWithTimezoneTypeName(typeName)) {
+                    primitiveType = PrimitiveType.DATETIME;
+                    break;
+                }
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
         }
 
-        if (typeName.equalsIgnoreCase("uuid")) {
+        if ("uuid".equalsIgnoreCase(typeName)) {
             return TypeFactory.createVarbinary(columnSize);
         }
 
@@ -168,6 +192,14 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
 
     public List<Partition> getPartitions(Connection connection, Table table) {
         return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+    }
+
+    private static boolean isTimeWithTimezoneTypeName(String typeName) {
+        return "timetz".equalsIgnoreCase(typeName) || "time with time zone".equalsIgnoreCase(typeName);
+    }
+
+    private static boolean isTimestampWithTimezoneTypeName(String typeName) {
+        return "timestamptz".equalsIgnoreCase(typeName) || "timestamp with time zone".equalsIgnoreCase(typeName);
     }
 
 }
