@@ -753,8 +753,8 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
                          << _compress_codec->max_input_size() << ", skipping compression";
             use_compression = false;
         } else {
-            return Status::InternalError(Substitute("The input size for compression should be less than $0",
-                                                    _compress_codec->max_input_size()));
+            return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                             _compress_codec->max_input_size()));
         }
     } else if (_compress_strategy) {
         // try compress the ChunkPB data

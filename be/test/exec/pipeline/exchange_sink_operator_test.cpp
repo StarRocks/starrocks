@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "gutil/casts.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
@@ -129,7 +130,7 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
     auto op = _factory->create(1, 0);
     ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
 
-    auto* sink = reinterpret_cast<ExchangeSinkOperator*>(op.get());
+    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
     sink->set_compress_codec_for_testing(&_overflow_codec);
 
     bool prev = config::enable_rpc_compress_overflow_skip;
@@ -140,7 +141,7 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
     bool is_first = true;
     EXPECT_OK(sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first));
     // No compression applied: compress_type stays at default (NO_COMPRESSION).
-    EXPECT_NE(chunk_pb.compress_type(), CompressionTypePB::LZ4);
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::NO_COMPRESSION);
 
     op->close(_runtime_state.get());
 }
@@ -151,7 +152,7 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_disabled) {
     auto op = _factory->create(1, 0);
     ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
 
-    auto* sink = reinterpret_cast<ExchangeSinkOperator*>(op.get());
+    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
     sink->set_compress_codec_for_testing(&_overflow_codec);
 
     bool prev = config::enable_rpc_compress_overflow_skip;
