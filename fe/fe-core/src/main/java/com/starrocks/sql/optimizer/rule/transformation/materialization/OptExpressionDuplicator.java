@@ -401,7 +401,12 @@ public class OptExpressionDuplicator {
                 ScalarOperator newOnPredicate = rewriter.rewrite(onpredicate);
                 LogicalJoinOperator.Builder joinBuilder = (LogicalJoinOperator.Builder) opBuilder;
                 joinBuilder.setOnPredicate(newOnPredicate);
+
+                if (joinOperator.getSkewColumn() != null) {
+                    joinBuilder.setSkewColumn(rewriter.rewrite(joinOperator.getSkewColumn()));
+                }
             }
+
             return OptExpression.create(opBuilder.build(), inputs);
         }
 
