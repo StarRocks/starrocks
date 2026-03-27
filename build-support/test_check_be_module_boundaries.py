@@ -56,6 +56,11 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         architecture_suffixes = {pattern.removeprefix("be/**/*") for pattern in architecture_patterns}
         self.assertEqual(MODULE.CODE_EXTENSIONS, architecture_suffixes)
 
+    def test_ci_architecture_filter_includes_workflow_file(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn("- '.github/workflows/ci-pipeline.yml'", workflow_text)
+
     def test_ci_baseline_shrink_is_gated_on_base_has_baseline_file(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
 

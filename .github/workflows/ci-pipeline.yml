@@ -231,6 +231,7 @@ jobs:
               - 'gensrc/**'
               - '!be/test/**'
             architecture:
+              - '.github/workflows/ci-pipeline.yml'
               - 'AGENTS.md'
               - 'be/AGENTS.md'
               - 'be/src/common/AGENTS.md'
