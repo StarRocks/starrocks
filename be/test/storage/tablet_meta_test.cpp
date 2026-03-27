@@ -38,6 +38,8 @@
 
 #include <string>
 
+#include "storage/olap_common.h"
+#include "storage/rowset/rowset_meta.h"
 #include "types/decimalv2_value.h"
 
 namespace starrocks {
@@ -250,6 +252,36 @@ TEST(TabletMetaTest, test_init_from_pb) {
     ASSERT_TRUE(binlog_config_ptr->binlog_enable);
     ASSERT_EQ(823, binlog_config_ptr->binlog_ttl_second);
     ASSERT_EQ(984, binlog_config_ptr->binlog_max_size);
+}
+
+TEST(TabletMetaTest, tablet_data_size_excludes_rowset_index_disk_bytes) {
+    constexpr int64_t kDataBytes = 421219;
+    constexpr int64_t kIndexBytes = 99173;
+
+    TabletMetaSharedPtr tablet_meta = TabletMeta::create();
+    RowsetMetaPB rowset_meta_pb;
+    rowset_meta_pb.set_tablet_id(100);
+    rowset_meta_pb.set_partition_id(1);
+    rowset_meta_pb.set_creation_time(0);
+    rowset_meta_pb.set_empty(false);
+    rowset_meta_pb.set_num_segments(1);
+    rowset_meta_pb.set_num_rows(100);
+    rowset_meta_pb.set_start_version(0);
+    rowset_meta_pb.set_end_version(1);
+    rowset_meta_pb.set_rowset_state(VISIBLE);
+    rowset_meta_pb.set_deprecated_rowset_id(0);
+    rowset_meta_pb.set_rowset_seg_id(1);
+    rowset_meta_pb.set_data_disk_size(kDataBytes);
+    rowset_meta_pb.set_index_disk_size(kIndexBytes);
+    RowsetId rowset_id;
+    rowset_id.init(2, 1, 0, 0);
+    rowset_meta_pb.set_rowset_id(rowset_id.to_string());
+
+    auto rs_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
+    tablet_meta->add_rs_meta(rs_meta);
+
+    ASSERT_EQ(tablet_meta->tablet_data_size(), static_cast<size_t>(kDataBytes));
+    ASSERT_EQ(tablet_meta->tablet_footprint(), static_cast<size_t>(kDataBytes + kIndexBytes));
 }
 
 } // namespace starrocks
