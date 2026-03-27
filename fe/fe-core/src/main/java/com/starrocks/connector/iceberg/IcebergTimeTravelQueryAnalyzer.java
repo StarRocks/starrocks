@@ -14,16 +14,15 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.catalog.IcebergTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.metadata.iceberg.IcebergFilesTable;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import org.apache.iceberg.SnapshotRef;
 
 import java.util.EnumSet;
@@ -77,11 +76,13 @@ public final class IcebergTimeTravelQueryAnalyzer {
         if (versionExpr instanceof IntLiteral) {
             return Optional.of(TimeTravelType.SNAPSHOT);
         }
-        if (!(versionExpr instanceof StringLiteral) || !(table instanceof IcebergTable)) {
+        if (!(versionExpr instanceof StringLiteral)
+                || !(table instanceof com.starrocks.catalog.IcebergTable)) {
             return Optional.empty();
         }
 
-        org.apache.iceberg.Table nativeTable = ((IcebergTable) table).getNativeTable();
+        org.apache.iceberg.Table nativeTable =
+                ((com.starrocks.catalog.IcebergTable) table).getNativeTable();
         if (nativeTable == null) {
             return Optional.empty();
         }
@@ -100,7 +101,7 @@ public final class IcebergTimeTravelQueryAnalyzer {
     }
 
     private static boolean isTimeTravelTable(Table table) {
-        return table instanceof IcebergTable
+        return table instanceof com.starrocks.catalog.IcebergTable
                 || table instanceof LogicalIcebergMetadataTable
                 || table instanceof IcebergFilesTable;
     }
