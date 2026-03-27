@@ -135,7 +135,6 @@ public class RewriteDataFilesTest {
             }
         };
 
-
         IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
         IcebergTableProcedureContext procedureContext =
                 new IcebergTableProcedureContext(icebergHiveCatalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause, null);
@@ -189,7 +188,7 @@ public class RewriteDataFilesTest {
             IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
             IcebergTableProcedureContext procedureContext =
                     new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
+                            HDFS_ENVIRONMENT, stmt, clause, null);
             procedure.execute(procedureContext, Map.of());
         }
 
@@ -237,7 +236,7 @@ public class RewriteDataFilesTest {
             IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
             IcebergTableProcedureContext procedureContext =
                     new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
+                            HDFS_ENVIRONMENT, stmt, clause, null);
             procedure.execute(procedureContext, Map.of());
         }
 
@@ -288,7 +287,7 @@ public class RewriteDataFilesTest {
             IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
             IcebergTableProcedureContext procedureContext =
                     new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
+                            HDFS_ENVIRONMENT, stmt, clause, null);
             procedure.execute(procedureContext, Map.of());
         }
 
@@ -337,7 +336,7 @@ public class RewriteDataFilesTest {
             IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
             IcebergTableProcedureContext procedureContext =
                     new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
+                            HDFS_ENVIRONMENT, stmt, clause, null);
             procedure.execute(procedureContext, Map.of());
         }
 
@@ -387,7 +386,7 @@ public class RewriteDataFilesTest {
             IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
             IcebergTableProcedureContext procedureContext =
                     new IcebergTableProcedureContext(icebergHiveCatalog, baseTable, ctx, null,
-                            HDFS_ENVIRONMENT, stmt, clause);
+                            HDFS_ENVIRONMENT, stmt, clause, null);
             procedure.execute(procedureContext, Map.of());
         }
 

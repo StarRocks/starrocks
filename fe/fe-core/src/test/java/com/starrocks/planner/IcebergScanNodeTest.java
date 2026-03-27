@@ -961,6 +961,29 @@ public class IcebergScanNodeTest {
     }
 
     @Test
+    public void testPrepareRetry(@Mocked IcebergTable table,
+                                 @Mocked IcebergConnectorScanRangeSource mockSource) throws Exception {
+        // setupCloudCredential returns early when catalogName is null (mocked default)
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+        // Set empty snapshot so setupScanRangeLocations returns early
+        scanNode.setTvrVersionRange(TvrTableSnapshot.empty());
+        // Simulate partially consumed state
+        Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
+        Deencapsulation.setField(scanNode, "reachLimit", true);
+
+        scanNode.prepareRetry();
+
+        Assertions.assertFalse((boolean) Deencapsulation.getField(scanNode, "reachLimit"),
+                "reachLimit should be reset to false");
+        Assertions.assertNull(Deencapsulation.getField(scanNode, "scanRangeSource"),
+                "scanRangeSource should be cleared");
+    }
+
+    @Test
     public void testGetBucketNums(@Mocked IcebergTable table) {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
