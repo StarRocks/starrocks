@@ -85,7 +85,7 @@ TEST_F(TabletTest, test_concurrent_add_remove_committed_rowsets) {
 
 TEST_F(TabletTest, test_get_basic_info_uses_tablet_data_size) {
     auto tablet_meta = std::make_shared<TabletMeta>();
-    tablet_meta->set_table_id(20001);
+    tablet_meta->TEST_set_table_id(20001);
     tablet_meta->set_partition_id(20002);
     tablet_meta->set_tablet_id(20003);
     tablet_meta->set_creation_time(123456789);
