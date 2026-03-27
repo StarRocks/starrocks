@@ -195,6 +195,7 @@ jobs:
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
+      architecture_filter: ${{ steps.path-filter.outputs.architecture }}
       thirdparty_filter: ${{ steps.prepare-info.outputs.thirdparty_filter }}
       clang_tidy_filter: ${{ steps.path-filter.outputs.clang_tidy }}
       only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
@@ -229,6 +230,29 @@ jobs:
               - 'be/cmake_modules/**'
               - 'gensrc/**'
               - '!be/test/**'
+            architecture:
+              - '.github/workflows/ci-pipeline.yml'
+              - 'AGENTS.md'
+              - 'be/AGENTS.md'
+              - 'be/src/common/AGENTS.md'
+              - 'be/module_boundary_manifest.json'
+              - 'be/**/*.c'
+              - 'be/**/*.cc'
+              - 'be/**/*.cpp'
+              - 'be/**/*.cxx'
+              - 'be/**/*.h'
+              - 'be/**/*.hh'
+              - 'be/**/*.hpp'
+              - 'be/**/*.hxx'
+              - 'be/**/*.inl'
+              - 'be/**/CMakeLists.txt'
+              - 'be/test/**'
+              - 'build-support/README.md'
+              - 'build-support/check_be_module_boundaries.py'
+              - 'build-support/render_be_agents.py'
+              - 'build-support/test_check_be_module_boundaries.py'
+              - 'build-support/test_render_be_agents.py'
+              - 'build-support/be_module_boundary_baseline.json'
 
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -253,6 +277,7 @@ jobs:
           mkdir be-path-filter && cd be-path-filter
           echo ${{ steps.path-filter.outputs.be }} > src_filter.txt
           echo ${{ steps.path-filter.outputs.ut }} > test_filter.txt
+          echo ${{ steps.path-filter.outputs.architecture }} > architecture_filter.txt
           echo ${thirdparty_filter} > thirdparty_filter.txt
           echo ${{ steps.path-filter.outputs.clang_tidy }} > clang_tidy_filter.txt
 
@@ -316,6 +341,52 @@ jobs:
             ./bin/elastic-cluster.sh --delete
           fi
           rm -rf ${{ github.workspace }}/*
+
+  be-architecture:
+    runs-on: ubuntu-latest
+    needs: [be-checker]
+    name: BE Architecture
+    if: >
+      always() &&
+      needs.be-checker.result == 'success' &&
+      needs.be-checker.outputs.architecture_filter == 'true'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute Merge Base
+        id: merge_base
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Determine Baseline Enforcement
+        id: baseline_shrink
+        run: |
+          if git cat-file -e "${{ steps.merge_base.outputs.base }}:build-support/be_module_boundary_baseline.json" 2>/dev/null; then
+            echo "enforce_baseline_shrink=true" >> $GITHUB_OUTPUT
+          else
+            echo "enforce_baseline_shrink=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Boundary Tool Tests
+        run: |
+          python3 -m unittest \
+            build-support/test_check_be_module_boundaries.py \
+            build-support/test_render_be_agents.py
+
+      - name: AGENTS Drift Check
+        run: |
+          python3 build-support/render_be_agents.py --check
+
+      - name: BE Boundary Check
+        run: |
+          args=(python3 build-support/check_be_module_boundaries.py --mode changed --base "${{ steps.merge_base.outputs.base }}")
+          if [[ "${{ steps.baseline_shrink.outputs.enforce_baseline_shrink }}" == "true" ]]; then
+            args+=(--enforce-baseline-shrink)
+          fi
+          "${args[@]}"
 
   thirdparty-info:
     runs-on: ubuntu-latest
