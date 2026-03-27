@@ -968,7 +968,7 @@ typedef short int16_t;
 #endif // _MSC_VER
 
 #ifdef STL_MSVC // not always the same as _MSC_VER
-#include "base/port_hash.h"
+#include "gutil/port_hash.h"
 #else
 struct PortableHashBase {};
 #endif

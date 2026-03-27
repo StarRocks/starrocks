@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdlib>
 
 #include "runtime/runtime_state.h"
 
@@ -32,6 +33,22 @@ TEST(RuntimeStateCoreTest, FragmentDictStateSetGet) {
     EXPECT_EQ(ptr, state.fragment_dict_state());
     const auto& const_state = state;
     EXPECT_EQ(ptr, const_state.fragment_dict_state());
+}
+
+TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
+    EXPECT_EXIT(
+            [] {
+                RuntimeState state;
+                auto* fragment_ctx = reinterpret_cast<pipeline::FragmentContext*>(static_cast<uintptr_t>(0x1234));
+                auto* fragment_dict_state = reinterpret_cast<FragmentDictState*>(static_cast<uintptr_t>(0x5678));
+                state.set_fragment_dict_state(fragment_dict_state);
+                state.set_fragment_ctx(fragment_ctx);
+                if (state.fragment_ctx() != fragment_ctx || state.fragment_dict_state() != fragment_dict_state) {
+                    std::_Exit(1);
+                }
+                std::_Exit(0);
+            }(),
+            ::testing::ExitedWithCode(0), "");
 }
 
 } // namespace starrocks
