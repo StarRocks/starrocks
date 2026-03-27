@@ -55,4 +55,5 @@ TEST_F(CpuInfoTest, test_fail_cpu_flags_check) {
     GTEST_SKIP() << "avx2 is not supported, skip the test!";
 #endif
 }
+
 } // namespace starrocks
