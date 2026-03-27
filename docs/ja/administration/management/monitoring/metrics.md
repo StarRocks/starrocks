@@ -2090,6 +2090,17 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 #### iceberg_delete_total
 
+#### iceberg_time_travel_query_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: 分類済み系列には `time_travel_type` が付き、値は `branch`、`tag`、`snapshot`、`timestamp` のいずれかです。
+- 説明: Iceberg の time travel クエリ総数。ラベルなし系列は各 time travel クエリを 1 回だけカウントします。ラベル付き系列は、そのクエリで使用された各 time travel タイプごとにカウントします。`snapshot` は `FOR VERSION AS OF <snapshot_id>`、`branch` と `tag` は `FOR VERSION AS OF <reference_name>`、`timestamp` は `FOR TIMESTAMP AS OF ...` を意味します。
+
+### Iceberg delete FE メトリクス
+
+#### iceberg_delete_total
+
 - 単位: Count
 - タイプ: Cumulative
 - ラベル:
