@@ -95,6 +95,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Map<TableStatsCacheKey, Optional<Long>> data = result.get();
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
@@ -663,6 +666,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Optional<MultiColumnCombinedStatistics> data = result.get();
                 return data.orElse(MultiColumnCombinedStatistics.EMPTY);
