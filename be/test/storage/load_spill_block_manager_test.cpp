@@ -67,8 +67,8 @@ TEST_F(LoadSpillBlockManagerTest, test_write_read) {
     ASSERT_OK(block_manager->release_block(block));
 }
 
-// Test that the spill parent directory is cleaned up after LoadSpillBlockManager is destroyed.
-TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_on_destroy) {
+// Test that clear_parent_path() cleans up the spill parent directory.
+TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path) {
     TUniqueId load_id;
     load_id.hi = 12345;
     load_id.lo = 67890;
@@ -88,12 +88,48 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_on_destroy) {
     ASSERT_OK(block_manager->release_block(block));
     block.reset();
 
-    // Destroy the manager — should clean up the parent path
-    block_manager.reset();
+    // Explicitly call clear_parent_path() — should clean up the parent path
+    ASSERT_OK(block_manager->clear_parent_path());
 
     // The parent directory should have been deleted
     status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
     ASSERT_TRUE(status.is_not_found()) << "Expected parent path to be deleted, but got: " << status;
+}
+
+// Test that destroying LoadSpillBlockManager does NOT clean up the spill parent directory.
+// The cleanup should be done explicitly via clear_parent_path() in DeltaWriter::close().
+TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
+    TUniqueId load_id;
+    load_id.hi = 12345;
+    load_id.lo = 67890;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+
+    // Acquire a block with force_remote=true to create the remote spill directory
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_OK(block->append({Slice("test_data")}));
+    ASSERT_OK(block->flush());
+
+    std::string parent_path = std::string(kTestDir) + "/load_spill/" + print_id(load_id);
+    auto status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
+    ASSERT_OK(status);
+
+    ASSERT_OK(block_manager->release_block(block));
+    block.reset();
+
+    // Destroy without calling clear_parent_path()
+    block_manager.reset();
+
+    // The parent directory should still exist — destructor no longer cleans it up
+    status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
+    ASSERT_TRUE(status.ok()) << "Expected parent path to still exist after destroy, but got: " << status;
+}
+
+// Test that clear_parent_path() is safe to call when init() was not called.
+TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_without_init) {
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    // Call clear_parent_path() without init() — should return OK without crashing
+    ASSERT_OK(block_manager->clear_parent_path());
 }
 
 class LoadSpillBlockMergeExecutorTest : public ::testing::Test {
