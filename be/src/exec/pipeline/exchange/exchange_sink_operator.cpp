@@ -745,17 +745,23 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     const size_t serialized_size = dst->uncompressed_size();
     COUNTER_UPDATE(_serialized_bytes_counter, serialized_size * num_receivers);
 
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
-        return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
-                                                         _compress_codec->max_input_size()));
-    }
-
-    // try compress the ChunkPB data
     bool use_compression = true;
-    if (_compress_strategy) {
+    // TODO: Better split the large chunk to smaller size and then compress.
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
+        if (config::enable_rpc_compress_overflow_skip) {
+            LOG(WARNING) << "Serialized size " << serialized_size << " exceeds compression codec max input size "
+                         << _compress_codec->max_input_size() << ", skipping compression";
+            use_compression = false;
+        } else {
+            return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                             _compress_codec->max_input_size()));
+        }
+    } else if (_compress_strategy) {
+        // try compress the ChunkPB data
         use_compression = _compress_strategy->decide();
     }
-    if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
+
+    if (use_compression && _compress_codec != nullptr && serialized_size > 0) {
         ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
 
         if (use_compression_pool(_compress_codec->type())) {

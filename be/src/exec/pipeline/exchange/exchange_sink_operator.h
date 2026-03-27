@@ -94,6 +94,11 @@ public:
 
     void set_execute_mode(int performance_level) override;
 
+#ifdef BE_TEST
+    // For testing only: inject a custom codec to simulate exceed_max_input_size scenarios.
+    void set_compress_codec_for_testing(const BlockCompressionCodec* codec) { _compress_codec = codec; }
+#endif
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns

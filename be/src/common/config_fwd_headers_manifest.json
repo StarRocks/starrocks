@@ -137,6 +137,7 @@
       "configs": [
         "compress_rowbatches",
         "rpc_compress_ratio_threshold",
+        "enable_rpc_compress_overflow_skip",
         "exchg_node_buffer_size_bytes",
         "result_buffer_cancelled_interval_time",
         "es_scroll_keepalive",

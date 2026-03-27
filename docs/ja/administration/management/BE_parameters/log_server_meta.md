@@ -357,6 +357,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
+### enable_rpc_compress_overflow_skip
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: シリアライズされた chunk のサイズが圧縮コーデックの最大入力サイズを超えた場合の動作を制御します。`true`（デフォルト）に設定すると、StarRocks は警告ログを記録して圧縮をスキップし、非圧縮のままデータを送信します。`false` に設定すると、StarRocks は `InternalError` を返して RPC を中断します。
+- 導入バージョン: -
+
 ### ssl_private_key_path
 
 - デフォルト: An empty string
