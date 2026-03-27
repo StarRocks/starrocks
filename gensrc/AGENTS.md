@@ -7,6 +7,8 @@
 
 This directory contains generated source code from Thrift and Protobuf definitions. These files are auto-generated during the build process.
 
+Read [`handbook/index.md`](../handbook/index.md) first and use [`handbook/domains/generated-and-extensions.md`](../handbook/domains/generated-and-extensions.md) for the generated-code and Java-extension workflow map.
+
 ## Directory Structure
 
 ```

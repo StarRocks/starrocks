@@ -6,6 +6,8 @@
 
 StarRocks documentation is built using Docusaurus and hosted at https://docs.starrocks.io/. Documentation is available in both English and Chinese.
 
+Read [`handbook/index.md`](../handbook/index.md) first for repo-wide routing, then use the docs domain map in [`handbook/domains/docs-and-translation.md`](../handbook/domains/docs-and-translation.md) for handbook-vs-public-docs boundaries.
+
 ## Directory Structure
 
 ```

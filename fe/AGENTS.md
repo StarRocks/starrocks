@@ -5,6 +5,8 @@
 
 ## Architecture Overview
 
+Start with [`handbook/index.md`](../handbook/index.md) for repo-wide routing and [`handbook/domains/frontend.md`](../handbook/domains/frontend.md) for FE commands, guardrails, and open harness gaps.
+
 The Frontend is responsible for:
 - **SQL Parsing**: ANTLR-based parser for StarRocks SQL dialect
 - **Query Optimization**: Cost-based optimizer with rule-based transformations

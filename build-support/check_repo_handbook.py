@@ -26,13 +26,31 @@ REQUIRED_FILES = (
     "handbook/architecture/index.md",
     "handbook/architecture/repo-topology.md",
     "handbook/architecture/be-boundary-harness.md",
+    "handbook/domains/index.md",
+    "handbook/domains/backend.md",
+    "handbook/domains/frontend.md",
+    "handbook/domains/sql-integration.md",
+    "handbook/domains/docs-and-translation.md",
+    "handbook/domains/ci-and-tooling.md",
+    "handbook/domains/generated-and-extensions.md",
     "handbook/plans/index.md",
     "handbook/plans/completed/README.md",
     "handbook/plans/templates/execution-plan.md",
+    "handbook/policies/index.md",
+    "handbook/policies/reliability-first.md",
+    "handbook/policies/internal-vs-public-docs.md",
+    "handbook/policies/agent-change-flow.md",
+    "handbook/quality/index.md",
+    "handbook/quality/scorecard.md",
+    "handbook/templates/domain-map.md",
+    "handbook/templates/policy.md",
 )
 INDEX_LINK_REQUIREMENTS = {
     "handbook/index.md": (
         "handbook/architecture/index.md",
+        "handbook/domains/index.md",
+        "handbook/policies/index.md",
+        "handbook/quality/index.md",
         "handbook/plans/index.md",
     ),
     "handbook/architecture/index.md": (
@@ -43,13 +61,53 @@ INDEX_LINK_REQUIREMENTS = {
         "handbook/plans/templates/execution-plan.md",
         "handbook/plans/completed/README.md",
     ),
+    "handbook/domains/index.md": (
+        "handbook/domains/backend.md",
+        "handbook/domains/frontend.md",
+        "handbook/domains/sql-integration.md",
+        "handbook/domains/docs-and-translation.md",
+        "handbook/domains/ci-and-tooling.md",
+        "handbook/domains/generated-and-extensions.md",
+    ),
+    "handbook/policies/index.md": (
+        "handbook/policies/reliability-first.md",
+        "handbook/policies/internal-vs-public-docs.md",
+        "handbook/policies/agent-change-flow.md",
+    ),
+    "handbook/quality/index.md": ("handbook/quality/scorecard.md",),
 }
 ENTRYPOINT_LINK_REQUIREMENTS = {
     "AGENTS.md": ("handbook/index.md",),
     "CLAUDE.md": ("handbook/index.md",),
     "be/AGENTS.md": (
         "handbook/index.md",
+        "handbook/domains/backend.md",
         "handbook/architecture/be-boundary-harness.md",
+    ),
+    "be/src/common/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/backend.md",
+        "be/AGENTS.md",
+    ),
+    "docs/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/docs-and-translation.md",
+    ),
+    "fe/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/frontend.md",
+    ),
+    "gensrc/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/generated-and-extensions.md",
+    ),
+    "java-extensions/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/generated-and-extensions.md",
+    ),
+    "test/AGENTS.md": (
+        "handbook/index.md",
+        "handbook/domains/sql-integration.md",
     ),
 }
 PLAN_METADATA_REQUIREMENTS = (
@@ -59,6 +117,24 @@ PLAN_METADATA_REQUIREMENTS = (
     "## Summary",
     "## Acceptance Criteria",
     "## Decision Log",
+)
+DOMAIN_SECTION_REQUIREMENTS = (
+    "## Purpose",
+    "## Entrypoints",
+    "## Commands",
+    "## Guardrails",
+    "## Test and Validation",
+    "## Open Gaps",
+)
+POLICY_SECTION_REQUIREMENTS = (
+    "## Intent",
+    "## Applies To",
+    "## Enforcement",
+    "## Exceptions",
+)
+QUALITY_SCORECARD_REQUIREMENTS = (
+    "## Rating Scale",
+    "## Domain Scores",
 )
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 
@@ -117,6 +193,35 @@ def extract_section_links(path: Path, heading: str, repo_root: Path) -> set[str]
     return links
 
 
+def _check_required_headings(path: Path, requirements: tuple[str, ...], repo_root: Path) -> list[str]:
+    text = path.read_text()
+    errors: list[str] = []
+    for requirement in requirements:
+        if requirement not in text:
+            errors.append(f"{_repo_relative(path, repo_root)} is missing required section heading: {requirement}")
+    return errors
+
+
+def _collect_unindexed_pages(
+    index_path: Path,
+    pages_dir: Path,
+    section_heading: str,
+    page_label: str,
+    repo_root: Path,
+) -> list[str]:
+    errors: list[str] = []
+    indexed_links = extract_section_links(index_path, section_heading, repo_root)
+    pages = sorted(path for path in pages_dir.glob("*.md") if path.name != "index.md")
+    if not indexed_links and pages:
+        errors.append(f"{_repo_relative(index_path, repo_root)} must list {page_label} pages under ## {section_heading}")
+
+    for page_path in pages:
+        rel_path = _repo_relative(page_path, repo_root)
+        if rel_path not in indexed_links:
+            errors.append(f"Unindexed {page_label} page: {rel_path}")
+    return errors
+
+
 def collect_errors(repo_root: Path) -> list[str]:
     repo_root = repo_root.resolve()
     errors: list[str] = []
@@ -143,6 +248,60 @@ def collect_errors(repo_root: Path) -> list[str]:
         for target in required_targets:
             if target not in links:
                 errors.append(f"{source} must link to {target}")
+
+    domains_index_path = repo_root / "handbook" / "domains" / "index.md"
+    if domains_index_path.exists():
+        errors.extend(
+            _collect_unindexed_pages(
+                domains_index_path,
+                repo_root / "handbook" / "domains",
+                "Domains",
+                "domain",
+                repo_root,
+            )
+        )
+        for domain_path in sorted((repo_root / "handbook" / "domains").glob("*.md")):
+            if domain_path.name == "index.md":
+                continue
+            errors.extend(
+                _check_required_headings(
+                    domain_path,
+                    DOMAIN_SECTION_REQUIREMENTS,
+                    repo_root,
+                )
+            )
+
+    policies_index_path = repo_root / "handbook" / "policies" / "index.md"
+    if policies_index_path.exists():
+        errors.extend(
+            _collect_unindexed_pages(
+                policies_index_path,
+                repo_root / "handbook" / "policies",
+                "Policies",
+                "policy",
+                repo_root,
+            )
+        )
+        for policy_path in sorted((repo_root / "handbook" / "policies").glob("*.md")):
+            if policy_path.name == "index.md":
+                continue
+            errors.extend(
+                _check_required_headings(
+                    policy_path,
+                    POLICY_SECTION_REQUIREMENTS,
+                    repo_root,
+                )
+            )
+
+    scorecard_path = repo_root / "handbook" / "quality" / "scorecard.md"
+    if scorecard_path.exists():
+        errors.extend(
+            _check_required_headings(
+                scorecard_path,
+                QUALITY_SCORECARD_REQUIREMENTS,
+                repo_root,
+            )
+        )
 
     plans_index_path = repo_root / "handbook" / "plans" / "index.md"
     if plans_index_path.exists():

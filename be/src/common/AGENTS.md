@@ -1,6 +1,6 @@
 # AGENTS.md - be/src/common
 
-`be/src/common` follows the BE harness in [`be/AGENTS.md`](../../AGENTS.md) and adds the config-forward-header workflow from [`README.md`](./README.md).
+`be/src/common` follows the repo handbook in [`handbook/index.md`](../../../handbook/index.md), the backend domain map in [`handbook/domains/backend.md`](../../../handbook/domains/backend.md), and the BE harness in [`be/AGENTS.md`](../../AGENTS.md). It adds the config-forward-header workflow from [`README.md`](./README.md).
 
 ## Local Rules
 

@@ -6,9 +6,9 @@ Agent entrypoint for this repository. Start with the nearest nested `AGENTS.md`;
 
 1. Read [`handbook/index.md`](./handbook/index.md) for repo topology, architecture entrypoints, and active engineering plans.
 2. Read the nearest nested `AGENTS.md`.
-3. For Backend work, read [`be/AGENTS.md`](./be/AGENTS.md).
-4. For Frontend work, read [`fe/AGENTS.md`](./fe/AGENTS.md).
-5. For SQL tests, docs, generated code, or Java extensions, read the matching nested guide.
+3. For Backend work, read [`handbook/domains/backend.md`](./handbook/domains/backend.md) and [`be/AGENTS.md`](./be/AGENTS.md).
+4. For Frontend work, read [`handbook/domains/frontend.md`](./handbook/domains/frontend.md) and [`fe/AGENTS.md`](./fe/AGENTS.md).
+5. For SQL tests, docs, generated code, Java extensions, or CI/tooling, read the matching `handbook/domains/` page before the nested guide.
 
 ## Repo Map
 
@@ -51,6 +51,9 @@ cd test && python3 run.py -v
 ## Nested Guides
 
 - [`handbook/index.md`](./handbook/index.md)
+- [`handbook/domains/index.md`](./handbook/domains/index.md)
+- [`handbook/policies/index.md`](./handbook/policies/index.md)
+- [`handbook/quality/index.md`](./handbook/quality/index.md)
 - [`be/AGENTS.md`](./be/AGENTS.md)
 - [`fe/AGENTS.md`](./fe/AGENTS.md)
 - [`docs/AGENTS.md`](./docs/AGENTS.md)
