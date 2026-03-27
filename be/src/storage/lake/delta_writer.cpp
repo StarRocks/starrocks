@@ -924,10 +924,16 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
 
     if (config::enable_tablet_write_log) {
         int64_t finish_time = UnixMillis();
+        int32_t sst_output_files = static_cast<int32_t>(_tablet_writer->ssts().size());
+        int64_t sst_output_bytes = 0;
+        for (const auto& sst : _tablet_writer->ssts()) {
+            sst_output_bytes += sst.size.value_or(0);
+        }
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time);
+                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                sst_output_files, sst_output_bytes);
     }
 
     return txn_log;

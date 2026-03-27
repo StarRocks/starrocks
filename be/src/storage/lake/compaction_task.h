@@ -21,6 +21,7 @@
 #include "column/column_access_path.h"
 #include "common/status.h"
 #include "compaction_task_context.h"
+#include "fs/fs.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
@@ -55,6 +56,27 @@ public:
 
     bool should_enable_pk_index_eager_build(int64_t input_bytes);
 
+    // SST stats result from compute_sst_stats
+    struct SstStats {
+        int32_t input_files = 0;
+        int64_t input_bytes = 0;
+        int32_t output_files = 0;
+        int64_t output_bytes = 0;
+    };
+
+    // Compute SST stats from writer's sst list and txn_log's compaction operation.
+    // This is a static method for testability.
+    static SstStats compute_sst_stats(const std::vector<FileInfo>& writer_ssts, const TxnLogPB* txn_log);
+
+    // Collect SST stats from eager build (writer) and major compaction (txn_log),
+    // to be used when recording tablet write log.
+    void collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log);
+
+    int32_t sst_input_files() const { return _sst_input_files; }
+    int64_t sst_input_bytes() const { return _sst_input_bytes; }
+    int32_t sst_output_files() const { return _sst_output_files; }
+    int64_t sst_output_bytes() const { return _sst_output_bytes; }
+
 protected:
     int64_t _txn_id;
     VersionedTablet _tablet;
@@ -64,6 +86,12 @@ protected:
     std::shared_ptr<const TabletSchema> _tablet_schema;
     // for flat json used
     std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+
+    // PK index SST stats collected from eager build and major compaction
+    int32_t _sst_input_files = 0;
+    int64_t _sst_input_bytes = 0;
+    int32_t _sst_output_files = 0;
+    int64_t _sst_output_bytes = 0;
 };
 
 } // namespace starrocks::lake

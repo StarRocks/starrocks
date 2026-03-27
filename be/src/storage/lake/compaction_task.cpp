@@ -123,6 +123,41 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
     return Status::OK();
 }
 
+CompactionTask::SstStats CompactionTask::compute_sst_stats(const std::vector<FileInfo>& writer_ssts,
+                                                           const TxnLogPB* txn_log) {
+    SstStats stats;
+    // SST output from eager PK index build
+    stats.output_files = static_cast<int32_t>(writer_ssts.size());
+    for (const auto& sst : writer_ssts) {
+        stats.output_bytes += sst.size.value_or(0);
+    }
+    // SST input/output from PK index major compaction
+    if (txn_log != nullptr && txn_log->has_op_compaction()) {
+        const auto& op = txn_log->op_compaction();
+        stats.input_files = op.input_sstables_size();
+        for (const auto& sst : op.input_sstables()) {
+            stats.input_bytes += sst.filesize();
+        }
+        for (const auto& sst : op.output_sstables()) {
+            stats.output_files += 1;
+            stats.output_bytes += sst.filesize();
+        }
+        if (op.has_output_sstable()) {
+            stats.output_files += 1;
+            stats.output_bytes += op.output_sstable().filesize();
+        }
+    }
+    return stats;
+}
+
+void CompactionTask::collect_sst_stats(const TabletWriter* writer, const TxnLogPB* txn_log) {
+    auto stats = compute_sst_stats(writer->ssts(), txn_log);
+    _sst_input_files = stats.input_files;
+    _sst_input_bytes = stats.input_bytes;
+    _sst_output_files = stats.output_files;
+    _sst_output_bytes = stats.output_bytes;
+}
+
 bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {
     if (_tablet.get_schema()->keys_type() != KeysType::PRIMARY_KEYS) {
         return false;

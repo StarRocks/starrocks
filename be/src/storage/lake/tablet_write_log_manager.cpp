@@ -32,7 +32,8 @@ TabletWriteLogManager* TabletWriteLogManager::instance() {
 void TabletWriteLogManager::add_load_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
                                          int64_t partition_id, int64_t input_rows, int64_t input_bytes,
                                          int64_t output_rows, int64_t output_bytes, int32_t output_segments,
-                                         const std::string& label, int64_t begin_time, int64_t finish_time) {
+                                         const std::string& label, int64_t begin_time, int64_t finish_time,
+                                         int32_t sst_output_files, int64_t sst_output_bytes) {
     TabletWriteLogEntry entry;
     entry.begin_time = begin_time;
     entry.finish_time = finish_time;
@@ -51,6 +52,28 @@ void TabletWriteLogManager::add_load_log(int64_t backend_id, int64_t txn_id, int
     entry.label = label;
     entry.compaction_score = 0;
     entry.compaction_type = "";
+    entry.sst_input_files = 0;
+    entry.sst_input_bytes = 0;
+    entry.sst_output_files = sst_output_files;
+    entry.sst_output_bytes = sst_output_bytes;
+
+    _add_log(std::move(entry));
+}
+
+void TabletWriteLogManager::add_publish_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
+                                            int64_t partition_id, int64_t begin_time, int64_t finish_time,
+                                            int32_t sst_output_files, int64_t sst_output_bytes) {
+    TabletWriteLogEntry entry;
+    entry.begin_time = begin_time;
+    entry.finish_time = finish_time;
+    entry.backend_id = backend_id;
+    entry.txn_id = txn_id;
+    entry.tablet_id = tablet_id;
+    entry.table_id = table_id;
+    entry.partition_id = partition_id;
+    entry.log_type = LogType::PUBLISH;
+    entry.sst_output_files = sst_output_files;
+    entry.sst_output_bytes = sst_output_bytes;
 
     _add_log(std::move(entry));
 }
@@ -60,7 +83,8 @@ void TabletWriteLogManager::add_compaction_log(int64_t backend_id, int64_t txn_i
                                                int64_t output_rows, int64_t output_bytes, int32_t input_segments,
                                                int32_t output_segments, int64_t compaction_score,
                                                const std::string& compaction_type, int64_t begin_time,
-                                               int64_t finish_time) {
+                                               int64_t finish_time, int32_t sst_input_files, int64_t sst_input_bytes,
+                                               int32_t sst_output_files, int64_t sst_output_bytes) {
     TabletWriteLogEntry entry;
     entry.begin_time = begin_time;
     entry.finish_time = finish_time;
@@ -79,6 +103,10 @@ void TabletWriteLogManager::add_compaction_log(int64_t backend_id, int64_t txn_i
     entry.label = "";
     entry.compaction_score = compaction_score;
     entry.compaction_type = compaction_type;
+    entry.sst_input_files = sst_input_files;
+    entry.sst_input_bytes = sst_input_bytes;
+    entry.sst_output_files = sst_output_files;
+    entry.sst_output_bytes = sst_output_bytes;
 
     _add_log(std::move(entry));
 }

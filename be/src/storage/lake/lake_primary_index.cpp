@@ -363,6 +363,24 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
     return Status::OK();
 }
 
+void LakePrimaryIndex::reset_publish_sst_stats() {
+    if (!_enable_persistent_index) return;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (idx != nullptr) idx->reset_publish_sst_stats();
+}
+
+int32_t LakePrimaryIndex::publish_sst_flush_count() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_count() : 0;
+}
+
+int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_bytes() : 0;
+}
+
 // Query index for existing rows matching primary keys from all segments.
 // This is used during read-only publish when index files already exist.
 //
