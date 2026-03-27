@@ -305,6 +305,85 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
             self.assertEqual("SamplePB.payload", issues[0].container)
 
+    def test_changed_mode_preserves_rename_source_paths(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "old.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      optional string name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            self._run_git(repo, "mv", "gensrc/proto/old.proto", "gensrc/proto/new.proto")
+            renamed_path = repo / "gensrc" / "proto" / "new.proto"
+            renamed_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      optional string name = 2;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_deleted"], [issue.rule for issue in issues])
+            self.assertEqual("gensrc/proto/old.proto", issues[0].path)
+
+    def test_changed_mode_parses_multiline_thrift_fields(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional map<
+                          string,
+                          string
+                      > properties
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional map<
+                          string,
+                          i64
+                      > properties
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_type_changed"], [issue.rule for issue in issues])
+            self.assertEqual("TSample", issues[0].container)
+            self.assertEqual(1, issues[0].field_number)
+
     def test_changed_mode_allows_same_number_rename(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

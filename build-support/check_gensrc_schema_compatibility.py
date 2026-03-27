@@ -454,13 +454,31 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
             kind, name = container_match.groups()
             containers[name] = ContainerDecl(name=name, kind=kind)
             index += 1
+            current_field: list[str] = []
+            current_start = index + 1
             while index < len(lines):
                 body_line = lines[index].strip()
                 if body_line == "}":
                     break
-                field = _parse_thrift_field_line(path, name, kind, lines[index], index + 1)
-                if field is not None:
-                    fields[name][field.number] = field
+                if not body_line:
+                    index += 1
+                    continue
+                if re.match(r"^\d+\s*:", body_line) and current_field:
+                    field = _parse_thrift_field_line(path, name, kind, " ".join(current_field), current_start)
+                    if field is not None:
+                        fields[name][field.number] = field
+                    current_field = [body_line]
+                    current_start = index + 1
+                else:
+                    if not current_field:
+                        current_start = index + 1
+                    current_field.append(body_line)
+                candidate = " ".join(current_field)
+                if _has_balanced_type_delimiters(candidate):
+                    field = _parse_thrift_field_line(path, name, kind, candidate, current_start)
+                    if field is not None:
+                        fields[name][field.number] = field
+                        current_field = []
                 index += 1
             index += 1
             continue
@@ -813,6 +831,21 @@ def _split_top_level(text: str, delimiter: str) -> list[str]:
     return items
 
 
+def _has_balanced_type_delimiters(text: str) -> bool:
+    angle_depth = 0
+    paren_depth = 0
+    for char in text:
+        if char == "<":
+            angle_depth += 1
+        elif char == ">" and angle_depth > 0:
+            angle_depth -= 1
+        elif char == "(":
+            paren_depth += 1
+        elif char == ")" and paren_depth > 0:
+            paren_depth -= 1
+    return angle_depth == 0 and paren_depth == 0
+
+
 def _is_schema_path(path: str) -> bool:
     if not any(path.startswith(prefix) for prefix in SCHEMA_PREFIXES):
         return False
@@ -832,13 +865,24 @@ def _all_schema_paths(repo_root: Path, base: str) -> set[str]:
 
 def _git_changed_paths(repo_root: Path, base: str) -> set[str]:
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...HEAD"],
+        ["git", "diff", "--name-status", "--find-renames", f"{base}...HEAD"],
         cwd=repo_root,
         check=True,
         capture_output=True,
         text=True,
     )
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    changed_paths: set[str] = set()
+    for raw_line in result.stdout.splitlines():
+        if not raw_line.strip():
+            continue
+        parts = raw_line.split("\t")
+        status = parts[0]
+        if status.startswith(("R", "C")) and len(parts) >= 3:
+            paths = parts[1:3]
+        else:
+            paths = parts[1:]
+        changed_paths.update(path.strip() for path in paths if path.strip())
+    return changed_paths
 
 
 def _git_list_paths(repo_root: Path, ref: str, *prefixes: str) -> set[str]:
