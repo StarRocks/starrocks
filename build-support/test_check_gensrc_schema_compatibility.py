@@ -144,6 +144,49 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("gensrc/thrift/service.thrift", issues[0].path)
             self.assertIn("omit field ids", issues[0].detail)
 
+    def test_changed_mode_checks_supported_fields_when_unsupported_syntax_is_unchanged(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "service.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    service SampleService {
+                      void ping(string request)
+                    }
+
+                    struct TSample {
+                      1: optional string existing_name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    service SampleService {
+                      void ping(string request)
+                    }
+
+                    struct TSample {
+                      1: optional string existing_name
+                      2: required string new_name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["new_field_must_be_optional"], [issue.rule for issue in issues])
+            self.assertEqual("TSample", issues[0].container)
+            self.assertEqual(2, issues[0].field_number)
+
     def test_changed_mode_allows_same_number_rename(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -445,6 +488,7 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
 
     def test_ci_pipeline_tracks_schema_checker_inputs(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+        workflow_section = workflow_text.split("  schema-compatibility:\n", 1)[1].split("\n  thirdparty-info:\n", 1)[0]
 
         self.assertIn("name: Schema Compatibility", workflow_text)
         self.assertIn("- 'gensrc/proto/**'", workflow_text)
@@ -452,11 +496,14 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
         self.assertIn("- 'build-support/check_gensrc_schema_compatibility.py'", workflow_text)
         self.assertIn("- 'build-support/test_check_gensrc_schema_compatibility.py'", workflow_text)
         self.assertIn("- 'build-support/schema_compatibility_waivers.json'", workflow_text)
+        self.assertIn("git fetch origin ${{ github.base_ref }}\n", workflow_section)
+        self.assertNotIn("git fetch origin ${{ github.base_ref }} --depth=1", workflow_section)
 
     def test_ci_pipeline_branch_tracks_schema_checker_inputs(self) -> None:
         workflow_text = (
             Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline-branch.yml"
         ).read_text()
+        workflow_section = workflow_text.split("  schema-compatibility:\n", 1)[1].split("\n  be-checker:\n", 1)[0]
 
         self.assertIn("name: Schema Compatibility", workflow_text)
         self.assertIn("- 'gensrc/proto/**'", workflow_text)
@@ -464,6 +511,8 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
         self.assertIn("- 'build-support/check_gensrc_schema_compatibility.py'", workflow_text)
         self.assertIn("- 'build-support/test_check_gensrc_schema_compatibility.py'", workflow_text)
         self.assertIn("- 'build-support/schema_compatibility_waivers.json'", workflow_text)
+        self.assertIn("git fetch origin ${{ github.base_ref }}\n", workflow_section)
+        self.assertNotIn("git fetch origin ${{ github.base_ref }} --depth=1", workflow_section)
 
     def _init_repo(self, repo: Path) -> None:
         (repo / "gensrc" / "proto").mkdir(parents=True)

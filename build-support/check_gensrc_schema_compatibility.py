@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -70,11 +70,23 @@ class ContainerDecl:
     syntax: str | None = None
 
 
+@dataclass(frozen=True)
+class UnsupportedConstruct:
+    kind: str
+    scope: str
+    detail: str
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.kind, self.scope)
+
+
 @dataclass
 class ParsedSchema:
     path: str
     containers: dict[str, ContainerDecl]
     fields: dict[str, dict[int, FieldDecl]]
+    unsupported: list[UnsupportedConstruct] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -102,9 +114,11 @@ class Violation:
 
 
 class UnsupportedSyntaxError(RuntimeError):
-    def __init__(self, path: str, detail: str):
+    def __init__(self, path: str, detail: str, kind: str, scope: str):
         self.path = path
         self.detail = detail
+        self.kind = kind
+        self.scope = scope
         super().__init__(detail)
 
 
@@ -235,7 +249,7 @@ def compare_schema_path(repo_root: Path, repo_path: str, base: str | None) -> li
         return [
             Violation(
                 path=repo_path,
-                container="",
+                container=head_error.scope if head_error is not None else base_error.scope,
                 field_number=None,
                 field_name="",
                 rule="unsupported_syntax",
@@ -244,7 +258,44 @@ def compare_schema_path(repo_root: Path, repo_path: str, base: str | None) -> li
             )
         ]
 
+    unsupported_issues = _compare_unsupported_constructs(repo_path, base_schema, head_schema)
+    if unsupported_issues:
+        return unsupported_issues
+
     return compare_schemas(repo_path, base_schema, head_schema)
+
+
+def _compare_unsupported_constructs(
+    repo_path: str,
+    base_schema: ParsedSchema | None,
+    head_schema: ParsedSchema | None,
+) -> list[Violation]:
+    base_schema = base_schema or ParsedSchema(repo_path, {}, {})
+    head_schema = head_schema or ParsedSchema(repo_path, {}, {})
+
+    base_by_key = {item.key: item for item in base_schema.unsupported}
+    head_by_key = {item.key: item for item in head_schema.unsupported}
+
+    issues: list[Violation] = []
+    for key in sorted(set(base_by_key) | set(head_by_key)):
+        base_item = base_by_key.get(key)
+        head_item = head_by_key.get(key)
+        if base_item is not None and head_item is not None and base_item.detail == head_item.detail:
+            continue
+        item = head_item or base_item
+        issues.append(
+            Violation(
+                path=repo_path,
+                container=item.scope,
+                field_number=None,
+                field_name="",
+                rule="unsupported_syntax",
+                detail=item.detail,
+                remediation="Avoid unsupported schema constructs in v1 of the compatibility harness.",
+            )
+        )
+
+    return issues
 
 
 def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schema: ParsedSchema | None) -> list[Violation]:
@@ -359,6 +410,7 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
     lines = _strip_comments(text).splitlines()
     containers: dict[str, ContainerDecl] = {}
     fields: dict[str, dict[int, FieldDecl]] = defaultdict(dict)
+    unsupported: list[UnsupportedConstruct] = []
 
     index = 0
     while index < len(lines):
@@ -366,8 +418,23 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
         if not line:
             index += 1
             continue
-        if re.match(r"union\s+\w+\s*\{", line):
-            raise UnsupportedSyntaxError(path, "thrift union parsing is not supported by the schema compatibility harness")
+        union_match = re.match(r"union\s+([A-Za-z_]\w*)\s*\{", line)
+        if union_match:
+            union_name = union_match.group(1)
+            unsupported.append(
+                UnsupportedConstruct(
+                    kind="thrift_union",
+                    scope=union_name,
+                    detail="thrift union parsing is not supported by the schema compatibility harness",
+                )
+            )
+            index += 1
+            while index < len(lines):
+                if lines[index].strip() == "}":
+                    break
+                index += 1
+            index += 1
+            continue
 
         container_match = re.match(r"(struct|exception)\s+([A-Za-z_]\w*)\s*\{", line)
         if container_match:
@@ -405,7 +472,12 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                 balance += stripped.count("(") - stripped.count(")")
                 if balance <= 0 and "(" in " ".join(current):
                     signature = " ".join(current)
-                    _parse_thrift_method_signature(path, service_name, signature, current_start, containers, fields)
+                    try:
+                        _parse_thrift_method_signature(path, service_name, signature, current_start, containers, fields)
+                    except UnsupportedSyntaxError as error:
+                        unsupported.append(
+                            UnsupportedConstruct(kind=error.kind, scope=error.scope, detail=error.detail)
+                        )
                     current = []
                     balance = 0
                 index += 1
@@ -414,7 +486,7 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
 
         index += 1
 
-    return ParsedSchema(path=path, containers=containers, fields=fields)
+    return ParsedSchema(path=path, containers=containers, fields=fields, unsupported=unsupported)
 
 
 def parse_proto_schema(path: str, text: str) -> ParsedSchema:
@@ -423,6 +495,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
     syntax = None
     containers: dict[str, ContainerDecl] = {}
     fields: dict[str, dict[int, FieldDecl]] = defaultdict(dict)
+    unsupported: list[UnsupportedConstruct] = []
     block_stack: list[tuple[str, str]] = []
     message_stack: list[str] = []
 
@@ -443,9 +516,6 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
                 syntax = syntax_match.group(1)
                 continue
 
-        if re.match(r"oneof\s+[A-Za-z_]\w*\s*\{", line):
-            raise UnsupportedSyntaxError(path, "proto oneof parsing is not supported by the schema compatibility harness")
-
         message_match = re.match(r"message\s+([A-Za-z_]\w*)\s*\{", line)
         if message_match:
             name = message_match.group(1)
@@ -453,6 +523,21 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
             containers[full_name] = ContainerDecl(name=full_name, kind="message", syntax=syntax)
             block_stack.append(("message", full_name))
             message_stack.append(full_name)
+            continue
+
+        oneof_match = re.match(r"oneof\s+([A-Za-z_]\w*)\s*\{", line)
+        if oneof_match:
+            current_message = message_stack[-1] if message_stack else ""
+            oneof_name = oneof_match.group(1)
+            scope = f"{current_message}.{oneof_name}" if current_message else oneof_name
+            unsupported.append(
+                UnsupportedConstruct(
+                    kind="proto_oneof",
+                    scope=scope,
+                    detail="proto oneof parsing is not supported by the schema compatibility harness",
+                )
+            )
+            block_stack.append(("oneof", scope))
             continue
 
         enum_match = re.match(r"enum\s+([A-Za-z_]\w*)\s*\{", line)
@@ -473,7 +558,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
                 if kind == "message" and message_stack:
                     message_stack.pop()
 
-    return ParsedSchema(path=path, containers=containers, fields=fields)
+    return ParsedSchema(path=path, containers=containers, fields=fields, unsupported=unsupported)
 
 
 def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw_line: str, line_number: int) -> FieldDecl | None:
@@ -554,11 +639,15 @@ def _parse_thrift_arguments(
                 path,
                 f"thrift service arguments that omit field ids are not supported by the schema compatibility harness: "
                 f"{container} line {line_number}: {stripped}",
+                kind="thrift_service_arguments",
+                scope=container,
             )
         raise UnsupportedSyntaxError(
             path,
             f"unsupported thrift service argument syntax in the schema compatibility harness: "
             f"{container} line {line_number}: {stripped}",
+            kind="thrift_service_arguments",
+            scope=container,
         )
     return parsed
 

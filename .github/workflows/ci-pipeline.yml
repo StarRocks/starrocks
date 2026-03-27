@@ -456,7 +456,7 @@ jobs:
         if: steps.path-filter.outputs.schema == 'true'
         id: merge_base
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin ${{ github.base_ref }}
           echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
 
       - name: Schema Tool Tests
