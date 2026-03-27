@@ -183,7 +183,7 @@ public class CreateFunctionAnalyzer {
             }
             checksum = Hex.encodeHexString(digest.digest());
         } catch (Exception e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot compute object's checksum", e);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "cannot compute object's checksum " + e.getMessage());
         }
 
         if (md5sum != null && !md5sum.equalsIgnoreCase(checksum)) {
