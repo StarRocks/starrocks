@@ -83,6 +83,10 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
 
     public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
             throws StarRocksException {
+        if (!Config.tablet_reshard_enable_tablet_merge) {
+            throw new StarRocksException("Tablet merge is disabled. " +
+                    "Set tablet_reshard_enable_tablet_merge=true to enable it.");
+        }
         TabletReshardJob job = new MergeTabletJobFactory(db, table, mergeTabletClause).createTabletReshardJob();
         addTabletReshardJob(job);
     }
