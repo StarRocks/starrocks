@@ -30,8 +30,8 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     // rename temporary file to target file
     auto ret = rename(tmp_file.c_str(), target_file.c_str());
     if (ret != 0) {
+        (void) remove(tmp_file.c_str());
         auto err = fmt::format("fail to rename file {} to {}", tmp_file, target_file);
-        ;
         LOG(ERROR) << err;
         return Status::InternalError(err);
     }
