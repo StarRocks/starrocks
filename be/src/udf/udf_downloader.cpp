@@ -95,7 +95,7 @@ class S3UDFDownLoader : public UDFDownLoader {
 public:
     Status do_download(std::string& dst_path, const std::string& remote_path, const std::string& md5sum,
                        const FSOptions& options) override {
-        LOG(INFO) << fmt::format("Downloading udf file from {}", dst_path);
+        LOG(INFO) << fmt::format("Downloading udf file from {}", remote_path);
         ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(remote_path, options));
         if (!fs) {
             LOG(ERROR) << fmt::format("No matching filesystem for {}", remote_path);
