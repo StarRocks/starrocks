@@ -153,7 +153,7 @@ public class ExpressionStatisticCalculator {
                 double inputNullFraction = inputStat.isUnknown() ? 0.0 : inputStat.getNullsFraction();
                 // Calculate amount of rows satisfying / not satisfying the predicate
                 long nullRows = Math.round(rowCount * inputNullFraction);
-                long nonNullRows = Math.round(rowCount * (1.0 - inputNullFraction));
+                long nonNullRows = Math.round(rowCount) - nullRows;
 
                 long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
                 long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
@@ -168,15 +168,21 @@ public class ExpressionStatisticCalculator {
                 }
             }
 
-            final var histogram = new Histogram(Collections.emptyList(), mcvs);
-            return ColumnStatistic.builder() //
+            final var builder = ColumnStatistic.builder() //
                     .setMinValue(0) //
                     .setMaxValue(1) //
                     .setNullsFraction(0) //
-                    .setAverageRowSize(operator.getType().getTypeSize()) //
-                    .setDistinctValuesCount(mcvs.size() < 2 ? 1 : 2) //
-                    .setHistogram(histogram) //
-                    .build();
+                    .setAverageRowSize(operator.getType().getTypeSize());
+
+            if (mcvs.isEmpty()) {
+                // True and false
+                builder.setDistinctValuesCount(2);
+            } else {
+                builder.setDistinctValuesCount(mcvs.size());
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
         }
 
         @Override
