@@ -42,8 +42,6 @@ under the License.
         <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
-        <starrocks.thrift.expected.version>0.22.</starrocks.thrift.expected.version>
-        <starrocks.thrift.generated.sources>${basedir}/target/generated-sources/thrift</starrocks.thrift.generated.sources>
         
         <!-- async-profiler in UT -->
         <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
@@ -1130,38 +1128,6 @@ under the License.
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.8</version>
                 <executions>
-                    <execution>
-                        <id>prepare-thrift-sources</id>
-                        <phase>validate</phase>
-                        <configuration>
-                            <target>
-                                <delete dir="${starrocks.thrift.generated.sources}"/>
-                                <exec executable="${starrocks.thrift}"
-                                      failonerror="true"
-                                      outputproperty="starrocks.thrift.version.stdout"
-                                      errorproperty="starrocks.thrift.version.stderr">
-                                    <arg value="-version"/>
-                                </exec>
-                                <condition property="starrocks.thrift.version.valid">
-                                    <or>
-                                        <contains string="${starrocks.thrift.version.stdout}"
-                                                  substring="${starrocks.thrift.expected.version}"/>
-                                        <contains string="${starrocks.thrift.version.stderr}"
-                                                  substring="${starrocks.thrift.expected.version}"/>
-                                    </or>
-                                </condition>
-                                <echo message="Using FE thrift compiler: ${starrocks.thrift}"/>
-                                <echo message="FE thrift version stdout: ${starrocks.thrift.version.stdout}"/>
-                                <echo message="FE thrift version stderr: ${starrocks.thrift.version.stderr}"/>
-                                <fail unless="starrocks.thrift.version.valid">
-                                    FE thrift compiler must be ${starrocks.thrift.expected.version}x, but ${starrocks.thrift} reported stdout='${starrocks.thrift.version.stdout}' stderr='${starrocks.thrift.version.stderr}'
-                                </fail>
-                            </target>
-                        </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
                     <execution>
                         <id>generate-sources</id>
                         <phase>generate-sources</phase>
