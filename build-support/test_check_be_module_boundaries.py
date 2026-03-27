@@ -201,6 +201,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 manifest=manifest,
                 cmake_state=cmake_state,
                 changed_paths={"be/src/column/hash_set.h"},
+                repo_root=repo,
             )
 
             self.assertEqual({"columncore"}, selected)
@@ -216,9 +217,40 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 manifest=manifest,
                 cmake_state=cmake_state,
                 changed_paths={"be/src/io/CMakeLists.txt", "be/src/column/hash_set.h"},
+                repo_root=repo,
             )
 
             self.assertEqual({"columncore", "iocore"}, selected)
+
+    def test_changed_paths_include_test_target_definition_cmakelists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            selected = MODULE.select_modules_for_changed_paths(
+                manifest=manifest,
+                cmake_state=cmake_state,
+                changed_paths={"be/test/column/CMakeLists.txt", "be/src/io/io.cpp"},
+                repo_root=repo,
+            )
+
+            self.assertEqual({"columncore", "iocore"}, selected)
+
+    def test_collect_owned_files_expands_recursive_manifest_globs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "src" / "column" / "header_only_column.h").write_text('#include "runtime/exec_env.h"\n')
+
+            manifest = MODULE.load_manifest(repo / "be" / "module_boundary_manifest.json")
+            cmake_state = MODULE.parse_cmake_state(repo)
+            columncore = next(module for module in manifest["modules"] if module.id == "columncore")
+
+            owned_files = MODULE.collect_owned_files(columncore, cmake_state, repo)
+
+            self.assertIn("be/src/column/header_only_column.h", owned_files)
 
     def _write_sample_repo(self, repo: Path) -> None:
         (repo / "build-support").mkdir(parents=True)
@@ -236,7 +268,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                             "id": "columncore",
                             "doc_label": "ColumnCore",
                             "owned_targets": ["ColumnCore"],
-                            "additional_owned_globs": ["be/src/column/hash_set.h"],
+                            "owned_globs": ["be/src/column/**"],
                             "allowed_include_prefixes": [
                                 "column/",
                                 "types/",

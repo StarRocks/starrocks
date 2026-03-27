@@ -167,6 +167,7 @@ def parse_cmake_state(repo_root: Path) -> CMakeState:
     raw_test_links: dict[str, list[str]] = {}
     cmake_files = sorted(repo_root.glob("be/src/**/CMakeLists.txt")) + sorted(repo_root.glob("be/test/**/CMakeLists.txt"))
     for cmake_path in cmake_files:
+        definition_path = cmake_path.relative_to(repo_root).as_posix()
         variables: dict[str, list[str]] = {}
         for command_name, tokens in _iter_cmake_commands(cmake_path):
             if not tokens:
@@ -183,13 +184,14 @@ def parse_cmake_state(repo_root: Path) -> CMakeState:
                 target_name = tokens[0]
                 source_tokens = _expand_tokens(tokens[1:], variables)
                 target_sources[target_name] = _resolve_source_tokens(source_tokens, cmake_path.parent, repo_root)
-                target_definition_paths[target_name] = cmake_path.relative_to(repo_root).as_posix()
+                target_definition_paths[target_name] = definition_path
                 continue
             if lower_name == "target_link_libraries":
                 target_name = tokens[0]
                 link_tokens = _expand_tokens([token for token in tokens[1:] if token not in LINK_SCOPE_KEYWORDS], variables)
                 if "be/test/" in cmake_path.as_posix():
                     raw_test_links[target_name] = link_tokens
+                    target_definition_paths.setdefault(target_name, definition_path)
                 else:
                     raw_target_links[target_name] = link_tokens
 
@@ -233,7 +235,7 @@ def select_modules_for_changed_paths(
             continue
         if any(
             cmake_state.target_definition_paths.get(target_name) in changed_paths
-            for target_name in module.owned_targets
+            for target_name in module.owned_targets + module.allowed_test_targets
         ):
             selected.add(module.id)
             continue
@@ -295,17 +297,15 @@ def collect_owned_files(module: ModuleSpec, cmake_state: CMakeState, repo_root: 
             if path.is_file() and path.suffix in CODE_EXTENSIONS:
                 owned.add(path.relative_to(repo_root).as_posix())
     for glob in module.owned_globs + module.additional_owned_globs:
-        for path in repo_root.glob(glob):
-            if path.is_file():
-                owned.add(path.relative_to(repo_root).as_posix())
+        for path in _iter_manifest_glob_files(repo_root, glob):
+            owned.add(path.relative_to(repo_root).as_posix())
     for target_name in module.owned_targets:
         for source in cmake_state.target_sources.get(target_name, []):
             owned.add(source)
             owned.update(_companion_headers(repo_root, Path(source)))
     for glob in module.excluded_globs:
-        for path in repo_root.glob(glob):
-            if path.is_file():
-                owned.discard(path.relative_to(repo_root).as_posix())
+        for path in _iter_manifest_glob_files(repo_root, glob):
+            owned.discard(path.relative_to(repo_root).as_posix())
     return {path for path in owned if Path(path).suffix in CODE_EXTENSIONS}
 
 
@@ -479,6 +479,16 @@ def _resolve_source_tokens(tokens: list[str], base_dir: Path, repo_root: Path) -
         except ValueError:
             continue
     return resolved
+
+
+def _iter_manifest_glob_files(repo_root: Path, pattern: str) -> Iterable[Path]:
+    if pattern.endswith("/**"):
+        root = repo_root / pattern.removesuffix("/**")
+        if not root.exists():
+            return
+        yield from (path for path in root.rglob("*") if path.is_file())
+        return
+    yield from (path for path in repo_root.glob(pattern) if path.is_file())
 
 
 def _companion_headers(repo_root: Path, source_path: Path) -> set[str]:
