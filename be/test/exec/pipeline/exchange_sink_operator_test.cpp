@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "gutil/casts.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
@@ -28,6 +27,7 @@
 #include "gen_cpp/Partitions_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/data.pb.h"
+#include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
