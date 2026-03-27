@@ -18,6 +18,8 @@
 #include <span>
 #include <vector>
 
+#include "column/buffer.h"
+
 namespace starrocks {
 
 class DecimalV2Value;
@@ -43,9 +45,8 @@ struct ProtobufChunkMeta;
 template <typename T>
 class ColumnAllocator;
 
-// We may change the Buffer implementation in the future.
 template <typename T>
-using Buffer = std::vector<T, ColumnAllocator<T>>;
+using Buffer = util::Buffer<T, 0>;
 
 template <typename T>
 using ImmBuffer = std::span<const T>;
@@ -135,7 +136,7 @@ using SchemaPtr = std::shared_ptr<Schema>;
 using Fields = std::vector<std::shared_ptr<Field>>;
 using FieldPtr = std::shared_ptr<Field>;
 
-using Filter = Buffer<uint8_t>;
+using Filter = std::vector<uint8_t>;
 using FilterPtr = std::shared_ptr<Filter>;
 using FilterData = uint8_t;
 

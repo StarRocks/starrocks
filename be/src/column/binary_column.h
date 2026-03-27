@@ -67,7 +67,7 @@ public:
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
-    using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+    using Bytes = util::Buffer<uint8_t, 16>;
 
     using Container = Buffer<Slice>;
     using ImmContainer = BinaryImmContainer;
