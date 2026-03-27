@@ -39,9 +39,9 @@
 namespace starrocks {
 
 template <class AggFactory, class SourceFactory, class SinkFactory>
-pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                                    pipeline::PipelineBuilderContext* context,
-                                                                    bool per_bucket_optimize) {
+StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                              pipeline::PipelineBuilderContext* context,
+                                                                              bool per_bucket_optimize) {
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
@@ -117,11 +117,12 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     return ops_with_source;
 }
 
-pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     context->has_aggregation = true;
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto& agg_node = _tnode.agg_node;
 
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
@@ -167,9 +168,10 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
 
     OpFactories ops_with_source;
     if (sorted_streaming_aggregate) {
-        ops_with_source =
-                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
-                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false);
+        ASSIGN_OR_RETURN(
+                ops_with_source,
+                (_decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         // disable spill when group by with a small limit
         bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
@@ -178,20 +180,23 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         }
         if (enable_agg_spill && has_group_by_keys) {
             if (runtime_state()->enable_spill_partitionwise_agg()) {
-                ops_with_source =
-                        _decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
-                                               SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
-                                                                                                   context, false);
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseAggregateSourceOperatorFactory,
+                                                SpillablePartitionWiseAggregateSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false)));
             } else {
-                ops_with_source =
-                        _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
-                                               SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context,
-                                                                                              false);
+                ASSIGN_OR_RETURN(
+                        ops_with_source,
+                        (_decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                                                SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context,
+                                                                                               false)));
             }
         } else {
-            ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+            ASSIGN_OR_RETURN(ops_with_source,
+                             (_decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                      AggregateBlockingSinkOperatorFactory>(
-                    ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys);
+                                     ops_with_sink, context, use_per_bucket_optimize && has_group_by_keys)));
         }
     }
 

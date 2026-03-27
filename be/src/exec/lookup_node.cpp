@@ -57,7 +57,7 @@ void LookUpNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories LookUpNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> LookUpNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     FAIL_POINT_TRIGGER_EXECUTE(lookup_prepare_sleep, { sleep(1); });
 
     std::vector<TupleId> tuple_ids;

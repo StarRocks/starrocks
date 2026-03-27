@@ -80,7 +80,7 @@ void ExceptNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     const auto num_operators_generated = _children.size() + 1;
@@ -90,7 +90,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
             std::make_shared<ExceptPartitionContextFactory>(_tuple_id, _children.size() - 1);
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
-    OpFactories ops_with_except_build_sink = child(0)->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_except_build_sink, child(0)->decompose_to_pipeline(context));
 
     if (_local_partition_by_exprs.empty()) {
         ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
@@ -110,7 +110,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
 
     // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto ops_with_except_probe_sink, child(i)->decompose_to_pipeline(context));
         if (_local_partition_by_exprs.empty()) {
             ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
                     runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);

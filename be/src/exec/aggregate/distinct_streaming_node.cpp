@@ -23,10 +23,11 @@
 
 namespace starrocks {
 
-pipeline::OpFactories DistinctStreamingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> DistinctStreamingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     size_t degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
     auto* upstream_source_op = context->source_operator(ops_with_sink);

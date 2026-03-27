@@ -133,12 +133,11 @@ StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
 }
 
 template <class BuildFactory, class ProbeFactory>
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> CrossJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
-    OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto right_ops, _children[1]->decompose_to_pipeline(context));
 
     // define a runtime filter holder
     context->fragment_context()->runtime_filter_hub()->add_holder(_id);
@@ -172,7 +171,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
-    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto left_ops, _children[0]->decompose_to_pipeline(context));
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<ProbeFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
@@ -203,7 +202,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
     return left_ops;
 }
 
-pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_nl_join_spill() && _join_op == TJoinOp::CROSS_JOIN) {

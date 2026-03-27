@@ -114,6 +114,7 @@ public:
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }
 
     bool contains(int32_t plan_node_id) { return _plan_node_ids.contains(plan_node_id); }
+    const std::unordered_set<int32_t>& plan_node_ids() const { return _plan_node_ids; }
 
 protected:
     // only used in colocate groups

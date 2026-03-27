@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/global_types.h"
+#include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
@@ -29,7 +30,7 @@ public:
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     int32_t _target_node_id;

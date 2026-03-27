@@ -207,7 +207,7 @@ Status ExecNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::NotSupported("Don't support vector query engine");
 }
 
-pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     pipeline::OpFactories operators;
     return operators;
 }

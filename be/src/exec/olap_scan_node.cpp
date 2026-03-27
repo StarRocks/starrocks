@@ -902,7 +902,7 @@ void OlapScanNode::_close_pending_scanners() {
     }
 }
 
-pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
     size_t dop = morsel_queue_factory->size();

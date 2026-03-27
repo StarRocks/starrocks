@@ -756,7 +756,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
-    auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
+    ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {

@@ -352,7 +352,7 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
     }
 }
 
-pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     std::vector<OpFactories> operators_list;
@@ -363,7 +363,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
-        auto child_ops = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         if (!_local_partition_by_exprs.empty()) {
             child_ops = context->maybe_interpolate_local_bucket_shuffle_exchange(
                     context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
@@ -394,7 +394,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
-        auto child_ops = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         std::vector<ExprContext*> partition_by_exprs;
         child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
         operators_list.emplace_back(child_ops);

@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 
 namespace starrocks {
@@ -44,7 +45,7 @@ class EmptySetNode final : public PipelineNode {
 public:
     EmptySetNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 };
 
 } // namespace starrocks
