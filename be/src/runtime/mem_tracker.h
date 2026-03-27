@@ -179,8 +179,8 @@ public:
                         const std::string& counter_name_prefix = std::string(), int64_t byte_limit = -1,
                         std::string label = std::string(), MemTracker* parent = nullptr);
 
-    void set_level(int64_t level) { _level = level; }
-    int64_t get_level() const { return _level; }
+    void set_level(int32_t level) { _level = level; }
+    int32_t get_level() const { return _level; }
 
     ~MemTracker();
 
@@ -473,7 +473,7 @@ private:
 
     MemTrackerType _type{MemTrackerType::NO_SET};
 
-    int64_t _level = 1;
+    int32_t _level = 1;
     int64_t _limit;              // in bytes
     int64_t _reserve_limit = -1; // only used in spillable query
 
@@ -481,24 +481,18 @@ private:
     MemTracker* _parent;
 
     /// in bytes; not owned
-    RuntimeProfile::HighWaterMarkCounter* _consumption;
-
-    /// holds _consumption counter if not tied to a profile
-    RuntimeProfile::HighWaterMarkCounter _local_consumption_counter;
+    RuntimeProfile::HighWaterMarkCounter* _consumption = nullptr;
+    std::unique_ptr<RuntimeProfile::HighWaterMarkCounter> _local_consumption_holder;
 
     /// in bytes; not owned. Only record allocation but ignore deallocation
     /// And for sake of performance, it can only be updated through `update_allocation`
-    RuntimeProfile::Counter* _allocation;
-
-    /// holds _allocation counter if not tied to a profile
-    RuntimeProfile::Counter _local_allocation_counter;
+    RuntimeProfile::Counter* _allocation = nullptr;
+    std::unique_ptr<RuntimeProfile::Counter> _local_allocation_holder;
 
     /// in bytes; not owned. Only record deallocation but ignore allocation
     /// And for sake of performance, it can only be updated through `update_deallocation`
-    RuntimeProfile::Counter* _deallocation;
-
-    /// holds _deallocation counter if not tied to a profile
-    RuntimeProfile::Counter _local_deallocation_counter;
+    RuntimeProfile::Counter* _deallocation = nullptr;
+    std::unique_ptr<RuntimeProfile::Counter> _local_deallocation_holder;
 
     std::vector<MemTracker*> _all_trackers;   // this tracker plus all of its ancestors
     std::vector<MemTracker*> _limit_trackers; // _all_trackers with valid limits

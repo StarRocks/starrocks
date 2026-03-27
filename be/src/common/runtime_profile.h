@@ -217,7 +217,14 @@ public:
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
-            Update(new_val);
+            // HighWaterMarkCounter: negative delta cannot produce a new peak.
+            // LowWaterMarkCounter:  positive delta cannot produce a new floor.
+            // Skip Update() entirely — avoids loading the peak cache line on every release().
+            if constexpr (is_high) {
+                if (delta > 0) Update(new_val);
+            } else {
+                if (delta < 0) Update(new_val);
+            }
         }
 
         /// Tries to increase the current value by delta. If current_value() + delta
@@ -257,15 +264,23 @@ public:
         /// Set '_value' to 'v' if 'v' is larger/lower than '_value'. The entire operation is
         /// atomic.
         void Update(int64_t v) {
+            int64_t old_value = _value.load(std::memory_order_relaxed);
+            // Fast path: skip CAS loop entirely when v is not a new extreme.
+            // This eliminates the CAS on all release() paths (where v < peak)
+            // and on most consume() paths once the peak stabilizes.
+            if constexpr (is_high) {
+                if (v <= old_value) return;
+            } else {
+                if (v >= old_value) return;
+            }
             while (true) {
-                int64_t old_value = _value.load(std::memory_order_relaxed);
                 int64_t new_value;
                 if constexpr (is_high) {
                     new_value = std::max(old_value, v);
                 } else {
                     new_value = std::min(old_value, v);
                 }
-                if (new_value == old_value) break; // Avoid atomic update.
+                if (new_value == old_value) break;
                 if (LIKELY(_value.compare_exchange_strong(old_value, new_value, std::memory_order_relaxed))) break;
             }
         }
