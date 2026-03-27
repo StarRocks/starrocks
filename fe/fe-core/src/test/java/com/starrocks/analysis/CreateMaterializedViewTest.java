@@ -6016,7 +6016,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             String ddl = mv.getMaterializedViewDdlStmt(true, false);
             Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
                     "COMMENT \"this is a comment2\"\n" +
-                    "PARTITION BY date_trunc('month', `date`)\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "REFRESH DEFERRED MANUAL\n" +
                     "PROPERTIES (\n" +
@@ -6031,7 +6031,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             String ddl = mv.getMaterializedViewDdlStmt(false, false);
             Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
                     "COMMENT \"this is a comment2\"\n" +
-                    "PARTITION BY date_trunc('month', `date`)\n" +
+                    "PARTITION BY (date_trunc('month', `date`))\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "REFRESH DEFERRED MANUAL\n" +
                     "PROPERTIES (\n" +
