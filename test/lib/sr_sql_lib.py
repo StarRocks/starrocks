@@ -3142,6 +3142,61 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, haystack),
             )
 
+    def assert_login_success(self, user, password, expected_current_user_contains=None):
+        """
+        Assert that a standalone MySQL connection can log in with the specified user/password.
+        """
+        conn = None
+        try:
+            conn = pymysql.connect(
+                host=self.mysql_host,
+                port=int(self.mysql_port),
+                user=user,
+                passwd=password,
+                connect_timeout=QUERY_TIMEOUT,
+            )
+            with conn.cursor() as cursor:
+                cursor.execute("select current_user()")
+                row = cursor.fetchone()
+
+            tools.assert_true(row is not None and len(row) == 1, "login helper did not return current_user()")
+            if expected_current_user_contains is not None:
+                tools.assert_true(
+                    expected_current_user_contains in str(row[0]),
+                    "assert expect {} is not found in current_user {}".format(expected_current_user_contains, row[0]),
+                )
+        except Exception as e:
+            tools.assert_true(False, "assert login success failed for user {}: {}".format(user, e))
+        finally:
+            if conn is not None:
+                close_conn(conn, "MySQL login helper")
+
+    def assert_login_fail(self, user, password, expected_error_contains=None):
+        """
+        Assert that a standalone MySQL connection cannot log in with the specified user/password.
+        """
+        conn = None
+        try:
+            conn = pymysql.connect(
+                host=self.mysql_host,
+                port=int(self.mysql_port),
+                user=user,
+                passwd=password,
+                connect_timeout=QUERY_TIMEOUT,
+            )
+        except Exception as e:
+            if expected_error_contains is not None:
+                tools.assert_true(
+                    expected_error_contains in str(e),
+                    "assert expect {} is not found in login error {}".format(expected_error_contains, e),
+                )
+            return
+        finally:
+            if conn is not None:
+                close_conn(conn, "MySQL login helper")
+
+        tools.assert_true(False, "assert login fail failed for user {}, connection unexpectedly succeeded".format(user))
+
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string

@@ -55,11 +55,13 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
 
-- `PROPERTIES` sets user properties, including the maximum user connection number (`max_user_connections`), catalog, database or session variables on the user level. User-level session variables take effect as the user logs in. This feature is supported from v3.3.3.
+- `PROPERTIES` sets user properties, including the maximum user connection number (`max_user_connections`), password policy (`PASSWORD_POLICY`), catalog, database or session variables on the user level. User-level session variables take effect as the user logs in. This feature is supported from v3.3.3.
 
   ```SQL
   -- Set the maximum user connection number.
   PROPERTIES ("max_user_connections" = "<Integer>")
+  -- Bind an existing password policy to the user.
+  PROPERTIES ("PASSWORD_POLICY" = "<policy_name>")
   -- Set the catalog.
   PROPERTIES ("catalog" = "<catalog_name>")
   -- Set the database.
@@ -70,6 +72,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   :::tip
   - `PROPERTIES` works on user instead of user identity.
+  - `PASSWORD_POLICY` must reference an existing password policy. When set, it takes precedence over the system-level password policy for that user.
   - Global variables and read-only variables cannot be set for a specific user.
   - Variables take effect in the following order: SET_VAR > Session > User property > Global.
   - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
@@ -158,7 +161,13 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-Example 13: Create a user with OAuth 2.0 Authentication.
+Example 13: Create a user and bind an existing password policy.
+
+```SQL
+CREATE USER 'jack'@'192.168.%' IDENTIFIED BY '123456Ab!' PROPERTIES ('PASSWORD_POLICY' = 'app_password_policy');
+```
+
+Example 14: Create a user with OAuth 2.0 Authentication.
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 

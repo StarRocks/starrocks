@@ -1651,6 +1651,9 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         ctxToTestUser();
         Authorizer.check(UtFrameUtils.parseStmtWithNewParser(
                 "set property 'max_user_connections' = '100'", ctx), ctx);
+
+        sql = "ALTER USER 'test2' SET PROPERTIES ('PASSWORD_POLICY' = 'pp1')";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
     }
 
     @Test

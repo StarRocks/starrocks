@@ -60,17 +60,21 @@ ALTER USER user_identity
 
   ALTER USER を実行してデフォルトロールを設定する前に、すべてのロールがユーザーに割り当てられていることを確認してください。ユーザーが再度ログインすると、ロールは自動的に有効になります。
 
-- `SET PROPERTIES` はユーザーのプロパティを設定します。これには、最大ユーザー接続数 (`max_user_connections`)、catalog、データベース、またはユーザーレベルのセッション変数が含まれます。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
+- `SET PROPERTIES` はユーザーのプロパティを設定します。これには、最大ユーザー接続数 (`max_user_connections`)、パスワードポリシー、catalog、データベース、またはユーザーレベルのセッション変数が含まれます。ユーザーレベルのセッション変数は、ユーザーがログインすると有効になります。この機能は v3.3.3 からサポートされています。
 
   ```SQL
   -- 最大ユーザー接続数を設定します。
   SET PROPERTIES ("max_user_connections" = "<Integer>")
+  -- ユーザーにパスワードポリシーをバインドします。
+  SET PROPERTIES ("PASSWORD_POLICY" = "<password_policy_name>")
   -- catalog を設定します。
   SET PROPERTIES ("catalog" = "<catalog_name>")
   -- データベースを設定します。
   SET PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
   -- セッション変数を設定します。
   SET PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  -- ユーザーのパスワードポリシーを解除し、システムレベルのパスワードポリシーに戻します。
+  SET PROPERTIES ("PASSWORD_POLICY" = "")
   -- ユーザーに設定されたプロパティをクリアします。
   SET PROPERTIES ("catalog" = "", "database" = "", "session.<variable_name>" = "");
   ```
@@ -79,6 +83,9 @@ ALTER USER user_identity
   - `SET PROPERTIES` はユーザーに対して機能し、ユーザーアイデンティティではありません。したがって、ユーザーのプロパティを変更する場合は、`ALTER USER` ステートメントで `user_identity` ではなく `username` を指定する必要があります。
   - グローバル変数および読み取り専用変数は、特定のユーザーに設定することはできません。
   - 変数は次の順序で有効になります: SET_VAR > セッション > ユーザープロパティ > グローバル。
+  - `PASSWORD_POLICY` は `ALTER USER ... SET PROPERTIES` でのみ設定できます。`CREATE USER` ではサポートされません。
+  - ユーザーに `PASSWORD_POLICY` が設定されていない場合は、システムレベルのパスワードポリシーが使用されます。ユーザーに `PASSWORD_POLICY` が設定されている場合は、パスワードの複雑性チェック、パスワード期限切れ、およびパスワード試行回数によるロックに対して、システムレベルのパスワードポリシーより優先されます。
+  - ユーザーにまだバインドされているパスワードポリシーは削除できません。
   - 特定のユーザーのプロパティを表示するには、[SHOW PROPERTY](./SHOW_PROPERTY.md) を使用できます。
   :::
 
@@ -160,6 +167,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ```SQL
 ALTER USER 'jack' SET PROPERTIES ('catalog' = '', 'database' = '', 'session.query_timeout' = '');
+```
+
+例 13: ユーザーにパスワードポリシー `pwd_policy_1` をバインドします。
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = 'pwd_policy_1');
+```
+
+例 14: ユーザーのパスワードポリシーを解除し、システムレベルのパスワードポリシーに戻します。
+
+```SQL
+ALTER USER 'jack' SET PROPERTIES ('PASSWORD_POLICY' = '');
 ```
 
 ## 参考文献

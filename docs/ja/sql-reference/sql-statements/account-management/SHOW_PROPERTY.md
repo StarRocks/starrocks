@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-SHOW PROPERTY は、最大接続数、デフォルトカタログ、デフォルトデータベースなどのユーザープロパティを表示します。
+SHOW PROPERTY は、最大接続数、パスワードポリシー、デフォルトカタログ、デフォルトデータベースなどのユーザープロパティを表示します。
 
 :::tip
 現在のユーザーは自分のプロパティを表示できます。`user_admin` ロールを持つユーザーのみが他のユーザーのプロパティを表示できます。
@@ -14,7 +14,7 @@ SHOW PROPERTY は、最大接続数、デフォルトカタログ、デフォル
 :::
 
 :::info
-`database` や `catalog` などのプロパティを設定するには、`SET PROPERTIES` を指定した [ALTER USER](./ALTER_USER.md) コマンドを使用してください。
+`database`、`catalog`、`PASSWORD_POLICY` などのプロパティを設定するには、`SET PROPERTIES` を指定した [ALTER USER](./ALTER_USER.md) コマンドを使用してください。
 `max_user_connections` については、`SET PROPERTY` 構文を使用できます。
 :::
 
@@ -42,6 +42,7 @@ SHOW PROPERTY;
 | Key                  | Value           |
 +----------------------+-----------------+
 | max_user_connections | 1024            |
+| PASSWORD_POLICY      |                 |
 | catalog              | default_catalog |
 | database             |                 |
 +----------------------+-----------------+
@@ -58,6 +59,7 @@ SHOW PROPERTY FOR 'jack';
 | Key                  | Value            |
 +----------------------+------------------+
 | max_user_connections | 100              |
+| PASSWORD_POLICY      | pwd_policy_1     |
 | catalog              | default_catalog  |
 | database             | sales_db         |
 +----------------------+------------------+
@@ -66,15 +68,15 @@ SHOW PROPERTY FOR 'jack';
 例 3: `LIKE` を使用してプロパティをフィルタリングします。
 
 ```SQL
-SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+SHOW PROPERTY FOR 'jack' LIKE 'PASSWORD_POLICY';
 ```
 
 ```Plain
-+----------------------+-------+
-| Key                  | Value |
-+----------------------+-------+
-| max_user_connections | 100   |
-+----------------------+-------+
++-----------------+--------------+
+| Key             | Value        |
++-----------------+--------------+
+| PASSWORD_POLICY | pwd_policy_1 |
++-----------------+--------------+
 ```
 
 ## 参照

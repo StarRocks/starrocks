@@ -57,11 +57,13 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
 
-- `PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`），Catalog，数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
+- `PROPERTIES`：设置用户属性，包括用户最大连接数（`max_user_connections`）、密码策略（`PASSWORD_POLICY`）、Catalog、数据库，或用户级别的 Session 变量。用户级别的 Session 变量在用户登录时生效。该功能自 v3.3.3 起支持。
 
   ```SQL
   -- 设置用户最大连接数。
   PROPERTIES ("max_user_connections" = "<Integer>")
+  -- 为用户绑定一个已存在的密码策略。
+  PROPERTIES ("PASSWORD_POLICY" = "<policy_name>")
   -- 设置 Catalog。
   PROPERTIES ("catalog" = "<catalog_name>")
   -- 设置数据库。
@@ -72,6 +74,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   :::tip
   - `PROPERTIES` 作用于用户本身而非用户标识。
+  - `PASSWORD_POLICY` 必须引用一个已存在的密码策略。设置后，该策略会优先于系统级密码策略对该用户生效。
   - 全局变量和只读变量无法为单个用户设置。
   - 变量按照以下顺序生效：SET_VAR > Session > 用户属性 > Global。
   - 您可以通过 [SHOW PROPERTY](./SHOW_PROPERTY.md) 查看特定用户的属性。
@@ -143,7 +146,13 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```
 
-示例十一：使用 JSON Web Token 认证创建用户。
+示例十一：创建用户，并绑定一个已存在的密码策略。
+
+```SQL
+CREATE USER 'jack'@'192.168.%' IDENTIFIED BY '123456Ab!' PROPERTIES ('PASSWORD_POLICY' = 'app_password_policy');
+```
+
+示例十二：使用 JSON Web Token 认证创建用户。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_jwt AS
@@ -155,7 +164,7 @@ CREATE USER tom IDENTIFIED WITH authentication_jwt AS
 }';
 ```
 
-示例十二：使用 OAuth 2.0 认证创建用户。
+示例十三：使用 OAuth 2.0 认证创建用户。
 
 ```SQL
 CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 

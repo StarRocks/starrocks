@@ -25,6 +25,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
@@ -47,6 +48,7 @@ public class UserProperty {
     // Because session variables does not include these two properties, we define them here.
     public static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
     public static final String PROP_DATABASE = "database";
+    public static final String PROP_PASSWORD_POLICY = "PASSWORD_POLICY";
     // In order to keep consistent with database, we support user to set session.catalog = xxx or catalog = yyy
     public static final String PROP_CATALOG = SessionVariable.CATALOG;
     public static final String PROP_SESSION_PREFIX = "session.";
@@ -70,6 +72,9 @@ public class UserProperty {
     @SerializedName(value = "s")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
+    @SerializedName(value = "pp")
+    private String passwordPolicy = EMPTY_VALUE;
+
     public UpdateInfo checkUpdate(List<Pair<String, String>> properties) throws DdlException {
         UpdateInfo result = new UpdateInfo();
         if (properties == null || properties.isEmpty()) {
@@ -88,6 +93,8 @@ public class UserProperty {
                 // we do not check database existence here, because we should
                 // check catalog existence first.
                 newDatabase = value;
+            } else if (key.equalsIgnoreCase(PROP_PASSWORD_POLICY)) {
+                result.passwordPolicy = checkPasswordPolicy(value);
             } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                 checkCatalog(value);
                 newCatalog = value;
@@ -123,6 +130,9 @@ public class UserProperty {
         if (result.database != null) {
             setDatabase(result.database);
         }
+        if (result.passwordPolicy != null) {
+            setPasswordPolicy(result.passwordPolicy);
+        }
         for (Map.Entry<String, String> entry : result.sessionVariables.entrySet()) {
             setSessionVariable(entry.getKey(), entry.getValue());
         }
@@ -147,6 +157,8 @@ public class UserProperty {
                     setMaxConn(maxConn);
                 } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
                     setDatabase(value);
+                } else if (key.equalsIgnoreCase(PROP_PASSWORD_POLICY)) {
+                    setPasswordPolicy(value);
                 } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                     setCatalog(value);
                 } else if (key.startsWith(PROP_SESSION_PREFIX)) {
@@ -182,6 +194,18 @@ public class UserProperty {
             this.database = DATABASE_DEFAULT_VALUE;
         } else {
             this.database = sessionDatabase;
+        }
+    }
+
+    public String getPasswordPolicy() {
+        return passwordPolicy == null ? EMPTY_VALUE : passwordPolicy;
+    }
+
+    public void setPasswordPolicy(String passwordPolicy) {
+        if (passwordPolicy == null || passwordPolicy.equalsIgnoreCase(EMPTY_VALUE)) {
+            this.passwordPolicy = EMPTY_VALUE;
+        } else {
+            this.passwordPolicy = passwordPolicy;
         }
     }
 
@@ -328,6 +352,19 @@ public class UserProperty {
         }
     }
 
+    private String checkPasswordPolicy(String value) throws DdlException {
+        if (value.equalsIgnoreCase(EMPTY_VALUE)) {
+            return EMPTY_VALUE;
+        }
+
+        SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
+        if (securityPolicyMgr.getPasswordPolicy(value) == null) {
+            throw new DdlException("Password Policy " + value + " not exist");
+        }
+
+        return value;
+    }
+
     private void setMaxConn(long value) {
         maxConn = value;
     }
@@ -338,6 +375,8 @@ public class UserProperty {
         String database;
 
         String catalog;
+
+        String passwordPolicy;
 
         Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     }

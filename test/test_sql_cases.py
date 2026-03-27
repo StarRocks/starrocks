@@ -181,6 +181,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.resource = list()
 
         sql_list = self._replace_uuid_variables(sql_list)
+        replaced_cleanup = []
 
         for sql in sql_list:
 
@@ -214,6 +215,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                             self.resource.append(resource_name)
             elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
                 tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                replaced_cleanup.extend(sql["cmd"])
                 for each_cmd in sql["cmd"]:
                     db_name = self._get_db_name(each_cmd)
                     if len(db_name) > 0:
@@ -223,6 +225,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         self.resource.append(resource_name)
             else:
                 tools.ok_(False, "Init data error!")
+
+        # tearDown executes case_info.cleanup directly, so reuse the same
+        # uuid-expanded cleanup statements generated for this case run.
+        self.case_info.cleanup = replaced_cleanup
 
         self._clear_db_and_resource_if_exists()
 

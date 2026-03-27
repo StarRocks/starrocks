@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ColumnPrivilege;
@@ -168,6 +169,7 @@ import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -1594,7 +1596,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
         String user = statement.getUser();
-        if (user != null && !user.equals(context.getCurrentUserIdentity().getUser())) {
+        boolean requiresGrant = containsPasswordPolicyProperty(statement)
+                || (user != null && !user.equals(context.getCurrentUserIdentity().getUser()));
+        if (requiresGrant) {
             try {
                 Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
             } catch (AccessDeniedException e) {
@@ -1605,6 +1609,15 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
             }
         }
         return null;
+    }
+
+    private boolean containsPasswordPolicyProperty(SetUserPropertyStmt statement) {
+        for (SetUserPropertyVar propertyVar : statement.getPropertyList()) {
+            if (propertyVar.getPropertyKey().equalsIgnoreCase(UserProperty.PROP_PASSWORD_POLICY)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------------------------------------- Security Integration Statement ---------------------------------------

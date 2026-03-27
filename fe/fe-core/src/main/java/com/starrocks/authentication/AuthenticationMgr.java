@@ -150,6 +150,20 @@ public class AuthenticationMgr {
         lock.writeLock().unlock();
     }
 
+    @FunctionalInterface
+    public interface DdlAction {
+        void run() throws DdlException;
+    }
+
+    public void withReadLock(DdlAction action) throws DdlException {
+        readLock();
+        try {
+            action.run();
+        } finally {
+            readUnlock();
+        }
+    }
+
     public boolean doesUserExist(UserIdentity userIdentity) {
         readLock();
         try {
@@ -548,6 +562,47 @@ public class AuthenticationMgr {
         return userProperty;
     }
 
+    public String getPasswordPolicyByUserName(String userName) {
+        readLock();
+        try {
+            UserProperty userProperty = userNameToProperty.get(userName);
+            if (userProperty == null) {
+                return UserProperty.EMPTY_VALUE;
+            }
+            return userProperty.getPasswordPolicy();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<String> getUserNamesByPasswordPolicy(String passwordPolicyName) {
+        readLock();
+        try {
+            List<String> users = new ArrayList<>();
+            for (Map.Entry<String, UserProperty> entry : userNameToProperty.entrySet()) {
+                if (entry.getValue() != null
+                        && entry.getValue().getPasswordPolicy().equalsIgnoreCase(passwordPolicyName)) {
+                    users.add(entry.getKey());
+                }
+            }
+            return users;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public PasswordPolicy getEffectivePasswordPolicy(UserIdentity userIdentity) {
+        String passwordPolicyName = getPasswordPolicyByUserName(userIdentity.getUser());
+        if (!UserProperty.EMPTY_VALUE.equalsIgnoreCase(passwordPolicyName)) {
+            PasswordPolicy passwordPolicy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
+                    .getPasswordPolicy(passwordPolicyName);
+            if (passwordPolicy != null) {
+                return passwordPolicy;
+            }
+        }
+        return GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getGlobalPasswordPolicy();
+    }
+
     public UserIdentity getUserIdentityByName(String userName) {
         Map<UserIdentity, UserAuthenticationInfo> userToAuthInfo = getUserToAuthenticationInfo();
         Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity = userToAuthInfo.entrySet().stream()
@@ -562,8 +617,7 @@ public class AuthenticationMgr {
 
     public void increasePasswordErrorTimes(UserIdentity userIdentity)
             throws DdlException {
-        PasswordPolicy passwordPolicy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
-                .getGlobalPasswordPolicy();
+        PasswordPolicy passwordPolicy = getEffectivePasswordPolicy(userIdentity);
         if (passwordPolicy != null && passwordPolicy.getPasswordMaxRetries() != null) {
             UserAuthenticationInfo userAuthenticationInfo = userToAuthenticationInfo.get(userIdentity);
             userAuthenticationInfo.increasePasswordErrorTimes();

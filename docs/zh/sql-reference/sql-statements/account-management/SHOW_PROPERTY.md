@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 功能
 
-SHOW PROPERTY 用于显示用户的属性，包括最大连接数、默认 Catalog 和默认数据库。
+SHOW PROPERTY 用于显示用户的属性，包括最大连接数、密码策略、默认 Catalog 和默认数据库。
 
 :::tip
 
@@ -15,7 +15,7 @@ SHOW PROPERTY 用于显示用户的属性，包括最大连接数、默认 Catal
 :::
 
 :::info
-如需设置 `database` 或 `catalog` 等属性，请使用带 `SET PROPERTIES` 子句的 [ALTER USER](./ALTER_USER.md) 命令。
+如需设置 `database`、`catalog` 或 `PASSWORD_POLICY` 等属性，请使用带 `SET PROPERTIES` 子句的 [ALTER USER](./ALTER_USER.md) 命令。
 对于 `max_user_connections`，可以使用 `SET PROPERTY` 语法。
 :::
 
@@ -43,6 +43,7 @@ SHOW PROPERTY;
 | Key                  | Value           |
 +----------------------+-----------------+
 | max_user_connections | 1024            |
+| PASSWORD_POLICY      |                 |
 | catalog              | default_catalog |
 | database             |                 |
 +----------------------+-----------------+
@@ -59,6 +60,7 @@ SHOW PROPERTY FOR 'jack';
 | Key                  | Value            |
 +----------------------+------------------+
 | max_user_connections | 100              |
+| PASSWORD_POLICY      | pwd_policy_1     |
 | catalog              | default_catalog  |
 | database             | sales_db         |
 +----------------------+------------------+
@@ -67,17 +69,17 @@ SHOW PROPERTY FOR 'jack';
 示例三：使用 `LIKE` 过滤查看特定属性。
 
 ```SQL
-SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+SHOW PROPERTY FOR 'jack' LIKE 'PASSWORD_POLICY';
 ```
 
 返回信息如下：
 
 ```Plain
-+----------------------+-------+
-| Key                  | Value |
-+----------------------+-------+
-| max_user_connections | 100   |
-+----------------------+-------+
++-----------------+--------------+
+| Key             | Value        |
++-----------------+--------------+
+| PASSWORD_POLICY | pwd_policy_1 |
++-----------------+--------------+
 ```
 
 ## 相关操作

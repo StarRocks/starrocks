@@ -20,6 +20,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.IndexParams;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
@@ -516,7 +517,8 @@ public class SetStmtAnalyzer {
             throw new SemanticException("User property value is null");
         }
 
-        if (!setUserPropertyVar.getPropertyKey().equals("max_user_connections")) {
+        if (!setUserPropertyVar.getPropertyKey().equalsIgnoreCase(UserProperty.PROP_MAX_USER_CONNECTIONS)
+                && !setUserPropertyVar.getPropertyKey().equalsIgnoreCase(UserProperty.PROP_PASSWORD_POLICY)) {
             throw new SemanticException("Unknown property key: " + setUserPropertyVar.getPropertyKey());
         }
     }
@@ -568,7 +570,8 @@ public class SetStmtAnalyzer {
                     userIdentity + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
         }
 
-        UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption(), null);
+        UserAuthOptionAnalyzer.analyzeAuthOption(var.getUser(), var.getAuthOption(), null,
+                GlobalStateMgr.getCurrentState().getAuthenticationMgr().getEffectivePasswordPolicy(userIdentity));
     }
 
     private static boolean checkUserVariableType(Type type) {

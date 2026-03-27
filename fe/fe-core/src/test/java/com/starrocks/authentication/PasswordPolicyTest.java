@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.system.sys.SysUsers;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.io.Writable;
@@ -44,10 +45,14 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TGetUsersRequest;
+import com.starrocks.thrift.TGetUsersResponse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -59,6 +64,22 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class PasswordPolicyTest {
+    private void mockEditLogAndLeader() {
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEdit(short op, Writable writable) {
+                return;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(null));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            boolean isLeader() {
+                return true;
+            }
+        };
+    }
+
     @Test
     public void testCreateUserWithLock() throws Exception {
         new MockUp<EditLog>() {
@@ -1183,5 +1204,230 @@ public class PasswordPolicyTest {
         // Should throw exception during analysis
         Assertions.assertThrows(SemanticException.class, () -> 
                 com.starrocks.sql.analyzer.Analyzer.analyze(setStmt, context));
+    }
+
+    @Test
+    public void testCreateUserSupportsPasswordPolicyProperty() throws Exception {
+        mockEditLogAndLeader();
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        CreatePasswordPolicyStmt globalPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY global_pp comment \"global\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\"\n" +
+                        ")",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(globalPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(globalPolicyStmt);
+        securityPolicyMgr.setGlobalPasswordPolicy("global_pp");
+
+        CreatePasswordPolicyStmt userPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY pp1 comment \"user\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"3\"\n" +
+                        ")",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(userPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(userPolicyStmt);
+
+        CreateUserStmt stmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123' properties('PASSWORD_POLICY' = 'pp1')",
+                context.getSessionVariable().getSqlMode());
+
+        Analyzer.analyze(stmt, context);
+        authenticationMgr.createUser(stmt);
+
+        Assertions.assertEquals("pp1", authenticationMgr.getPasswordPolicyByUserName("u1"));
+    }
+
+    @Test
+    public void testCreateUserWithNonexistentPasswordPolicyProperty() {
+        mockEditLogAndLeader();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(new SecurityPolicyMgr());
+
+        ConnectContext context = new ConnectContext();
+        CreateUserStmt stmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123456Ab!' properties('PASSWORD_POLICY' = 'missing_pp')",
+                context.getSessionVariable().getSqlMode());
+
+        Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(stmt, context));
+    }
+
+    @Test
+    public void testUserPasswordPolicyOverridesGlobalPolicy() throws Exception {
+        mockEditLogAndLeader();
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        CreatePasswordPolicyStmt globalPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY global_pp comment \"global\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MIN_UPPER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_LOWER_CASE_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_NUMERIC_CHARS\" = \"1\",\n" +
+                        "    \"PASSWORD_MIN_SPECIAL_CHARS\" = \"1\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(globalPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(globalPolicyStmt);
+
+        CreatePasswordPolicyStmt userPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY user_pp comment \"user\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"3\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(userPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(userPolicyStmt);
+        securityPolicyMgr.setGlobalPasswordPolicy("global_pp");
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123456Ab!'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        StatementBase bindStmt = SqlParser.parseSingleStatement(
+                "ALTER USER 'u1' SET PROPERTIES ('PASSWORD_POLICY' = 'user_pp')",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(bindStmt, context);
+        DDLStmtExecutor.execute(bindStmt, context);
+        Assertions.assertEquals("user_pp", authenticationMgr.getPasswordPolicyByUserName("u1"));
+
+        AlterUserStmt alterUserStmt = (AlterUserStmt) SqlParser.parseSingleStatement(
+                "alter user u1 identified by '123'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(alterUserStmt, context);
+        DDLStmtExecutor.execute(alterUserStmt, context);
+
+        StatementBase unbindStmt = SqlParser.parseSingleStatement(
+                "ALTER USER 'u1' SET PROPERTIES ('PASSWORD_POLICY' = '')",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(unbindStmt, context);
+        DDLStmtExecutor.execute(unbindStmt, context);
+        Assertions.assertEquals("", authenticationMgr.getPasswordPolicyByUserName("u1"));
+
+        AlterUserStmt strictAlterStmt = (AlterUserStmt) SqlParser.parseSingleStatement(
+                "alter user u1 identified by '123'",
+                context.getSessionVariable().getSqlMode());
+        Assertions.assertThrows(SemanticException.class, () -> Analyzer.analyze(strictAlterStmt, context));
+    }
+
+    @Test
+    public void testUserPasswordPolicyOverridesRetryPolicy() throws Exception {
+        mockEditLogAndLeader();
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        CreatePasswordPolicyStmt globalPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY global_retry comment \"global\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MAX_RETRIES\" = \"3\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(globalPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(globalPolicyStmt);
+
+        CreatePasswordPolicyStmt userPolicyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY user_retry comment \"user\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"8\",\n" +
+                        "    \"PASSWORD_MAX_RETRIES\" = \"1\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(userPolicyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(userPolicyStmt);
+        securityPolicyMgr.setGlobalPasswordPolicy("global_retry");
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '12345678'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        StatementBase bindStmt = SqlParser.parseSingleStatement(
+                "ALTER USER 'u1' SET PROPERTIES ('PASSWORD_POLICY' = 'user_retry')",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(bindStmt, context);
+        DDLStmtExecutor.execute(bindStmt, context);
+
+        byte[] seed = "data_salt".getBytes(StandardCharsets.UTF_8);
+        byte[] scramble = MysqlPassword.scramble(seed, "wrong_password");
+        context.setAuthDataSalt(seed);
+        try {
+            AuthenticationHandler.authenticate(context, "u1", "%", scramble);
+            Assertions.fail();
+        } catch (AuthenticationException e) {
+            // expected
+        }
+
+        Assertions.assertTrue(authenticationMgr.checkUserLocked(new UserIdentity("u1", "%")));
+    }
+
+    @Test
+    public void testUserPasswordPolicyShownAndDropBlocked() throws Exception {
+        mockEditLogAndLeader();
+
+        AuthenticationMgrEPack authenticationMgr = new AuthenticationMgrEPack();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
+        GlobalStateMgr.getCurrentState().setSecurityPolicyManager(securityPolicyMgr);
+
+        ConnectContext context = new ConnectContext();
+
+        CreatePasswordPolicyStmt policyStmt = (CreatePasswordPolicyStmt) SqlParser.parseSingleStatement(
+                "CREATE PASSWORD POLICY user_pp comment \"user\"\n" +
+                        "properties (\n" +
+                        "    \"PASSWORD_MIN_LENGTH\" = \"3\"\n" +
+                        ")", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(policyStmt, context);
+        securityPolicyMgr.createPasswordPolicy(policyStmt);
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser.parseSingleStatement(
+                "create user u1 identified by '123'",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(createUserStmt, context);
+        authenticationMgr.createUser(createUserStmt);
+
+        StatementBase bindStmt = SqlParser.parseSingleStatement(
+                "ALTER USER 'u1' SET PROPERTIES ('PASSWORD_POLICY' = 'user_pp')",
+                context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(bindStmt, context);
+        DDLStmtExecutor.execute(bindStmt, context);
+
+        ShowUserPropertyStmt showStmt = new ShowUserPropertyStmt("u1", null);
+        List<List<String>> rows = showStmt.getRows(context);
+        Assertions.assertTrue(rows.stream().anyMatch(row -> row.get(0).equals(UserProperty.PROP_PASSWORD_POLICY)
+                && row.get(1).equals("user_pp")));
+
+        TGetUsersResponse response = SysUsers.getUsers(new TGetUsersRequest());
+        Assertions.assertTrue(response.getUsers().stream().anyMatch(
+                item -> item.getUser().equals("u1") && item.getPassword_policy().equals("user_pp")));
+
+        com.starrocks.epack.sql.ast.DropPasswordPolicyStmt dropStmt =
+                (com.starrocks.epack.sql.ast.DropPasswordPolicyStmt) SqlParser.parseSingleStatement(
+                        "drop password policy user_pp", context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(dropStmt, context);
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> securityPolicyMgr.dropPasswordPolicy(dropStmt));
+        Assertions.assertTrue(exception.getMessage().contains("associated with users"));
     }
 }

@@ -16,11 +16,13 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -31,6 +33,9 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
+
+import java.util.Map;
+import java.util.Map.Entry;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -93,6 +98,30 @@ public class AuthenticationAnalyzer {
             }
         }
 
+        private PasswordPolicy getPasswordPolicyFromProperties(Map<String, String> properties) {
+            if (properties == null || properties.isEmpty()) {
+                return null;
+            }
+
+            for (Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(UserProperty.PROP_PASSWORD_POLICY)) {
+                    String policyName = entry.getValue();
+                    if (policyName.equalsIgnoreCase(UserProperty.EMPTY_VALUE)) {
+                        return null;
+                    }
+
+                    PasswordPolicy passwordPolicy = GlobalStateMgr.getCurrentState()
+                            .getSecurityPolicyManager().getPasswordPolicy(policyName);
+                    if (passwordPolicy == null) {
+                        throw new SemanticException("Password Policy " + policyName + " not exist");
+                    }
+                    return passwordPolicy;
+                }
+            }
+
+            return null;
+        }
+
         @Override
         public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             analyzeUser(stmt.getUser());
@@ -101,7 +130,13 @@ public class AuthenticationAnalyzer {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption());
+            PasswordPolicy passwordPolicy = getPasswordPolicyFromProperties(stmt.getProperties());
+            if (passwordPolicy == null) {
+                passwordPolicy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getGlobalPasswordPolicy();
+            }
+
+            UserAuthOptionAnalyzer.analyzeAuthOption(
+                    stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption(), passwordPolicy);
             return null;
         }
 
@@ -109,8 +144,11 @@ public class AuthenticationAnalyzer {
         public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             analyzeUser(stmt.getUser());
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
+            UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(),
+                    stmt.getUser().isDomain());
 
-            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption());
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption(), stmt.getPasswordOption(),
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().getEffectivePasswordPolicy(userIdentity));
             return null;
         }
 
