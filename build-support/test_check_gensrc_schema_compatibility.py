@@ -683,6 +683,56 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
 
             self.assertEqual([], issues)
 
+    def test_changed_mode_rejects_thrift_service_throws_type_change(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "service.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    exception TError {
+                      1: optional string message
+                    }
+
+                    exception TOtherError {
+                      1: optional string message
+                    }
+
+                    service SampleService {
+                      void ping(1: optional string request) throws (1: optional TError err)
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    exception TError {
+                      1: optional string message
+                    }
+
+                    exception TOtherError {
+                      1: optional string message
+                    }
+
+                    service SampleService {
+                      void ping(1: optional string request) throws (1: optional TOtherError err)
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_type_changed"], [issue.rule for issue in issues])
+            self.assertEqual("SampleService.ping(throws)", issues[0].container)
+            self.assertEqual(1, issues[0].field_number)
+
     def test_ci_pipeline_tracks_schema_checker_inputs(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
         workflow_section = workflow_text.split("  schema-compatibility:\n", 1)[1].split("\n  thirdparty-info:\n", 1)[0]

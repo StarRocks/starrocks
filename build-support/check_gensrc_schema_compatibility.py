@@ -644,7 +644,7 @@ def _parse_thrift_method_signature(
     fields: dict[str, dict[int, FieldDecl]],
 ) -> None:
     match = re.match(
-        r"^\s*(.+?)\s+([A-Za-z_]\w*)\s*\((.*)\)\s*(?:throws\s*\((.*)\))?\s*;?\s*$",
+        r"^\s*(.+?)\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*(?:throws\s*\((.*?)\))?\s*;?\s*$",
         signature,
     )
     if match is None:
