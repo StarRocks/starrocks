@@ -1027,6 +1027,11 @@ void DeltaWriterImpl::release_resources() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
+    if (_load_spill_block_mgr != nullptr) {
+        // ignore the return status of clear_parent_path,
+        // because the spill blocks will be cleared by GC later.
+        (void)_load_spill_block_mgr->clear_parent_path();
+    }
     {
         // Take exclusive lock before resetting _flush_token to prevent race with cancel()
         // and get_flush_token(), which may be accessing _flush_token concurrently.

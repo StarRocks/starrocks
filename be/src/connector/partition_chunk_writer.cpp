@@ -123,6 +123,9 @@ SpillPartitionChunkWriter::~SpillPartitionChunkWriter() {
     if (_block_merge_token) {
         _block_merge_token->shutdown();
     }
+    if (_load_spill_block_mgr != nullptr) {
+        (void)_load_spill_block_mgr->clear_parent_path();
+    }
 }
 
 Status SpillPartitionChunkWriter::init() {
