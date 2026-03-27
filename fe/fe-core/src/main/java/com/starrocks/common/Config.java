@@ -4336,6 +4336,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
     public static int tablet_reshard_max_split_count = 1024;
 
+    @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
+            "Only takes effect for tables in clusters with run_mode=shared_data.")
+    public static boolean tablet_reshard_enable_tablet_merge = false;
+
     /**
      * Whether to enable tracing historical nodes when cluster scale
      */
