@@ -21,7 +21,7 @@ import json
 import re
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -276,29 +276,53 @@ def _compare_unsupported_constructs(
     base_schema = base_schema or ParsedSchema(repo_path, {}, {})
     head_schema = head_schema or ParsedSchema(repo_path, {}, {})
 
-    base_by_key = {item.key: item for item in base_schema.unsupported}
-    head_by_key = {item.key: item for item in head_schema.unsupported}
+    base_by_key: defaultdict[tuple[str, str], list[UnsupportedConstruct]] = defaultdict(list)
+    head_by_key: defaultdict[tuple[str, str], list[UnsupportedConstruct]] = defaultdict(list)
+    for item in base_schema.unsupported:
+        base_by_key[item.key].append(item)
+    for item in head_schema.unsupported:
+        head_by_key[item.key].append(item)
 
     issues: list[Violation] = []
     for key in sorted(set(base_by_key) | set(head_by_key)):
-        base_item = base_by_key.get(key)
-        head_item = head_by_key.get(key)
-        if base_item is not None and head_item is not None and base_item.construct == head_item.construct:
+        base_items = base_by_key.get(key, [])
+        head_items = head_by_key.get(key, [])
+        base_constructs = Counter(item.construct for item in base_items)
+        head_constructs = Counter(item.construct for item in head_items)
+        if base_constructs == head_constructs:
             continue
-        item = head_item or base_item
-        issues.append(
-            Violation(
-                path=repo_path,
-                container=item.scope,
-                field_number=None,
-                field_name="",
-                rule="unsupported_syntax",
-                detail=item.detail,
-                remediation="Avoid unsupported schema constructs in v1 of the compatibility harness.",
+
+        changed_items = _select_unsupported_constructs(head_items, head_constructs - base_constructs)
+        if not changed_items:
+            changed_items = _select_unsupported_constructs(base_items, base_constructs - head_constructs)
+        for item in changed_items:
+            issues.append(
+                Violation(
+                    path=repo_path,
+                    container=item.scope,
+                    field_number=None,
+                    field_name="",
+                    rule="unsupported_syntax",
+                    detail=item.detail,
+                    remediation="Avoid unsupported schema constructs in v1 of the compatibility harness.",
+                )
             )
-        )
 
     return issues
+
+
+def _select_unsupported_constructs(
+    items: list[UnsupportedConstruct],
+    construct_counts: Counter[str],
+) -> list[UnsupportedConstruct]:
+    remaining = construct_counts.copy()
+    selected: list[UnsupportedConstruct] = []
+    for item in items:
+        if remaining[item.construct] <= 0:
+            continue
+        selected.append(item)
+        remaining[item.construct] -= 1
+    return selected
 
 
 def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schema: ParsedSchema | None) -> list[Violation]:

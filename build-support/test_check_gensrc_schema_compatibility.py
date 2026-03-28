@@ -265,6 +265,42 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
+    def test_changed_mode_rejects_changed_non_last_unsupported_thrift_field(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TLegacy {
+                      string trace_id
+                      string span_id
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TLegacy {
+                      binary trace_id
+                      string span_id
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
+            self.assertEqual("TLegacy", issues[0].container)
+            self.assertIn("binary trace_id", issues[0].detail)
+
     def test_changed_mode_ignores_line_drift_for_unchanged_unsupported_syntax(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
