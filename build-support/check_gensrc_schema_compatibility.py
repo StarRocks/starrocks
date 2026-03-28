@@ -607,7 +607,8 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
 
 def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw_line: str, line_number: int) -> FieldDecl | None:
     match = re.match(
-        r"^\s*(\d+)\s*:\s*(?:(required|optional)\s+)?(.+?)\s+([A-Za-z_]\w*)\s*(?:=\s*[^,;]+)?\s*[,;]?\s*$",
+        r"^\s*(\d+)\s*:\s*(?:(required|optional)\s+)?(.+?)\s+([A-Za-z_]\w*)"
+        r"\s*(?:=\s*[^,;()]+)?\s*(?:\([^)]*\)\s*)*[,;]?\s*$",
         raw_line.strip(),
     )
     if match is None:
