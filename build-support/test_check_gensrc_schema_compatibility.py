@@ -454,6 +454,52 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("SamplePB", issues[0].container)
             self.assertEqual(1, issues[0].field_number)
 
+    def test_changed_mode_preserves_deep_proto_message_scope(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "nested.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message Outer {
+                      message Inner {
+                        message Leaf {
+                          optional string name = 1;
+                        }
+                      }
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message Outer {
+                      message Inner {
+                        message Leaf {
+                          optional int64 name = 1;
+                        }
+                      }
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_type_changed"], [issue.rule for issue in issues])
+            self.assertEqual("Outer.Inner.Leaf", issues[0].container)
+            self.assertEqual(1, issues[0].field_number)
+
     def test_changed_mode_rejects_proto3_bare_singular_addition(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

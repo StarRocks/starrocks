@@ -557,7 +557,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
         message_match = re.match(r"message\s+([A-Za-z_]\w*)\s*\{", line)
         if message_match:
             name = message_match.group(1)
-            full_name = ".".join([*message_stack, name]) if message_stack else name
+            full_name = f"{message_stack[-1]}.{name}" if message_stack else name
             containers[full_name] = ContainerDecl(name=full_name, kind="message", syntax=syntax)
             block_stack.append(("message", full_name))
             message_stack.append(full_name)
