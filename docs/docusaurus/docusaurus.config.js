@@ -157,15 +157,14 @@ const config = {
           includePages: false,
           includeDocs: true,
           includeVersionedDocs: false,
-          excludeRoutes: ['/ja/**', '/zh/**'], // Exclude non-English content and let the LLMs handle translations
-
+          excludeRoutes: [], 
         },
         llmsTxt: {
           enableLlmsFullTxt: true,
           includeBlog: false,
           includePages: false,
           includeDocs: true,
-          excludeRoutes: ['/ja/**', '/zh/**'], // Exclude non-English content and let the LLMs handle translations
+          excludeRoutes: [],
 
           // Site metadata
           siteTitle: 'StarRocks Documentation',
