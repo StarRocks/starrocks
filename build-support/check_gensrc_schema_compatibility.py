@@ -465,8 +465,18 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                     index += 1
                     continue
                 if re.match(r"^\d+\s*:", body_line) and current_field:
-                    field = _parse_or_raise_thrift_field(path, name, kind, " ".join(current_field), current_start)
-                    fields[name][field.number] = field
+                    try:
+                        field = _parse_or_raise_thrift_field(path, name, kind, " ".join(current_field), current_start)
+                        fields[name][field.number] = field
+                    except UnsupportedSyntaxError as error:
+                        unsupported.append(
+                            UnsupportedConstruct(
+                                kind=error.kind,
+                                scope=error.scope,
+                                construct=error.construct,
+                                detail=error.detail,
+                            )
+                        )
                     current_field = [body_line]
                     current_start = index + 1
                 else:
@@ -475,8 +485,18 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                     current_field.append(body_line)
                 candidate = " ".join(current_field)
                 if _has_balanced_type_delimiters(candidate):
-                    field = _parse_or_raise_thrift_field(path, name, kind, candidate, current_start)
-                    fields[name][field.number] = field
+                    try:
+                        field = _parse_or_raise_thrift_field(path, name, kind, candidate, current_start)
+                        fields[name][field.number] = field
+                    except UnsupportedSyntaxError as error:
+                        unsupported.append(
+                            UnsupportedConstruct(
+                                kind=error.kind,
+                                scope=error.scope,
+                                construct=error.construct,
+                                detail=error.detail,
+                            )
+                        )
                     current_field = []
                 index += 1
             index += 1

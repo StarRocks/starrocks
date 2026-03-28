@@ -222,6 +222,49 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertIn("omit field ids", issues[0].detail)
 
+    def test_changed_mode_checks_supported_fields_when_idless_struct_field_is_unchanged(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TLegacy {
+                      string trace_id
+                    }
+
+                    struct TSample {
+                      1: optional string existing_name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TLegacy {
+                      string trace_id
+                    }
+
+                    struct TSample {
+                      1: optional string existing_name
+                      2: required string new_name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["new_field_must_be_optional"], [issue.rule for issue in issues])
+            self.assertEqual("TSample", issues[0].container)
+            self.assertEqual(2, issues[0].field_number)
+
     def test_changed_mode_ignores_line_drift_for_unchanged_unsupported_syntax(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
