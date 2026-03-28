@@ -194,6 +194,32 @@ class CheckRepoHandbookTest(unittest.TestCase):
                 )
             )
 
+    def test_unindexed_architecture_page_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "handbook" / "architecture" / "index.md").write_text(
+                textwrap.dedent(
+                    """\
+                    # Architecture
+
+                    ## Pages
+
+                    - [Repo Topology](repo-topology.md)
+                    - [BE Boundary Harness](be-boundary-harness.md)
+                    """
+                )
+            )
+
+            errors = MODULE.collect_errors(repo)
+
+            self.assertTrue(
+                any(
+                    "schema-compatibility-harness.md" in error and "Unindexed architecture page" in error
+                    for error in errors
+                )
+            )
+
     def test_ci_pipeline_tracks_handbook_inputs(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
 
@@ -354,13 +380,19 @@ class CheckRepoHandbookTest(unittest.TestCase):
                 """\
                 # Architecture
 
+                ## Pages
+
                 - [Repo Topology](repo-topology.md)
                 - [BE Boundary Harness](be-boundary-harness.md)
+                - [Schema Compatibility Harness](schema-compatibility-harness.md)
                 """
             )
         )
         (repo / "handbook" / "architecture" / "repo-topology.md").write_text("# Repo Topology\n")
         (repo / "handbook" / "architecture" / "be-boundary-harness.md").write_text("# BE Boundary Harness\n")
+        (repo / "handbook" / "architecture" / "schema-compatibility-harness.md").write_text(
+            "# Schema Compatibility Harness\n"
+        )
         (repo / "handbook" / "domains" / "index.md").write_text(
             textwrap.dedent(
                 """\

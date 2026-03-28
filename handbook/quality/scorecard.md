@@ -13,4 +13,4 @@
 - SQL Integration: `seed`
 - Docs and Translation: `seed`
 - CI and Tooling: `structured`
-- Generated and Extensions: `seed`
+- Generated and Extensions: `structured`

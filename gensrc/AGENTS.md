@@ -166,6 +166,9 @@ message MyMessagePB {
 
 After regenerating, verify:
 ```bash
+# Check schema compatibility against your branch base
+python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base origin/main
+
 # Check generated C++ compiles
 ./build.sh --be
 

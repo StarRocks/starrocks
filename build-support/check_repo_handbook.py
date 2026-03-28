@@ -26,6 +26,7 @@ REQUIRED_FILES = (
     "handbook/architecture/index.md",
     "handbook/architecture/repo-topology.md",
     "handbook/architecture/be-boundary-harness.md",
+    "handbook/architecture/schema-compatibility-harness.md",
     "handbook/domains/index.md",
     "handbook/domains/backend.md",
     "handbook/domains/frontend.md",
@@ -56,6 +57,7 @@ INDEX_LINK_REQUIREMENTS = {
     "handbook/architecture/index.md": (
         "handbook/architecture/repo-topology.md",
         "handbook/architecture/be-boundary-harness.md",
+        "handbook/architecture/schema-compatibility-harness.md",
     ),
     "handbook/plans/index.md": (
         "handbook/plans/templates/execution-plan.md",
@@ -267,9 +269,21 @@ def collect_errors(repo_root: Path) -> list[str]:
                 _check_required_headings(
                     domain_path,
                     DOMAIN_SECTION_REQUIREMENTS,
-                    repo_root,
-                )
+                repo_root,
             )
+        )
+
+    architecture_index_path = repo_root / "handbook" / "architecture" / "index.md"
+    if architecture_index_path.exists():
+        errors.extend(
+            _collect_unindexed_pages(
+                architecture_index_path,
+                repo_root / "handbook" / "architecture",
+                "Pages",
+                "architecture",
+                repo_root,
+            )
+        )
 
     policies_index_path = repo_root / "handbook" / "policies" / "index.md"
     if policies_index_path.exists():
