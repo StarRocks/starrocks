@@ -71,6 +71,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     // Always queue a spill task for residual hash table and streaming data.
     // Even if channel has_task(), the in-flight task may have been created with
     // should_spill_hash_table=false and won't drain the hash table.
+    _aggregator->init_hash_map_iterator();
     _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
 
     auto flush_function = [this](RuntimeState* state) {
@@ -273,6 +274,9 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
+    if (should_spill_hash_table) {
+        _aggregator->init_hash_map_iterator();
+    }
     CHECK(!_aggregator->spill_channel()->has_task());
     RETURN_IF_ERROR(_aggregator->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));
     return Status::OK();

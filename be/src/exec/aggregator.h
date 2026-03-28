@@ -538,7 +538,23 @@ protected:
     // used to build the topn runtime filter
     AggTopNRuntimeFilterBuilder* _topn_runtime_filter_builder = nullptr;
 
+    // When true, small aggregate states (<=8 bytes, POD) are stored directly
+    // in the hash map value slot instead of via an external pointer.
+    bool _use_inline_agg_state = false;
+
 public:
+    bool use_inline_agg_state() const { return _use_inline_agg_state; }
+
+    // Initialize _it_hash to the appropriate begin iterator based on
+    // whether inline state mode is active.
+    void init_hash_map_iterator() {
+        if (_use_inline_agg_state) {
+            _hash_map_variant.visit([&](auto& variant) { _it_hash = variant->hash_map.begin(); });
+        } else {
+            _it_hash = _state_allocator.begin();
+        }
+    }
+
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown, bool agg_group_by_with_limit);
     void build_hash_map_with_selection(size_t chunk_size);

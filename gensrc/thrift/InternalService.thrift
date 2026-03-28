@@ -380,6 +380,7 @@ struct TQueryOptions {
 
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
+  212: optional bool enable_inline_agg_state;
 
   // http_request function SSL settings
   212: optional bool http_request_ssl_verification_required = true;

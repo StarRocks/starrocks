@@ -375,6 +375,28 @@ Status Aggregator::open(RuntimeState* state) {
             _agg_states_total_size = ALIGN_TO(_agg_states_total_size, _max_agg_state_align_size);
             _state_allocator.aggregate_key_size = _agg_states_total_size;
             _state_allocator.pool = _mem_pool.get();
+
+            // Detect inline state eligibility: single POD agg function with state <= 8 bytes
+            // whose initial state (set by create()) is all-zeros.
+            // Zero-init requirement: inline state is stored in the hash map value slot which is
+            // zero-initialized on entry creation; functions like min/max need a non-zero initial
+            // value (INT_MAX / INT_MIN) and must not use the inline path.
+            if (state->enable_inline_agg_state() && _agg_fn_ctxs.size() == 1 &&
+                _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state()) {
+                uint64_t tmp_state = 0;
+                _agg_functions[0]->create(_agg_fn_ctxs[0], reinterpret_cast<AggDataPtr>(&tmp_state));
+                const bool initial_state_is_zero = (tmp_state == 0);
+                _agg_functions[0]->destroy(_agg_fn_ctxs[0], reinterpret_cast<AggDataPtr>(&tmp_state));
+                if (initial_state_is_zero) {
+                    _hash_map_variant.visit([&](auto& variant) {
+                        using MapType = std::remove_reference_t<decltype(*variant)>;
+                        if constexpr (MapType::supports_inline_state) {
+                            _use_inline_agg_state = true;
+                            _agg_states_offsets[0] = 0;
+                        }
+                    });
+                }
+            }
         }
     }
 
@@ -1224,6 +1246,10 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 }
 
 void Aggregator::try_convert_to_two_level_map() {
+    // Two-level maps have independent sub-map rehash — inline state not safe.
+    if (_use_inline_agg_state) {
+        return;
+    }
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
         _hash_map_variant.convert_to_two_level(_state);
@@ -1644,6 +1670,13 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                hash_map_with_key->template build_hash_map<true>(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                 NoAllocFunc{}, &_tmp_agg_states);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
                                           &_tmp_agg_states);
     });
@@ -1668,6 +1701,15 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
     }
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                hash_map_with_key->template build_hash_map_with_limit<true>(chunk_size, _group_by_columns,
+                                                                            _mem_pool.get(), NoAllocFunc{},
+                                                                            &_tmp_agg_states, &_streaming_selection,
+                                                                            _limit);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_limit(chunk_size, _group_by_columns, _mem_pool.get(),
                                                      AllocateState<MapType>(this), &_tmp_agg_states,
                                                      &_streaming_selection, _limit);
@@ -1678,6 +1720,14 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                hash_map_with_key->template build_hash_map_with_selection<true>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        &_streaming_selection);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
                                                          AllocateState<MapType>(this), &_tmp_agg_states,
                                                          &_streaming_selection);
@@ -1688,6 +1738,14 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
     _streaming_selection.resize(chunk_size);
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                hash_map_with_key->template build_hash_map_with_selection_and_allocation<true>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        &_streaming_selection);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
@@ -1706,6 +1764,14 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
 void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (MapType::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                hash_map_with_key->template build_hash_map_with_selection_and_allocation<true>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        &_streaming_selection);
+                return;
+            }
+        }
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
                                                                         &_streaming_selection);
@@ -1720,9 +1786,6 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
-        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
-        auto end = _state_allocator.end();
-
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
@@ -1730,6 +1793,88 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 
         int32_t read_index = 0;
+
+        if constexpr (HashMapWithKey::supports_inline_state) {
+            if (_use_inline_agg_state) {
+                // Inline state: iterate hash map directly (state is in value slot).
+                using Iterator = typename HashMapWithKey::HashMapType::iterator;
+                auto it = std::any_cast<Iterator>(_it_hash);
+                auto end = hash_map_with_key.hash_map.end();
+                {
+                    SCOPED_TIMER(_agg_stat->iter_timer);
+                    hash_map_with_key.results.resize(chunk_size);
+                    while ((it != end) && (read_index < chunk_size)) {
+                        hash_map_with_key.results[read_index] = it->first;
+                        _tmp_agg_states[read_index] = reinterpret_cast<AggDataPtr>(&it->second);
+                        ++read_index;
+                        ++it;
+                    }
+                }
+
+                if (read_index > 0) {
+                    {
+                        SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                        hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns,
+                                                                 read_index);
+                    }
+                    {
+                        SCOPED_TIMER(_agg_stat->agg_append_timer);
+                        SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                        if (!use_intermediate) {
+                            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                                TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(
+                                        _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                        agg_result_columns[i].get()));
+                            }
+                        } else {
+                            for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                                TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(
+                                        _agg_fn_ctxs[i], read_index, _tmp_agg_states, _agg_states_offsets[i],
+                                        agg_result_columns[i].get()));
+                            }
+                        }
+                    }
+                }
+
+                RETURN_IF_ERROR(check_has_error());
+                _is_ht_eos = (it == end);
+
+                // Handle null key for inline state
+                if constexpr (HashMapWithKey::has_single_null_key) {
+                    if (_is_ht_eos && hash_map_with_key.get_inline_null_key_data() != nullptr) {
+                        if (read_index < _state->chunk_size()) {
+                            DCHECK(group_by_columns.size() == 1);
+                            DCHECK(group_by_columns[0]->is_nullable());
+                            group_by_columns[0]->append_default();
+                            SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
+                            auto null_state = hash_map_with_key.get_inline_null_key_data();
+                            if (!use_intermediate) {
+                                TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(null_state, agg_result_columns));
+                            } else {
+                                TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(null_state, agg_result_columns));
+                            }
+                            RETURN_IF_ERROR(check_has_error());
+                            ++read_index;
+                        } else {
+                            _is_ht_eos = false;
+                        }
+                    }
+                }
+
+                _it_hash = it;
+                auto result_chunk = _build_output_chunk(std::move(group_by_columns), std::move(agg_result_columns),
+                                                        use_intermediate);
+                _num_rows_returned += read_index;
+                _num_rows_processed += read_index;
+                *chunk = std::move(result_chunk);
+                return Status::OK();
+            }
+        }
+
+        // Non-inline: iterate _state_allocator via RawHashTableIterator.
+        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
+        auto end = _state_allocator.end();
+
         {
             SCOPED_TIMER(_agg_stat->iter_timer);
             hash_map_with_key.results.resize(chunk_size);
@@ -1888,6 +2033,10 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
 }
 
 void Aggregator::_release_agg_memory() {
+    // Inline POD states live in the hash map itself — no destroy needed.
+    if (_use_inline_agg_state) {
+        return;
+    }
     // If all function states are of POD type,
     // then we don't have to traverse the hash table to call destroy method.
     //
