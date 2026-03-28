@@ -134,7 +134,7 @@ const config = {
   ],
 
   plugins: [
-    [
+        [
       "@docusaurus/plugin-client-redirects",
       {
         redirects: [
@@ -149,17 +149,30 @@ const config = {
     [
       '@signalwire/docusaurus-plugin-llms-txt',
       {
-        siteTitle: 'StarRocks Documentation',
-        siteDescription: 'Comprehensive guide to our platform',
-        depth: 2,
-        content: {
+                // Markdown file generation options
+        markdown: {
+          enableFiles: true,
+          relativePaths: true,
           includeBlog: false,
+          includePages: false,
+          includeDocs: true,
+          includeVersionedDocs: false
+        },
+        llmsTxt: {
+          enableLlmsFullTxt: true,
+          includeBlog: true,
           includePages: true,
-          enableLlmsFullTxt: true  // Optional: generates llms-full.txt
-        }
-      }
-    ]
+          includeDocs: true,
+          excludeRoutes: ['/admin/**'],
+
+          // Site metadata
+          siteTitle: 'StarRocks Documentation',
+          siteDescription: 'Comprehensive documentation for developers',
+        },
+      },
+    ],
   ],
+
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
