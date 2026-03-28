@@ -498,6 +498,74 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(1, issues[0].field_number)
 
+    def test_changed_mode_ignores_thrift_type_formatting_drift(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional map<string,string> properties
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional map<string, string> properties
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
+    def test_changed_mode_ignores_proto_type_formatting_drift(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "sample.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto3";
+
+                    message SamplePB {
+                      map<string,string> properties = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto3";
+
+                    message SamplePB {
+                      map<string, string> properties = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
     def test_changed_mode_allows_same_number_rename(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

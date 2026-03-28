@@ -325,6 +325,11 @@ def _select_unsupported_constructs(
     return selected
 
 
+def _normalize_type_repr(type_repr: str) -> str:
+    normalized = " ".join(type_repr.split())
+    return re.sub(r"\s*([<>,()])\s*", r"\1", normalized)
+
+
 def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schema: ParsedSchema | None) -> list[Violation]:
     base_schema = base_schema or ParsedSchema(repo_path, {}, {})
     head_schema = head_schema or ParsedSchema(repo_path, {}, {})
@@ -342,7 +347,7 @@ def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schem
         for number in sorted(common_numbers):
             before = base_fields[number]
             after = head_fields[number]
-            if before.type_repr != after.type_repr:
+            if _normalize_type_repr(before.type_repr) != _normalize_type_repr(after.type_repr):
                 issues.append(
                     Violation(
                         path=repo_path,
@@ -851,9 +856,9 @@ def _match_renumbered_fields(
     added_by_shape: dict[tuple[str, str, str], list[FieldDecl]] = defaultdict(list)
 
     for field in deleted_fields.values():
-        deleted_by_shape[(field.name, field.type_repr, field.cardinality)].append(field)
+        deleted_by_shape[(field.name, _normalize_type_repr(field.type_repr), field.cardinality)].append(field)
     for field in added_fields.values():
-        added_by_shape[(field.name, field.type_repr, field.cardinality)].append(field)
+        added_by_shape[(field.name, _normalize_type_repr(field.type_repr), field.cardinality)].append(field)
 
     pairs: list[tuple[FieldDecl, FieldDecl]] = []
     for shape, deleted in deleted_by_shape.items():
