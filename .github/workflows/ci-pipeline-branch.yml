@@ -156,6 +156,47 @@ jobs:
         run: |
           python3 build-support/check_repo_handbook.py
 
+  schema-compatibility:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: Schema Compatibility
+    if: needs.basic-checker.outputs.PASS == 'true'
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            schema:
+              - '.github/workflows/ci-pipeline-branch.yml'
+              - '.github/workflows/ci-pipeline.yml'
+              - 'gensrc/proto/**'
+              - 'gensrc/thrift/**'
+              - 'build-support/check_gensrc_schema_compatibility.py'
+              - 'build-support/test_check_gensrc_schema_compatibility.py'
+              - 'build-support/schema_compatibility_waivers.json'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.schema == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Compute Merge Base
+        if: steps.path-filter.outputs.schema == 'true'
+        id: merge_base
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Schema Tool Tests
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 -m unittest build-support/test_check_gensrc_schema_compatibility.py
+
+      - name: Schema Check
+        if: steps.path-filter.outputs.schema == 'true'
+        run: |
+          python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base "${{ steps.merge_base.outputs.base }}"
+
   be-checker:
     runs-on: ubuntu-latest
     needs: basic-checker
