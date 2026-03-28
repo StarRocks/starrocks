@@ -465,9 +465,8 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                     index += 1
                     continue
                 if re.match(r"^\d+\s*:", body_line) and current_field:
-                    field = _parse_thrift_field_line(path, name, kind, " ".join(current_field), current_start)
-                    if field is not None:
-                        fields[name][field.number] = field
+                    field = _parse_or_raise_thrift_field(path, name, kind, " ".join(current_field), current_start)
+                    fields[name][field.number] = field
                     current_field = [body_line]
                     current_start = index + 1
                 else:
@@ -476,10 +475,9 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
                     current_field.append(body_line)
                 candidate = " ".join(current_field)
                 if _has_balanced_type_delimiters(candidate):
-                    field = _parse_thrift_field_line(path, name, kind, candidate, current_start)
-                    if field is not None:
-                        fields[name][field.number] = field
-                        current_field = []
+                    field = _parse_or_raise_thrift_field(path, name, kind, candidate, current_start)
+                    fields[name][field.number] = field
+                    current_field = []
                 index += 1
             index += 1
             continue
@@ -536,6 +534,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
     block_stack: list[tuple[str, str]] = []
     oneof_capture_stack: list[tuple[str, list[str]]] = []
     message_stack: list[str] = []
+    aggregate_option_depth = 0
 
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
@@ -579,6 +578,10 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
 
         if oneof_capture_stack:
             oneof_capture_stack[-1][1].append(line)
+
+        if aggregate_option_depth > 0 or _is_proto_aggregate_option_line(line):
+            aggregate_option_depth += raw_line.count("{") - raw_line.count("}")
+            continue
 
         current_message = message_stack[-1] if message_stack else None
         if current_message and block_stack and block_stack[-1][0] == "message":
@@ -624,6 +627,46 @@ def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw
         type_repr=type_repr.strip(),
         cardinality=cardinality or "unlabeled",
         line=line_number,
+    )
+
+
+def _parse_or_raise_thrift_field(
+    path: str,
+    container: str,
+    container_kind: str,
+    raw_line: str,
+    line_number: int,
+) -> FieldDecl:
+    field = _parse_thrift_field_line(path, container, container_kind, raw_line, line_number)
+    if field is not None:
+        return field
+    if _looks_like_idless_thrift_field(raw_line):
+        raise UnsupportedSyntaxError(
+            path,
+            f"thrift fields that omit field ids are not supported by the schema compatibility harness: "
+            f"{container} line {line_number}: {raw_line.strip()}",
+            kind="thrift_fields",
+            scope=container,
+            construct=raw_line.strip(),
+        )
+    raise UnsupportedSyntaxError(
+        path,
+        f"unsupported thrift field syntax in the schema compatibility harness: "
+        f"{container} line {line_number}: {raw_line.strip()}",
+        kind="thrift_fields",
+        scope=container,
+        construct=raw_line.strip(),
+    )
+
+
+def _looks_like_idless_thrift_field(raw_line: str) -> bool:
+    return (
+        re.match(
+            r"^\s*(?:(required|optional)\s+)?(.+?)\s+([A-Za-z_]\w*)"
+            r"\s*(?:=\s*[^,;()]+)?\s*(?:\([^)]*\)\s*)*[,;]?\s*$",
+            raw_line.strip(),
+        )
+        is not None
     )
 
 
@@ -846,6 +889,14 @@ def _has_balanced_type_delimiters(text: str) -> bool:
         elif char == ")" and paren_depth > 0:
             paren_depth -= 1
     return angle_depth == 0 and paren_depth == 0
+
+
+def _is_proto_aggregate_option_line(line: str) -> bool:
+    if not re.match(r"option\b", line):
+        return False
+    equals_index = line.find("=")
+    brace_index = line.find("{")
+    return equals_index >= 0 and brace_index > equals_index
 
 
 def _is_schema_path(path: str) -> bool:

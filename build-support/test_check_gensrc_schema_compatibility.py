@@ -187,6 +187,41 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
+    def test_changed_mode_rejects_idless_thrift_struct_field(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional string existing_name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional string existing_name
+                      string trace_id
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
+            self.assertEqual("TSample", issues[0].container)
+            self.assertIn("omit field ids", issues[0].detail)
+
     def test_changed_mode_ignores_line_drift_for_unchanged_unsupported_syntax(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -538,6 +573,50 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual(["proto3_field_must_be_explicit_optional"], [issue.rule for issue in issues])
             self.assertEqual("SamplePB", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
+
+    def test_changed_mode_tracks_proto_aggregate_option_braces(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "aggregate_option.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      option (sample.message) = {
+                        enabled: true
+                      };
+                      optional string name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      option (sample.message) = {
+                        enabled: true
+                      };
+                      optional int64 name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_type_changed"], [issue.rule for issue in issues])
+            self.assertEqual("SamplePB", issues[0].container)
+            self.assertEqual(1, issues[0].field_number)
 
     def test_deletion_requires_waiver(self) -> None:
         module = _load_module()
