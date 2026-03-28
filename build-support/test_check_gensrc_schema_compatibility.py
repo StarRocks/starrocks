@@ -638,6 +638,53 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual(["stale_waiver"], [issue.rule for issue in issues])
             self.assertEqual("gensrc/proto/sample.proto", issues[0].path)
 
+    def test_stale_waiver_is_reported_for_missing_schema_path(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "sample.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      optional string existing_name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            waiver_path = repo / "build-support" / "schema_compatibility_waivers.json"
+            waiver_path.write_text(
+                json.dumps(
+                    {
+                        "waivers": [
+                            {
+                                "path": "gensrc/proto/missing.proto",
+                                "container_or_method": "MissingPB",
+                                "field_number": 9,
+                                "field_name": "ghost_name",
+                                "rule": "field_deleted",
+                                "base_signature": "optional string ghost_name = 9",
+                                "reason": "stale waiver coverage",
+                                "owner": "engprod",
+                            }
+                        ]
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["stale_waiver"], [issue.rule for issue in issues])
+            self.assertEqual("gensrc/proto/missing.proto", issues[0].path)
+
     def test_full_mode_ignores_non_schema_files_under_gensrc(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -661,6 +708,33 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             issues = module.check_repo(repo, mode="full", base="HEAD")
 
             self.assertEqual([], issues)
+
+    def test_full_mode_includes_nested_schema_files(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            self._commit_all(repo, "base")
+
+            proto_path = repo / "gensrc" / "proto" / "nested" / "sample.proto"
+            proto_path.parent.mkdir(parents=True)
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message NestedPB {
+                      required string new_name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="full", base="HEAD~1")
+
+            self.assertEqual(["new_field_must_be_optional"], [issue.rule for issue in issues])
+            self.assertEqual("gensrc/proto/nested/sample.proto", issues[0].path)
 
     def test_full_mode_ignores_unchanged_unsupported_syntax(self) -> None:
         module = _load_module()

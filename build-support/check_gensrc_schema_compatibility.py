@@ -154,6 +154,7 @@ def check_repo(
     repo_root = repo_root.resolve()
     waivers_path = waivers_path or (repo_root / DEFAULT_WAIVERS)
     selected_paths = select_schema_paths(repo_root, mode, base)
+    all_schema_paths = _all_schema_paths(repo_root, base) if base is not None else set(selected_paths)
     waivers = load_waivers(waivers_path)
 
     violations: list[Violation] = []
@@ -174,7 +175,7 @@ def check_repo(
             continue
         filtered.append(issue)
 
-    scoped_waivers = [waiver for waiver in waivers if waiver.path in selected_paths]
+    scoped_waivers = [waiver for waiver in waivers if waiver.path in selected_paths or waiver.path not in all_schema_paths]
     for waiver in scoped_waivers:
         key = (
             waiver.path,
@@ -856,9 +857,10 @@ def _is_schema_path(path: str) -> bool:
 def _all_schema_paths(repo_root: Path, base: str) -> set[str]:
     current_paths = {
         path.relative_to(repo_root).as_posix()
-        for pattern in ("gensrc/proto/*.proto", "gensrc/thrift/*.thrift")
-        for path in repo_root.glob(pattern)
-        if path.is_file()
+        for root in (repo_root / "gensrc" / "proto", repo_root / "gensrc" / "thrift")
+        if root.exists()
+        for path in root.rglob("*")
+        if path.is_file() and _is_schema_path(path.relative_to(repo_root).as_posix())
     }
     base_paths = set(_git_list_paths(repo_root, base, "gensrc/proto", "gensrc/thrift"))
     return current_paths | base_paths
