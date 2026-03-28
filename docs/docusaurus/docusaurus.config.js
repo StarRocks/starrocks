@@ -156,18 +156,20 @@ const config = {
           includeBlog: false,
           includePages: false,
           includeDocs: true,
-          includeVersionedDocs: false
+          includeVersionedDocs: false,
+          excludeRoutes: ['/ja/**', '/zh/**'], // Exclude non-English content and let the LLMs handle translations
+
         },
         llmsTxt: {
           enableLlmsFullTxt: true,
-          includeBlog: true,
-          includePages: true,
+          includeBlog: false,
+          includePages: false,
           includeDocs: true,
-          excludeRoutes: ['/admin/**'],
+          excludeRoutes: ['/ja/**', '/zh/**'], // Exclude non-English content and let the LLMs handle translations
 
           // Site metadata
           siteTitle: 'StarRocks Documentation',
-          siteDescription: 'Comprehensive documentation for developers',
+          siteDescription: 'Documentation for StarRocks, the fastest and most reliable OLAP database. StarRocks is Standard SQL compliant.',
         },
       },
     ],
