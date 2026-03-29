@@ -58,24 +58,21 @@ inline Status deserialize_parquet_page_header(const uint8_t* buf, uint32_t* len,
 
 inline Status deserialize_parquet_column_index(const uint8_t* buf, uint32_t* len, tparquet::ColumnIndex* column_index) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_column_index_raw(
-                                                 buf, len, detail::parquet_thrift_limits(), column_index, &err),
-                                         err);
+    return detail::parquet_thrift_status(
+            deserialize_parquet_column_index_raw(buf, len, detail::parquet_thrift_limits(), column_index, &err), err);
 }
 
 inline Status deserialize_parquet_offset_index(const uint8_t* buf, uint32_t* len, tparquet::OffsetIndex* offset_index) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_offset_index_raw(
-                                                 buf, len, detail::parquet_thrift_limits(), offset_index, &err),
-                                         err);
+    return detail::parquet_thrift_status(
+            deserialize_parquet_offset_index_raw(buf, len, detail::parquet_thrift_limits(), offset_index, &err), err);
 }
 
 inline Status deserialize_parquet_bloom_filter_header(const uint8_t* buf, uint32_t* len,
                                                       tparquet::BloomFilterHeader* header) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_bloom_filter_header_raw(
-                                                 buf, len, detail::parquet_thrift_limits(), header, &err),
-                                         err);
+    return detail::parquet_thrift_status(
+            deserialize_parquet_bloom_filter_header_raw(buf, len, detail::parquet_thrift_limits(), header, &err), err);
 }
 
 } // namespace starrocks::parquet

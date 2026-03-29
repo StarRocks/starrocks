@@ -35,20 +35,16 @@ struct ParquetThriftLimits {
 };
 
 bool deserialize_parquet_file_metadata_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                           tparquet::FileMetaData* metadata,
-                                           std::string* err);
+                                           tparquet::FileMetaData* metadata, std::string* err);
 
 bool deserialize_parquet_page_header_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                         tparquet::PageHeader* header,
-                                         std::string* err);
+                                         tparquet::PageHeader* header, std::string* err);
 
 bool deserialize_parquet_column_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                          tparquet::ColumnIndex* column_index,
-                                          std::string* err);
+                                          tparquet::ColumnIndex* column_index, std::string* err);
 
 bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                          tparquet::OffsetIndex* offset_index,
-                                          std::string* err);
+                                          tparquet::OffsetIndex* offset_index, std::string* err);
 
 bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
                                                  tparquet::BloomFilterHeader* header, std::string* err);

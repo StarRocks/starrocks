@@ -73,26 +73,22 @@ bool deserialize_parquet_compact_raw(const uint8_t* buf, uint32_t* len, const Pa
 } // namespace
 
 bool deserialize_parquet_file_metadata_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                           tparquet::FileMetaData* metadata,
-                                           std::string* err) {
+                                           tparquet::FileMetaData* metadata, std::string* err) {
     return deserialize_parquet_compact_raw(buf, len, limits, metadata, err);
 }
 
 bool deserialize_parquet_page_header_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                         tparquet::PageHeader* header,
-                                         std::string* err) {
+                                         tparquet::PageHeader* header, std::string* err) {
     return deserialize_parquet_compact_raw(buf, len, limits, header, err);
 }
 
 bool deserialize_parquet_column_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                          tparquet::ColumnIndex* column_index,
-                                          std::string* err) {
+                                          tparquet::ColumnIndex* column_index, std::string* err) {
     return deserialize_parquet_compact_raw(buf, len, limits, column_index, err);
 }
 
 bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
-                                          tparquet::OffsetIndex* offset_index,
-                                          std::string* err) {
+                                          tparquet::OffsetIndex* offset_index, std::string* err) {
     return deserialize_parquet_compact_raw(buf, len, limits, offset_index, err);
 }
 
