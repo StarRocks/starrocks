@@ -32,7 +32,6 @@
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
-#include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
@@ -41,6 +40,7 @@
 #include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/parquet_thrift_deserializer.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/parquet_test_util/util.h"
@@ -2900,7 +2900,7 @@ TEST_F(FileReaderTest, bloom_filter_reader) {
             buffer.data(), 256);
     uint32_t header_len = 256;
     tparquet::BloomFilterHeader header;
-    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    ASSERT_OK(deserialize_parquet_bloom_filter_header(reinterpret_cast<const uint8*>(buffer.data()), &header_len, &header));
     //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
     std::cout << "bloom filter header info, header length:" << header_len;
     EXPECT_EQ(header_len, 18);
@@ -2992,7 +2992,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
             buffer.data(), 256);
     uint32_t header_len = 256;
     tparquet::BloomFilterHeader header;
-    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    ASSERT_OK(deserialize_parquet_bloom_filter_header(reinterpret_cast<const uint8*>(buffer.data()), &header_len, &header));
     //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
     std::cout << "bloom filter header info, header length:" << header_len;
     EXPECT_EQ(header_len, 18);
@@ -3052,7 +3052,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop2) {
             buffer.data(), 256);
     uint32_t header_len = 256;
     tparquet::BloomFilterHeader header;
-    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    ASSERT_OK(deserialize_parquet_bloom_filter_header(reinterpret_cast<const uint8*>(buffer.data()), &header_len, &header));
     //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
     std::cout << "bloom filter header info, header length:" << header_len;
     EXPECT_EQ(header_len, 18);
@@ -3135,7 +3135,7 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
             buffer.data(), 256);
     uint32_t header_len = 256;
     tparquet::BloomFilterHeader header;
-    deserialize_thrift_msg(reinterpret_cast<const uint8*>(buffer.data()), &header_len, TProtocolType::COMPACT, &header);
+    ASSERT_OK(deserialize_parquet_bloom_filter_header(reinterpret_cast<const uint8*>(buffer.data()), &header_len, &header));
     //uint64_t value = 1ULL * buffer[0] + (buffer[1] >> 8) + (buffer[2] >> 16) + (buffer[3] >> 24);
     std::cout << "bloom filter header info, header length:" << header_len;
     EXPECT_EQ(header_len, 18);

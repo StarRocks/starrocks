@@ -21,8 +21,8 @@
 #include <string_view>
 #include <utility>
 
-#include "common/util/thrift_util.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/parquet/parquet_thrift_deserializer.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "runtime/current_thread.h"
@@ -521,9 +521,10 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
         int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         tparquet::FileMetaData t_metadata;
         // deserialize footer
-        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) +
-                                                       footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
-                                               &metadata_length, TProtocolType::COMPACT, &t_metadata));
+        RETURN_IF_ERROR(deserialize_parquet_file_metadata(
+                reinterpret_cast<const uint8*>(footer_buffer.data()) +
+                        footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
+                &metadata_length, &t_metadata));
 
         *file_metadata_ptr = std::make_shared<FileMetaData>();
         FileMetaData* file_metadata = file_metadata_ptr->get();

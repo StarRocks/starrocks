@@ -41,6 +41,7 @@ starrocks_define_thrift_codegen_target(
 
 set(SRC_FILES
     ${SRC_DIR}/gen_cpp/thrift_types_customize_impl.cpp
+    ${SRC_DIR}/formats/parquet/parquet_thrift_raw_deserializer.cpp
     ${GEN_CPP_DIR}/AgentService_types.cpp
     ${GEN_CPP_DIR}/BackendService.cpp
     ${GEN_CPP_DIR}/BackendService_types.cpp
@@ -104,6 +105,9 @@ set(SRC_FILES
 # keep everything in one library, the object files reference
 # each other
 ADD_BE_LIB(StarRocksGen ${SRC_FILES})
+if (ENABLE_MULTI_DYNAMIC_LIBS)
+    target_link_options(StarRocksGen PRIVATE "-Wl,-Bsymbolic")
+endif()
 add_dependencies(StarRocksGen be_proto_codegen be_thrift_codegen)
 set_target_properties(StarRocksGen PROPERTIES CXX_CLANG_TIDY "")
 

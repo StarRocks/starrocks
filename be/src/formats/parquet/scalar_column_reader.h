@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/parquet_thrift_deserializer.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/utils.h"
 
@@ -98,8 +98,8 @@ public:
             RETURN_IF_ERROR(
                     _opts.file->read_at_fully(offset_index_offset, offset_index_data.data(), offset_index_length));
 
-            RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
-                                                   TProtocolType::COMPACT, &_offset_index_ctx->offset_index));
+            RETURN_IF_ERROR(deserialize_parquet_offset_index(offset_index_data.data(), &offset_index_length,
+                                                            &_offset_index_ctx->offset_index));
         }
         return &_offset_index_ctx->offset_index;
     }

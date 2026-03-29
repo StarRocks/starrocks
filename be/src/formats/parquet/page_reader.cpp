@@ -25,9 +25,9 @@
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
-#include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/parquet_thrift_deserializer.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -79,7 +79,7 @@ Status PageReader::_deal_page_with_cache() {
                 const_cast<std::vector<uint8_t>*>(reinterpret_cast<const std::vector<uint8_t>*>(cache_handle.data()));
         _page_handle = PageHandle(std::move(cache_handle));
         _header_length = _cache_buf->size();
-        auto st = deserialize_thrift_msg(_cache_buf->data(), &_header_length, TProtocolType::COMPACT, &_cur_header);
+        auto st = deserialize_parquet_page_header(_cache_buf->data(), &_header_length, &_cur_header);
         DCHECK(st.ok());
         _next_header_pos = _offset + _header_length + _data_length();
         RETURN_IF_ERROR(_skip_bytes(_header_length + _data_length()));
@@ -146,7 +146,7 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
         }
 
         _header_length = allowed_page_size;
-        auto st = deserialize_thrift_msg(page_buf, &_header_length, TProtocolType::COMPACT, &_cur_header);
+        auto st = deserialize_parquet_page_header(page_buf, &_header_length, &_cur_header);
 
         if (st.ok()) {
             DCHECK(_header_length > 0);

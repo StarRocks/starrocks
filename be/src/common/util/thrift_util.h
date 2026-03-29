@@ -148,6 +148,8 @@ std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration();
 // Deserialize a thrift message from buf/len.  buf/len must at least contain
 // all the bytes needed to store the thrift message.  On return, len will be
 // set to the actual length of the header.
+// This generic helper is not safe for generated thrift types across DSO
+// boundaries in dynamic mode. Parquet uses an owner-DSO bridge instead.
 template <class T>
 Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType type, T* deserialized_msg) {
     // Deserialize msg bytes into c++ thrift msg using memory
