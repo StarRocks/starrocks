@@ -99,7 +99,7 @@ public:
                     _opts.file->read_at_fully(offset_index_offset, offset_index_data.data(), offset_index_length));
 
             RETURN_IF_ERROR(deserialize_parquet_offset_index(offset_index_data.data(), &offset_index_length,
-                                                            &_offset_index_ctx->offset_index));
+                                                             &_offset_index_ctx->offset_index));
         }
         return &_offset_index_ctx->offset_index;
     }

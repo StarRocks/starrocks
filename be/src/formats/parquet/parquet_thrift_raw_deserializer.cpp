@@ -85,8 +85,8 @@ bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, tpa
     return deserialize_parquet_compact_raw(buf, len, offset_index, err);
 }
 
-bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len,
-                                                 tparquet::BloomFilterHeader* header, std::string* err) {
+bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len, tparquet::BloomFilterHeader* header,
+                                                 std::string* err) {
     return deserialize_parquet_compact_raw(buf, len, header, err);
 }
 

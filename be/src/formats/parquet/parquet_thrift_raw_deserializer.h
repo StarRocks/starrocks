@@ -41,7 +41,7 @@ bool deserialize_parquet_column_index_raw(const uint8_t* buf, uint32_t* len, tpa
 bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, tparquet::OffsetIndex* offset_index,
                                           std::string* err);
 
-bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len,
-                                                 tparquet::BloomFilterHeader* header, std::string* err);
+bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len, tparquet::BloomFilterHeader* header,
+                                                 std::string* err);
 
 } // namespace starrocks::parquet

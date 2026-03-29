@@ -48,14 +48,12 @@ inline Status deserialize_parquet_page_header(const uint8_t* buf, uint32_t* len,
     return detail::parquet_thrift_status(deserialize_parquet_page_header_raw(buf, len, header, &err), err);
 }
 
-inline Status deserialize_parquet_column_index(const uint8_t* buf, uint32_t* len,
-                                               tparquet::ColumnIndex* column_index) {
+inline Status deserialize_parquet_column_index(const uint8_t* buf, uint32_t* len, tparquet::ColumnIndex* column_index) {
     std::string err;
     return detail::parquet_thrift_status(deserialize_parquet_column_index_raw(buf, len, column_index, &err), err);
 }
 
-inline Status deserialize_parquet_offset_index(const uint8_t* buf, uint32_t* len,
-                                               tparquet::OffsetIndex* offset_index) {
+inline Status deserialize_parquet_offset_index(const uint8_t* buf, uint32_t* len, tparquet::OffsetIndex* offset_index) {
     std::string err;
     return detail::parquet_thrift_status(deserialize_parquet_offset_index_raw(buf, len, offset_index, &err), err);
 }

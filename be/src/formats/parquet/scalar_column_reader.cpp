@@ -286,8 +286,7 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     RETURN_IF_ERROR(_opts.file->read_at_fully(column_index_offset, page_index_data.data(), column_index_length));
 
     tparquet::ColumnIndex column_index;
-    RETURN_IF_ERROR(deserialize_parquet_column_index(page_index_data.data(), &column_index_length,
-                                                     &column_index));
+    RETURN_IF_ERROR(deserialize_parquet_column_index(page_index_data.data(), &column_index_length, &column_index));
 
     ASSIGN_OR_RETURN(const tparquet::OffsetIndex* offset_index, get_offset_index(rg_first_row));
 
@@ -368,8 +367,8 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), header_len));
     }
 
-    RETURN_IF_ERROR(deserialize_parquet_bloom_filter_header(
-            reinterpret_cast<const uint8*>(bloom_filter_data.data()), &header_len, &header));
+    RETURN_IF_ERROR(deserialize_parquet_bloom_filter_header(reinterpret_cast<const uint8*>(bloom_filter_data.data()),
+                                                            &header_len, &header));
     if (length == 0) {
         bloom_filter_data.resize(header_len + header.numBytes + 1);
         RETURN_IF_ERROR(
