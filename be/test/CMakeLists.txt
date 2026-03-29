@@ -355,7 +355,7 @@ if (USE_AVX2)
 endif ()
 
 if (STARROCKS_JIT_ENABLE)
-    set(EXEC_FILES ${EXEC_FILES} ./runtime/jit_cache_test.cpp)
+    set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
 endif()
 
 add_subdirectory(base)
