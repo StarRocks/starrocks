@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "common/config_thrift_server_fwd.h"
 #include "common/status.h"
 #include "formats/parquet/parquet_thrift_raw_deserializer.h"
 
@@ -29,6 +30,11 @@ inline Status parquet_thrift_status(bool ok, const std::string& err) {
     return Status::InternalError(err.empty() ? "Unknown exception" : err);
 }
 
+inline ParquetThriftLimits parquet_thrift_limits() {
+    return ParquetThriftLimits{config::thrift_max_message_size, config::thrift_max_frame_size,
+                               config::thrift_max_recursion_depth};
+}
+
 } // namespace detail
 
 // This wrapper is the public parquet-facing API. It keeps Status handling in
@@ -40,28 +46,36 @@ inline Status parquet_thrift_status(bool ok, const std::string& err) {
 
 inline Status deserialize_parquet_file_metadata(const uint8_t* buf, uint32_t* len, tparquet::FileMetaData* metadata) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_file_metadata_raw(buf, len, metadata, &err), err);
+    return detail::parquet_thrift_status(
+            deserialize_parquet_file_metadata_raw(buf, len, detail::parquet_thrift_limits(), metadata, &err), err);
 }
 
 inline Status deserialize_parquet_page_header(const uint8_t* buf, uint32_t* len, tparquet::PageHeader* header) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_page_header_raw(buf, len, header, &err), err);
+    return detail::parquet_thrift_status(
+            deserialize_parquet_page_header_raw(buf, len, detail::parquet_thrift_limits(), header, &err), err);
 }
 
 inline Status deserialize_parquet_column_index(const uint8_t* buf, uint32_t* len, tparquet::ColumnIndex* column_index) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_column_index_raw(buf, len, column_index, &err), err);
+    return detail::parquet_thrift_status(deserialize_parquet_column_index_raw(
+                                                 buf, len, detail::parquet_thrift_limits(), column_index, &err),
+                                         err);
 }
 
 inline Status deserialize_parquet_offset_index(const uint8_t* buf, uint32_t* len, tparquet::OffsetIndex* offset_index) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_offset_index_raw(buf, len, offset_index, &err), err);
+    return detail::parquet_thrift_status(deserialize_parquet_offset_index_raw(
+                                                 buf, len, detail::parquet_thrift_limits(), offset_index, &err),
+                                         err);
 }
 
 inline Status deserialize_parquet_bloom_filter_header(const uint8_t* buf, uint32_t* len,
                                                       tparquet::BloomFilterHeader* header) {
     std::string err;
-    return detail::parquet_thrift_status(deserialize_parquet_bloom_filter_header_raw(buf, len, header, &err), err);
+    return detail::parquet_thrift_status(deserialize_parquet_bloom_filter_header_raw(
+                                                 buf, len, detail::parquet_thrift_limits(), header, &err),
+                                         err);
 }
 
 } // namespace starrocks::parquet

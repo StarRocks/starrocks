@@ -32,11 +32,18 @@
 namespace starrocks::parquet {
 namespace {
 
+std::shared_ptr<apache::thrift::TConfiguration> create_parquet_thrift_configuration(const ParquetThriftLimits& limits) {
+    return std::make_shared<apache::thrift::TConfiguration>(limits.max_message_size, limits.max_frame_size,
+                                                            limits.max_recursion_depth);
+}
+
 // Keep protocol construction and generated parquet thrift reads in StarRocksGen.
 template <class T>
-bool deserialize_parquet_compact_raw(const uint8_t* buf, uint32_t* len, T* deserialized_msg, std::string* err) {
+bool deserialize_parquet_compact_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                     T* deserialized_msg, std::string* err) {
     auto transport = std::make_shared<apache::thrift::transport::TMemoryBuffer>(
-            const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE);
+            const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE,
+            create_parquet_thrift_configuration(limits));
     apache::thrift::protocol::TCompactProtocolT<apache::thrift::transport::TMemoryBuffer> protocol(transport);
 
     try {
@@ -65,29 +72,33 @@ bool deserialize_parquet_compact_raw(const uint8_t* buf, uint32_t* len, T* deser
 
 } // namespace
 
-bool deserialize_parquet_file_metadata_raw(const uint8_t* buf, uint32_t* len, tparquet::FileMetaData* metadata,
+bool deserialize_parquet_file_metadata_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                           tparquet::FileMetaData* metadata,
                                            std::string* err) {
-    return deserialize_parquet_compact_raw(buf, len, metadata, err);
+    return deserialize_parquet_compact_raw(buf, len, limits, metadata, err);
 }
 
-bool deserialize_parquet_page_header_raw(const uint8_t* buf, uint32_t* len, tparquet::PageHeader* header,
+bool deserialize_parquet_page_header_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                         tparquet::PageHeader* header,
                                          std::string* err) {
-    return deserialize_parquet_compact_raw(buf, len, header, err);
+    return deserialize_parquet_compact_raw(buf, len, limits, header, err);
 }
 
-bool deserialize_parquet_column_index_raw(const uint8_t* buf, uint32_t* len, tparquet::ColumnIndex* column_index,
+bool deserialize_parquet_column_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                          tparquet::ColumnIndex* column_index,
                                           std::string* err) {
-    return deserialize_parquet_compact_raw(buf, len, column_index, err);
+    return deserialize_parquet_compact_raw(buf, len, limits, column_index, err);
 }
 
-bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, tparquet::OffsetIndex* offset_index,
+bool deserialize_parquet_offset_index_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                          tparquet::OffsetIndex* offset_index,
                                           std::string* err) {
-    return deserialize_parquet_compact_raw(buf, len, offset_index, err);
+    return deserialize_parquet_compact_raw(buf, len, limits, offset_index, err);
 }
 
-bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len, tparquet::BloomFilterHeader* header,
-                                                 std::string* err) {
-    return deserialize_parquet_compact_raw(buf, len, header, err);
+bool deserialize_parquet_bloom_filter_header_raw(const uint8_t* buf, uint32_t* len, const ParquetThriftLimits& limits,
+                                                 tparquet::BloomFilterHeader* header, std::string* err) {
+    return deserialize_parquet_compact_raw(buf, len, limits, header, err);
 }
 
 } // namespace starrocks::parquet
