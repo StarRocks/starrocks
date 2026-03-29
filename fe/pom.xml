@@ -52,7 +52,7 @@ under the License.
         <jackson.version>2.21.1</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.1 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
-        <spark.version>3.5.5</spark.version>
+        <spark.version>3.5.7</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.16.0</parquet.version>
         <hadoop.version>3.4.3</hadoop.version>

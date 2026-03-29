@@ -50,7 +50,7 @@ fixed_jars = [
     "grpc-netty-shaded-1.67.1.jar",
     # extra scan from docker scout
     "spark-network-common_2.12-3.5.5.jar",
-    "spark-core_2.12-3.5.5.jar",
+    "spark-core_2.12-3.5.7.jar",
 ]
 
 
