@@ -219,7 +219,7 @@ struct ArrayAggWindowState final : ArrayAggAggregateState<PT, is_distinct, MyHas
     }
 };
 
-template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename> typename State,
+template <LogicalType LT, bool is_distinct, template <LogicalType, bool, typename...> typename State,
           typename MyHashSet = std::set<int>>
 class ArrayAggAggregateFunctionBase final
         : public AggregateFunctionBatchHelper<State<LT, is_distinct, MyHashSet>,
