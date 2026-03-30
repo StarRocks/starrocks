@@ -632,16 +632,14 @@ struct GetContainer {
 };
 
 <<<<<<< HEAD
-#define GET_CONTAINER(ltype)                                                            \
-    template <>                                                                         \
-    struct GetContainer<ltype> {                                                        \
-        static const auto& get_data(const Column* column) {                             \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
-        static const auto& get_data(const ColumnPtr& column) {                          \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
-    };
+#define GET_CONTAINER(ltype) template < > struct GetContainer < ltype> {
+    static const auto& get_data(const Column* column) {
+        return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();
+    }
+    static const auto& get_data(const ColumnPtr& column) {
+        return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();
+    }
+};
 APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 #undef GET_CONTAINER
 

@@ -182,20 +182,21 @@ public:
 
 <<<<<<< HEAD
 =======
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                                _range_or_ranges, _build_tie));
-            restore_inline_permutation(inlined, _permutation);
-        } else {
-            using ItemType = InlinePermuteItem<Slice>;
-            auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-                return lhs.inline_value.compare(rhs.inline_value);
-            };
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                            _range_or_ranges, _build_tie));
+        restore_inline_permutation(inlined, _permutation);
+    }
+    else {
+        using ItemType = InlinePermuteItem<Slice>;
+        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
+            return lhs.inline_value.compare(rhs.inline_value);
+        };
 
-            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.immutable_data());
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                                _range_or_ranges, _build_tie));
-            restore_inline_permutation(inlined, _permutation);
-        }
+        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.immutable_data());
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
+                                            _range_or_ranges, _build_tie));
+        restore_inline_permutation(inlined, _permutation);
+    }
 >>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
         return Status::OK();
     }
@@ -242,7 +243,7 @@ private:
     Tie& _tie;
     R _range_or_ranges;
     bool _build_tie;
-};
+}; // namespace starrocks
 
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
