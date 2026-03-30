@@ -137,7 +137,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
     RETURN_IF_ERROR(result);
 
     if (nullable_array != nullptr) {
-        return NullableColumn::create(std::move(result.value()), nullable_array->null_column());
+        auto null_column = std::static_pointer_cast<NullColumn>(nullable_array->null_column()->clone_shared());
+        return NullableColumn::create(std::move(result.value()), std::move(null_column));
     }
     return result;
 }
@@ -371,7 +372,8 @@ private:
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target))
             DCHECK_EQ(nullable->size(), result->size());
-            return NullableColumn::create(std::move(result), nullable->null_column());
+            auto null_column = std::static_pointer_cast<NullColumn>(nullable->null_column()->clone_shared());
+            return NullableColumn::create(std::move(result), std::move(null_column));
         }
 
         return _array_remove_non_nullable(down_cast<ArrayColumn&>(*array), *target);
@@ -1727,4 +1729,5 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
         return dest_column;
     }
 }
+
 } // namespace starrocks

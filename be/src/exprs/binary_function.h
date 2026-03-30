@@ -256,7 +256,8 @@ public:
 
             NullColumnPtr null_flags;
             if (data->is_nullable()) {
-                null_flags = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
+                null_flags = std::static_pointer_cast<NullColumn>(
+                        ColumnHelper::as_raw_column<NullableColumn>(data)->null_column()->clone_shared());
             } else {
                 null_flags = RunTimeColumnType<TYPE_NULL>::create();
                 null_flags->resize(data->size());
