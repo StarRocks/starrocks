@@ -6011,11 +6011,21 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         CTERelation.CTEMaterializationHint hint = CTERelation.CTEMaterializationHint.NONE;
         if (context.bracketHint() != null) {
-            String hintText = ((Identifier) visit(context.bracketHint().identifier(0))).getValue().toLowerCase();
+            List<Identifier> hintIdentifiers = visit(context.bracketHint().identifier(), Identifier.class);
+            if (hintIdentifiers.size() != 1) {
+                throw new ParsingException(
+                        "CTE hint must be a single [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
+            }
+            String hintText = hintIdentifiers.get(0).getValue().toLowerCase();
             if (hintText.equals("materialized")) {
                 hint = CTERelation.CTEMaterializationHint.MATERIALIZED;
             } else if (hintText.equals("not_materialized")) {
                 hint = CTERelation.CTEMaterializationHint.NOT_MATERIALIZED;
+            } else {
+                throw new ParsingException(
+                        "Unknown CTE hint [" + hintText + "]. Use [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
             }
         }
 
