@@ -86,12 +86,6 @@ ColumnPtr make_null_bigint_column() {
     return col;
 }
 
-// Metadata bytes from any VariantRowValue (all share the same root metadata).
-std::string get_metadata_raw(const VariantRowValue& rv) {
-    auto raw = rv.get_metadata().raw();
-    return std::string(raw.data(), raw.size());
-}
-
 } // namespace
 
 // ─── existing test ──────────────────────────────────────────────────────────
