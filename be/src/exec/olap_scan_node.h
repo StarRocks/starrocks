@@ -22,6 +22,7 @@
 
 #include "column/chunk.h"
 #include "column/column_access_path.h"
+#include "common/statusor.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
@@ -79,8 +80,7 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 

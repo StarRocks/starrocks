@@ -187,9 +187,9 @@ void HashJoinNode::close(RuntimeState* state) {
 }
 
 template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
-pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    auto rhs_operators = child(1)->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto rhs_operators, child(1)->decompose_to_pipeline(context));
     // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
     // return empty result in this case. Hash join cannot be divided into multiple
     // partitions in this case. Otherwise, NULL value in right table will only occur
@@ -268,7 +268,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
-    auto lhs_operators = child(0)->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto lhs_operators, child(0)->decompose_to_pipeline(context));
     auto join_colocate_group = context->find_exec_group_by_plan_node_id(_id);
     if (join_colocate_group->type() == ExecutionGroupType::COLOCATE) {
         DCHECK(context->current_execution_group()->is_colocate_exec_group());
@@ -332,7 +332,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     return lhs_operators;
 }
 
-pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     // now spill only support INNER_JOIN and LEFT-SEMI JOIN. we could implement LEFT_OUTER_JOIN later
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() && is_spillable(_join_type)) {

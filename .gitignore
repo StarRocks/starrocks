@@ -106,6 +106,7 @@ CMakeLists.txt
 .claude
 .clangd
 .cursor/
+.worktrees/
 
 
 !build-mac/CMakeLists.txt

@@ -57,6 +57,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -112,6 +113,7 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -247,6 +249,14 @@ public class ConnectProcessor {
         if (ctx.getState().isQuery()) {
             if (ctx.getState().getErrType() != QueryState.ErrType.BLACKLISTED) {
                 MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+                EnumSet<IcebergTimeTravelQueryAnalyzer.TimeTravelType> timeTravelQueryTypes =
+                        IcebergTimeTravelQueryAnalyzer.collectTimeTravelTypes(parsedStmt);
+                if (!timeTravelQueryTypes.isEmpty()) {
+                    MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+                    timeTravelQueryTypes.forEach(type ->
+                            MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric(type.getMetricLabel())
+                                    .increase(1L));
+                }
                 ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
                 if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                     // err query

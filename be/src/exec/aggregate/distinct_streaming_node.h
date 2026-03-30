@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/aggregate/aggregate_base_node.h"
 
 // Distinct means this node handle distinct or group by no aggregate function query.
@@ -25,6 +26,6 @@ public:
     DistinctStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 };
 } // namespace starrocks

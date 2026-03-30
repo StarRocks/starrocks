@@ -72,6 +72,7 @@ import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -779,6 +780,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
         for (Snapshot snapshot : snapshots) {
+            // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
+            // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
+            if (DataOperations.REPLACE.equals(snapshot.operation())) {
+                lastSnapshotId = snapshot.snapshotId();
+                continue;
+            }
             long currentSnapshotId = snapshot.snapshotId();
             TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot);
@@ -888,6 +895,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
                                                     MetadataTableType metadataTableType) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || !connectContext.isMetadataContext()) {
+            MetricRepo.COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL
+                    .getMetric(metadataTableType.typeString)
+                    .increase(1L);
+        }
+
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
