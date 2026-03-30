@@ -225,7 +225,7 @@ private:
     Tie& _tie;
     R _range_or_ranges;
     bool _build_tie;
-};
+}; // namespace starrocks
 
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {

@@ -274,7 +274,7 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        auto& data = column.get_proxy_data();
+        const auto& data = column.get_proxy_data();
         const NullData* null_data = nullptr;
         if (_nullable_column != nullptr) {
             null_data = &_nullable_column->get_data();

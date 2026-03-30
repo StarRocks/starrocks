@@ -259,7 +259,7 @@ public:
     static ColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                        const bool is_nullable);
 
-    // Create a column with specified size, the column will be resized to size
+    // Create a column with a specified size, the column will be resized to size
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);
     /**
@@ -630,19 +630,6 @@ struct GetContainer {
     static const auto& get_data(const Column* column) { return ColumnHelper::get_container_data<ltype>(column); }
     static const auto& get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
 };
-
-#define GET_CONTAINER(ltype)                                                            \
-    template <>                                                                         \
-    struct GetContainer<ltype> {                                                        \
-        static const auto& get_data(const Column* column) {                             \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
-        static const auto& get_data(const ColumnPtr& column) {                          \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
-    };
-APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
-#undef GET_CONTAINER
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
