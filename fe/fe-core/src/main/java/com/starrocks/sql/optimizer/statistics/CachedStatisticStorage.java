@@ -94,6 +94,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Map<TableStatsCacheKey, Optional<Long>> data = result.get();
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
@@ -249,6 +252,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute connectorTableCachedStatistics.getAll", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultConnectorTableStatistics(columns);
         }
     }
@@ -342,6 +348,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
                         columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -351,6 +360,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistic", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return ColumnStatistic.unknown();
         }
     }
@@ -378,6 +390,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
                     columnStatistics.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
@@ -397,6 +412,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultColumnStatisticList(columns);
         }
     }
@@ -531,6 +549,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
                 realResult = result.get();
@@ -547,6 +568,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
@@ -578,6 +602,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getConnectorHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
@@ -632,6 +659,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
+            if (Config.enable_sync_statistics_load) {
+                result.get();
+            }
             if (result.isDone()) {
                 Optional<MultiColumnCombinedStatistics> data = result.get();
                 return data.orElse(MultiColumnCombinedStatistics.EMPTY);
