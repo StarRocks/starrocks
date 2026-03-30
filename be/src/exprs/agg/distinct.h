@@ -366,11 +366,13 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         if constexpr (IsSlice<T>) {
-            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
+            auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
+            this->data(state).update(ctx->mem_pool(), slice);
         } else {
-            this->data(state).update(column->get_data()[row_num]);
+            const auto* column = down_cast<const ColumnType*>(columns[0]);
+            const auto& immutable_data = column->get_data();
+            this->data(state).update(immutable_data[row_num]);
         }
     }
 
@@ -379,7 +381,6 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -387,28 +388,42 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-            cache[i] = CacheEntry{hash_value};
-        }
-        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-        size_t prefetch_index = 16;
-
-        MemPool* mem_pool = ctx->mem_pool();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            if (prefetch_index < chunk_size) {
-                agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
-                prefetch_index++;
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{hash_value};
             }
-            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_data();
+                build_and_update(container_data);
+            } else {
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto& container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
@@ -418,23 +433,39 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            AggDataPtr state = states[i] + state_offset;
-            auto& agg_state = this->data(state);
-            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
-            cache[i] = CacheEntry{&agg_state, hash_value};
-        }
-        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
-        size_t prefetch_index = 16;
-
-        MemPool* mem_pool = ctx->mem_pool();
-        for (size_t i = 0; i < chunk_size; ++i) {
-            if (prefetch_index < chunk_size) {
-                cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
-                prefetch_index++;
+        auto build_and_update = [&](const auto& container_data) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                AggDataPtr state = states[i] + state_offset;
+                auto& agg_state = this->data(state);
+                size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+                cache[i] = CacheEntry{&agg_state, hash_value};
             }
-            cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+            size_t prefetch_index = 16;
+
+            MemPool* mem_pool = ctx->mem_pool();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (prefetch_index < chunk_size) {
+                    cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                    prefetch_index++;
+                }
+                cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            }
+        };
+
+        if constexpr (IsSlice<T>) {
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            if (data_column->is_large_binary()) {
+                const auto& container_data = down_cast<const LargeBinaryColumn*>(data_column)->get_data();
+                build_and_update(container_data);
+            } else {
+                const auto& container_data = down_cast<const BinaryColumn*>(data_column)->get_data();
+                build_and_update(container_data);
+            }
+        } else {
+            const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
+            const auto& container_data = GetContainer<LT>::get_data(column);
+            build_and_update(container_data);
         }
     }
 
@@ -581,15 +612,15 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
             const auto& off = array_column->offsets().get_data();
-            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
-            for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
-                if (!column->is_null(i)) {
-                    agg_state.update(mem_pool, binary_column->get_slice(i));
+            ColumnHelper::with_binary_data_column(column, [&](const auto* typed_column) {
+                for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                    if (!column->is_null(i)) {
+                        agg_state.update(mem_pool, typed_column->get_slice(i));
+                    }
                 }
-            }
+            });
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
-            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+            agg_state.update(mem_pool, ColumnHelper::get_binary_slice(data_column, row_num));
         }
 
         agg_state.update_over_limit();

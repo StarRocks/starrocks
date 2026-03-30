@@ -486,7 +486,8 @@ private:
         return overlap;
     }
 
-    static bool _check_overlap(const HashSet& hash_set, const DataArray& data, uint32_t start, uint32_t end,
+    template <typename DataArrayType>
+    static bool _check_overlap(const HashSet& hash_set, const DataArrayType& data, uint32_t start, uint32_t end,
                                size_t index) {
         for (auto i = start; i < end; i++) {
             if (hash_set.contains(data[i])) {
@@ -496,7 +497,8 @@ private:
         return false;
     }
 
-    static bool _check_overlap_nullable(const HashSet& hash_set, const DataArray& data, const NullData& null_data,
+    template <typename DataArrayType>
+    static bool _check_overlap_nullable(const HashSet& hash_set, const DataArrayType& data, const NullData& null_data,
                                         uint32_t start, uint32_t end, bool has_null, size_t index) {
         for (auto i = start; i < end; i++) {
             if (null_data[i] == 1) {
