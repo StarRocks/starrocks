@@ -219,14 +219,15 @@ public class CreateFunctionAnalyzer {
 
             } catch (IOException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Failed to load object_file: " + stmt.getProperties().get(CreateFunctionStmt.FILE_KEY), e);
+                        "Failed to load object_file: " + stmt.getProperties().get(CreateFunctionStmt.FILE_KEY) + 
+                        "," + e.getMessage());
             } catch (ClassNotFoundException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Class '" + className + "' not found in object_file :" +
-                                stmt.getProperties().get(CreateFunctionStmt.FILE_KEY), e);
+                                stmt.getProperties().get(CreateFunctionStmt.FILE_KEY) + "," + e.getMessage());
             } catch (Exception e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "other exception when load class. exception:", e);
+                        "other exception when load class. exception:" + e.getMessage());
             }
         } finally {
             System.setSecurityManager(null);
