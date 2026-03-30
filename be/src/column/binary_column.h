@@ -314,8 +314,9 @@ public:
         return _slices;
     }
 
-    Bytes& get_bytes() { return _bytes; }
     const ProxyContainer& get_proxy_data() const { return _immuable_container; }
+
+    Bytes& get_bytes() { return _bytes; }
 
     const Bytes& get_bytes() const { return _bytes; }
 
