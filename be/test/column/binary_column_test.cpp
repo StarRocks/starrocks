@@ -748,7 +748,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupport
     src->append_string("hello");
     auto dst = BinaryColumn::create();
     dst->append_string("bar");
-    ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), ".*");
+    ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
 }
 
 } // namespace starrocks
