@@ -61,7 +61,7 @@ public:
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
-    using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+    using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     using Container = Buffer<Slice>;
     using BinaryDataProxyContainer = starrocks::BinaryDataProxyContainer;
