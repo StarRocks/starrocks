@@ -107,8 +107,16 @@ public class JDBCScanNode extends ScanNode {
         return output.toString();
     }
 
-    private String getJDBCQueryStr() {
+    private String buildJDBCQuerySQL(long queryLimit) {
+        String jdbcUri = getJdbcUri();
         StringBuilder sql = new StringBuilder("SELECT ");
+
+        // SQL Server uses TOP(N) instead of LIMIT
+        if (queryLimit != -1 && jdbcUri != null && jdbcUri.startsWith("jdbc:sqlserver")) {
+            sql.append("TOP(").append(queryLimit).append(") ");
+            queryLimit = -1;
+        }
+
         sql.append(Joiner.on(", ").join(columns));
         sql.append(" FROM ").append(tableName);
 
@@ -117,7 +125,20 @@ public class JDBCScanNode extends ScanNode {
             sql.append(Joiner.on(") AND (").join(filters));
             sql.append(")");
         }
+
+        if (queryLimit != -1) {
+            if (jdbcUri != null && jdbcUri.startsWith("jdbc:oracle")) {
+                // Oracle doesn't support LIMIT clause, use ROWNUM in a subquery
+                return "SELECT * FROM (" + sql + ") WHERE ROWNUM <= " + queryLimit;
+            } else {
+                sql.append(" LIMIT ").append(queryLimit);
+            }
+        }
         return sql.toString();
+    }
+
+    private String getJDBCQueryStr() {
+        return buildJDBCQuerySQL(-1);
     }
 
     private void createJDBCTableColumns() {
@@ -204,6 +225,7 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+        msg.jdbc_scan_node.setSql(buildJDBCQuerySQL(limit));
     }
 
     @Override

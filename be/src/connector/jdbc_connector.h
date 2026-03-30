@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/jdbc_scanner.h"
@@ -22,6 +23,9 @@ namespace starrocks {
 class JDBCScanner;
 
 namespace connector {
+
+// When FE sends `TJDBCScanNode.sql`, use it; otherwise build SQL on BE (legacy path).
+std::string resolve_jdbc_scan_sql(const TJDBCScanNode& jdbc_scan_node, const Slice& jdbc_url, int64_t read_limit);
 
 class JDBCConnector final : public Connector {
 public:

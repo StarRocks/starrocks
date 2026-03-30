@@ -53,7 +53,7 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
     std::ostringstream oss;
     oss << "SELECT";
     if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
-        oss << fmt::format(" TOP({}) ", limit);
+        oss << fmt::format(" TOP({})", limit);
         limit = -1;
     }
     for (size_t i = 0; i < columns.size(); i++) {
@@ -76,6 +76,14 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
         }
     }
     return oss.str();
+}
+
+std::string resolve_jdbc_scan_sql(const TJDBCScanNode& jdbc_scan_node, const Slice& jdbc_url, int64_t read_limit) {
+    if (jdbc_scan_node.__isset.sql) {
+        return jdbc_scan_node.sql;
+    }
+    return get_jdbc_sql(jdbc_url, jdbc_scan_node.table_name, jdbc_scan_node.columns, jdbc_scan_node.filters,
+                        read_limit);
 }
 
 JDBCDataSource::JDBCDataSource(const JDBCDataSourceProvider* provider, const TScanRange& scan_range)
@@ -151,8 +159,7 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();
     scan_ctx.user = jdbc_table->jdbc_user();
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
-    scan_ctx.sql = get_jdbc_sql(scan_ctx.jdbc_url, jdbc_scan_node.table_name, jdbc_scan_node.columns,
-                                jdbc_scan_node.filters, _read_limit);
+    scan_ctx.sql = resolve_jdbc_scan_sql(jdbc_scan_node, scan_ctx.jdbc_url, _read_limit);
     _scanner = _pool->add(new JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
 
     RETURN_IF_ERROR(_scanner->open(state));
