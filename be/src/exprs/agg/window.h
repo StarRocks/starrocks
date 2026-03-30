@@ -713,18 +713,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                                 this->data(state).value,
                                 AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
                     } else {
-                        const Column* def_col = columns[2];
-                        if (def_col != nullptr && current_row >= 0 &&
-                            current_row < static_cast<int64_t>(def_col->size())) {
-                            this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row));
-                            if (!this->data(state).is_null) {
-                                const Column* def_data_column = ColumnHelper::get_data_column(def_col);
-                                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                                    this->get_row_ref(def_data_column, current_row));
-                            }
-                        } else {
-                            this->data(state).is_null = true;
-                        }
+                        this->data(state).value = this->data(state).default_value;
                     }
                 }
             } else {
