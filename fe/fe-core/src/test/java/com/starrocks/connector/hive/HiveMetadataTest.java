@@ -37,8 +37,8 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
@@ -875,18 +875,25 @@ public class HiveMetadataTest {
     }
 
     @Test
-    public void testGetRemotePartitions(
+    public void testGetPartitionDataInfosByDirectoryMtime(
             @Mocked HiveTable table,
             @Mocked HiveMetastoreOperations hmsOps) {
         List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
         Map<String, Partition> partitionMap = Maps.newHashMap();
+        List<FileStatus> fileStatusList = Lists.newArrayList();
+        long modificationTime = 1000;
         for (String name : partitionNames) {
             Map<String, String> parameters = Maps.newHashMap();
             TextFileFormatDesc formatDesc = new TextFileFormatDesc("a", "b", "c", "d");
             String fullPath = "hdfs://path_to_table/" + name;
             Partition partition = new Partition(parameters, RemoteFileInputFormat.PARQUET, formatDesc, fullPath, true);
             partitionMap.put(name, partition);
+
+            Path filePath = new Path(fullPath + "/00000_0");
+            FileStatus fileStatus = new FileStatus(100000, false, 1, 256, modificationTime++, filePath);
+            fileStatusList.add(fileStatus);
         }
+        FileStatus[] fileStatuses = fileStatusList.toArray(new FileStatus[0]);
         new Expectations() {
             {
                 hmsOps.getPartitionByNames((Table) any, (List<String>) any);
@@ -894,9 +901,70 @@ public class HiveMetadataTest {
                 minTimes = 1;
             }
         };
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public FileStatus[] getFileStatus(Path... paths) {
+                return fileStatuses;
+            }
+        };
 
-        List<PartitionInfo> partitionInfoList = hiveMetadata.getRemotePartitions(table, partitionNames);
-        Assertions.assertEquals(3, partitionInfoList.size());
+        new Expectations() {
+            {
+                table.getTableLocation();
+                result = "hdfs://path_to_table";
+                minTimes = 1;
+            }
+        };
+
+        Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                hiveMetadata.getHivePartitionDataInfos(table, partitionNames, -1);
+        Assertions.assertTrue(partitionDataInfosOpt.isPresent());
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
+        Assertions.assertEquals(3, partitionDataInfos.size());
+        for (int i = 0; i < partitionNames.size(); i++) {
+            Optional<HivePartitionDataInfo> partitionDataInfo = partitionDataInfos.get(partitionNames.get(i));
+            Assertions.assertTrue(partitionDataInfo.isPresent());
+            Assertions.assertEquals(1000 + i, partitionDataInfo.get().getLastFileModifiedTime());
+            Assertions.assertEquals(1, partitionDataInfo.get().getFileNumber());
+        }
+    }
+
+    @Test
+    public void testGetPartitionDataInfosByRemoteFilesWithLimit(@Mocked HiveTable table) {
+        List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103", "dt=20200104");
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList(
+                new RemoteFileInfo(RemoteFileInputFormat.PARQUET, null, "path1"),
+                new RemoteFileInfo(RemoteFileInputFormat.PARQUET, Lists.newArrayList(
+                        new RemoteFileDesc("file1", "gzip", 100, 1001, null),
+                        new RemoteFileDesc("file2", "gzip", 100, 1005, null)), "path2"));
+
+        new Expectations() {
+            {
+                table.getTableLocation();
+                result = "oss://path_to_table";
+                minTimes = 1;
+            }
+        };
+
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public List<RemoteFileInfo> getRemoteFiles(Table ignoredTable, GetRemoteFilesParams params) {
+                Assertions.assertEquals(Lists.newArrayList("dt=20200103", "dt=20200104"), params.getPartitionNames());
+                return remoteFileInfos;
+            }
+        };
+
+        Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                hiveMetadata.getHivePartitionDataInfos(table, partitionNames, 2);
+        Assertions.assertTrue(partitionDataInfosOpt.isPresent());
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
+        Assertions.assertEquals(2, partitionDataInfos.size());
+        Assertions.assertTrue(partitionDataInfos.containsKey("dt=20200103"));
+        Assertions.assertFalse(partitionDataInfos.get("dt=20200103").isPresent());
+        Assertions.assertTrue(partitionDataInfos.containsKey("dt=20200104"));
+        Assertions.assertTrue(partitionDataInfos.get("dt=20200104").isPresent());
+        Assertions.assertEquals(1005, partitionDataInfos.get("dt=20200104").get().getLastFileModifiedTime());
+        Assertions.assertEquals(2, partitionDataInfos.get("dt=20200104").get().getFileNumber());
     }
 
     @Test

@@ -15,7 +15,6 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.ExceptionChecker;
@@ -29,12 +28,10 @@ import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.hudi.HudiRemoteFileIO;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Assertions;
@@ -284,53 +281,14 @@ public class RemoteFileOperationsTest {
     }
 
     @Test
-    public void testGetRemotePartitions() {
-        List<String> partitionNames = Lists.newArrayList("dt=20200101", "dt=20200102", "dt=20200103");
-        List<Partition> partitionList = Lists.newArrayList();
-        List<FileStatus> fileStatusList = Lists.newArrayList();
-        long modificationTime = 1000;
-        for (String name : partitionNames) {
-            Map<String, String> parameters = Maps.newHashMap();
-            TextFileFormatDesc formatDesc = new TextFileFormatDesc("a", "b", "c", "d");
-            String fullPath = "hdfs://path_to_table/" + name;
-            Partition partition = new Partition(parameters, RemoteFileInputFormat.PARQUET, formatDesc, fullPath, true);
-            partitionList.add(partition);
-
-            Path filePath = new Path(fullPath + "/00000_0");
-            FileStatus fileStatus = new FileStatus(100000, false, 1, 256, modificationTime++, filePath);
-            fileStatusList.add(fileStatus);
-        }
-
-        FileStatus[] fileStatuses = fileStatusList.toArray(new FileStatus[0]);
-
-        new MockUp<RemoteFileOperations>() {
-            @Mock
-            public FileStatus[] getFileStatus(Path... paths) {
-                return fileStatuses;
+    public void testAnonPartitionInfo() {
+        PartitionInfo x = new PartitionInfo() {
+            @Override
+            public long getModifiedTime() {
+                return 0;
             }
         };
-
-        RemoteFileOperations ops = new RemoteFileOperations(null, null, null,
-                false, true, null);
-        List<PartitionInfo> partitions = ops.getRemotePartitions(partitionList);
-        Assertions.assertEquals(3, partitions.size());
-        for (int i = 0; i < partitionNames.size(); i++) {
-            Assertions.assertEquals(partitions.get(i).getFullPath(), "hdfs://path_to_table/" + partitionNames.get((i)));
-        }
-    }
-
-    @Test
-    public void testAnonPartitionInfo() {
-        {
-            PartitionInfo x = new PartitionInfo() {
-                @Override
-                public long getModifiedTime() {
-                    return 0;
-                }
-            };
-            Assertions.assertThrows(UnsupportedOperationException.class, () -> x.getFileFormat());
-            Assertions.assertThrows(UnsupportedOperationException.class, () -> x.getFullPath());
-        }
+        Assertions.assertEquals(0, x.getVersion());
     }
 
     @Test

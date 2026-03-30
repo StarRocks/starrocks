@@ -46,11 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveUtils;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -342,10 +342,18 @@ public class HiveTable extends Table {
         for (ReferencedPartitionInfo partition : partitions) {
             partitionNames.add(PartitionUtil.toHivePartitionName(getPartitionColumnNames(), partition.getKey()));
         }
-        List<PartitionInfo> hivePartitions;
+        List<Partition> hivePartitions;
         try {
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getPartitions(this.getCatalogName(), this, partitionNames);
+                    .getPartitions(this.getCatalogName(), this, partitionNames)
+                    .stream()
+                    .map(partitionInfo -> {
+                        Preconditions.checkState(partitionInfo instanceof Partition,
+                                "partition info for hive table %s is not a hive partition: %s",
+                                name, partitionInfo.getClass());
+                        return (Partition) partitionInfo;
+                    })
+                    .collect(Collectors.toList());
         } catch (StarRocksConnectorException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;

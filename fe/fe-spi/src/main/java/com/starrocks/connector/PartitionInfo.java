@@ -14,8 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.connector.hive.RemoteFileInputFormat;
-
 import java.util.concurrent.TimeUnit;
 
 public interface PartitionInfo {
@@ -27,15 +25,7 @@ public interface PartitionInfo {
         return getModifiedTime();
     }
 
-    default TimeUnit getModifiedTimeUnit()  {
+    default TimeUnit getModifiedTimeUnit() {
         return TimeUnit.SECONDS;
-    }
-
-    default RemoteFileInputFormat getFileFormat() {
-        throw new UnsupportedOperationException("");
-    }
-
-    default String getFullPath() {
-        throw new UnsupportedOperationException("");
     }
 }

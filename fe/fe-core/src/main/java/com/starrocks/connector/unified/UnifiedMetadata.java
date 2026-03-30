@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
@@ -59,7 +60,7 @@ import static com.starrocks.catalog.Table.TableType.KUDU;
 import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static java.util.Objects.requireNonNull;
 
-public class UnifiedMetadata implements ConnectorMetadata {
+public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMetadata {
     public static final String ICEBERG_TABLE_TYPE_NAME = "table_type";
     public static final String ICEBERG_TABLE_TYPE_VALUE = "iceberg";
     public static final String SPARK_TABLE_PROVIDER_KEY = "spark.sql.sources.provider";
@@ -207,6 +208,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                                     long snapshotId, String serializedPredicate, MetadataTableType type) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
         return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+    }
+
+    @Override
+    public ConnectorMetadata delegateFor(Table table) {
+        return metadataOfTable(table);
     }
 
     @Override

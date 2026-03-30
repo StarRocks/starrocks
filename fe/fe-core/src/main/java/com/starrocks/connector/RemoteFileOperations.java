@@ -345,32 +345,4 @@ public class RemoteFileOperations {
             throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
         }
     }
-
-    public List<PartitionInfo> getRemotePartitions(List<Partition> partitions) {
-        List<Path> paths = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            Path partitionPath = new Path(partition.getFullPath());
-            paths.add(partitionPath);
-        }
-        FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
-        List<PartitionInfo> result = Lists.newArrayList();
-        for (int i = 0; i < partitions.size(); i++) {
-            Partition partition = partitions.get(i);
-            FileStatus fileStatus = fileStatuses[i];
-            final String fullPath = partition.getFullPath();
-            final long time = fileStatus.getModificationTime();
-            result.add(new PartitionInfo() {
-                @Override
-                public long getModifiedTime() {
-                    return time;
-                }
-
-                @Override
-                public String getFullPath() {
-                    return fullPath;
-                }
-            });
-        }
-        return result;
-    }
 }
