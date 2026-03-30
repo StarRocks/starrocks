@@ -21,6 +21,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.connector.PartitionUtil;
 
 import java.util.List;
@@ -111,7 +112,7 @@ public abstract class PartitionDiffer {
         if (refBaseTable.isNativeTableOrMaterializedView()) {
             return;
         }
-        PartitionNameSetMap mvPartitionNameMap = PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
+        PartitionNameSetMap mvPartitionNameMap = MVPartitionCellBuilder.buildMVPartitionNameMap(refBaseTable,
                 refTablePartitionColumns, PartitionUtil.getPartitionNames(refBaseTable));
         result.put(refBaseTable, mvPartitionNameMap);
     }
