@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -41,6 +42,7 @@ import java.time.temporal.IsoFields;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
@@ -155,11 +157,11 @@ public class ExpressionStatisticCalculator {
                 long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
                 // Add MCV for each branch
                 if (trueRows > 0) {
-                    final var castedMcv = ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR);
+                    final var castedMcv = ConstantOperator.createBoolean(true).castTo(Type.VARCHAR);
                     castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
                 }
                 if (falseRows > 0) {
-                    final var castedMcv = ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR);
+                    final var castedMcv = ConstantOperator.createBoolean(false).castTo(Type.VARCHAR);
                     castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
                 }
             }
