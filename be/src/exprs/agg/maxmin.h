@@ -271,7 +271,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        auto value = ColumnHelper::get_binary_slice(columns[0], row_num);
+        auto value = GetContainer<LT>::get_data(columns[0], row_num);
         OP()(this->data(state), value);
     }
 
@@ -288,14 +288,13 @@ public:
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
                                              bool ignore_subtraction, bool ignore_addition,
                                              [[maybe_unused]] bool has_null) const override {
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
 
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
             previous_frame_first_position < partition_end) {
-            if (OP::equals(this->data(state),
-                           ColumnHelper::get_binary_slice(data_column, previous_frame_first_position))) {
+            if (OP::equals(this->data(state), datas[previous_frame_first_position])) {
                 current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
                 this->data(state).reset();
                 int64_t frame_start = previous_frame_first_position + 1;
