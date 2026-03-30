@@ -55,8 +55,7 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
-                      lt_is_object_family<RType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
             const auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
             const auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < s; ++i) {
