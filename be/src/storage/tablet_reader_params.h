@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "column/column_access_path.h"
 #include "options.h"
 #include "runtime/global_dict/types.h"
@@ -77,6 +78,7 @@ struct TabletReaderParams {
     RuntimeFilterPredicates runtime_filter_preds;
 
     RuntimeState* runtime_state = nullptr;
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     RuntimeProfile* profile = nullptr;
 

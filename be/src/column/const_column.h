@@ -29,9 +29,12 @@ class ConstColumn final : public CowFactory<ColumnFactory<Column, ConstColumn>, 
 
 public:
     using ValueType = void;
+    using SuperClass = CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn>;
 
     explicit ConstColumn(ColumnPtr data_column);
+    ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
+    ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data_column, size_t size);
 
     DISALLOW_COPY(ConstColumn);
 
@@ -197,9 +200,13 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return _data->serialize_size(0); }
 
-    MutableColumnPtr clone_empty() const override { return create(_data->clone_empty(), 0); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
+        return create(_data->clone_empty(), 0);
+    }
 
-    MutableColumnPtr clone() const override { return create(_data->clone(), _size); }
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
+        return create(_data->clone(), _size);
+    }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

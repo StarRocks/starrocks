@@ -27,7 +27,7 @@ StatusOr<ColumnPtr> StringFunctions::inet_aton(FunctionContext* context, const C
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto size = columns[0]->size();
 
-    ColumnBuilder<TYPE_BIGINT> result(size);
+    ColumnBuilder<TYPE_BIGINT> result(context->allocator(), size);
     for (int row = 0; row < size; row++) {
         if (str_viewer.is_null(row)) {
             result.append_null();

@@ -16,6 +16,7 @@
 
 #include <queue>
 
+#include "base/memory/memory_allocator.h"
 #include "exec/aggregator.h"
 #include "exec/analytor.h"
 #include "exec/chunks_sorter.h"
@@ -114,6 +115,9 @@ public:
 
     PipeObservable& observable() { return _observable; }
 
+    void set_sink_allocator_for_sorters(memory::Allocator* allocator);
+    void set_source_allocator_for_sorters(memory::Allocator* allocator);
+
 private:
     // Pull one chunk from one of the sorters
     // The output chunk stream is unordered
@@ -165,6 +169,9 @@ private:
     int32_t _sorter_index = 0;
 
     PipeObservable _observable;
+
+    memory::Allocator* _sink_allocator_for_sorters = nullptr;
+    memory::Allocator* _source_allocator_for_sorters = nullptr;
 };
 
 using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;

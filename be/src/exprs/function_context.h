@@ -163,6 +163,8 @@ public:
     bool allow_throw_exception() const;
 
     std::unique_ptr<NgramBloomFilterState>& get_ngram_state() { return _ngramState; }
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
 
 private:
     friend class ExprContext;
@@ -172,6 +174,8 @@ private:
     // We use the query's runtime state to report errors and warnings. NULL for test
     // contexts.
     RuntimeState* _state{nullptr};
+    // TODO: wire allocator propagation from ExprContext/Operator in a follow-up phase.
+    memory::Allocator* _allocator = memory::get_default_allocator();
 
     // Empty if there's no error
     mutable std::mutex _error_msg_mutex;

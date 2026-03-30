@@ -62,11 +62,12 @@ class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryCol
 
 public:
     using ValueType = Slice;
+    using SuperClass = CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
-    using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+    using Bytes = util::Buffer<uint8_t, 16>;
 
     using Container = Buffer<Slice>;
     using ImmContainer = BinaryImmContainer;
@@ -74,22 +75,55 @@ public:
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
-    BinaryColumnBase() { _offsets.emplace_back(0); }
+    BinaryColumnBase() : BinaryColumnBase(memory::get_default_allocator()) {}
+    explicit BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator)
+            : SuperClass(allocator),
+              _bytes(allocator),
+              _offsets(allocator),
+              _resource(),
+              _slices(allocator),
+              _german_strings(allocator) {
+        _offsets.emplace_back(0);
+    }
     // Default value is empty string
-    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
-    BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
+    explicit BinaryColumnBase(size_t size) : BinaryColumnBase(memory::get_default_allocator(), size) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, size_t size)
+            : SuperClass(allocator),
+              _bytes(allocator),
+              _offsets(allocator, size + 1, 0),
+              _resource(),
+              _slices(allocator),
+              _german_strings(allocator) {}
+    BinaryColumnBase(Bytes bytes, Offsets offsets)
+            : BinaryColumnBase(memory::get_default_allocator(), std::move(bytes), std::move(offsets)) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, Bytes bytes, Offsets offsets)
+            : SuperClass(allocator),
+              _bytes(std::move(bytes)),
+              _offsets(std::move(offsets)),
+              _resource(),
+              _slices(allocator),
+              _german_strings(allocator) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
+            : BinaryColumnBase(memory::get_default_allocator(), std::move(resource), std::move(offsets)) {}
+    BinaryColumnBase([[maybe_unused]] memory::Allocator* allocator, ContainerResource resource, Offsets offsets);
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), _resource(std::move(rhs._resource)) {}
+            : SuperClass(std::move(rhs)),
+              _bytes(std::move(rhs._bytes)),
+              _offsets(std::move(rhs._offsets)),
+              _resource(std::move(rhs._resource)),
+              _slices(std::move(rhs._slices)),
+              _slices_cache(rhs._slices_cache),
+              _german_strings(std::move(rhs._german_strings)),
+              _german_strings_cache(rhs._german_strings_cache) {}
 
     BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
@@ -219,7 +253,8 @@ public:
     bool append_nulls(size_t count) override { return false; }
 
     void append_string(const std::string& str) {
-        _bytes.insert(_bytes.end(), str.data(), str.data() + str.size());
+        const auto* p = reinterpret_cast<const uint8_t*>(str.data());
+        _bytes.append(p, p + str.size());
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
     }
@@ -245,7 +280,7 @@ public:
     }
 
     void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
+        _offsets.append(count, static_cast<uint32_t>(_bytes.size()));
         _slices_cache = false;
     }
 
@@ -296,9 +331,11 @@ public:
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
+        return BinaryColumnBase<T>::create();
+    }
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, size());
         return p;
@@ -372,6 +409,8 @@ public:
         swap(_offsets, r._offsets);
         swap(_slices, r._slices);
         swap(_slices_cache, r._slices_cache);
+        swap(_german_strings, r._german_strings);
+        swap(_german_strings_cache, r._german_strings_cache);
         swap(_resource, r._resource);
     }
 

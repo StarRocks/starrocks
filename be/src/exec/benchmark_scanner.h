@@ -69,7 +69,7 @@ private:
 
     ObjectPool _pool;
     ArrowConvertContext _conv_ctx;
-    Filter _chunk_filter;
+    Filter _chunk_filter = Filter(memory::get_default_allocator());
     bool _scanner_eof = false;
 };
 

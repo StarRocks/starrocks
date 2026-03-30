@@ -255,8 +255,9 @@ std::string ArrayViewColumn::debug_string() const {
     return ss.str();
 }
 
-MutableColumnPtr ArrayViewColumn::clone_empty() const {
-    return create(_elements, UInt32Column::create(), UInt32Column::create());
+MutableColumnPtr ArrayViewColumn::clone_empty(memory::Allocator* allocator) const {
+    auto* target_allocator = allocator == nullptr ? this->allocator() : allocator;
+    return create(_elements, UInt32Column::create(target_allocator), UInt32Column::create(target_allocator));
 }
 
 void ArrayViewColumn::swap_column(Column& rhs) {

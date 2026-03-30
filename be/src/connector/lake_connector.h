@@ -105,7 +105,7 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
-    Filter _selection;
+    Filter _selection = Filter(memory::get_default_allocator());
 
     ObjectPool _obj_pool;
 

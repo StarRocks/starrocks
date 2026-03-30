@@ -714,19 +714,23 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
         return Status::InvalidArgument("node should not be null");
     }
     if (node->value_reader != nullptr) {
-        node->value_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        auto* allocator = node->value_reader->allocator();
+        node->value_column =
+                NullableColumn::create(allocator, BinaryColumn::create(allocator), NullColumn::create(allocator));
         RETURN_IF_ERROR(node->value_reader->read_range(range, filter, node->value_column));
     } else {
         node->value_column = nullptr;
     }
     if (node->typed_value_reader != nullptr) {
-        node->typed_value_column = ColumnHelper::create_column(*node->typed_value_read_type, true);
+        node->typed_value_column =
+                ColumnHelper::create_column(node->typed_value_reader->allocator(), *node->typed_value_read_type, true);
         RETURN_IF_ERROR(node->typed_value_reader->read_range(range, filter, node->typed_value_column));
     } else {
         node->typed_value_column = nullptr;
     }
     if (node->array_element_value_reader != nullptr) {
-        node->array_element_value_column = ColumnHelper::create_column(array_varbinary_type_desc(), true);
+        node->array_element_value_column = ColumnHelper::create_column(node->array_element_value_reader->allocator(),
+                                                                       array_varbinary_type_desc(), true);
         RETURN_IF_ERROR(node->array_element_value_reader->read_range(range, filter, node->array_element_value_column));
     } else {
         node->array_element_value_column = nullptr;
@@ -1694,13 +1698,18 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         variant_column = down_cast<VariantColumn*>(dst_mut);
     }
 
-    ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    ColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto* metadata_allocator = _top_level.metadata_reader->allocator();
+    auto* value_allocator = _top_level.value_reader->allocator();
+    ColumnPtr metadata_col = NullableColumn::create(metadata_allocator, BinaryColumn::create(metadata_allocator),
+                                                    NullColumn::create(metadata_allocator));
+    ColumnPtr value_col = NullableColumn::create(value_allocator, BinaryColumn::create(value_allocator),
+                                                 NullColumn::create(value_allocator));
     RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
     RETURN_IF_ERROR(_top_level.value_reader->read_range(range, filter, value_col));
     if (_top_level.root_typed_value_reader != nullptr) {
         DCHECK(_top_level.root_typed_value_type != nullptr);
-        _top_level.root_typed_value_column = ColumnHelper::create_column(*_top_level.root_typed_value_type, true);
+        _top_level.root_typed_value_column = ColumnHelper::create_column(
+                _top_level.root_typed_value_reader->allocator(), *_top_level.root_typed_value_type, true);
         RETURN_IF_ERROR(
                 _top_level.root_typed_value_reader->read_range(range, filter, _top_level.root_typed_value_column));
     } else {
@@ -1744,10 +1753,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         typed_paths.emplace_back(binding.path);
         typed_types.emplace_back(binding.type);
         // One-level only: SCALAR → scalar column, VARIANT → plain VariantColumn (no nested typed_columns).
-        typed_columns.emplace_back(ColumnHelper::create_column(binding.type, true));
+        typed_columns.emplace_back(
+                ColumnHelper::create_column(_top_level.value_reader->allocator(), binding.type, true));
     }
     variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
-                                         BinaryColumn::create(), BinaryColumn::create());
+                                         BinaryColumn::create(_top_level.value_reader->allocator()),
+                                         BinaryColumn::create(_top_level.value_reader->allocator()));
 
     NullColumn reconstructed_null_column(num_rows);
     auto& reconstructed_nulls = reconstructed_null_column.get_data();

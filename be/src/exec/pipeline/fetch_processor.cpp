@@ -166,7 +166,7 @@ StatusOr<ChunkPtr> FetchProcessor::_build_request_chunk(RuntimeState* state, con
 
     auto chunk = std::make_shared<Chunk>();
 
-    auto position_column = UInt32Column::create();
+    auto position_column = UInt32Column::create(_allocator);
     size_t total_rows = 0;
     std::ranges::for_each(input_chunks, [&total_rows](const ChunkPtr& chunk) { total_rows += chunk->num_rows(); });
 
@@ -177,7 +177,7 @@ StatusOr<ChunkPtr> FetchProcessor::_build_request_chunk(RuntimeState* state, con
     }
 
     auto concat_column_func = [&](SlotId slot_id) {
-        auto col = input_chunks[0]->get_column_by_slot_id(slot_id)->clone_empty();
+        auto col = input_chunks[0]->get_column_by_slot_id(slot_id)->clone_empty(_allocator);
         col->reserve(total_rows);
         for (auto& input_chunk : input_chunks) {
             auto src_column = input_chunk->get_column_by_slot_id(slot_id);
@@ -262,7 +262,7 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
             }
             std::vector<uint32_t> not_null_indices;
             not_null_indices.reserve(not_null_rows);
-            MutableColumnPtr null_row_positions = UInt32Column::create();
+            MutableColumnPtr null_row_positions = UInt32Column::create(_allocator);
             null_row_positions->reserve(null_rows);
             auto& null_row_positions_data = down_cast<UInt32Column*>(null_row_positions.get())->get_data();
 
@@ -280,15 +280,15 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
             null_position_columns->emplace(source_slot_id, std::move(null_row_positions));
 
             // only keep non-null row
-            source_id_column = Int32Column::create();
-            position_column = UInt32Column::create();
+            source_id_column = Int32Column::create(_allocator);
+            position_column = UInt32Column::create(_allocator);
             const auto& data_column = nullable_column->data_column();
             source_id_column->append_selective(*data_column, not_null_indices.data(), 0, not_null_rows);
             const auto& pos_column = request_chunk->get_column_by_slot_id(kPositionColumnSlotId);
             position_column->append_selective(*pos_column, not_null_indices.data(), 0, not_null_rows);
             for (const auto& slot_id : row_pos_desc->get_fetch_ref_slot_ids()) {
                 auto src_col = request_chunk->get_column_by_slot_id(slot_id);
-                auto dst_col = src_col->clone_empty();
+                auto dst_col = src_col->clone_empty(_allocator);
                 dst_col->append_selective(*src_col, not_null_indices.data(), 0, not_null_rows);
                 tmp_chunk->append_column(std::move(dst_col), slot_id);
             }
@@ -327,19 +327,19 @@ Status FetchProcessor::_gen_fetch_tasks(RuntimeState* state, const ChunkPtr& req
             // build new request chunk
             auto new_request_chunk = std::make_shared<Chunk>();
 
-            auto new_source_id_column = Int32Column::create();
+            auto new_source_id_column = Int32Column::create(_allocator);
             new_source_id_column->reserve(num_rows);
             new_source_id_column->append(*source_id_column, start, num_rows);
             new_request_chunk->append_column(std::move(new_source_id_column), source_slot_id);
 
-            auto new_position_column = UInt32Column::create();
+            auto new_position_column = UInt32Column::create(_allocator);
             new_position_column->reserve(num_rows);
             new_position_column->append(*position_column, start, num_rows);
             new_request_chunk->append_column(std::move(new_position_column), kPositionColumnSlotId);
 
             for (const auto& slot_id : row_pos_desc->get_fetch_ref_slot_ids()) {
                 auto src_col = sorted_chunk->get_column_by_slot_id(slot_id);
-                auto new_col = src_col->clone_empty();
+                auto new_col = src_col->clone_empty(_allocator);
                 new_col->reserve(num_rows);
                 new_col->append(*src_col, start, num_rows);
                 new_request_chunk->append_column(std::move(new_col), slot_id);
@@ -381,7 +381,7 @@ StatusOr<ChunkPtr> FetchProcessor::_sort_chunk(RuntimeState* state, const ChunkP
     _permutation.resize(0);
 
     RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), order_by_columns, sort_descs, &_permutation));
-    auto sorted_chunk = chunk->clone_empty_with_slot(chunk->num_rows());
+    auto sorted_chunk = chunk->clone_empty_with_slot(_allocator, chunk->num_rows());
     materialize_by_permutation(sorted_chunk.get(), {chunk}, _permutation);
 
     return sorted_chunk;
@@ -429,7 +429,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
         auto chunk = std::make_shared<Chunk>();
         const auto& tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
         auto source_slot_id = row_pos_desc->get_row_source_slot_id();
-        MutableColumnPtr position_column = UInt32Column::create();
+        MutableColumnPtr position_column = UInt32Column::create(_allocator);
         std::vector<SlotDescriptor*> slots;
         {
             const auto& lookup = row_pos_desc->get_lookup_ref_slot_ids();
@@ -450,7 +450,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
         }
 
         for (const auto& slot : slots) {
-            auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+            auto column = ColumnHelper::create_column(_allocator, slot->type(), slot->is_nullable());
             chunk->append_column(std::move(column), slot->id());
         }
         if (all_fetch_tasks.contains(tuple_id)) {
@@ -504,7 +504,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
 
             for (const auto& input_chunk : input_chunks) {
                 size_t num_rows = input_chunk->num_rows();
-                auto dst_column = src_column->clone_empty();
+                auto dst_column = src_column->clone_empty(_allocator);
                 dst_column->reserve(num_rows);
                 dst_column->append(*src_column, offset, num_rows);
                 input_chunk->append_column(std::move(dst_column), slot->id());
@@ -517,7 +517,7 @@ Status FetchProcessor::_build_output_chunk(RuntimeState* state, const BatchUnitP
             auto slot_desc = state->desc_tbl().get_slot_descriptor(slot);
             for (const auto& input_chunk : input_chunks) {
                 size_t num_rows = input_chunk->num_rows();
-                auto dst_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+                auto dst_column = ColumnHelper::create_column(_allocator, slot_desc->type(), slot_desc->is_nullable());
                 dst_column->append_default(num_rows);
                 input_chunk->append_column(std::move(dst_column), slot);
                 input_chunk->check_or_die();

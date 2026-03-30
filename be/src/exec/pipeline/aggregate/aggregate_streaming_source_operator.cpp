@@ -59,6 +59,7 @@ Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
 
 Status AggregateStreamingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->set_source_allocator(_allocator);
     _aggregator->attach_source_observer(state, this->_observer);
     return Status::OK();
 }

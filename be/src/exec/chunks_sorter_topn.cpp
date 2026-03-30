@@ -15,6 +15,7 @@
 #include "chunks_sorter_topn.h"
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/memory/memory_allocator.h"
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
@@ -48,7 +49,7 @@ void get_compare_results_colwise(size_t rows_to_sort, const Columns& order_by_co
     size_t order_by_column_size = order_by_columns.size();
 
     for (size_t i = 0; i < dats_segment_size; i++) {
-        Buffer<Datum> rhs_values;
+        Buffer<Datum> rhs_values(memory::get_default_allocator());
         auto& segment = data_segments[i];
         for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
             rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
@@ -216,7 +217,7 @@ Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     *eos = false;
     size_t chunk_size = _state->chunk_size();
     MergedRun& run = _merged_runs.front();
-    *chunk = run.steal_chunk(chunk_size);
+    *chunk = run.steal_chunk(chunk_size, source_allocator());
     if (*chunk != nullptr) {
         RETURN_IF_ERROR((*chunk)->downgrade());
     }
@@ -453,7 +454,11 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     DCHECK(_merged_runs.num_rows() > 0);
     size_t data_segment_size = data_segments.size();
 
-    std::vector<CompareVector> compare_results_array(data_segment_size);
+    std::vector<CompareVector> compare_results_array;
+    compare_results_array.reserve(data_segment_size);
+    for (size_t i = 0; i < data_segment_size; ++i) {
+        compare_results_array.emplace_back(memory::get_default_allocator());
+    }
     // First compare the chunk with last row of this segment.
     const size_t max_value_row_id = _get_number_of_rows_to_sort() - 1;
     const auto& [run, max_rid] = _get_run_by_row_id(max_value_row_id);
@@ -509,7 +514,11 @@ Status ChunksSorterTopn::_build_filter_from_low_comparison(const DataSegments& d
                                                            uint32_t& include_num) {
     DCHECK(_merged_runs.num_rows() > 0);
     size_t data_segment_size = data_segments.size();
-    std::vector<CompareVector> compare_results_array(data_segment_size);
+    std::vector<CompareVector> compare_results_array;
+    compare_results_array.reserve(data_segment_size);
+    for (size_t i = 0; i < data_segment_size; ++i) {
+        compare_results_array.emplace_back(memory::get_default_allocator());
+    }
 
     get_compare_results_colwise(0, _lowest_merged_run().orderby, compare_results_array, data_segments, sort_descs);
 
@@ -561,8 +570,9 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
     // Assemble the permutated segments into a chunk
     size_t right_chunk_size = permutation_second.size();
     ChunkUniquePtr right_unique_chunk =
-            dst->empty() ? segments[permutation_second[0].chunk_index].chunk->clone_empty(right_chunk_size)
-                         : dst->front().chunk->clone_empty(right_chunk_size);
+            dst->empty()
+                    ? segments[permutation_second[0].chunk_index].chunk->clone_empty(sink_allocator(), right_chunk_size)
+                    : dst->front().chunk->clone_empty(sink_allocator(), right_chunk_size);
     {
         std::vector<ChunkPtr> right_chunks;
         for (auto& segment : segments) {
@@ -587,7 +597,7 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
         _adjust_chunks_capacity(true);
         // merge to multi sorted chunks
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _merged_runs, std::move(right_unique_chunk),
-                                            rows_to_keep, dst));
+                                            rows_to_keep, dst, sink_allocator()));
     } else {
         // merge to big chunk
         // prepare left chunk
@@ -607,7 +617,7 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
 
         ChunkUniquePtr big_chunk;
         if (dst->num_chunks() == 0) {
-            big_chunk = segments[permutation_second[0].chunk_index].chunk->clone_empty(rows_to_keep);
+            big_chunk = segments[permutation_second[0].chunk_index].chunk->clone_empty(sink_allocator(), rows_to_keep);
         } else {
             big_chunk = std::move(dst->front().chunk);
             dst->pop_front();
@@ -664,7 +674,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         for (auto& segment : segments) {
             chunks.push_back(segment.chunk);
         }
-        big_chunk = segments[new_permutation.first[0].chunk_index].chunk->clone_empty(first_size);
+        big_chunk = segments[new_permutation.first[0].chunk_index].chunk->clone_empty(sink_allocator(), first_size);
         materialize_by_permutation(big_chunk.get(), chunks, new_permutation.first);
         rows_to_keep -= first_size;
         ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
@@ -710,7 +720,8 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         return Status::InternalError(fmt::format("TopN sort exceed rows limit {}", rows_to_keep));
     }
 
-    ChunkUniquePtr big_chunk = segments[new_permutation[0].chunk_index].chunk->clone_empty(rows_to_keep);
+    ChunkUniquePtr big_chunk =
+            segments[new_permutation[0].chunk_index].chunk->clone_empty(sink_allocator(), rows_to_keep);
 
     // Initial this big chunk.
     std::vector<ChunkPtr> chunks;

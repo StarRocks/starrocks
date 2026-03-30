@@ -43,7 +43,7 @@ public:
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
-    Buffer<uint8_t> _serialize_buf; // reusable serialization buffer
-    Buffer<Slice> _slices;          // reusable slice array
+    Buffer<uint8_t> _serialize_buf = Buffer<uint8_t>(memory::get_default_allocator()); // reusable buffer
+    Buffer<Slice> _slices = Buffer<Slice>(memory::get_default_allocator());            // reusable slices
 };
 } // namespace starrocks

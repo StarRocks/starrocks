@@ -132,9 +132,9 @@ public:
     uint32_t serialize_size(size_t idx) const override;
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
-    MutableColumnPtr clone_empty() const override;
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override;
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, size());
         return p;

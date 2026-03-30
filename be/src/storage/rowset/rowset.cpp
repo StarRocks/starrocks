@@ -770,6 +770,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
+    seg_options.allocator = options.allocator;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;

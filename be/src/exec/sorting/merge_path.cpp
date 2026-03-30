@@ -19,7 +19,9 @@
 #include <limits>
 #include <mutex>
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/sort/sort_context.h"
@@ -385,10 +387,10 @@ void detail::MergeNode::process_input(const int32_t parallel_idx) {
         DCHECK_EQ(_right_buffer.len, 0);
         return;
     }
-    ChunkPtr dest_chunk = primitive->runs.chunks[0].chunk->clone_empty();
+    ChunkPtr dest_chunk = primitive->runs.chunks[0].chunk->clone_empty(_merger->column_allocator());
     Columns dest_orderby;
     for (auto& column : primitive->runs.chunks[0].orderby) {
-        dest_orderby.emplace_back(column->clone_empty());
+        dest_orderby.emplace_back(column->clone_empty(_merger->column_allocator()));
     }
     SortedRun dest_run(dest_chunk, std::move(dest_orderby));
     std::vector<int32_t> orderby_indexes = _build_orderby_indexes(dest_run.chunk, _merger->sort_exprs());
@@ -593,7 +595,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
                 while (offset < chunk->num_rows()) {
                     const size_t num_rows =
                             std::min(chunk->num_rows() - offset, MergePathCascadeMerger::MAX_CHUNK_SIZE);
-                    ChunkPtr standard_chunk = chunk->clone_empty(num_rows);
+                    ChunkPtr standard_chunk = chunk->clone_empty(_merger->column_allocator(), num_rows);
                     standard_chunk->append(*chunk, offset, num_rows);
                     DCHECK_EQ(standard_chunk->num_rows(), num_rows);
                     const size_t chunk_id = _merger->add_original_chunk(std::move(standard_chunk));
@@ -601,7 +603,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 
                     Columns standard_orderby;
                     for (const auto& column : orderby) {
-                        auto standard_column = column->clone_empty();
+                        auto standard_column = column->clone_empty(_merger->column_allocator());
                         standard_column->reserve(num_rows);
                         standard_column->append(*column, offset, num_rows);
                         standard_orderby.emplace_back(std::move(standard_column));
@@ -625,7 +627,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t num_rows) {
     static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
     static Chunk::SlotHashMap s_slot_map = {{0, 0}};
-    MutableColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
+    MutableColumnPtr ordinal_column = ColumnHelper::create_column(_merger->column_allocator(), s_type_desc, false);
     ordinal_column->resize(num_rows);
     auto* raw_array = down_cast<Int64Column*>(ordinal_column.get())->get_data().data();
 
@@ -646,7 +648,7 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
                                                const TupleDescriptor* tuple_desc, const TTopNType::type topn_type,
                                                const int64_t offset, const int64_t limit,
                                                std::vector<MergePathChunkProvider> chunk_providers,
-                                               TLateMaterializeMode::type mode)
+                                               memory::Allocator* column_allocator, TLateMaterializeMode::type mode)
         : _chunk_size(chunk_size > MAX_CHUNK_SIZE ? MAX_CHUNK_SIZE : chunk_size),
           _streaming_batch_size(4 * chunk_size * degree_of_parallelism),
           _degree_of_parallelism(degree_of_parallelism),
@@ -657,6 +659,7 @@ MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const in
           _offset(offset),
           _limit(limit),
           _chunk_providers(std::move(chunk_providers)),
+          _column_allocator(column_allocator),
           _process_cnts(degree_of_parallelism),
           _output_chunks(degree_of_parallelism),
           _late_materialization_mode(mode) {
@@ -1069,7 +1072,7 @@ void MergePathCascadeMerger::_split_chunk(const int32_t parallel_idx) {
 
     size_t remain_size = big_run.num_rows();
     while (remain_size > 0) {
-        auto pair = big_run.steal(_late_materialization, _chunk_size, 0);
+        auto pair = big_run.steal(_late_materialization, _chunk_size, 0, column_allocator());
         ChunkPtr chunk = pair.first;
         Columns orderby = std::move(pair.second);
         DCHECK(chunk != nullptr);
@@ -1259,7 +1262,7 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(const int32_t par
         const auto row = static_cast<size_t>(ordinal) & MAX_CHUNK_SIZE;
         if (prev_chunk_id == -1) {
             auto& pair = get_original_pair(chunk_id);
-            output = pair.first->clone_empty(num_rows);
+            output = pair.first->clone_empty(column_allocator(), num_rows);
             prev_chunk_id = chunk_id;
             prev_row = row;
             range_start = row;

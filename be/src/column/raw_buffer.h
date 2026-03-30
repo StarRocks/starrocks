@@ -47,7 +47,7 @@ template <typename T>
 inline constexpr bool is_relocatable_v = is_relocatable<T>::value;
 
 static constexpr size_t empty_raw_buffer_size = 1024;
-alignas(std::max_align_t) extern uint8_t empty_raw_buffer[empty_raw_buffer_size];
+extern uint8_t empty_raw_buffer[empty_raw_buffer_size];
 
 inline size_t element_bytes(size_t element_num, size_t element_size) {
     size_t bytes;

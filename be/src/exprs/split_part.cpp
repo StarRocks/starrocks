@@ -128,7 +128,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
         // if part_number is 0, return an empty string.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
         if (part_number == 0) {
-            return ColumnHelper::create_const_column<TYPE_VARCHAR>("", columns[0]->size());
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(context->allocator(), "", columns[0]->size());
         }
     }
 
@@ -137,7 +137,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
     ColumnViewer part_number_viewer = ColumnViewer<TYPE_INT>(columns[2]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> res(size);
+    ColumnBuilder<TYPE_VARCHAR> res(context->allocator(), size);
     Slice slice;
     for (int i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || delimiter_viewer.is_null(i) || part_number_viewer.is_null(i)) {

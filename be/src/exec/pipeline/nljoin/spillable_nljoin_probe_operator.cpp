@@ -80,7 +80,7 @@ ChunkPtr NLJoinProber::_init_output_chunk(RuntimeState* state, const ChunkPtr& b
         if (!is_probe && build_chunk) {
             nullable |= build_chunk->get_column_by_slot_id(slot->id())->is_nullable();
         }
-        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
+        MutableColumnPtr new_col = ColumnHelper::create_column(_allocator, slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
 
@@ -129,6 +129,7 @@ SpillableNLJoinProbeOperator::SpillableNLJoinProbeOperator(
 Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _accumulator.set_desired_size(state->chunk_size());
+    _prober.set_allocator(allocator());
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
     spill::SpilledOptions opts;
@@ -136,6 +137,9 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     _spiller = _spill_factory->create(opts);
     _spiller->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
+    _spiller->set_spill_allocator(allocator());
+    _spiller->set_restore_allocator(allocator());
+    _cross_join_context->set_build_spiller_restore_allocator(allocator());
     _cross_join_context->incr_prober();
     return Status::OK();
 }

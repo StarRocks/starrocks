@@ -38,6 +38,11 @@ public:
     virtual MemoryKind memory_kind() const = 0;
 };
 
+// Temporary placeholder used during the refactoring process.
+// When a column-specific allocator is not available yet, fall back to the
+// runtime default allocator instead of leaving the pointer null.
+Allocator* get_default_allocator();
+
 template <class Alloc>
 class AllocHolder : private Alloc {
 public:

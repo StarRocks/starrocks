@@ -124,19 +124,19 @@ Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::Fu
 
     if (RE2::FullMatch(pattern_str, LIKE_ENDS_WITH_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_ends_with_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_STARTS_WITH_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_starts_with_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_EQUALS_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_equals_fn;
     } else if (RE2::FullMatch(pattern_str, LIKE_SUBSTRING_RE, &search_string)) {
         remove_escape_character(&search_string);
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
@@ -188,16 +188,16 @@ Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::F
     // characters. In any of these conditions, we can search for the pattern more
     // efficiently by using our own string match functions rather than regex matching.
     if (RE2::FullMatch(pattern_str, EQUALS_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_equals_fn;
     } else if (RE2::FullMatch(pattern_str, STARTS_WITH_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_starts_with_fn;
     } else if (RE2::FullMatch(pattern_str, ENDS_WITH_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_ends_with_fn;
     } else if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
-        state->set_search_string(search_string);
+        state->set_search_string(context->allocator(), search_string);
         state->function = &constant_substring_fn;
     } else {
         RETURN_IF_ERROR(compile_with_hyperscan_or_re2<false>(pattern_str, state, context, pattern));
@@ -247,7 +247,7 @@ StatusOr<ColumnPtr> LikePredicate::match_fn_with_long_constant_pattern(FunctionC
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     for (int row = 0; row < num_rows; ++row) {
         if (value_viewer.is_null(row)) {
@@ -280,7 +280,8 @@ StatusOr<ColumnPtr> LikePredicate::constant_ends_with_fn(FunctionContext* contex
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantEndsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantEndsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(context->allocator(),
+                                                                                                  value, pattern);
 }
 
 // constant_starts
@@ -295,7 +296,8 @@ StatusOr<ColumnPtr> LikePredicate::constant_starts_with_fn(FunctionContext* cont
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantStartsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantStartsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(
+            context->allocator(), value, pattern);
 }
 
 // constant_equals
@@ -309,7 +311,8 @@ StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, 
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
-    return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
+    return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(
+            context->allocator(), value, pattern);
 }
 
 StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* context, const starrocks::Columns& columns) {
@@ -317,7 +320,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(state->_search_string_column);
-    auto res = RunTimeColumnType<TYPE_BOOLEAN>::create();
+    auto res = RunTimeColumnType<TYPE_BOOLEAN>::create(context->allocator());
 
     if (columns[0]->is_constant()) {
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[0]);
@@ -331,7 +334,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         } else {
             res->append(true);
         }
-        return ConstColumn::create(std::move(res), columns[0]->size());
+        return ConstColumn::create(context->allocator(), std::move(res), columns[0]->size());
     }
 
     const BinaryColumn* haystack = nullptr;
@@ -386,7 +389,8 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
-        return NullableColumn::create(std::move(res), std::move(res_null));
+        return NullableColumn::create(context->allocator(), std::move(res),
+                                      NullColumn::static_pointer_cast(std::move(*res_null).mutate()));
     }
     return res;
 }
@@ -509,7 +513,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -517,7 +521,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
             return _predicate_const_regex(context, &result, value_viewer, value_column);
         } else {
             // because pattern_column is constant, so if it is nullable means it is only_null.
-            return ColumnHelper::create_const_null_column(value_column->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), value_column->size());
         }
     }
 
@@ -595,7 +599,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+    ColumnBuilder<TYPE_BOOLEAN> result(context->allocator(), num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -603,7 +607,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
             return _predicate_const_regex(context, &result, value_viewer, value_column);
         } else {
             // because pattern_column is constant, so if it is nullable means it is only_null.
-            return ColumnHelper::create_const_null_column(value_column->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), value_column->size());
         }
     }
 

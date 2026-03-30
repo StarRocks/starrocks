@@ -156,7 +156,7 @@ public:
 private:
     size_t _ratio = 0;
     static constexpr size_t _num_rows = 4096;
-    Filter _filter;
+    Filter _filter = Filter(memory::get_default_allocator());
     std::vector<T> _data;
     std::vector<T> _res_data;
 };

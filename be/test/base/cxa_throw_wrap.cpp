@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <exception>
 #include <typeinfo>
 
 // TODO: remove this wrapper once base_test links the standard Util wrapper.
 extern "C" {
+[[noreturn]] void __cxa_call_terminate(void*) {
+    std::terminate();
+}
+
 #ifdef __clang__
 #ifdef __APPLE__
 void __cxa_throw(void* thrown_exception, std::type_info* info, void (*dest)(void*));

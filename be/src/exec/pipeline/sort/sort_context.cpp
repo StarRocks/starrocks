@@ -18,6 +18,7 @@
 #include <mutex>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
@@ -109,9 +110,18 @@ Status SortContext::_init_merger() {
         _required_rows = ((_limit < 0) ? _total_rows.load() : std::min<int64_t>(_limit + _offset, _total_rows));
     }
 
+    memory::Allocator* merge_alloc = _chunks_sorter_partitions.empty()
+                                             ? memory::get_default_allocator()
+                                             : _chunks_sorter_partitions[0]->source_allocator();
+#ifndef NDEBUG
+    for (size_t pi = 1; pi < _chunks_sorter_partitions.size(); ++pi) {
+        DCHECK_EQ(_chunks_sorter_partitions[pi]->source_allocator(), merge_alloc);
+    }
+#endif
+
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
-        ChunkProvider provider = [i, this](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+        ChunkProvider provider = [i, this, merge_alloc](ChunkUniquePtr* out_chunk, bool* eos) -> bool {
             // data ready
             if (out_chunk == nullptr || eos == nullptr) {
                 return true;
@@ -122,13 +132,13 @@ Status SortContext::_init_merger() {
             if (!st.ok() || *eos || chunk == nullptr) {
                 return false;
             }
-            *out_chunk = chunk->clone_unique();
+            *out_chunk = chunk->clone_unique(merge_alloc);
             return true;
         };
         _partial_cursors.push_back(std::make_unique<SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
     }
 
-    RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors)));
+    RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors), merge_alloc));
     CHECK(_merger.is_data_ready()) << "data must be ready";
     _merger_inited = true;
 

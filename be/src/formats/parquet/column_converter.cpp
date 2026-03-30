@@ -559,29 +559,29 @@ MutableColumnPtr ColumnConverter::create_src_column() {
     MutableColumnPtr data_column = nullptr;
     switch (parquet_type) {
     case tparquet::Type::type::BOOLEAN:
-        data_column = FixedLengthColumn<uint8_t>::create();
+        data_column = FixedLengthColumn<uint8_t>::create(_allocator);
         break;
     case tparquet::Type::type::INT32:
-        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT32>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT32>::CppType>::create(_allocator);
         break;
     case tparquet::Type::type::INT64:
-        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT64>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT64>::CppType>::create(_allocator);
         break;
     case tparquet::Type::type::INT96:
-        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT96>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::INT96>::CppType>::create(_allocator);
         break;
     case tparquet::Type::type::FLOAT:
-        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::FLOAT>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::FLOAT>::CppType>::create(_allocator);
         break;
     case tparquet::Type::type::DOUBLE:
-        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::DOUBLE>::CppType>::create();
+        data_column = FixedLengthColumn<PhysicalTypeTraits<tparquet::Type::DOUBLE>::CppType>::create(_allocator);
         break;
     case tparquet::Type::type::BYTE_ARRAY:
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY:
-        data_column = BinaryColumn::create();
+        data_column = BinaryColumn::create(_allocator);
         break;
     }
-    return NullableColumn::create(std::move(data_column), NullColumn::create());
+    return NullableColumn::create(_allocator, std::move(data_column), NullColumn::create(_allocator));
 }
 
 Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {

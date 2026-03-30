@@ -155,9 +155,12 @@ private:
 
 template <typename HashMap, typename Impl>
 struct AggHashMapWithKey {
-    AggHashMapWithKey(int chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
+    AggHashMapWithKey(int chunk_size, AggStatistics* agg_stat_,
+                      memory::Allocator* allocator = memory::get_default_allocator())
+            : agg_stat(agg_stat_), _allocator(allocator) {}
     using HashMapType = HashMap;
     HashMap hash_map;
+    memory::Allocator* allocator() const { return _allocator; }
     AggStatistics* agg_stat;
 
     ////// Common Methods ////////
@@ -214,6 +217,9 @@ struct AggHashMapWithKey {
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
         defer.cancel();
     }
+
+protected:
+    memory::Allocator* _allocator;
 };
 
 // ==============================================================
@@ -233,7 +239,8 @@ struct AggHashMapWithOneNumberKeyWithNullable
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
     template <class... Args>
-    AggHashMapWithOneNumberKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashMapWithOneNumberKeyWithNullable(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -428,12 +435,12 @@ struct AggHashMapWithOneNumberKeyWithNullable
         if constexpr (is_nullable) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
-            column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+            column->get_data().append(keys.begin(), keys.begin() + chunk_size);
             nullable_column->null_column_data().resize(chunk_size);
         } else {
             DCHECK(!null_key_data);
             auto* column = down_cast<ColumnType*>(key_columns[0].get());
-            column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
+            column->get_data().append(keys.begin(), keys.begin() + chunk_size);
         }
     }
 
@@ -457,7 +464,8 @@ struct AggHashMapWithOneStringKeyWithNullable
     using ResultVector = Buffer<Slice>;
 
     template <class... Args>
-    AggHashMapWithOneStringKeyWithNullable(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    AggHashMapWithOneStringKeyWithNullable(Args&&... args)
+            : Base(std::forward<Args>(args)...), results(Base::allocator()) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -688,8 +696,10 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     template <class... Args>
     AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
+              slice_sizes(Base::allocator()),
               mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
+              results(Base::allocator()),
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
@@ -927,7 +937,7 @@ struct AggHashMapWithSerializedKeyFixedSize
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
-    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    using ResultVector = Buffer<FixedSizeSliceKey>;
 
     // TODO: make has_null_column as a constexpr
     bool has_null_column = false;
@@ -944,7 +954,10 @@ struct AggHashMapWithSerializedKeyFixedSize
     template <class... Args>
     AggHashMapWithSerializedKeyFixedSize(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
+              slice_sizes(Base::allocator()),
               mem_pool(std::make_unique<MemPool>()),
+              results(Base::allocator()),
+              tmp_slices(Base::allocator()),
               _chunk_size(chunk_size) {
         caches.reserve(chunk_size);
         auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
@@ -1121,12 +1134,13 @@ struct AggHashMapWithCompressedKeyFixedSize
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
-    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    using ResultVector = Buffer<FixedSizeSliceKey>;
 
     template <class... Args>
     AggHashMapWithCompressedKeyFixedSize(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               mem_pool(std::make_unique<MemPool>()),
+              results(Base::allocator()),
               _chunk_size(chunk_size) {
         fixed_keys.reserve(chunk_size);
     }

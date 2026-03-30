@@ -48,7 +48,7 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
     }
 
     auto null_score = state.range(0);
-    Filter filter(kDictSize + 1, 1);
+    Filter filter(memory::get_default_allocator(), kDictSize + 1, 1);
 
     std::random_device rd;
     std::mt19937 rng(rd());
@@ -101,7 +101,7 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
 template <int batch_size>
 static void do_GetDictCodesWithFilterBatch(benchmark::State& state) {
     auto null_score = state.range(0);
-    Filter filter(kDictSize, 1);
+    Filter filter(memory::get_default_allocator(), kDictSize, 1);
 
     std::random_device rd;
     std::mt19937 rng(rd());

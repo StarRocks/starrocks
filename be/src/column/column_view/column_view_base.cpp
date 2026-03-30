@@ -20,8 +20,9 @@
 
 namespace starrocks {
 
-MutableColumnPtr ColumnViewBase::clone() const {
-    auto copy = ColumnView::create(ColumnPtr(_default_column->clone()), _concat_rows_limit, _concat_bytes_limit);
+MutableColumnPtr ColumnViewBase::clone(memory::Allocator* allocator) const {
+    auto copy =
+            ColumnView::create(ColumnPtr(_default_column->clone(allocator)), _concat_rows_limit, _concat_bytes_limit);
     auto* c = static_cast<ColumnViewBase*>(copy.get());
     c->_habitats = _habitats;
     c->_num_rows = _num_rows;

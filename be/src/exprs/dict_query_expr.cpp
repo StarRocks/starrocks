@@ -62,12 +62,13 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             return Status::InternalError("invalid parameter : get NULL paramenter");
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, std::move(column), column->size());
+            column = ColumnHelper::update_column_nullable(context->allocator(), false, std::move(column),
+                                                          column->size());
         }
     }
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, key_chunk->num_rows());
+    ChunkPtr value_chunk = ChunkHelper::new_chunk(context->allocator(), _value_schema, key_chunk->num_rows());
     value_chunk->set_slot_id_to_index(_value_slot_id, 0);
 
     Status status = _table_reader->multi_get(*key_chunk, {_dict_query_expr.value_field}, found, *value_chunk);
@@ -78,8 +79,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     }
     res = value_chunk->get_column_by_index(0)->clone_empty();
     if (!res->is_nullable()) {
-        auto null_column = UInt8Column::create(0, 0);
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        auto null_column = UInt8Column::create(context->allocator(), 0, 0);
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_column));
     }
 
     int res_idx = 0;

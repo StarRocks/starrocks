@@ -129,7 +129,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            MutableColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
+            MutableColumnPtr column = ColumnHelper::create_column(_params.allocator, desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             TypeDescriptor item_desc;
@@ -137,7 +137,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             desc.children.emplace_back(item_desc);
-            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
+            MutableColumnPtr column = ColumnHelper::create_column(_params.allocator, desc, true);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == META_FLAT_JSON_META) {
             TypeDescriptor item_desc;
@@ -145,15 +145,15 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            MutableColumnPtr column = ColumnHelper::create_column(desc, false);
+            MutableColumnPtr column = ColumnHelper::create_column(_params.allocator, desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE) {
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
-            MutableColumnPtr column = ColumnHelper::create_column(desc, true);
+            MutableColumnPtr column = ColumnHelper::create_column(_params.allocator, desc, true);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            MutableColumnPtr column = ColumnHelper::create_column(_params.allocator, slot->type(), true);
             chunk->append_column(std::move(column), slot->id());
         }
     }

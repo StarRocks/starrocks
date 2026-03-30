@@ -373,7 +373,7 @@ public:
         _dict.resize(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+        _dict_data.resize(total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
 
         size_t offset = 0;
         _max_value_length = 0;
@@ -549,7 +549,7 @@ private:
             auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
             size_t cnt = 0;
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+            offsets.resize(count + prev_offsets);
             for (size_t i = 0; i < count; ++i) {
                 offset += is_nulls[i] ? 0 : lengths[cnt++];
                 offsets[prev_offsets + i] = offset;

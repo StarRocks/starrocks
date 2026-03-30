@@ -109,7 +109,8 @@ static void append_variant_field_to_result(FunctionContext* context, VariantRowV
 // Copies the typed column data in bulk (SIMD for fixed-length, bulk for strings)
 // and merges null masks from the outer variant column and the typed column.
 template <LogicalType ResultType>
-static ColumnPtr _build_typed_bulk_result(const Column* typed_col, const Column* variant_col, size_t num_rows) {
+static ColumnPtr _build_typed_bulk_result(FunctionContext* context, const Column* typed_col, const Column* variant_col,
+                                          size_t num_rows) {
     // Unwrap nullable typed column
     const Column* typed_data = typed_col;
     const uint8_t* typed_null_data = nullptr;
@@ -120,11 +121,11 @@ static ColumnPtr _build_typed_bulk_result(const Column* typed_col, const Column*
     }
 
     // Bulk-copy data column (SIMD memcpy for fixed-length, bulk string copy for varchar)
-    auto result_data = RunTimeColumnType<ResultType>::create();
+    auto result_data = RunTimeColumnType<ResultType>::create(context->allocator());
     result_data->append(*typed_data, 0, num_rows);
 
     // Build merged null mask: variant_null | typed_null
-    auto result_null = NullColumn::create(num_rows, 0);
+    auto result_null = NullColumn::create(context->allocator(), num_rows, 0);
     uint8_t* rn = result_null->get_data().data();
 
     if (variant_col->is_nullable()) {
@@ -136,7 +137,7 @@ static ColumnPtr _build_typed_bulk_result(const Column* typed_col, const Column*
     }
 
     bool has_null = SIMD::contain_nonzero(result_null->get_data());
-    auto col = NullableColumn::create(std::move(result_data), std::move(result_null));
+    auto col = NullableColumn::create(context->allocator(), std::move(result_data), std::move(result_null));
     col->set_has_null(has_null);
     return col;
 }
@@ -151,14 +152,14 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
         TypeDescriptor result_type_desc = TypeDescriptor::from_logical_type(ResultType);
         auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc);
         if (casted.ok()) {
-            return _build_typed_bulk_result<ResultType>(casted.value().get(), variant_col, num_rows);
+            return _build_typed_bulk_result<ResultType>(context, casted.value().get(), variant_col, num_rows);
         }
     }
 
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
 
-    ColumnBuilder<ResultType> result(num_rows);
+    ColumnBuilder<ResultType> result(context->allocator(), num_rows);
 
     std::vector<uint8_t> null_mask(num_rows, 0);
     if (variant_col->is_nullable()) {
@@ -225,7 +226,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     if (cached_path != nullptr && !columns[0]->is_constant() && reader.is_typed_exact() &&
         !reader.typed_column()->is_constant()) {
         if (reader.typed_type() == ResultType) {
-            return _build_typed_bulk_result<ResultType>(reader.typed_column(), columns[0].get(), num_rows);
+            return _build_typed_bulk_result<ResultType>(context, reader.typed_column(), columns[0].get(), num_rows);
         } else {
             return _build_typed_cast_result<ResultType>(context, reader.typed_column(), reader.typed_type_desc(),
                                                         columns[0].get(), num_rows);
@@ -233,7 +234,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     }
 
     // Row-by-row fallback.
-    ColumnBuilder<ResultType> result(num_rows);
+    ColumnBuilder<ResultType> result(context->allocator(), num_rows);
     VariantPath row_path;
     VariantPathReader row_reader;
 
@@ -277,7 +278,7 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
     const auto* variant_data_column =
             down_cast<const VariantColumn*>(ColumnHelper::get_data_column(variant_column.get()));
 
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row)) {
             result.append_null();

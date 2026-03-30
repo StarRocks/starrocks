@@ -32,6 +32,7 @@ Status LakeMetaScanner::_lazy_init(RuntimeState* runtime_state, const MetaScanne
     _runtime_state = runtime_state;
     _tablet_id = params.scan_range->tablet_id;
     _version = strtoul(params.scan_range->version.c_str(), nullptr, 10);
+    _allocator = params.allocator;
     return Status::OK();
 }
 
@@ -41,6 +42,7 @@ Status LakeMetaScanner::_real_init() {
     reader_params.version = Version(0, _version);
     reader_params.runtime_state = _runtime_state;
     reader_params.chunk_size = _runtime_state->chunk_size();
+    reader_params.allocator = _allocator;
     reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     reader_params.desc_tbl = &_parent->_desc_tbl;
     reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold

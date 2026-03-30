@@ -300,6 +300,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
 
     _params.runtime_range_pruner =
             RuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
+    _params.allocator = _allocator;
     _morsel->init_tablet_reader_params(&_params);
 
     ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
@@ -622,9 +623,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ASSIGN_OR_RETURN(auto chunk_ptr,
-                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
-    chunk->reset(chunk_ptr);
+    ASSIGN_OR_RETURN(auto chunk_ptr, ChunkHelper::new_chunk_checked(_allocator, _prj_iter->output_schema(),
+                                                                    _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr.release());
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }

@@ -46,6 +46,7 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     _join_builder->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     RETURN_IF_ERROR(_join_builder->spiller()->prepare(state));
+    _join_builder->spiller()->set_spill_allocator(_join_builder->build_allocator());
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }
@@ -173,7 +174,7 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
     const auto& build_partition = factory->build_side_partition();
 
     size_t num_rows = chunk->num_rows();
-    auto hash_column = spill::SpillHashColumn::create(num_rows);
+    auto hash_column = spill::SpillHashColumn::create(allocator(), num_rows);
     auto& hash_values = hash_column->get_data();
 
     // TODO: use different hash method

@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
@@ -76,6 +77,7 @@ public:
     RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
     LakeIOOptions lake_io_opts;
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;

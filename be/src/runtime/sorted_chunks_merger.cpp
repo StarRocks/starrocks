@@ -313,7 +313,7 @@ Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
     _sort_exprs = sort_exprs;
     _sort_desc = sort_desc;
     _merger = std::make_unique<MergeCursorsCascade>();
-    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
+    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors), _column_allocator));
     return Status::OK();
 }
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,

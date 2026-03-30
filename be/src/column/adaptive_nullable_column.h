@@ -68,10 +68,14 @@ public:
         kMaterialized,
     };
 
-    AdaptiveNullableColumn() = default;
+    AdaptiveNullableColumn() : SuperClass(memory::get_default_allocator()) {}
 
     explicit AdaptiveNullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
-            : SuperClass(std::move(data_column), std::move(null_column)) {
+            : AdaptiveNullableColumn(memory::get_default_allocator(), std::move(data_column), std::move(null_column)) {}
+
+    AdaptiveNullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                           MutableColumnPtr&& null_column)
+            : SuperClass(allocator, std::move(data_column), std::move(null_column)) {
         DCHECK_EQ(_null_column->size(), _data_column->size());
         if (_data_column->size() == 0) {
             _state = State::kUninitialized;
@@ -352,11 +356,11 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    MutableColumnPtr clone_empty() const override {
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override {
         return NullableColumn::create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         materialized_nullable();
         return create(_data_column->clone(), _null_column->clone());
     }
@@ -555,17 +559,17 @@ public:
             switch (_state) {
             case State::kNull: {
                 _data_column->as_mutable_raw_ptr()->append_default(_size);
-                null_column_data().insert(null_column_data().end(), _size, 1);
+                null_column_data().append(_size, 1);
                 _has_null = true;
                 break;
             }
             case State::kConstant: {
                 _data_column->as_mutable_raw_ptr()->append_default(_size);
-                null_column_data().insert(null_column_data().end(), _size, 0);
+                null_column_data().append(_size, 0);
                 break;
             }
             case State::kNotConstant: {
-                null_column_data().insert(null_column_data().end(), _size, 0);
+                null_column_data().append(_size, 0);
                 break;
             }
             default: {

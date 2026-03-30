@@ -18,14 +18,13 @@
 #include <span>
 #include <vector>
 
-#include "base/container/raw_container.h"
-#include "common/memory/column_allocator.h"
+#include "column/buffer.h"
 
 namespace starrocks {
 
 // Bytes is a special vector<uint8_t> in which the internal memory is always allocated with an additional 16 bytes,
 // to make life easier with 128 bit instructions.
-using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+using Bytes = util::Buffer<uint8_t, 16>;
 using ImmBytes = const std::span<const uint8_t>;
 
 } // namespace starrocks

@@ -123,6 +123,8 @@ public:
 
     bool error_if_overflow() const;
     bool error_for_division_by_zero() const;
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
     void set_build_from_only_in_filter(bool build_from_only_in_filter) {
         _build_from_only_in_filter = build_from_only_in_filter;
     }
@@ -141,6 +143,8 @@ private:
     std::unique_ptr<MemPool> _pool;
 
     RuntimeState* _runtime_state = nullptr;
+    // TODO: wire allocator propagation to/from FunctionContext in a follow-up phase.
+    memory::Allocator* _allocator = memory::get_default_allocator();
     /// The expr tree this context is for.
     Expr* _root;
 
@@ -164,14 +168,14 @@ private:
         }                                          \
     } while (false)
 
-#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                      \
-    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                         \
-        auto st = c->evaluate(e, ptr);                                                                \
-        if (st.ok()) {                                                                                \
-            return st.value();                                                                        \
-        }                                                                                             \
-        ColumnPtr res = ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
-        return res;                                                                                   \
+#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                                      \
+    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                                         \
+        auto st = c->evaluate(e, ptr);                                                                                \
+        if (st.ok()) {                                                                                                \
+            return st.value();                                                                                        \
+        }                                                                                                             \
+        ColumnPtr res = ColumnHelper::create_const_null_column(c->allocator(), ptr == nullptr ? 1 : ptr->num_rows()); \
+        return res;                                                                                                   \
     }(ctx, expr, chunk)
 
 } // namespace starrocks

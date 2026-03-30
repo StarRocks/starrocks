@@ -27,6 +27,7 @@ Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
     _spill_channel->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     RETURN_IF_ERROR(_spill_channel->spiller()->prepare(state));
+    _spill_channel->spiller()->set_spill_allocator(allocator());
     _cross_join_context->input_channel(_driver_sequence).set_spiller(_spill_channel->spiller());
     if (state->spill_mode() == TSpillMode::FORCE) {
         _strategy = spill::SpillStrategy::SPILL_ALL;

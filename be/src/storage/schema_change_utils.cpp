@@ -229,7 +229,8 @@ StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     ColumnPtr filter_col = std::move(res.value());
 
     size_t size = filter_col->size();
-    Buffer<uint8_t> filter(size, 0);
+    Buffer<uint8_t> filter(memory::get_default_allocator());
+    filter.resize(size);
     ColumnViewer<TYPE_BOOLEAN> col(filter_col);
     for (size_t i = 0; i < size; ++i) {
         filter[i] = !col.is_null(i) && col.value(i);

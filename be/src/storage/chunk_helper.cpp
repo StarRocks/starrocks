@@ -17,6 +17,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -372,9 +373,10 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
 
 struct ColumnBuilder {
     template <LogicalType ftype>
-    MutableColumnPtr operator()(bool nullable) {
+    MutableColumnPtr operator()(memory::Allocator* allocator, bool nullable) {
         [[maybe_unused]] auto NullableIfNeed = [&](MutableColumnPtr&& col) -> MutableColumnPtr {
-            return nullable ? MutableColumnPtr(NullableColumn::create(std::move(col), NullColumn::create()))
+            return nullable ? MutableColumnPtr(
+                                      NullableColumn::create(allocator, std::move(col), NullColumn::create(allocator)))
                             : std::move(col);
         };
 
@@ -388,76 +390,100 @@ struct ColumnBuilder {
             CHECK(false) << "array not supported";
             return nullptr;
         } else {
-            return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
+            return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create(allocator));
         }
     }
 };
 
-MutableColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
-    return field_type_dispatch_column(type, ColumnBuilder(), nullable);
+MutableColumnPtr ChunkHelper::column_from_field_type(memory::Allocator* allocator, LogicalType type, bool nullable) {
+    return field_type_dispatch_column(type, ColumnBuilder(), allocator, nullable);
 }
 
-MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
+MutableColumnPtr ChunkHelper::column_from_field(memory::Allocator* allocator, const Field& field) {
     [[maybe_unused]] auto NullableIfNeed = [&](MutableColumnPtr&& col) -> MutableColumnPtr {
-        return field.is_nullable() ? MutableColumnPtr(NullableColumn::create(std::move(col), NullColumn::create()))
+        return field.is_nullable() ? MutableColumnPtr(NullableColumn::create(allocator, std::move(col),
+                                                                             NullColumn::create(allocator)))
                                    : std::move(col);
     };
     auto type = field.type()->type();
     switch (type) {
     case TYPE_DECIMAL32:
-        return NullableIfNeed(Decimal32Column::create(field.type()->precision(), field.type()->scale()));
+        return NullableIfNeed(Decimal32Column::create(allocator, field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL64:
-        return NullableIfNeed(Decimal64Column::create(field.type()->precision(), field.type()->scale()));
+        return NullableIfNeed(Decimal64Column::create(allocator, field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL128:
-        return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
+        return NullableIfNeed(Decimal128Column::create(allocator, field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL256:
-        return NullableIfNeed(Decimal256Column::create(field.type()->precision(), field.type()->scale()));
+        return NullableIfNeed(Decimal256Column::create(allocator, field.type()->precision(), field.type()->scale()));
     case TYPE_ARRAY: {
-        return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
+        return NullableIfNeed(ArrayColumn::create(allocator, column_from_field(allocator, field.sub_field(0)),
+                                                  UInt32Column::create(allocator)));
     }
     case TYPE_MAP:
-        return NullableIfNeed(MapColumn::create(column_from_field(field.sub_field(0)),
-                                                column_from_field(field.sub_field(1)), UInt32Column::create()));
+        return NullableIfNeed(MapColumn::create(allocator, column_from_field(allocator, field.sub_field(0)),
+                                                column_from_field(allocator, field.sub_field(1)),
+                                                UInt32Column::create(allocator)));
     case TYPE_STRUCT: {
         std::vector<std::string> names;
         MutableColumns fields;
         for (auto& sub_field : field.sub_fields()) {
             names.emplace_back(sub_field.name());
-            fields.emplace_back(ChunkHelper::column_from_field(sub_field));
+            fields.emplace_back(ChunkHelper::column_from_field(allocator, sub_field));
         }
-        auto struct_column = StructColumn::create(std::move(fields), std::move(names));
+        auto struct_column = StructColumn::create(allocator, std::move(fields), std::move(names));
         return NullableIfNeed(std::move(struct_column));
     }
     default:
-        return NullableIfNeed(column_from_field_type(type, false));
+        return NullableIfNeed(column_from_field_type(allocator, type, false));
     }
 }
 
-ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
+MutableColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
+    return column_from_field_type(memory::get_default_allocator(), type, nullable);
+}
+
+MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
+    return column_from_field(memory::get_default_allocator(), field);
+}
+
+ChunkUniquePtr ChunkHelper::new_chunk(memory::Allocator* allocator, const Schema& schema, size_t n) {
     size_t fields = schema.num_fields();
     Columns columns;
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
         const FieldPtr& f = schema.field(i);
-        auto col = column_from_field(*f);
+        auto col = column_from_field(allocator, *f);
         col->reserve(n);
         columns.emplace_back(std::move(col));
     }
     return std::make_unique<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
 
-ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_chunk(tuple_desc.slots(), n);
+ChunkUniquePtr ChunkHelper::new_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc, size_t n) {
+    return new_chunk(allocator, tuple_desc.slots(), n);
 }
 
-ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+ChunkUniquePtr ChunkHelper::new_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots,
+                                      size_t n) {
     auto chunk = std::make_unique<Chunk>();
     for (const auto slot : slots) {
-        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        auto column = ColumnHelper::create_column(allocator, slot->type(), slot->is_nullable());
         column->reserve(n);
         chunk->append_column(std::move(column), slot->id());
     }
     return chunk;
+}
+
+ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
+    return new_chunk(memory::get_default_allocator(), schema, n);
+}
+
+ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_chunk(memory::get_default_allocator(), tuple_desc, n);
+}
+
+ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    return new_chunk(memory::get_default_allocator(), slots, n);
 }
 
 // create object column then reserve is exception safe.
@@ -469,71 +495,114 @@ StatusOr<Chunk*> ChunkHelper::new_chunk_pooled_checked(const Schema& schema, siz
     TRY_CATCH_ALLOC_SCOPE_END();
 }
 
-StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const Schema& schema, size_t n) {
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* allocator, const Schema& schema, size_t n) {
     TRY_CATCH_ALLOC_SCOPE_START()
     ChunkUniquePtr chunk;
-    chunk = ChunkHelper::new_chunk(schema, n);
+    chunk = ChunkHelper::new_chunk(allocator, schema, n);
     return chunk;
     TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* allocator,
+                                                        const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    ChunkUniquePtr chunk;
+    chunk = ChunkHelper::new_chunk(allocator, slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
+                                                        size_t n) {
+    return ChunkHelper::new_chunk_checked(allocator, tuple_desc.slots(), n);
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const Schema& schema, size_t n) {
+    return new_chunk_checked(memory::get_default_allocator(), schema, n);
 }
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    TRY_CATCH_ALLOC_SCOPE_START()
-    ChunkUniquePtr chunk;
-    chunk = ChunkHelper::new_chunk(slots, n);
-    return chunk;
-    TRY_CATCH_ALLOC_SCOPE_END();
+    return new_chunk_checked(memory::get_default_allocator(), slots, n);
 }
 
 StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
+    return new_chunk_checked(memory::get_default_allocator(), tuple_desc, n);
 }
 
-MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {
+MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, const Schema& schema, size_t n) {
     size_t fields = schema.num_fields();
     MutableColumns columns;
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
         const FieldPtr& f = schema.field(i);
-        auto col = column_from_field(*f);
+        auto col = column_from_field(allocator, *f);
         col->reserve(n);
         columns.emplace_back(std::move(col));
     }
     return std::make_shared<MutableChunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
 
-MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
-    return new_mutable_chunk(tuple_desc.slots(), n);
+MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, const TupleDescriptor& tuple_desc,
+                                               size_t n) {
+    return new_mutable_chunk(allocator, tuple_desc.slots(), n);
 }
 
-MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+MutableChunkPtr ChunkHelper::new_mutable_chunk(memory::Allocator* allocator, const std::vector<SlotDescriptor*>& slots,
+                                               size_t n) {
     auto chunk = std::make_shared<MutableChunk>();
     for (const auto slot : slots) {
-        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        auto column = ColumnHelper::create_column(allocator, slot->type(), slot->is_nullable());
         column->reserve(n);
         chunk->append_column(std::move(column), slot->id());
     }
     return chunk;
 }
 
-StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const Schema& schema, size_t n) {
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {
+    return new_mutable_chunk(memory::get_default_allocator(), schema, n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_mutable_chunk(memory::get_default_allocator(), tuple_desc, n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    return new_mutable_chunk(memory::get_default_allocator(), slots, n);
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(memory::Allocator* allocator, const Schema& schema,
+                                                                 size_t n) {
     TRY_CATCH_ALLOC_SCOPE_START()
     MutableChunkPtr chunk;
-    chunk = ChunkHelper::new_mutable_chunk(schema, n);
+    chunk = ChunkHelper::new_mutable_chunk(allocator, schema, n);
     return chunk;
     TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(memory::Allocator* allocator,
+                                                                 const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    MutableChunkPtr chunk;
+    chunk = ChunkHelper::new_mutable_chunk(allocator, slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(memory::Allocator* allocator,
+                                                                 const TupleDescriptor& tuple_desc, size_t n) {
+    return ChunkHelper::new_mutable_chunk_checked(allocator, tuple_desc.slots(), n);
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const Schema& schema, size_t n) {
+    return new_mutable_chunk_checked(memory::get_default_allocator(), schema, n);
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    TRY_CATCH_ALLOC_SCOPE_START()
-    MutableChunkPtr chunk;
-    chunk = ChunkHelper::new_mutable_chunk(slots, n);
-    return chunk;
-    TRY_CATCH_ALLOC_SCOPE_END();
+    return new_mutable_chunk_checked(memory::get_default_allocator(), slots, n);
 }
 
 StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
-    return ChunkHelper::new_mutable_chunk_checked(tuple_desc.slots(), n);
+    return new_mutable_chunk_checked(memory::get_default_allocator(), tuple_desc, n);
 }
 
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {

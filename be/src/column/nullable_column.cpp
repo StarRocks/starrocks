@@ -23,7 +23,11 @@
 namespace starrocks {
 
 NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
-        : _data_column(std::move(data_column)), _has_null(false) {
+        : NullableColumn(memory::get_default_allocator(), std::move(data_column), std::move(null_column)) {}
+
+NullableColumn::NullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                               MutableColumnPtr&& null_column)
+        : SuperClass(allocator), _data_column(std::move(data_column)), _has_null(false) {
     DCHECK(!_data_column->is_constant() && !_data_column->is_nullable())
             << "nullable column's data must be single column";
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())
@@ -142,7 +146,8 @@ StatusOr<MutableColumnPtr> NullableColumn::replicate(const Buffer<uint32_t>& off
 
     ASSIGN_OR_RETURN(auto null_col, this->_null_column->replicate(offsets));
 
-    return NullableColumn::create(std::move(data_col), NullColumn::dynamic_pointer_cast(std::move(null_col)));
+    return NullableColumn::create(data_col->allocator(), std::move(data_col),
+                                  NullColumn::dynamic_pointer_cast(std::move(null_col)));
 }
 
 bool NullableColumn::append_nulls(size_t count) {
@@ -150,7 +155,7 @@ bool NullableColumn::append_nulls(size_t count) {
         return true;
     }
     _data_column->resize_uninitialized(_data_column->size() + count);
-    null_column_data().insert(null_column_data().end(), count, 1);
+    null_column_data().append(count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
     _has_null = true;
     return true;
@@ -195,7 +200,7 @@ bool NullableColumn::append_continuous_fixed_length_strings(const char* data, si
 size_t NullableColumn::append_numbers(const void* buff, size_t length) {
     size_t n;
     if ((n = _data_column->append_numbers(buff, length)) > 0) {
-        null_column_data().insert(null_column_data().end(), n, 0);
+        null_column_data().append(n, 0);
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return n;
@@ -203,7 +208,7 @@ size_t NullableColumn::append_numbers(const void* buff, size_t length) {
 
 void NullableColumn::append_value_multiple_times(const void* value, size_t count) {
     _data_column->append_value_multiple_times(value, count);
-    null_column_data().insert(null_column_data().end(), count, 0);
+    null_column_data().append(count, 0);
 }
 
 void NullableColumn::fill_null_with_default() {
@@ -228,7 +233,7 @@ void NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
         update_has_null();
     } else {
         auto new_null_column = NullColumn::create();
-        new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
+        new_null_column->get_data().append(replace_num, 0);
         _null_column->update_rows(*new_null_column.get(), indexes);
         _data_column->update_rows(src, indexes);
     }

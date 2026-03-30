@@ -26,6 +26,7 @@
 #include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exprs/expr_context.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -55,7 +56,7 @@ public:
         }
 
         if (map_col->only_null()) {
-            return ColumnHelper::create_const_null_column(num_rows);
+            return ColumnHelper::create_const_null_column(context->allocator(), num_rows);
         }
 
         bool map_is_const = map_col->is_constant();
@@ -124,9 +125,9 @@ public:
             if (!res->is_null(0)) {
                 // map_value is nullable, remove it.
                 auto col = down_cast<NullableColumn*>(res.get())->data_column();
-                return ConstColumn::create(std::move(col), num_rows);
+                return ConstColumn::create(context->allocator(), std::move(col), num_rows);
             }
-            return ConstColumn::create(std::move(res), num_rows);
+            return ConstColumn::create(context->allocator(), std::move(res), num_rows);
         } else {
             return res;
         }

@@ -16,6 +16,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "base/string/array_view.hpp"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
@@ -67,8 +68,12 @@ struct CursorAlgo {
 };
 
 MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor>&& left_cursor,
-                               std::unique_ptr<SimpleChunkSortCursor>&& right_cursor)
-        : _sort_desc(sort_desc), _left_cursor(std::move(left_cursor)), _right_cursor(std::move(right_cursor)) {
+                               std::unique_ptr<SimpleChunkSortCursor>&& right_cursor,
+                               memory::Allocator* column_allocator)
+        : _sort_desc(sort_desc),
+          _left_cursor(std::move(left_cursor)),
+          _right_cursor(std::move(right_cursor)),
+          _column_allocator(column_allocator) {
     _chunk_provider = [&](ChunkUniquePtr* output, bool* eos) -> bool {
         if (output == nullptr || eos == nullptr) {
             return is_data_ready();
@@ -170,11 +175,11 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
 
     int intersect = _left_run.intersect(sort_desc, _right_run);
     if (intersect < 0) {
-        result = _left_run.clone_slice();
+        result = _left_run.clone_slice(_column_allocator);
         _left_run.reset();
         VLOG_ROW << "merge_sorted_cursor_two_way output left run";
     } else if (intersect > 0) {
-        result = _right_run.clone_slice();
+        result = _right_run.clone_slice(_column_allocator);
         _right_run.reset();
         VLOG_ROW << "merge_sorted_cursor_two_way output right run";
     } else {
@@ -198,7 +203,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
 
     size_t merged_rows = std::min(run1.num_rows(), run2.num_rows());
 
-    ChunkUniquePtr merged = run2.chunk->clone_empty(merged_rows);
+    ChunkUniquePtr merged = run2.chunk->clone_empty(_column_allocator, merged_rows);
 
     auto perm_view = PermutationView(permutation.data(), merged_rows);
 
@@ -207,7 +212,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
 
     auto left_rows = permutation.size() - merged_rows;
     perm_view = PermutationView(permutation.data() + merged_rows, left_rows);
-    ChunkUniquePtr left_merged = run2.chunk->clone_empty(left_rows);
+    ChunkUniquePtr left_merged = run2.chunk->clone_empty(_column_allocator, left_rows);
     materialize_by_permutation(left_merged.get(), {run1.chunk, run2.chunk}, perm_view);
 
     if (tail_cmp <= 0) {
@@ -225,7 +230,9 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only
 // In the scenario that chunk has many columns but order by a few column, that could save a lot of cpu cycles
 Status MergeCursorsCascade::init(const SortDescs& sort_desc,
-                                 std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors) {
+                                 std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
+                                 memory::Allocator* column_allocator) {
+    _column_allocator = column_allocator;
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> current_level = std::move(cursors);
 
     while (current_level.size() > 1) {
@@ -236,7 +243,8 @@ Status MergeCursorsCascade::init(const SortDescs& sort_desc,
         for (int i = 0; i < level_size; i += 2) {
             auto& left = current_level[i];
             auto& right = current_level[i + 1];
-            _mergers.push_back(std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right)));
+            _mergers.push_back(
+                    std::make_unique<MergeTwoCursor>(sort_desc, std::move(left), std::move(right), _column_allocator));
             next_level.push_back(_mergers.back()->as_chunk_cursor());
         }
         if (current_level.size() % 2 == 1) {
@@ -291,25 +299,26 @@ Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer
 }
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
-                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
-    MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output,
+                                   memory::Allocator* column_allocator) {
+    MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor), column_allocator);
     return merger.consume_all(output);
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   const ChunkConsumer& consumer) {
+                                   const ChunkConsumer& consumer, memory::Allocator* column_allocator) {
     MergeCursorsCascade merger;
-    RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
+    RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors), column_allocator));
     CHECK(merger.is_data_ready());
     return merger.consume_all(consumer);
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   const ChunkConsumer& consumer, size_t limit) {
+                                   const ChunkConsumer& consumer, size_t limit, memory::Allocator* column_allocator) {
     MergeCursorsCascade merger;
-    RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
+    RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors), column_allocator));
     CHECK(merger.is_data_ready());
     return merger.consume_all_with_limit(consumer, limit);
 }

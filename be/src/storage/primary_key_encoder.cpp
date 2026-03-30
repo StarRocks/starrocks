@@ -260,16 +260,16 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
+Status PrimaryKeyEncoder::create_column(memory::Allocator* allocator, const Schema& schema, MutableColumnPtr* pcolumn,
                                         PrimaryKeyEncodingType encoding_type, bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
     }
-    return create_column(schema, pcolumn, key_idxes, encoding_type, large_column);
+    return create_column(allocator, schema, pcolumn, key_idxes, encoding_type, large_column);
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
+Status PrimaryKeyEncoder::create_column(memory::Allocator* allocator, const Schema& schema, MutableColumnPtr* pcolumn,
                                         const std::vector<ColumnId>& key_idxes, PrimaryKeyEncodingType encoding_type,
                                         bool large_column) {
     if (!is_supported(schema, key_idxes)) {
@@ -284,17 +284,17 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
         // varchar use binary
         auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
-#define M(TYPE)                                       \
-    case TYPE:                                        \
-        *pcolumn = RunTimeColumnType<TYPE>::create(); \
+#define M(TYPE)                                                \
+    case TYPE:                                                 \
+        *pcolumn = RunTimeColumnType<TYPE>::create(allocator); \
         break;
             APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M)
 #undef M
         case TYPE_VARCHAR:
             if (large_column) {
-                *pcolumn = LargeBinaryColumn::create();
+                *pcolumn = LargeBinaryColumn::create(allocator);
             } else {
-                *pcolumn = BinaryColumn::create();
+                *pcolumn = BinaryColumn::create(allocator);
             }
             break;
         default:
@@ -304,9 +304,9 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
         if (large_column) {
-            *pcolumn = LargeBinaryColumn::create();
+            *pcolumn = LargeBinaryColumn::create(allocator);
         } else {
-            *pcolumn = BinaryColumn::create();
+            *pcolumn = BinaryColumn::create(allocator);
         }
     }
     return Status::OK();

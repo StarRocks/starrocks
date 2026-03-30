@@ -50,7 +50,8 @@ void ColumnOffsetIndexCtx::collect_io_range(std::vector<io::SharedBufferedInputS
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
                                                                    bool* is_group_filtered) {
     // create dict value chunk for evaluation.
-    MutableColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    MutableColumnPtr dict_value_column =
+            ColumnHelper::create_column(reader->allocator(), TypeDescriptor(TYPE_VARCHAR), true);
     RETURN_IF_ERROR(reader->get_dict_values(dict_value_column.get()));
     // append a null value to check if null is ok or not.
     dict_value_column->append_default();
@@ -58,7 +59,8 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     ColumnPtr result_column = std::move(dict_value_column);
     for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
         if (!result_column->is_nullable()) {
-            result_column = NullableColumn::create(result_column, NullColumn::create(result_column->size(), 0));
+            result_column = NullableColumn::create(reader->allocator(), result_column,
+                                                   NullColumn::create(reader->allocator(), result_column->size(), 0));
         }
         Columns columns;
         columns.emplace_back(result_column);
@@ -69,7 +71,7 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
 
     ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
     dict_value_chunk->append_column(result_column, slot_id);
-    Filter filter(dict_size, 1);
+    Filter filter(memory::get_default_allocator(), dict_size, 1);
     int dict_values_after_filter = 0;
     ASSIGN_OR_RETURN(dict_values_after_filter, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
                                                        conjunct_ctxs, dict_value_chunk.get(), &filter));

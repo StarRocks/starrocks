@@ -44,7 +44,7 @@ Status OffsetOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     }
 
     if (rows_to_skip > 0) {
-        auto new_chunk = _cur_chunk->clone_empty();
+        auto new_chunk = _cur_chunk->clone_empty(allocator());
         new_chunk->append(*_cur_chunk, rows_to_skip, chunk->num_rows() - rows_to_skip);
         _cur_chunk = std::move(new_chunk);
     }

@@ -47,12 +47,14 @@ public:
         Columns new_columns;
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
-            ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], _arg_nullables[i], false));
+            ASSIGN_OR_RETURN(ColumnPtr new_column,
+                             _convert_to_nullable_column(context->allocator(), columns[i], _arg_nullables[i], false));
             new_columns.emplace_back(new_column);
         }
 
         // TODO: use mutable ptr as result
-        MutableColumnPtr result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
+        MutableColumnPtr result = ColumnHelper::create_column(context->allocator(), _intermediate_type,
+                                                              _agg_state_desc.is_result_nullable());
         auto chunk_size = columns[0]->size();
         _function->convert_to_serialize_format(context, new_columns, chunk_size, result);
 

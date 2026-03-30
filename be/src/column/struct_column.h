@@ -28,21 +28,36 @@ public:
 
     // Used to construct an unnamed struct
     StructColumn(MutableColumns&& fields);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields);
     StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumns&& fields,
+                 std::vector<std::string> field_names);
     StructColumn(const Columns& fields);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields);
     StructColumn(const Columns& fields, std::vector<std::string> field_names);
+    StructColumn([[maybe_unused]] memory::Allocator* allocator, const Columns& fields,
+                 std::vector<std::string> field_names);
     DISALLOW_COPY(StructColumn);
 
     StructColumn(StructColumn&& rhs) noexcept
             : _fields(std::move(rhs._fields)), _field_names(std::move(rhs._field_names)) {}
 
     static Ptr create(const Columns& columns, std::vector<std::string> field_names);
+    static Ptr create(memory::Allocator* allocator, const Columns& columns, std::vector<std::string> field_names);
     static Ptr create(const Columns& columns);
+    static Ptr create(memory::Allocator* allocator, const Columns& columns);
 
     static MutablePtr create(MutableColumns&& columns, std::vector<std::string> field_names) {
         return Base::create(std::move(columns), std::move(field_names));
     }
+    static MutablePtr create(memory::Allocator* allocator, MutableColumns&& columns,
+                             std::vector<std::string> field_names) {
+        return Base::create(allocator, std::move(columns), std::move(field_names));
+    }
     static MutablePtr create(MutableColumns&& columns) { return Base::create(std::move(columns)); }
+    static MutablePtr create(memory::Allocator* allocator, MutableColumns&& columns) {
+        return Base::create(allocator, std::move(columns));
+    }
 
     ~StructColumn() override = default;
 
@@ -115,9 +130,9 @@ public:
 
     uint32_t serialize_size(size_t idx) const override;
 
-    MutableColumnPtr clone_empty() const override;
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override;
 
-    MutableColumnPtr clone() const override {
+    MutableColumnPtr clone(memory::Allocator* /*allocator*/ = nullptr) const override {
         auto p = clone_empty();
         p->append(*this, 0, size());
         return p;

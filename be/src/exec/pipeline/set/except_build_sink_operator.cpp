@@ -28,6 +28,7 @@ Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
 
 Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _except_ctx->set_sink_allocator(allocator());
 
     RETURN_IF_ERROR(_except_ctx->prepare(state, _dst_exprs));
     RETURN_IF_ERROR(_buffer_state->init(state));

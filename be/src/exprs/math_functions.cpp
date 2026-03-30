@@ -58,60 +58,60 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 
 // ====== evaluation + check rules ========
 
-#define DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                          \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                \
-        using VectorizedUnaryFunction = VectorizedStrictUnaryFunction<NAME##Impl>;                             \
-        if constexpr (lt_is_decimal<TYPE>) {                                                                   \
-            const auto& type = context->get_return_type();                                                     \
-            return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0), type.precision, \
-                                                                        type.scale);                           \
-        } else {                                                                                               \
-            return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));                \
-        }                                                                                                      \
+#define DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                                 \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                       \
+        using VectorizedUnaryFunction = VectorizedStrictUnaryFunction<NAME##Impl>;                                    \
+        if constexpr (lt_is_decimal<TYPE>) {                                                                          \
+            const auto& type = context->get_return_type();                                                            \
+            return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0),  \
+                                                                        type.precision, type.scale);                  \
+        } else {                                                                                                      \
+            return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
+        }                                                                                                             \
     }
 
-#define DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {   \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, ZeroCheck>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
+#define DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                             \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                   \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, ZeroCheck>;                 \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                             \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {       \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NegativeCheck>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));           \
+#define DEFINE_MATH_UNARY_WITH_NEGATIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                         \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                   \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NegativeCheck>;             \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                            \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {          \
-        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NonPositiveCheck>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));              \
+#define DEFINE_MATH_UNARY_WITH_NON_POSITIVE_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                     \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                   \
+        using VectorizedUnaryFunction = VectorizedInputCheckUnaryFunction<NAME##Impl, NonPositiveCheck>;          \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                       \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {   \
-        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NanCheck>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));       \
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                       \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                   \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, NanCheck>;                 \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                      \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {      \
-        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, InfNanCheck>; \
-        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));          \
+#define DEFINE_MATH_UNARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, TYPE, RESULT_TYPE)                                   \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                   \
+        using VectorizedUnaryFunction = VectorizedOutputCheckUnaryFunction<NAME##Impl, InfNanCheck>;              \
+        return VectorizedUnaryFunction::evaluate<TYPE, RESULT_TYPE>(context->allocator(), VECTORIZED_FN_ARGS(0)); \
     }
 
-#define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                 \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {      \
-        using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>;   \
-        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
-                                                                             VECTORIZED_FN_ARGS(1)); \
+#define DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)               \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {    \
+        using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>; \
+        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(                      \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));               \
     }
 
 #define DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)              \
     StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {       \
         using VectorizedBinaryFunction = VectorizedOuputCheckBinaryFunction<NAME##Impl, InfNanCheck>; \
-        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),   \
-                                                                             VECTORIZED_FN_ARGS(1));  \
+        return VectorizedBinaryFunction::evaluate<LTYPE, RTYPE, RESULT_TYPE>(                         \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                  \
     }
 
 // ============ math function macro ==========
@@ -124,16 +124,16 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_UNARY_FN_CAST(NAME##Impl, FN);                                \
     DEFINE_MATH_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
-#define DEFINE_MATH_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {                        \
-        return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
-                                                                                               VECTORIZED_FN_ARGS(1)); \
+#define DEFINE_MATH_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                  \
+    StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) { \
+        return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));            \
     }
 
 #define DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(NAME, LTYPE, RTYPE, RESULT_TYPE)                                 \
     StatusOr<ColumnPtr> MathFunctions::NAME(FunctionContext* context, const Columns& columns) {               \
         return VectorizedOuputCheckBinaryFunction<NAME##Impl, NanCheck>::evaluate<LTYPE, RTYPE, RESULT_TYPE>( \
-                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                \
+                context->allocator(), VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                          \
     }
 
 #define DEFINE_MATH_BINARY_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
@@ -162,11 +162,11 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
 
 // ============ math function impl ==========
 StatusOr<ColumnPtr> MathFunctions::pi(FunctionContext* context, const Columns& columns) {
-    return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_PI, 1);
+    return ColumnHelper::create_const_column<TYPE_DOUBLE>(context->allocator(), M_PI, 1);
 }
 
 StatusOr<ColumnPtr> MathFunctions::e(FunctionContext* context, const Columns& columns) {
-    return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_E, 1);
+    return ColumnHelper::create_const_column<TYPE_DOUBLE>(context->allocator(), M_E, 1);
 }
 
 // sign
@@ -195,7 +195,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(logImpl, base, v) {
 StatusOr<ColumnPtr> MathFunctions::log(FunctionContext* context, const Columns& columns) {
     const auto& l = VECTORIZED_FN_ARGS(0);
     const auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedUnstrictBinaryFunction<logProduceNullImpl, logImpl>::evaluate<TYPE_DOUBLE>(l, r);
+    return VectorizedUnstrictBinaryFunction<logProduceNullImpl, logImpl>::evaluate<TYPE_DOUBLE>(context->allocator(), l,
+                                                                                                r);
 }
 
 // log2
@@ -239,7 +240,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
 }
 
 StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& columns) {
-    return VectorizedStringStrictUnaryFunction<binImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
+    return VectorizedStringStrictUnaryFunction<binImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(context->allocator(),
+                                                                                             columns[0]);
 }
 
 // unary math
@@ -346,7 +348,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     }
 
     const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    MutableColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
+    MutableColumnPtr res = RunTimeColumnType<Type>::create(context->allocator(), original_precision, original_scale);
     res->resize_uninitialized(size);
 
     // result column is mutable, use non-const raw pointer
@@ -366,7 +368,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     }
 #undef ABS
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -388,7 +390,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     const auto& raw_null_flags = null_flags->immutable_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
     const auto& raw_c0 = int_col->immutable_data();
-    MutableColumnPtr res = RunTimeColumnType<Type>::create();
+    MutableColumnPtr res = RunTimeColumnType<Type>::create(context->allocator());
     res->resize_uninitialized(size);
 
     // result column is mutable, use non-const raw pointer
@@ -407,7 +409,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     }
 #undef haveDifferentSigns
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -425,7 +427,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create(context->allocator());
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
@@ -437,7 +439,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     }
 
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -455,7 +457,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create(context->allocator());
     res->resize_uninitialized(size);
     auto raw_c0 = col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
@@ -466,7 +468,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     }
 
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -481,7 +483,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create(context->allocator());
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
@@ -494,7 +496,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     }
 
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -509,7 +511,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create(context->allocator());
     res->resize_uninitialized(size);
     const auto& raw_c0 = col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
@@ -525,7 +527,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     }
 
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -563,7 +565,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
+    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create(context->allocator());
     res->resize_uninitialized(size);
     const auto& raw_c0 = decimalv3_col->immutable_data();
     auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
@@ -575,7 +577,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     }
 
     if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+        res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     }
     return res;
 }
@@ -773,7 +775,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
     if (c0->only_null() || c1->only_null()) {
-        return ColumnHelper::create_const_null_column(c0->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), c0->size());
     }
 
     NullColumn::MutablePtr null_flags;
@@ -782,7 +784,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
         has_null = true;
         null_flags = FunctionHelper::union_nullable_column(c0, c1);
     } else {
-        null_flags = NullColumn::create();
+        null_flags = NullColumn::create(context->allocator());
         null_flags->reserve(c0->size());
         null_flags->append_default(c0->size());
     }
@@ -799,7 +801,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     c0 = FunctionHelper::get_data_column_of_nullable(c0);
     c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
-    MutableColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(context->allocator(), type.precision, type.scale);
     res->resize_uninitialized(size);
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
@@ -821,10 +823,10 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
         MathFunctions::decimal_round<rule, false>(raw_c0[0], original_scale, raw_c1[0], &raw_res[0], &is_over_flow);
         if (is_over_flow) {
             DCHECK(!has_null);
-            res = ColumnHelper::create_const_null_column(size);
+            res = ColumnHelper::create_const_null_column(context->allocator(), size);
         } else {
             res->resize(1);
-            res = ConstColumn::create(std::move(res), size);
+            res = ConstColumn::create(context->allocator(), std::move(res), size);
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
@@ -856,7 +858,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     }
 
     if (has_null) {
-        return NullableColumn::create(std::move(res), std::move(null_flags));
+        return NullableColumn::create(context->allocator(), std::move(res), std::move(null_flags));
     } else {
         return res;
     }
@@ -870,7 +872,8 @@ StatusOr<ColumnPtr> MathFunctions::round_decimal128(FunctionContext* context, co
     DCHECK_EQ(columns.size(), 1);
     Columns new_columns;
     new_columns.push_back(columns[0]);
-    new_columns.push_back(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(0, columns[0]->size()));
+    new_columns.push_back(
+            ColumnHelper::create_const_column<LogicalType::TYPE_INT>(context->allocator(), 0, columns[0]->size()));
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
 }
 
@@ -884,7 +887,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_int(FunctionContext* context, const Colu
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (bigint.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -919,7 +922,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
     auto dest_base = ColumnViewer<TYPE_TINYINT>(columns[2]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), size);
     for (int row = 0; row < size; ++row) {
         if (string_viewer.is_null(row) || src_base.is_null(row) || dest_base.is_null(row)) {
             result.append_null();
@@ -1009,7 +1012,7 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
 
 StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    ColumnBuilder<TYPE_DOUBLE> result(num_rows);
+    ColumnBuilder<TYPE_DOUBLE> result(context->allocator(), num_rows);
     for (int i = 0; i < num_rows; ++i) {
         result.append(distribution(generator));
     }
@@ -1021,7 +1024,7 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
     DCHECK_EQ(columns.size(), 2);
 
     if (columns[0]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), columns[0]->size());
     }
 
     return rand(context, columns);
@@ -1426,7 +1429,8 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
-    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result =
+            ColumnHelper::create_column(context->allocator(), TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
 
@@ -1595,7 +1599,8 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
     const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
-    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result =
+            ColumnHelper::create_column(context->allocator(), TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
 

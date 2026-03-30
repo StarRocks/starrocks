@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -153,6 +154,10 @@ public:
     void set_metrics(const SpillProcessMetrics& metrics) { _metrics = metrics; }
 
     const SpillProcessMetrics& metrics() { return _metrics; }
+    void set_spill_allocator(memory::Allocator* allocator) { _spill_allocator = allocator; }
+    void set_restore_allocator(memory::Allocator* allocator);
+    memory::Allocator* spill_allocator() const { return _spill_allocator; }
+    memory::Allocator* restore_allocator() const { return _restore_allocator; }
 
     // set partitions for spiller only works when spiller has partitioned spill writer
     void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
@@ -263,6 +268,9 @@ private:
 private:
     SpillProcessMetrics _metrics;
     SpilledOptions _opts;
+    // TODO: wire allocator propagation from owner contexts in a follow-up phase.
+    memory::Allocator* _spill_allocator = memory::get_default_allocator();
+    memory::Allocator* _restore_allocator = memory::get_default_allocator();
     std::weak_ptr<SpillerFactory> _parent;
 
     std::unique_ptr<SpillerWriter> _writer;

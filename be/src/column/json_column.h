@@ -35,8 +35,10 @@ public:
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column>;
     using BaseClass = JsonColumnBase;
 
-    JsonColumn() = default;
-    explicit JsonColumn(size_t size) : SuperClass(size) {}
+    JsonColumn() : JsonColumn(memory::get_default_allocator()) {}
+    explicit JsonColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
+    explicit JsonColumn(size_t size) : JsonColumn(memory::get_default_allocator(), size) {}
+    JsonColumn([[maybe_unused]] memory::Allocator* allocator, size_t size) : SuperClass(allocator, size) {}
     DISALLOW_COPY(JsonColumn);
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
@@ -45,8 +47,8 @@ public:
         _flat_column_types = std::move(rhs._flat_column_types);
     }
 
-    MutableColumnPtr clone() const override;
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override;
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
 
     void append_datum(const Datum& datum) override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,

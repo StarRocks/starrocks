@@ -18,6 +18,7 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "base/memory/memory_allocator.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -28,15 +29,33 @@
 
 namespace starrocks {
 
+template <typename T>
+T make_any_value() {
+    if constexpr (std::is_constructible_v<T, memory::Allocator*>) {
+        return T(memory::get_default_allocator());
+    } else {
+        return T();
+    }
+}
+
+template <typename T>
+void clear_any_value(T& value) {
+    if constexpr (std::is_constructible_v<T, memory::Allocator*>) {
+        value.resize(0);
+    } else {
+        value = T{};
+    }
+}
+
 template <LogicalType LT>
 struct AnyValueAggregateData {
     using T = AggDataValueType<LT>;
 
-    T result;
+    T result = make_any_value<T>();
     bool has_value = false;
 
     void reset() {
-        result = T{};
+        clear_any_value(result);
         has_value = false;
     }
 };
@@ -110,7 +129,7 @@ public:
 struct AnyValueSemiState {
     void update(FunctionContext* ctx, const Column& column, size_t offset) {
         if (!has_fill) {
-            data_column = FunctionHelper::create_column(*ctx->get_arg_type(0), false);
+            data_column = FunctionHelper::create_column(ctx->allocator(), *ctx->get_arg_type(0), false);
             data_column->append(column, offset, 1);
             has_fill = true;
         }

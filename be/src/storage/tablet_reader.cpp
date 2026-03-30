@@ -214,7 +214,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
-    auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+    auto keys = ChunkHelper::new_chunk(_reader_params->allocator, pk_schema, 1);
     size_t num_pk_eq_predicates = 0;
 
     PredicateAndNode pushdown_pred_root;
@@ -249,7 +249,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_reader_params->allocator, *tablet_schema->schema(), &pk_column,
                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(),
                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
@@ -366,6 +366,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
     rs_opts.tablet_schema = _tablet_schema;
+    rs_opts.allocator = params.allocator;
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;

@@ -109,7 +109,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             return Status::OK();
         }
 
-        Buffer<rowid_t> hit_rowids(upper.first - lower.first);
+        Buffer<rowid_t> hit_rowids(memory::get_default_allocator(), upper.first - lower.first);
         std::iota(hit_rowids.begin(), hit_rowids.end(), lower.first);
         RETURN_IF_ERROR(_bitmap_itr->read_union_bitmap(hit_rowids, bitmap));
         return Status::OK();
@@ -176,7 +176,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         _stats->gin_ngram_dict_filtered = _bitmap_itr->num_dictionaries() - filtered_key_words.cardinality();
     }
 
-    Buffer<rowid_t> hit_rowids;
+    Buffer<rowid_t> hit_rowids(memory::get_default_allocator());
     {
         SCOPED_RAW_TIMER(&_stats->gin_predicate_filter_dict_ns);
         // Check if pattern starts/ends with '%' to enforce SQL LIKE semantics

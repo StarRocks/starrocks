@@ -20,6 +20,7 @@
 
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/container/raw_container.h"
+#include "base/memory/memory_allocator.h"
 #include "base/phmap/phmap.h"
 #include "bthread/mutex.h"
 #include "column/column.h"
@@ -90,6 +91,8 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
 
     bool is_sink_complete() const { return _is_sink_complete; }
 
@@ -123,6 +126,8 @@ private:
     const phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
     const phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     const std::shared_ptr<StarRocksNodesInfo> _nodes_info;
+    // Allocator is propagated from Fetch sink/source operators during prepare().
+    memory::Allocator* _allocator = memory::get_default_allocator();
     int32_t _local_be_id = 0;
 
     BatchUnitPtr _current_unit;

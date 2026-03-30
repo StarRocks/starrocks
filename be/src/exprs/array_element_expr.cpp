@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
 
 namespace starrocks {
 
@@ -75,8 +76,8 @@ public:
             }
         }
 
-        NullData null_flags;
-        raw::make_room(&null_flags, num_rows);
+        NullData null_flags(arg0->allocator());
+        null_flags.resize(num_rows);
 
         // Construct null flags.
         uint32_t prev = offsets[0];
@@ -104,7 +105,7 @@ public:
 
         // construct selection list.
         std::vector<uint32_t> selection;
-        starrocks::raw::make_room(&selection, num_rows);
+        selection.resize(num_rows);
 
         prev = offsets[0];
         uint32_t idx = 0;
@@ -126,7 +127,7 @@ public:
 
         // Construct the final result column;
         MutableColumnPtr result_data = array_elements_data->clone_empty();
-        NullColumn::MutablePtr result_null = NullColumn::create();
+        NullColumn::MutablePtr result_null = NullColumn::create(context->allocator());
         result_null->get_data().swap(null_flags);
 
         if (!array_elements_data->empty()) {
@@ -136,7 +137,7 @@ public:
         }
         DCHECK_EQ(result_null->size(), result_data->size());
 
-        return NullableColumn::create(std::move(result_data), std::move(result_null));
+        return NullableColumn::create(context->allocator(), std::move(result_data), std::move(result_null));
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayElementExpr(*this)); }

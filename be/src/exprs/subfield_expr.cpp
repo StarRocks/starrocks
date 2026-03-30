@@ -20,6 +20,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 
 namespace starrocks {
@@ -43,10 +44,10 @@ public:
         // handle nullable column
         const size_t num_rows = col->size();
         if (col->only_null()) {
-            return ColumnHelper::create_const_null_column(num_rows);
+            return ColumnHelper::create_const_null_column(context->allocator(), num_rows);
         }
 
-        NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
+        NullColumn::MutablePtr union_null_column = NullColumn::create(context->allocator(), num_rows, false);
 
         for (size_t i = 0; i < _used_subfield_names.size(); i++) {
             const std::string& fieldname = _used_subfield_names[i];
@@ -70,12 +71,12 @@ public:
         }
 
         DCHECK_EQ(col->size(), union_null_column->size());
-
         // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
+            return NullableColumn::create(context->allocator(), Column::mutate(std::move(col)),
+                                          std::move(union_null_column));
         } else {
-            return NullableColumn::create(col, std::move(union_null_column));
+            return NullableColumn::create(context->allocator(), col->as_mutable_ptr(), std::move(union_null_column));
         }
     }
 

@@ -124,6 +124,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
+    _chunk_builder.chunk_schema()->set_restore_allocator(_restore_allocator);
 #ifndef BE_TEST
     DCHECK(_opts.wg != nullptr) << "workgroup must be set";
 #endif
@@ -147,6 +148,13 @@ Status Spiller::prepare(RuntimeState* state) {
     _block_manager = _opts.block_manager;
 
     return Status::OK();
+}
+
+void Spiller::set_restore_allocator(memory::Allocator* allocator) {
+    _restore_allocator = allocator;
+    if (auto& schema = _chunk_builder.chunk_schema(); schema) {
+        schema->set_restore_allocator(allocator);
+    }
 }
 
 void Spiller::set_partition(const std::vector<const SpillPartitionInfo*>& parititons) {

@@ -517,7 +517,7 @@ struct AggHashMapVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
-    void init(RuntimeState* state, Type type, AggStatistics* agg_statis);
+    void init(RuntimeState* state, Type type, AggStatistics* agg_statis, memory::Allocator* allocator);
 
     void convert_to_two_level(RuntimeState* state);
 
@@ -643,7 +643,7 @@ struct AggHashSetVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_set_with_key);
     }
 
-    void init(RuntimeState* state, Type type_, AggStatistics* agg_stat);
+    void init(RuntimeState* state, Type type_, AggStatistics* agg_stat, memory::Allocator* allocator);
 
     void convert_to_two_level(RuntimeState* state);
 

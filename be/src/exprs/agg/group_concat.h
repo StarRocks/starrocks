@@ -355,7 +355,8 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(FunctionHelper::create_column(*ctx->get_arg_type(i), true));
+            state.data_columns->emplace_back(
+                    FunctionHelper::create_column(ctx->allocator(), *ctx->get_arg_type(i), true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }
@@ -514,7 +515,7 @@ public:
         }
         // get null info from output columns
         auto output_col_num = ctx->get_num_args() - ctx->get_nulls_first().size() - 1;
-        NullColumn::MutablePtr nulls = NullColumn::create(chunk_size, false);
+        NullColumn::MutablePtr nulls = NullColumn::create(ctx->allocator(), chunk_size, false);
         auto& null_data = nulls->get_data();
         for (int j = 0; j < output_col_num; ++j) {
             if (src[j]->only_null()) {
@@ -631,7 +632,7 @@ public:
         }
         // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
         // TODO(fzh) optimize it later, as distinct is often rewritten to group by.
-        Buffer<bool> duplicated(outputs[0]->size(), false);
+        std::vector<bool> duplicated(outputs[0]->size(), false);
         if (ctx->get_is_distinct()) {
             for (auto row_id = 0; row_id < elem_size; row_id++) {
                 bool is_duplicated = false;

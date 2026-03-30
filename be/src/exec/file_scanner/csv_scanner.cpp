@@ -236,9 +236,10 @@ void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
                 down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
-        chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
-                                                             adaptive_column->materialized_raw_null_column()),
-                                      i);
+        chunk->update_column_by_index(
+                NullableColumn::create(_allocator, adaptive_column->materialized_raw_data_column(),
+                                       adaptive_column->materialized_raw_null_column()),
+                i);
     }
 }
 
@@ -580,7 +581,7 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
         // NOTE: Always create a nullable column, even if |slot->is_nullable()| is false.
         // See the comment in `CSVScanner::Open` for reference.
         // here we optimize it through adaptive nullable column
-        auto column = ColumnHelper::create_column(slots[i]->type(), true, false, 0, true);
+        auto column = ColumnHelper::create_column(_allocator, slots[i]->type(), true, false, 0, true);
 
         chunk->append_column(std::move(column), slots[i]->id());
     }

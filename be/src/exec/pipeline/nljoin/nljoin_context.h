@@ -19,6 +19,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -179,10 +180,12 @@ public:
     // Return true if it's the last prober, which need to perform the right join task
     bool finish_probe(int32_t driver_seq, const Filter& build_match_flags);
 
-    const Filter get_shared_build_match_flag() const;
+    const Filter& get_shared_build_match_flag() const;
 
     const SpillProcessChannelFactoryPtr& spill_channel_factory() { return _spill_process_factory_ptr; }
     NLJoinBuildChunkStreamBuilder& builder() { return _build_stream_builder; }
+
+    void set_build_spiller_restore_allocator(memory::Allocator* allocator);
 
     void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _builder_observable.add_observer(state, observer);
@@ -219,7 +222,7 @@ private:
     std::vector<ChunkPtr> _build_chunks; // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
-    Filter _shared_build_match_flag;
+    Filter _shared_build_match_flag = Filter(memory::get_default_allocator());
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _rf_conjuncts_ctx;

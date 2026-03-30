@@ -50,7 +50,7 @@ public:
         const ColumnPtr& col = ptr->get_column_by_slot_id(_slot_id);
         const size_t size = col->size();
 
-        BooleanColumn::MutablePtr result = BooleanColumn::create(size, 1);
+        BooleanColumn::MutablePtr result = BooleanColumn::create(context->allocator(), size, 1);
         uint8_t* res = result->get_data().data();
 
         if (col->only_null()) {

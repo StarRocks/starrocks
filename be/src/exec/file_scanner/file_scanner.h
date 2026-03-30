@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "base/memory/memory_allocator.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
@@ -126,6 +127,8 @@ public:
     // only for test
     RuntimeState* TEST_runtime_state() { return _state; }
     ScannerCounter* TEST_scanner_counter() { return _counter; }
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
 
     static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
                              std::vector<SlotDescriptor>* output);
@@ -143,6 +146,7 @@ protected:
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;
+    memory::Allocator* _allocator = memory::get_default_allocator();
     const TBrokerScanRangeParams& _params;
     ScannerCounter* _counter;
 

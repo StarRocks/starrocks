@@ -99,17 +99,18 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     auto max_column_size = runtime_state->chunk_size();
     auto arg_tablet_id = ColumnViewer<TYPE_BIGINT>(state->get_columns()[0]);
     auto arg_tablet_version = ColumnViewer<TYPE_BIGINT>(state->get_columns()[1]);
+    auto* allocator = state->allocator();
     auto curr_row = state->processed_rows();
     auto num_rows = state->input_rows();
     auto row_offset = state->get_offset();
-    auto offsets = UInt32Column::create();
+    auto offsets = UInt32Column::create(allocator);
     MutableColumns result;
-    result.emplace_back(Int64Column::create());                                     // id
-    result.emplace_back(Int64Column::create());                                     // segments
-    result.emplace_back(Int64Column::create());                                     // rows
-    result.emplace_back(Int64Column::create());                                     // size
-    result.emplace_back(BooleanColumn::create());                                   // overlapped
-    result.emplace_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
+    result.emplace_back(Int64Column::create(allocator));                                     // id
+    result.emplace_back(Int64Column::create(allocator));                                     // segments
+    result.emplace_back(Int64Column::create(allocator));                                     // rows
+    result.emplace_back(Int64Column::create(allocator));                                     // size
+    result.emplace_back(BooleanColumn::create(allocator));                                   // overlapped
+    result.emplace_back(NullableColumn::wrap_if_necessary(BinaryColumn::create(allocator))); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));

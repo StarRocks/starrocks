@@ -364,9 +364,11 @@ public:
         const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
-            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodFloatImpl>::evaluate<Type>(l, r);
+            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodFloatImpl>::evaluate<Type>(
+                    context->allocator(), l, r);
         } else {
-            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodImpl>::evaluate<Type>(l, r);
+            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodImpl>::evaluate<Type>(context->allocator(),
+                                                                                                   l, r);
         }
     }
 
@@ -380,7 +382,8 @@ public:
         const auto& l = VECTORIZED_FN_ARGS(0);
         const auto& r = VECTORIZED_FN_ARGS(1);
 
-        return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, fmodImpl>::evaluate<Type>(l, r);
+        return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, fmodImpl>::evaluate<Type>(context->allocator(), l,
+                                                                                               r);
     }
 
     /**
@@ -396,20 +399,21 @@ public:
         const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (lt_is_decimalv2<Type>) {
-            return VectorizedUnstrictBinaryFunction<RValueCheckZeroDecimalv2Impl, modDecimalv2Impl>::evaluate<Type>(l,
-                                                                                                                    r);
+            return VectorizedUnstrictBinaryFunction<RValueCheckZeroDecimalv2Impl, modDecimalv2Impl>::evaluate<Type>(
+                    context->allocator(), l, r);
         } else if constexpr (lt_is_decimal<Type>) {
             // TODO(by satanson):
             //  FunctionContext carry decimal_overflow_check flag to control overflow checking.
             if (context != nullptr && context->error_if_overflow()) {
                 using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, OverflowMode::REPORT_ERROR>;
-                return VectorizedDiv::template evaluate<Type>(l, r);
+                return VectorizedDiv::template evaluate<Type>(context->allocator(), l, r);
             } else {
                 using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, OverflowMode::OUTPUT_NULL>;
-                return VectorizedDiv::template evaluate<Type>(l, r);
+                return VectorizedDiv::template evaluate<Type>(context->allocator(), l, r);
             }
         } else {
-            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, modImpl>::evaluate<Type>(l, r);
+            return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, modImpl>::evaluate<Type>(context->allocator(),
+                                                                                                  l, r);
         }
     }
 
@@ -434,10 +438,11 @@ public:
     DEFINE_VECTORIZED_FN(negative) {
         if constexpr (lt_is_decimal<Type>) {
             const auto& type = context->get_return_type();
-            return VectorizedStrictUnaryFunction<negativeImpl>::evaluate<Type>(VECTORIZED_FN_ARGS(0), type.precision,
-                                                                               type.scale);
+            return VectorizedStrictUnaryFunction<negativeImpl>::evaluate<Type>(
+                    context->allocator(), VECTORIZED_FN_ARGS(0), type.precision, type.scale);
         } else {
-            return VectorizedStrictUnaryFunction<negativeImpl>::evaluate<Type>(VECTORIZED_FN_ARGS(0));
+            return VectorizedStrictUnaryFunction<negativeImpl>::evaluate<Type>(context->allocator(),
+                                                                               VECTORIZED_FN_ARGS(0));
         }
     }
 
@@ -464,7 +469,7 @@ public:
         }
 
         auto size = columns[0]->size();
-        ColumnBuilder<Type> result(size, type.precision, type.scale);
+        ColumnBuilder<Type> result(context->allocator(), size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;
@@ -505,7 +510,7 @@ public:
         }
 
         auto size = columns[0]->size();
-        ColumnBuilder<Type> result(size, type.precision, type.scale);
+        ColumnBuilder<Type> result(context->allocator(), size, type.precision, type.scale);
         for (int row = 0; row < size; row++) {
             auto value = list[0].value(row);
             bool is_null = false;

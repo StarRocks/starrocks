@@ -14,6 +14,7 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
@@ -79,10 +80,11 @@ static void reserve_memory(Column* dst_col, const std::vector<ChunkPtr>& src_chu
     binary_dst_col->get_bytes().reserve(total_num_bytes);
 }
 
-static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_chunks, size_t num_rows) {
+static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_chunks, size_t num_rows,
+                          memory::Allocator* column_allocator) {
     DCHECK(!src_chunks.empty());
     // Columns like FixedLengthColumn have already reserved memory when invoke Chunk::clone_empty(num_rows).
-    dst_chunk = src_chunks.front()->clone_empty(num_rows);
+    dst_chunk = src_chunks.front()->clone_empty(column_allocator, num_rows);
     const auto num_columns = dst_chunk->num_columns();
     for (auto i = 0; i < num_columns; ++i) {
         auto* dst_col = dst_chunk->get_column_raw_ptr_by_index(i);
@@ -109,7 +111,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         COUNTER_UPDATE(_profiler->input_required_memory, _staging_unsorted_bytes);
-        concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
+        concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows, sink_allocator());
         _staging_unsorted_chunks.clear();
         RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
@@ -118,7 +120,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         SmallPermutation permutation = create_small_permutation(_staging_unsorted_rows);
         RETURN_IF_ERROR(
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
-        auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
+        auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(sink_allocator(), _unsorted_chunk->num_rows());
         materialize_by_permutation_single(sorted_chunk.get(), _unsorted_chunk, permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
@@ -143,12 +145,13 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _early_materialized_slots.clear();
         _runtime_profile->add_info_string("LateMaterialization", "False");
-        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
+        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, sink_allocator()));
     } else {
         _runtime_profile->add_info_string("LateMaterialization", "True");
         _split_late_and_early_chunks();
         _assign_ordinals();
-        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
+        RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs,
+                                            sink_allocator()));
     }
 
     FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_full_sort_done_bad_alloc, { throw std::bad_alloc(); });
@@ -191,7 +194,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         size_t num_rows = partial_sort_chunk->num_rows();
         auto ordinal_column = OrdinalColumn<T>::create();
         auto& ordinal_data = down_cast<OrdinalColumn<T>*>(ordinal_column.get())->get_data();
-        raw::make_room(&ordinal_data, num_rows);
+        ordinal_data.resize(num_rows);
         for (T offset = 0; offset < num_rows; ++offset) {
             ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }
@@ -239,7 +242,7 @@ template <typename T>
 starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks::ChunkPtr& sorted_eager_chunk) {
     static_assert(type_is_ordinal<T>, "T must be uint32_t or uint64_t");
     const auto num_rows = sorted_eager_chunk->num_rows();
-    auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(num_rows);
+    auto sorted_lazy_chunk = _late_materialized_chunks[0]->clone_empty(source_allocator(), num_rows);
     auto* ordinal_column = sorted_eager_chunk->get_column_raw_ptr_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
     auto& ordinal_data = down_cast<const OrdinalColumn<T>*>(ordinal_column)->get_data();
     T _offset_in_chunk_mask = static_cast<T>((1L << _offset_in_chunk_bits) - 1);
@@ -277,7 +280,7 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     }
     size_t chunk_size = _state->chunk_size();
     SortedRun& run = _merged_runs.front();
-    *chunk = run.steal_chunk(chunk_size);
+    *chunk = run.steal_chunk(chunk_size, 0, source_allocator());
     if (*chunk != nullptr) {
         if (!_early_materialized_slots.empty()) {
             *chunk = _late_materialize(*chunk);

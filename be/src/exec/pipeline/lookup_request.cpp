@@ -27,6 +27,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "connector/hive_connector.h"
+#include "exec/pipeline/fetch_processor.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
@@ -60,9 +61,11 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
                                                           const std::vector<SlotDescriptor*>& slots,
                                                           size_t start_offset) {
     size_t num_rows = fetch_ctx->request_chunk->num_rows();
+    auto processor = fetch_ctx->processor.lock();
+    auto* allocator = processor != nullptr ? processor->allocator() : nullptr;
     for (const auto& slot : slots) {
         auto src_col = result_chunk->get_column_by_slot_id(slot->id());
-        auto dst_col = src_col->clone_empty();
+        auto dst_col = src_col->clone_empty(allocator);
         dst_col->append(*src_col, start_offset, num_rows);
         DCHECK(!fetch_ctx->response_columns.contains(slot->id()))
                 << "slot id: " << slot->id() << " already exists in response columns";
@@ -83,7 +86,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         SlotId slot_id = pcolumn.slot_id();
         int64_t data_size = pcolumn.data_size();
         auto dst_col = chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
-        auto col = dst_col->clone_empty();
+        auto col = dst_col->clone_empty(dst_col->allocator());
         VLOG_FILE << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
                   << ", column: " << col->get_name();
         const uint8_t* buff = reinterpret_cast<const uint8_t*>(pcolumn.data().data());
@@ -112,7 +115,7 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
     size_t max_serialized_size = 0;
     for (const auto& slot : slots) {
         auto src_col = result_chunk->get_column_by_slot_id(slot->id());
-        auto dst_col = src_col->clone_empty();
+        auto dst_col = src_col->clone_empty(src_col->allocator());
         dst_col->append(*src_col, start_offset, num_rows);
         max_serialized_size += serde::ColumnArraySerde::max_serialized_size(*dst_col);
         columns.emplace_back(std::move(dst_col));
@@ -155,7 +158,7 @@ StatusOr<ChunkPtr> LookUpTask::_sort_chunk(RuntimeState* state, const ChunkPtr& 
     _ctx->permutation.resize(0);
 
     RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), order_by_columns, sort_descs, &_ctx->permutation));
-    auto sorted_chunk = chunk->clone_empty_with_slot(chunk->num_rows());
+    auto sorted_chunk = chunk->clone_empty_with_slot(_ctx->parent->allocator(), chunk->num_rows());
     materialize_by_permutation(sorted_chunk.get(), {chunk}, _ctx->permutation);
 
     return sorted_chunk;
@@ -169,7 +172,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
         Buffer<uint32_t>* replicated_offsets) {
     SCOPED_TIMER(_ctx->parent->_calculate_row_id_range_timer);
     // Step 1: Add position column to track original row order
-    UInt32Column::MutablePtr position_column = UInt32Column::create();
+    UInt32Column::MutablePtr position_column = UInt32Column::create(_ctx->parent->allocator());
     position_column->resize_uninitialized(request_chunk->num_rows());
     auto& position_data = position_column->get_data();
     for (size_t i = 0; i < request_chunk->num_rows(); i++) {
@@ -612,7 +615,7 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
 
     // Calculate row_id ranges and fetch data from storage
     phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>> row_id_ranges;
-    Buffer<uint32_t> replicated_offsets;
+    Buffer<uint32_t> replicated_offsets(memory::get_default_allocator());
     ASSIGN_OR_RETURN(auto sorted_chunk,
                      _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
     ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, {}, row_id_ranges));
@@ -667,7 +670,7 @@ Status NativeLookUpTask::process(RuntimeState* state, const ChunkPtr& request_ch
     }
 
     SmallPermutation permutation;
-    Buffer<uint32_t> replicated;
+    Buffer<uint32_t> replicated(memory::get_default_allocator());
 
     Columns columns;
 
@@ -707,7 +710,7 @@ Status NativeLookUpTask::process(RuntimeState* state, const ChunkPtr& request_ch
     }
     {
         size_t num_rows = late_materialized_chunk->num_rows();
-        auto sorted_chunk = late_materialized_chunk->clone_empty_with_slot(num_rows);
+        auto sorted_chunk = late_materialized_chunk->clone_empty_with_slot(_ctx->parent->allocator(), num_rows);
         materialize_by_permutation_single(sorted_chunk.get(), late_materialized_chunk, permutation);
         late_materialized_chunk = std::move(sorted_chunk);
     }
@@ -753,7 +756,7 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
         chunk->append_column(row_locator[i], i);
     }
 
-    auto sorted_chunk = chunk->clone_empty_with_slot(chunk->num_rows());
+    auto sorted_chunk = chunk->clone_empty_with_slot(_ctx->parent->allocator(), chunk->num_rows());
 
     materialize_by_permutation_single(sorted_chunk.get(), chunk, permutation);
 

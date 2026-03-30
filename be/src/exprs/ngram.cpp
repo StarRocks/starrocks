@@ -87,7 +87,7 @@ public:
 
         // needle is too small so we can not get even single Ngram, so they are not similar at all
         if (needle.get_size() < gram_num) {
-            return ColumnHelper::create_const_column<TYPE_DOUBLE>(0, haystack_column->size());
+            return ColumnHelper::create_const_column<TYPE_DOUBLE>(context->allocator(), 0, haystack_column->size());
         }
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -96,12 +96,14 @@ public:
             if (context->is_constant_column(0)) {
                 // already calculated in prepare and cache result in state
                 DCHECK(state->result != -1);
-                return ColumnHelper::create_const_column<TYPE_DOUBLE>(state->result, haystack_column->size());
+                return ColumnHelper::create_const_column<TYPE_DOUBLE>(context->allocator(), state->result,
+                                                                      haystack_column->size());
             } else {
                 // haystack is const column but not constant
                 float result = haystack_const_and_needle_const(
                         ColumnHelper::get_const_value<TYPE_VARCHAR>(haystack_column), *map, context, gram_num);
-                return ColumnHelper::create_const_column<TYPE_DOUBLE>(result, haystack_column->size());
+                return ColumnHelper::create_const_column<TYPE_DOUBLE>(context->allocator(), result,
+                                                                      haystack_column->size());
             }
         } else {
             return haystack_vector_and_needle_const(haystack_column, *map, context, gram_num);
@@ -187,12 +189,13 @@ private:
         }
         if constexpr (case_insensitive) {
             // @TODO if ngram supports utf8 in the future, we should use antoher implementation.
-            haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(haystackPtr);
+            haystackPtr = StringCaseToggleFunction<false>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(context->allocator(),
+                                                                                                haystackPtr);
         }
 
         const BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
         size_t chunk_size = haystack->size();
-        auto res = RunTimeColumnType<TYPE_DOUBLE>::create(chunk_size);
+        auto res = RunTimeColumnType<TYPE_DOUBLE>::create(context->allocator(), chunk_size);
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -217,7 +220,8 @@ private:
         }
 
         if (haystack_column->is_nullable()) {
-            return NullableColumn::create(std::move(res), std::move(res_null));
+            return NullableColumn::create(context->allocator(), std::move(res),
+                                          NullColumn::static_pointer_cast(std::move(*res_null).mutate()));
         } else {
             return res;
         }

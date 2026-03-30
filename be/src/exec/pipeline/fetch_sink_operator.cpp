@@ -27,6 +27,7 @@ FetchSinkOperator::FetchSinkOperator(OperatorFactory* factory, int32_t id, int32
 Status FetchSinkOperator::prepare(RuntimeState* state) {
     DLOG(INFO) << "[GLM] FetchSinkOperator::prepare, processor: " << (void*)_processor.get() << ", " << (void*)this;
     RETURN_IF_ERROR(Operator::prepare(state));
+    _processor->set_allocator(allocator());
     RETURN_IF_ERROR(_processor->prepare(state, _unique_metrics));
     return Status::OK();
 }

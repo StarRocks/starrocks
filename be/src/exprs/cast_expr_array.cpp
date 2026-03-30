@@ -144,27 +144,27 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         const auto* input = down_cast<const ConstColumn*>(_constant_res.get());
         size_t rows = input_chunk == nullptr ? 1 : input_chunk->num_rows();
         if (input->only_null()) {
-            return ColumnHelper::create_const_null_column(rows);
+            return ColumnHelper::create_const_null_column(context->allocator(), rows);
         } else {
-            return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
+            return ConstColumn::create(context->allocator(), std::move(*(input->data_column())).clone(), rows);
         }
     }
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), column->size());
     }
 
     LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_VARCHAR> src(column);
-    UInt32Column::MutablePtr offsets = UInt32Column::create();
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    UInt32Column::MutablePtr offsets = UInt32Column::create(context->allocator());
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
 
     std::vector<char> stack;
 
     // 1. Split string with ',' delimiter
     uint32_t offset = 0;
     bool has_null = false;
-    ColumnBuilder<TYPE_VARCHAR> slice_builder(src.size());
+    ColumnBuilder<TYPE_VARCHAR> slice_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {
@@ -217,19 +217,19 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
+        elements = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
 
     if (column->is_nullable() || has_null) {
-        res = NullableColumn::create(res, std::move(null_column));
+        res = NullableColumn::create(context->allocator(), res->as_mutable_ptr(), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(context->allocator(), std::move(res), column->size());
     }
     return res;
 }
@@ -257,17 +257,17 @@ Slice CastStringToArray::_unquote(Slice slice) const {
 StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), column->size());
     }
 
     LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_JSON> src(column);
-    UInt32Column::MutablePtr offsets = UInt32Column::create();
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    UInt32Column::MutablePtr offsets = UInt32Column::create(context->allocator());
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
 
     // 1. Cast JsonArray to ARRAY<JSON>
     uint32_t offset = 0;
-    ColumnBuilder<TYPE_JSON> json_column_builder(src.size());
+    ColumnBuilder<TYPE_JSON> json_column_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {
@@ -297,18 +297,18 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(std::move(elements), slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
+        elements = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(elements, std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(context->allocator(), Column::mutate(std::move(elements)), std::move(offsets));
     if (column->is_nullable()) {
-        res = NullableColumn::create(res, std::move(null_column));
+        res = NullableColumn::create(context->allocator(), res->as_mutable_ptr(), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(context->allocator(), std::move(res), column->size());
     }
     return res;
 }
@@ -316,20 +316,20 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
 StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, Chunk* input_chunk) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
-        return ColumnHelper::create_const_null_column(column->size());
+        return ColumnHelper::create_const_null_column(context->allocator(), column->size());
     }
 
     DCHECK(_cast_elements_expr != nullptr);
     const LogicalType element_type = _cast_elements_expr->type().type;
     const ColumnViewer<TYPE_VARIANT> src(column);
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
-    UInt32Column::MutablePtr offsets = UInt32Column::create();
-    NullColumn::MutablePtr null_column = NullColumn::create();
+    UInt32Column::MutablePtr offsets = UInt32Column::create(context->allocator());
+    NullColumn::MutablePtr null_column = NullColumn::create(context->allocator());
 
     // 1. Cast a variant(type=ARRAY) to ARRAY<VARIANT>
     // If the variant is not array type, set null
     uint32_t offset = 0;
-    ColumnBuilder<TYPE_VARIANT> variant_column_builder(src.size());
+    ColumnBuilder<TYPE_VARIANT> variant_column_builder(context->allocator(), src.size());
     for (size_t i = 0; i < src.size(); i++) {
         offsets->append(offset);
         if (src.is_null(i)) {
@@ -377,16 +377,17 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
         const SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(elements, slot_id);
         ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
-        elements = ColumnHelper::cast_to_nullable_column(std::move(cast_res));
+        elements = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(cast_res));
     }
 
     // 3. Assemble elements into array column
-    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    MutableColumnPtr res =
+            ArrayColumn::create(context->allocator(), std::move(elements)->as_mutable_ptr(), std::move(offsets));
     // Cast from variant may generate null rows for non-array/null variant values even when source
     // column itself is non-nullable, so keep the per-row null bitmap.
-    res = NullableColumn::create(std::move(res), std::move(null_column));
+    res = NullableColumn::create(context->allocator(), std::move(res), std::move(null_column));
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(context->allocator(), std::move(res), column->size());
     }
 
     return res;

@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -98,7 +99,8 @@ public:
 
     static StatusOr<ChunkPtr> materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
                                                             const SortExecExprs& sort_exec_exprs,
-                                                            const std::vector<OrderByType>& order_by_types);
+                                                            const std::vector<OrderByType>& order_by_types,
+                                                            memory::Allocator* column_allocator = nullptr);
 
     virtual void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
@@ -131,6 +133,10 @@ public:
     bool has_output() { return spiller() == nullptr || !spiller()->spilled() || spiller()->has_output_data(); }
 
     const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
+    void set_sink_allocator(memory::Allocator* allocator) { _sink_allocator = allocator; }
+    void set_source_allocator(memory::Allocator* allocator) { _source_allocator = allocator; }
+    memory::Allocator* sink_allocator() const { return _sink_allocator; }
+    memory::Allocator* source_allocator() const { return _source_allocator; }
 
     size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
     void set_spill_stragety(spill::SpillStrategy stragety) { _spill_strategy = stragety; }
@@ -145,6 +151,8 @@ protected:
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
+    memory::Allocator* _sink_allocator = memory::get_default_allocator();
+    memory::Allocator* _source_allocator = memory::get_default_allocator();
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;

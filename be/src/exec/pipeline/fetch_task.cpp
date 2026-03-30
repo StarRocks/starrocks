@@ -107,7 +107,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                 }
                 int32_t slot_id = pcolumn.slot_id();
                 const SlotDescriptor* slot_desc = processor->_slot_id_to_desc.at(slot_id);
-                auto column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+                auto column = ColumnHelper::create_column(processor->allocator(), slot_desc->type(),
+                                                          slot_desc->is_nullable());
                 const uint8_t* buff = reinterpret_cast<const uint8_t*>(buffer.data());
                 auto ret = serde::ColumnArraySerde::deserialize(buff, buff + buffer.size(), column.get());
                 if (!ret.ok()) {

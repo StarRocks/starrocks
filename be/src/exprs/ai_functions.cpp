@@ -128,7 +128,7 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
     auto num_rows = columns[0]->size();
     auto prompt_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[1]);
-    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnBuilder<TYPE_VARCHAR> result(context->allocator(), num_rows);
 
     bool config_is_const = columns[1]->is_constant();
     std::unique_ptr<ModelConfig> const_config = nullptr;

@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "column/fixed_length_column.h"
 #include "exprs/function_helper.h"
 #include "runtime/runtime_fwd.h"
@@ -63,6 +64,10 @@ public:
 
     bool is_required() { return _is_required; }
 
+    void set_allocator(memory::Allocator* allocator) { _allocator = allocator; }
+
+    memory::Allocator* allocator() const { return _allocator; }
+
 private:
     virtual void on_new_params(){};
 
@@ -84,6 +89,7 @@ private:
     // used to identify left join for table function
     bool _is_left_join = false;
     bool _is_required = true;
+    memory::Allocator* _allocator = memory::get_default_allocator();
 };
 
 class TableFunction {

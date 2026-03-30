@@ -144,7 +144,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 // we should unpack the const column before evaluation
                 size_t elements_num = array_column->get_element_size(0);
                 auto new_elements_column = elements_column->clone_empty();
-                auto new_offsets_column = UInt32Column::create();
+                auto new_offsets_column = UInt32Column::create(context->allocator());
                 // replicate N time and ignore null
                 size_t repeat_times = input_elements[i]->size() - null_rows;
                 size_t offset = 0;
@@ -209,16 +209,17 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             DCHECK_EQ(tmp_col->size(), 1);
             // Now we cannot guarantee that a const column input will return a const column.
             if (tmp_col->has_null()) {
-                tmp_col = ColumnHelper::create_const_null_column(1);
+                tmp_col = ColumnHelper::create_const_null_column(context->allocator(), 1);
             } else {
-                tmp_col = ConstColumn::create(ColumnHelper::get_data_column(tmp_col.get()), 1);
+                tmp_col = ConstColumn::create(context->allocator(), ColumnHelper::get_data_column(tmp_col.get()), 1);
             }
         } else {
             ASSIGN_OR_RETURN(tmp_col, context->evaluate(_children[0], cur_chunk.get()));
         }
         tmp_col->check_or_die();
         ASSIGN_OR_RETURN(column, tmp_col->as_mutable_raw_ptr()->replicate(aligned_offsets_data));
-        column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
+        column = ColumnHelper::align_return_type(context->allocator(), std::move(column), type().children[0],
+                                                 column->size(), true);
 
         RETURN_IF_ERROR(column->capacity_limit_reached());
     } else {
@@ -228,8 +229,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
-            size_t num_rows = tmp_col->size();
-            column = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], num_rows, true);
+            column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), std::move(tmp_col));
+            column = ColumnHelper::align_return_type(context->allocator(), std::move(column), type().children[0],
+                                                     column->size(), true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
@@ -245,8 +247,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 }
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
-                                                          true);
+                tmp_col = ColumnHelper::align_return_type(context->allocator(), std::move(tmp_col), type().children[0],
+                                                          tmp_chunk->num_rows(), true);
                 if (column == nullptr) {
                     column = std::move(*tmp_col).mutate();
                 } else {
@@ -257,33 +259,39 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     }
 
     DCHECK(column != nullptr);
-    column = ColumnHelper::cast_to_nullable_column(std::move(column));
+    column = ColumnHelper::cast_to_nullable_column(context->allocator(), std::move(column));
 
     if (all_const_input && capture_slot_ids.empty()) {
         // if all input arguments are const and lambdaexpr doesn't depend on other capture columns,
         // we can return a const column
         auto data_column = FunctionHelper::get_data_column_of_const(column);
 
-        auto new_aligned_offsets = UInt32Column::create();
+        auto new_aligned_offsets = UInt32Column::create(context->allocator());
         new_aligned_offsets->append(0);
         new_aligned_offsets->append(data_column->size());
         aligned_offsets = std::move(new_aligned_offsets);
-        auto array_column = ArrayColumn::create(std::move(*data_column).mutate(), aligned_offsets);
+        auto array_column =
+                ArrayColumn::create(context->allocator(), std::move(*data_column).mutate(),
+                                    UInt32Column::static_pointer_cast(std::move(*aligned_offsets).mutate()));
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(std::move(array_column), result_null_column);
+            result_column =
+                    NullableColumn::create(context->allocator(), std::move(array_column),
+                                           NullColumn::static_pointer_cast(std::move(*result_null_column).mutate()));
             result_column->check_or_die();
         }
-        result_column = ConstColumn::create(result_column, chunk->num_rows());
+        result_column = ConstColumn::create(context->allocator(), result_column, chunk->num_rows());
         result_column->check_or_die();
         return result_column;
     } else {
         auto array_column =
-                ArrayColumn::create(std::move(column), ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone()));
+                ArrayColumn::create(context->allocator(), std::move(column),
+                                    ColumnHelper::as_column<UInt32Column>(std::move(*aligned_offsets).mutate()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
-            return NullableColumn::create(std::move(array_column), result_null_column);
+            return NullableColumn::create(context->allocator(), std::move(array_column),
+                                          NullColumn::static_pointer_cast(std::move(*result_null_column).mutate()));
         }
         return array_column;
     }
@@ -303,7 +311,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
-            return ColumnHelper::align_return_type(std::move(child_col), type(), chunk->num_rows(), true);
+            return ColumnHelper::align_return_type(context->allocator(), std::move(child_col), type(),
+                                                   chunk->num_rows(), true);
         }
 
         bool is_const = child_col->is_constant();
@@ -342,7 +351,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         ColumnPtr column = data_column;
         if (is_const) {
             // keep it as a const array column in input_elements
-            column = ConstColumn::create(std::move(data_column), num_rows);
+            column = ConstColumn::create(context->allocator(), std::move(data_column), num_rows);
         }
 
         // check each array's lengths in input_elements
@@ -373,23 +382,25 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
     if (null_rows == input_elements[0]->size()) {
         // if all input rows are null, just return a const nullable array column as result
-        column = ColumnHelper::create_column(type().children[0],
+        column = ColumnHelper::create_column(context->allocator(), type().children[0],
                                              true); // array->elements must be of return array->elements' type
         column->append_default(1);
-        auto aligned_offsets = UInt32Column::create(0);
+        auto aligned_offsets = UInt32Column::create(context->allocator(), 0);
         aligned_offsets->append(0);
         aligned_offsets->append(1);
-        auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
+        auto array_col = ArrayColumn::create(context->allocator(), std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
         if (result_null_column) {
             auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
             result_null_mut->resize(1);
-            auto result = ConstColumn::create(NullableColumn::create(std::move(array_col), std::move(result_null_mut)),
-                                              chunk->num_rows());
+            auto result = ConstColumn::create(
+                    context->allocator(),
+                    NullableColumn::create(context->allocator(), std::move(array_col), std::move(result_null_mut)),
+                    chunk->num_rows());
             result->check_or_die();
             return result;
         }
-        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows());
+        auto result = ConstColumn::create(context->allocator(), std::move(array_col), chunk->num_rows());
         result->check_or_die();
         return result;
     }
@@ -400,12 +411,12 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
 
     if (total_elements_num == 0) {
         // if all input rows are empty arrays, return a const empty array column as result
-        column = ColumnHelper::create_column(type().children[0], true);
-        auto aligned_offsets = UInt32Column::create(0);
+        column = ColumnHelper::create_column(context->allocator(), type().children[0], true);
+        auto aligned_offsets = UInt32Column::create(context->allocator(), 0);
         aligned_offsets->append_default(2);
-        auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
+        auto array_col = ArrayColumn::create(context->allocator(), std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
-        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows() - null_rows);
+        auto result = ConstColumn::create(context->allocator(), std::move(array_col), chunk->num_rows() - null_rows);
         result->check_or_die();
         return result;
     }

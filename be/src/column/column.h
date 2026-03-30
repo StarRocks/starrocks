@@ -18,6 +18,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/memory/memory_allocator.h"
 #include "base/string/slice.h"
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
@@ -44,6 +45,8 @@ class Datum;
 class Column : public Cow<Column> {
 public:
     friend class Cow<Column>;
+
+    memory::Allocator* allocator() const { return _allocator; }
 
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
@@ -346,9 +349,9 @@ public:
     virtual uint32_t serialize_size(size_t idx) const = 0;
 
     // return new empty column with the same type
-    virtual MutablePtr clone_empty() const = 0;
+    virtual MutablePtr clone_empty(memory::Allocator* allocator = nullptr) const = 0;
 
-    virtual MutablePtr clone() const = 0;
+    virtual MutablePtr clone(memory::Allocator* allocator = nullptr) const = 0;
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
@@ -493,6 +496,9 @@ public:
     }
 
 protected:
+    Column() : _allocator(memory::get_default_allocator()) {}
+    explicit Column([[maybe_unused]] memory::Allocator* allocator) : _allocator(allocator) {}
+
     // Helper functions for downgrade and upgrade,
     // if downgrade failed, return the error status.
     // if upgrade success, always return nullptr.
@@ -504,6 +510,7 @@ protected:
     // if upgrade's result is not nullptr, it will replace the input col with the new column.
     static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
+    memory::Allocator* _allocator = nullptr;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 

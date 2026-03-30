@@ -17,7 +17,7 @@
 #include "column/chunk_extra_data.h"
 
 namespace starrocks {
-void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) {
+void ChunkExtraColumnsData::filter(const Filter& selection) {
     for (auto& col : _columns) {
         auto mutable_col = col->as_mutable_ptr();
         mutable_col->filter(selection);
@@ -25,7 +25,7 @@ void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) {
     }
 }
 
-void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
+void ChunkExtraColumnsData::filter_range(const Filter& selection, size_t from, size_t to) {
     for (auto& col : _columns) {
         auto mutable_col = col->as_mutable_ptr();
         mutable_col->filter_range(selection, from, to);

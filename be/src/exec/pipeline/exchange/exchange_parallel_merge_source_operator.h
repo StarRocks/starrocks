@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/sorting/merge_path.h"
 
@@ -107,7 +108,7 @@ public:
     void close(RuntimeState* state) override;
 
     DataStreamRecvr* get_stream_recvr(RuntimeState* state);
-    merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state);
+    merge_path::MergePathCascadeMerger* get_merge_path_merger(RuntimeState* state, memory::Allocator* column_allocator);
     void close_stream_recvr();
 
     SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }

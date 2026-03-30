@@ -107,6 +107,7 @@ void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare(state));
+    _aggregator->set_sink_allocator(_allocator);
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare_local_state(state));
 
     DCHECK(!_aggregator->is_none_group_by_exprs());
@@ -120,6 +121,10 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
     _agg_group_by_with_limit = false;
     _aggregator->params()->enable_pipeline_share_limit = false;
+
+    if (const auto& sp = _aggregator->spiller(); sp) {
+        sp->set_spill_allocator(_aggregator->sink_allocator());
+    }
 
     return Status::OK();
 }

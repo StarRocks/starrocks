@@ -269,12 +269,14 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                     end = ColumnHelper::find_first_not_equal(column.get(), 0, 0, end);
                 }
                 // First part: [0, end)
-                ChunkPtr first_part = chunk->clone_empty();
+                auto* first_part_allocator = _source->get_sources()[_previous_channel_id]->allocator();
+                ChunkPtr first_part = chunk->clone_empty(first_part_allocator);
                 first_part->append(*chunk, 0, end);
                 chunks.emplace_back(_previous_channel_id, first_part);
 
                 // Second part: [end, chunk->num_rows())
-                ChunkPtr second_part = chunk->clone_empty();
+                auto* second_part_allocator = _source->get_sources()[min_channel_id]->allocator();
+                ChunkPtr second_part = chunk->clone_empty(second_part_allocator);
                 second_part->append(*chunk, end, chunk->num_rows() - end);
                 chunks.emplace_back(min_channel_id, second_part);
             }
@@ -360,7 +362,7 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
         if (key2datum.find(partition_key) == key2datum.end()) {
             std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_datum;
             for (int j = 0; j < partition_columns.size(); j++) {
-                auto column = partition_columns[j]->clone_empty();
+                auto column = partition_columns[j]->clone_empty(allocator());
                 column->append_datum(partition_columns[j]->get(i));
                 partition_datum.emplace_back(_partition_expr_ctxs[j]->root()->type(), column);
             }
@@ -385,7 +387,8 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
 
     for (auto& [key, indices] : key2indices) {
         uint32_t shuffle_channel_id = hash_values[indices[0]] % source_op_cnt;
-        auto partial_chunk = chunk->clone_empty_with_slot();
+        auto* partial_chunk_allocator = _source->get_sources()[shuffle_channel_id]->allocator();
+        auto partial_chunk = chunk->clone_empty_with_slot(partial_chunk_allocator, indices.size());
         partial_chunk->append_selective(*chunk, indices.data(), 0, indices.size());
         RETURN_IF_ERROR(
                 _source->get_sources()[shuffle_channel_id]->add_chunk(key, key2datum[key], std::move(partial_chunk)));

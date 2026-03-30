@@ -314,6 +314,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
+    _params.allocator = _allocator;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache =

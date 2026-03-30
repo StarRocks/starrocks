@@ -39,9 +39,9 @@ public:
         Columns result;
         if (arg0->has_null() || state->get_is_left_join()) {
             auto offset_column = col_array->offsets_column();
-            auto copy_count_column = UInt32Column::create();
+            auto copy_count_column = UInt32Column::create(state->allocator());
             copy_count_column->append(0);
-            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty(state->allocator());
             uint32_t offset = 0;
             for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
                 if (arg0->is_null(row_idx)) {

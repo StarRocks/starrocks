@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -106,7 +107,8 @@ public:
     Status create_merger(RuntimeState* state, RuntimeProfile* profile, const SortExecExprs* exprs,
                          const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
     Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
-                                      const std::vector<bool>* is_null_first);
+                                      const std::vector<bool>* is_null_first,
+                                      memory::Allocator* column_allocator = nullptr);
 
     std::vector<merge_path::MergePathChunkProvider> create_merge_path_chunk_providers();
 

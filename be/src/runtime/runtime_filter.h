@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "base/hash/hash_std.hpp"
+#include "base/memory/memory_allocator.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -241,8 +242,11 @@ public:
 
     class RunningContext {
     public:
-        Filter selection;
-        Filter merged_selection;
+        RunningContext()
+                : selection(memory::get_default_allocator()), merged_selection(memory::get_default_allocator()) {}
+
+        Filter selection = Filter(memory::get_default_allocator());
+        Filter merged_selection = Filter(memory::get_default_allocator());
         bool use_merged_selection;
         bool compatibility = true;
         std::vector<uint32_t> hash_values;
@@ -292,6 +296,10 @@ public:
     bool always_true() const { return _always_true; }
 
     bool has_null() const { return _has_null; }
+    memory::Allocator* allocator() const { return _allocator; }
+    void set_allocator(memory::Allocator* allocator) {
+        _allocator = allocator != nullptr ? allocator : memory::get_default_allocator();
+    }
 
     virtual std::string debug_string() const = 0;
 
@@ -354,6 +362,7 @@ protected:
     bool _has_null = false;
     bool _always_true = false;
     size_t _rf_version = 0;
+    memory::Allocator* _allocator = memory::get_default_allocator();
     // local colocate filters is local filter we don't have to serialize them
     std::vector<RuntimeFilter*> _group_colocate_filters;
 };

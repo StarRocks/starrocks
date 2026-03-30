@@ -114,7 +114,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     if (ptr != nullptr) {
         num_rows = ptr->num_rows();
     }
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
+    auto result_column = ColumnHelper::create_column(context->allocator(), type(), is_nullable(), false, num_rows);
     if (num_rows == 0) {
         return result_column;
     }
@@ -137,7 +137,9 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
                 << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());
 
         if (child->is_nullable() && !column->is_nullable()) {
-            column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
+            auto column_size = column->size();
+            column = NullableColumn::create(context->allocator(), Column::mutate(std::move(column)),
+                                            NullColumn::create(context->allocator(), column_size, 0));
         } else if (!child->is_nullable() && column->is_nullable()) {
             if (column->has_null()) {
                 return Status::RuntimeError(

@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/defer_op.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -121,7 +122,7 @@ Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
         size_t result_rows = sorted_values.size();
-        ChunkPtr result_chunk = sorted_values[0].data_segment()->chunk->clone_empty(result_rows);
+        ChunkPtr result_chunk = sorted_values[0].data_segment()->chunk->clone_empty(sink_allocator(), result_rows);
         for (int i = 0; i < result_rows; ++i) {
             auto rid = sorted_values[i].row_id();
             const auto& ref_chunk = sorted_values[i].data_segment()->chunk;
@@ -153,7 +154,7 @@ Status ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     }
     *eos = false;
     size_t count = std::min(size_t(_state->chunk_size()), _merged_segment.chunk->num_rows() - _next_output_row);
-    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
+    chunk->reset(_merged_segment.chunk->clone_empty(source_allocator(), count).release());
     (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
     _next_output_row += count;
 
@@ -292,7 +293,7 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     const int cursor_rid = top_cursor.row_id();
     const int column_sz = top_cursor.data_segment()->order_by_columns.size();
 
-    Filter filter(row_sz);
+    Filter filter(memory::get_default_allocator(), row_sz, 0);
 
     // For single column special optimization
     if (_do_filter_data) {

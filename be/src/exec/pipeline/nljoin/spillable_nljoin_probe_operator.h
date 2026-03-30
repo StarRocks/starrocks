@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
@@ -47,6 +48,10 @@ public:
 
     // current probe chunk has finished
     bool probe_finished() const { return _probe_chunk == nullptr || _probe_row_current >= _probe_chunk->num_rows(); }
+
+    void set_allocator(memory::Allocator* allocator) {
+        _allocator = allocator == nullptr ? memory::get_default_allocator() : allocator;
+    }
 
     Status push_probe_chunk(const ChunkPtr& chunk);
 
@@ -90,6 +95,7 @@ private:
 private:
     RuntimeProfile::Counter* _permute_rows_counter = nullptr;
     RuntimeProfile::Counter* _permute_left_rows_counter = nullptr;
+    memory::Allocator* _allocator = memory::get_default_allocator();
 };
 
 // now we only support cross-join/left-semi join/left-anti join

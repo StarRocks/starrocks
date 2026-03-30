@@ -96,7 +96,7 @@ public:
 
     void update_help(FunctionContext* ctx, size_t chunk_size, const Column** columns, const Column** replace_columns,
                      ColumnPtr& new_nullable_column) const {
-        auto fake_null_column = NullColumn::create(columns[0]->size(), 0);
+        auto fake_null_column = NullColumn::create(ctx->allocator(), columns[0]->size(), 0);
         uint8_t* __restrict fake_null_column_raw_data = fake_null_column->mutable_raw_data();
 
         auto column_size = ctx->get_num_args() + 1;
@@ -119,7 +119,7 @@ public:
                     fake_null_column_raw_data[i] = !nullable_predicate_data_col_raw_data[i];
                 }
             } else if (nullCount == predicate_column->size()) {
-                fake_null_column = NullColumn::create(columns[0]->size(), 1);
+                fake_null_column = NullColumn::create(ctx->allocator(), columns[0]->size(), 1);
             } else {
                 const auto nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
                 const auto nullable_predicate_data_col_data =
@@ -163,7 +163,8 @@ public:
                 // step 2: merge first_nullable_arg_col(if exsited)'s null_column into fake_null_column
                 const uint8_t* __restrict nulls = first_nullable_arg_col->immutable_null_column_data().data();
                 // merge two null column
-                ColumnHelper::or_two_filters(&fake_null_column->get_data(), nulls);
+                ColumnHelper::or_two_filters(fake_null_column->get_data().size(), fake_null_column->get_data().data(),
+                                             nulls);
                 data_column = first_nullable_arg_col;
             }
         }
@@ -172,9 +173,12 @@ public:
         if (data_column->is_nullable()) {
             NullableColumn* original_nullable_column =
                     const_cast<NullableColumn*>(down_cast<const NullableColumn*>(data_column.get()));
-            new_nullable_column = NullableColumn::create(original_nullable_column->data_column(), fake_null_column);
+            new_nullable_column =
+                    NullableColumn::create(ctx->allocator(), original_nullable_column->data_column()->as_mutable_ptr(),
+                                           std::move(fake_null_column));
         } else {
-            new_nullable_column = NullableColumn::create(data_column, fake_null_column);
+            new_nullable_column = NullableColumn::create(ctx->allocator(), data_column->as_mutable_ptr(),
+                                                         std::move(fake_null_column));
         }
 
         for (int i = 0; i < column_size - 1; i++) {

@@ -40,6 +40,7 @@ void HashJoinProbeOperator::close(RuntimeState* state) {
 Status HashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependency::prepare(state));
 
+    _join_prober->set_probe_allocator(allocator());
     _join_builder->incr_prober();
 
     if (_join_builder != _join_prober) {

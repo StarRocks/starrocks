@@ -65,6 +65,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->use_page_cache = use_page_cache;
     dst->temporary_data = temporary_data;
     dst->profile = profile;
+    dst->allocator = allocator;
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;

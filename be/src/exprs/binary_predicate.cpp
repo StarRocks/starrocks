@@ -19,6 +19,7 @@
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -29,6 +30,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
 
+#include "exprs/expr_context.h"
 #include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
@@ -143,7 +145,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
-        return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
+        return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(context->allocator(), l, r);
     }
 #ifdef STARROCKS_JIT_ENABLE
 
@@ -255,7 +257,7 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         if (l->only_null() || r->only_null()) {
-            return ColumnHelper::create_const_null_column(l->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), l->size());
         }
 
         auto* data1 =
@@ -268,7 +270,7 @@ public:
         const auto& lhs_arr = down_cast<const ArrayColumn&>(*data1);
         const auto& rhs_arr = down_cast<const ArrayColumn&>(*data2);
 
-        ColumnBuilder<TYPE_BOOLEAN> builder(l->size());
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), l->size());
         std::vector<int8_t> cmp_result;
         lhs_arr.compare_column(rhs_arr, &cmp_result);
 
@@ -302,7 +304,7 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
 
         if (l->only_null() || r->only_null()) {
-            return ColumnHelper::create_const_null_column(l->size());
+            return ColumnHelper::create_const_null_column(context->allocator(), l->size());
         }
         // a nullable column must not contain const columns
         size_t lstep = l->is_constant() ? 0 : 1;
@@ -315,7 +317,7 @@ public:
         ColumnPtr data2 = FunctionHelper::get_data_column_of_nullable(const2);
 
         size_t size = l->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
             if (l->is_null(loff) || r->is_null(roff)) {
                 builder.append_null();
@@ -355,15 +357,16 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
 
         if (l->only_null() && r->only_null()) {
-            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, l->size());
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), true, l->size());
         }
 
         auto is_null_predicate = [&](const ColumnPtr& column) -> ColumnPtr {
             if (!column->is_nullable() || !column->has_null()) {
-                return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
+                return ColumnHelper::create_const_column<TYPE_BOOLEAN>(context->allocator(), false, column->size());
             }
             auto col = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
-            return VectorizedStrictUnaryFunction<isNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(col);
+            return VectorizedStrictUnaryFunction<isNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(context->allocator(),
+                                                                                                col);
         };
 
         if (l->only_null()) {
@@ -382,7 +385,7 @@ public:
         const auto& data2 = FunctionHelper::get_data_column_of_const(const2);
 
         size_t size = l->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
             auto ln = l->is_null(loff);
             auto rn = r->is_null(roff);
@@ -428,7 +431,7 @@ public:
         Columns list = {l, r};
 
         size_t size = list[0]->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        ColumnBuilder<TYPE_BOOLEAN> builder(context->allocator(), size);
         for (int row = 0; row < size; ++row) {
             auto null1 = v1.is_null(row);
             auto null2 = v2.is_null(row);

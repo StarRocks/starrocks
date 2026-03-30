@@ -67,14 +67,16 @@ public:
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
             bool is_result_nullable = _agg_state_desc.is_result_nullable() || _arg_nullables[i];
-            ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], is_result_nullable, true));
+            ASSIGN_OR_RETURN(ColumnPtr new_column,
+                             _convert_to_nullable_column(context->allocator(), columns[i], is_result_nullable, true));
             new_columns.emplace_back(new_column);
         }
 
         auto chunk_size = columns[0]->size();
         auto align_size = _function->alignof_size();
         auto state_size = BitUtil::round_up(_function->size(), align_size);
-        auto result = ColumnHelper::create_column(_intermediate_type, _agg_state_desc.is_result_nullable());
+        auto result = ColumnHelper::create_column(context->allocator(), _intermediate_type,
+                                                  _agg_state_desc.is_result_nullable());
         // allocate the agg_state
         AlignedMemoryGuard guard(align_size, state_size);
         RETURN_IF_ERROR(guard.allocate());

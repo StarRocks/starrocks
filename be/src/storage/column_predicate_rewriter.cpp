@@ -356,7 +356,7 @@ Status ColumnPredicateRewriter::_load_segment_dict(std::vector<std::pair<std::st
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
-    auto column = BinaryColumn::create();
+    auto column = BinaryColumn::create(_allocator);
     RETURN_IF_ERROR(column_iterator->decode_dict_codes(dict_codes, dict_size, column.get()));
 
     for (int i = 0; i < dict_size; ++i) {
@@ -392,14 +392,14 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
 
-    auto dict_col = BinaryColumn::create();
+    auto dict_col = BinaryColumn::create(_allocator);
     RETURN_IF_ERROR(column_iterator->decode_dict_codes(dict_codes, dict_size, dict_col.get()));
 
     if (field_nullable) {
         // create nullable column with NULL at last.
-        NullColumn::MutablePtr null_col = NullColumn::create();
+        NullColumn::MutablePtr null_col = NullColumn::create(_allocator);
         null_col->resize(dict_size);
-        auto null_column = NullableColumn::create(std::move(dict_col), std::move(null_col));
+        auto null_column = NullableColumn::create(_allocator, std::move(dict_col), std::move(null_col));
         null_column->append_default();
         *dict_column = std::move(null_column);
     } else {
@@ -407,7 +407,7 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
         *dict_column = std::move(dict_col);
     }
 
-    auto code_col = Int32Column::create();
+    auto code_col = Int32Column::create(_allocator);
     code_col->resize(dict_size);
     auto& code_buf = code_col->get_data();
     for (int i = 0; i < dict_size; i++) {
@@ -429,7 +429,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (value_size <= chunk_size) {
         RETURN_IF_ERROR(pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size));
     } else {
-        auto dict_column = raw_dict_column->clone_empty();
+        auto dict_column = raw_dict_column->clone_empty(_allocator);
         SparseRange<> range(0, value_size);
         auto iter = range.new_iterator();
         auto selection_cursor = selection.data();
@@ -465,7 +465,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     }
 
     // TODO(yan): use eq/ne predicates when only one item, but it's very very hard to construct ne/eq expr.
-    auto used_values = Int32Column::create();
+    auto used_values = Int32Column::create(_allocator);
     for (int i = 0; i < code_size; i++) {
         if (selection[i]) {
             used_values->append(code_values[i]);
@@ -517,8 +517,6 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     }
 
     const auto& dict = _dict_maps.at(pred->column_id());
-    ChunkPtr temp_chunk = std::make_shared<Chunk>();
-
     auto [binary_column, codes] = extract_column_with_codes(*dict);
 
     size_t dict_rows = codes.size();

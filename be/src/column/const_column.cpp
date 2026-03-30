@@ -23,9 +23,16 @@
 
 namespace starrocks {
 
-ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(std::move(data), 0) {}
+ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(memory::get_default_allocator(), std::move(data), 0) {}
 
-ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
+ConstColumn::ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data)
+        : ConstColumn(allocator, std::move(data), 0) {}
+
+ConstColumn::ConstColumn(ColumnPtr data, size_t size)
+        : ConstColumn(memory::get_default_allocator(), std::move(data), size) {}
+
+ConstColumn::ConstColumn([[maybe_unused]] memory::Allocator* allocator, ColumnPtr data, size_t size)
+        : SuperClass(allocator), _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());
     if (_data->is_nullable() && size > 0 && !_data->is_null(0)) {
         _data = down_cast<NullableColumn*>(_data.get())->data_column();

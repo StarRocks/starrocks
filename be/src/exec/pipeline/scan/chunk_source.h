@@ -16,6 +16,7 @@
 
 #include <future>
 
+#include "base/memory/memory_allocator.h"
 #include "base/utility/exclusive_ptr.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -71,6 +72,7 @@ public:
     RuntimeProfile::Counter* scan_timer() { return _scan_timer; }
     RuntimeProfile::Counter* io_task_wait_timer() { return _io_task_wait_timer; }
     RuntimeProfile::Counter* io_task_exec_timer() { return _io_task_exec_timer; }
+    memory::Allocator* allocator() const { return _allocator; }
 
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
@@ -91,6 +93,8 @@ protected:
     ScanOperator* _scan_op;
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
+    // TODO: wire allocator propagation from ScanOperator in a follow-up phase.
+    memory::Allocator* _allocator = memory::get_default_allocator();
     // The morsel will own by pipeline driver
     MorselPtr _morsel;
 

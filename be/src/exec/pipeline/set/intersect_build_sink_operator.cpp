@@ -28,6 +28,7 @@ Status IntersectBuildSinkOperator::push_chunk(RuntimeState* state, const ChunkPt
 
 Status IntersectBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    _intersect_ctx->set_sink_allocator(allocator());
     _intersect_ctx->observable().attach_sink_observer(state, observer());
     return _intersect_ctx->prepare(state, _dst_exprs, _has_outer_join_child);
 }

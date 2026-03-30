@@ -18,11 +18,26 @@
 
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 
 namespace starrocks::pipeline {
+
+void LocalPartitionTopnContext::set_sink_allocator_for_sorters(memory::Allocator* allocator) {
+    _sink_allocator_for_sorters = allocator;
+}
+
+void LocalPartitionTopnContext::set_source_allocator_for_sorters(memory::Allocator* allocator) {
+    _source_allocator_for_sorters = allocator;
+    memory::Allocator* eff = allocator ? allocator : memory::get_default_allocator();
+    for (auto& s : _chunks_sorters) {
+        if (s) {
+            s->set_source_allocator(eff);
+        }
+    }
+}
 
 LocalPartitionTopnContext::LocalPartitionTopnContext(
         const std::vector<TExpr>& t_partition_exprs, bool has_outer_join_child, bool enable_pre_agg,
@@ -189,6 +204,14 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
                         _topn_type, ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes,
                         ChunksSorterTopn::max_buffered_chunks(_partition_limit)));
+                {
+                    memory::Allocator* sink_alloc =
+                            _sink_allocator_for_sorters ? _sink_allocator_for_sorters : memory::get_default_allocator();
+                    memory::Allocator* src_alloc = _source_allocator_for_sorters ? _source_allocator_for_sorters
+                                                                                 : memory::get_default_allocator();
+                    _chunks_sorters.back()->set_sink_allocator(sink_alloc);
+                    _chunks_sorters.back()->set_source_allocator(src_alloc);
+                }
                 // create agg state for new partition
                 if (_enable_pre_agg) {
                     AggDataPtr agg_states = _mem_pool->allocate_aligned(_pre_agg->_agg_states_total_size,

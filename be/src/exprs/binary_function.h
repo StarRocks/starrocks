@@ -44,7 +44,7 @@ template <typename OP>
 class BaseBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr vector_vector(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         using LCppType = RunTimeCppType<LType>;
         using RCppType = RunTimeCppType<RType>;
         using ResultCppType = RunTimeCppType<ResultType>;
@@ -52,7 +52,7 @@ public:
 
         const int s = std::min(v1->size(), v2->size());
 
-        auto result = ResultColumnType::create();
+        auto result = ResultColumnType::create(allocator);
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
@@ -76,14 +76,14 @@ public:
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr const_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr const_vector(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         using LCppType = RunTimeCppType<LType>;
         using RCppType = RunTimeCppType<RType>;
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
         int size = v2->size();
-        auto result = ResultColumnType::create();
+        auto result = ResultColumnType::create(allocator);
         result->resize_uninitialized(size);
         auto* data3 = result->get_data().data();
 
@@ -106,14 +106,14 @@ public:
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_const(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr vector_const(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         using LCppType = RunTimeCppType<LType>;
         using RCppType = RunTimeCppType<RType>;
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
         int size = v1->size();
-        auto result = ResultColumnType::create();
+        auto result = ResultColumnType::create(allocator);
         result->resize_uninitialized(size);
         auto& r3 = result->get_data();
         auto* data3 = r3.data();
@@ -137,13 +137,13 @@ public:
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr const_const(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr const_const(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         using LCppType = RunTimeCppType<LType>;
         using RCppType = RunTimeCppType<RType>;
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
-        auto result = ResultColumnType::create();
+        auto result = ResultColumnType::create(allocator);
         result->resize_uninitialized(1);
         auto& r3 = result->get_data();
 
@@ -164,25 +164,26 @@ template <typename OP>
 class UnpackConstColumnBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         if (!v1->is_constant() && !v2->is_constant()) {
-            return BaseBinaryFunction<OP>::template vector_vector<LType, RType, ResultType>(v1, v2);
+            return BaseBinaryFunction<OP>::template vector_vector<LType, RType, ResultType>(allocator, v1, v2);
 
         } else if (!v1->is_constant() && v2->is_constant()) {
             const ColumnPtr& data2 = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
 
-            return BaseBinaryFunction<OP>::template vector_const<LType, RType, ResultType>(v1, data2);
+            return BaseBinaryFunction<OP>::template vector_const<LType, RType, ResultType>(allocator, v1, data2);
         } else if (v1->is_constant() && !v2->is_constant()) {
             const ColumnPtr& data1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
 
-            return BaseBinaryFunction<OP>::template const_vector<LType, RType, ResultType>(data1, v2);
+            return BaseBinaryFunction<OP>::template const_vector<LType, RType, ResultType>(allocator, data1, v2);
         } else {
             const ColumnPtr& data1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             const ColumnPtr& data2 = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
 
-            auto result = BaseBinaryFunction<OP>::template const_const<LType, RType, ResultType>(data1, data2);
+            auto result =
+                    BaseBinaryFunction<OP>::template const_const<LType, RType, ResultType>(allocator, data1, data2);
 
-            return ConstColumn::create(result, v1->size());
+            return ConstColumn::create(allocator, result, v1->size());
         }
     }
 };
@@ -205,15 +206,15 @@ template <typename FN>
 class UnionNullableColumnBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         if (v1->only_null() || v2->only_null()) {
-            return ColumnHelper::create_const_null_column(v1->size());
+            return ColumnHelper::create_const_null_column(allocator, v1->size());
         }
 
         const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
         const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
 
-        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
+        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(allocator, data1, data2);
         if (v1->has_null() || v2->has_null()) {
             // two NOT-nullable column can generate a {nullable, not-nullable, const, const-null} column
             // because when decimal overflow checking is enabled, overflow results will yield NULL.
@@ -225,13 +226,13 @@ public:
     }
 
     template <LogicalType Type>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        return evaluate<Type, Type, Type>(v1, v2);
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, Type>(allocator, v1, v2);
     }
 
     template <LogicalType Type, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        return evaluate<Type, Type, ResultType>(v1, v2);
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, ResultType>(allocator, v1, v2);
     }
 };
 
@@ -239,8 +240,8 @@ template <typename FN, typename NULL_OP = ResultNopCheck>
 class CheckOutputBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
+        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(allocator, v1, v2);
 
         if constexpr (!std::is_same<NULL_OP, ResultNopCheck>::value) {
             ColumnPtr data;
@@ -258,7 +259,7 @@ public:
                 auto nullable_column = ColumnHelper::as_raw_column<NullableColumn>(data);
                 null_flags = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
             } else {
-                null_flags = RunTimeColumnType<TYPE_NULL>::create();
+                null_flags = RunTimeColumnType<TYPE_NULL>::create(allocator);
                 null_flags->resize(data->size());
             }
             const auto& real_data =
@@ -279,9 +280,9 @@ public:
                 ColumnHelper::as_raw_column<NullableColumn>(data)->update_has_null();
             } else {
                 if (SIMD::count_nonzero(null_flags->get_data())) {
-                    auto null_result = NullableColumn::create(data, null_flags);
+                    auto null_result = NullableColumn::create(allocator, data->as_mutable_ptr(), std::move(null_flags));
                     if (data_result->is_constant()) {
-                        return ConstColumn::create(std::move(null_result), data_result->size());
+                        return ConstColumn::create(allocator, std::move(null_result), data_result->size());
                     }
                     return null_result;
                 }
@@ -304,9 +305,9 @@ template <typename PRODUCE_NULL_FN, typename FN>
 class ProduceNullableColumnBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         if (v1->only_null() || v2->only_null()) {
-            return ColumnHelper::create_const_null_column(v1->size());
+            return ColumnHelper::create_const_null_column(allocator, v1->size());
         }
 
         // UnpackConstColumnBinaryFunction will return const column if v1 and v2 all const column,
@@ -315,54 +316,55 @@ public:
             const ColumnPtr& data2 = ColumnHelper::as_column<ConstColumn>(v2)->data_column();
 
             auto null_result = NullColumn::static_pointer_cast(
-                    PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, data2));
+                    PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(allocator, v1, data2));
 
             // is null, return only null
             if (1 == null_result->immutable_data()[0]) {
-                return ColumnHelper::create_const_null_column(v1->size());
+                return ColumnHelper::create_const_null_column(allocator, v1->size());
             } else {
                 // not null return const column
-                return FN::template evaluate<LType, RType, ResultType>(v1, v2);
+                return FN::template evaluate<LType, RType, ResultType>(allocator, v1, v2);
             }
         }
 
         if (!v1->is_nullable() && !v2->is_nullable()) {
             NullColumnPtr null_result = NullColumn::static_pointer_cast(
-                    PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, v2));
+                    PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(allocator, v1, v2));
 
-            ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
+            ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(allocator, v1, v2);
             // for decimal arithmetics, non-nullable lhs op non-nullable rhs maybe produce a nullable result if
             // result overflows. so we must merge null_result generated by PRODUCE_NULL_FN and null_column of the
             // data_result.
             if constexpr (lt_is_decimal<ResultType>) {
                 return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
             } else {
-                return NullableColumn::create(data_result, std::move(null_result));
+                return NullableColumn::create(allocator, data_result->as_mutable_ptr(),
+                                              NullColumn::static_pointer_cast(std::move(*null_result).mutate()));
             }
         }
 
         const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
         const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
 
-        ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
+        ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(allocator, data1, data2);
 
         NullColumn::MutablePtr null_result = ColumnHelper::as_column<NullColumn>(std::move(*produce_null).mutate());
         FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
 
-        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
+        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(allocator, data1, data2);
         // for decimal arithmetics, data_column of nullable lhs op data_column of nullable rhs maybe produce a nullable
         // result if result overflows. so we must merge null_column of lhs, null_column of rhs, produce_null generated
         // by PRODUCE_NULL_FN and null_column of result into one NullColumn.
         if constexpr (lt_is_decimal<ResultType>) {
             return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
         } else {
-            return NullableColumn::create(data_result, std::move(null_result));
+            return NullableColumn::create(allocator, data_result->as_mutable_ptr(), std::move(null_result));
         }
     }
 
     template <LogicalType Type>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        return evaluate<Type, Type, Type>(v1, v2);
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, Type>(allocator, v1, v2);
     }
 };
 
@@ -370,18 +372,18 @@ template <typename FN>
 class UnpackNotAlignDataAndNullColumnBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const NullColumnPtr& n1, const ColumnPtr& v2,
-                              const NullColumnPtr& n2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const NullColumnPtr& n1,
+                              const ColumnPtr& v2, const NullColumnPtr& n2) {
         if (v1->size() == v2->size()) {
-            return FN::template vector_vector<LType, RType, ResultType>(v1, n1, v2, n2);
+            return FN::template vector_vector<LType, RType, ResultType>(allocator, v1, n1, v2, n2);
         } else if (v2->size() == 1) {
-            return FN::template vector_const<LType, RType, ResultType>(v1, n1, v2, n2);
+            return FN::template vector_const<LType, RType, ResultType>(allocator, v1, n1, v2, n2);
         } else if (v1->size() == 1) {
-            return FN::template const_vector<LType, RType, ResultType>(v1, n1, v2, n2);
+            return FN::template const_vector<LType, RType, ResultType>(allocator, v1, n1, v2, n2);
         } else {
             DCHECK(v1->size() == v2->size());
             LOG(WARNING) << "It's impossible column1 size: " << v1->size() << ", column2 size: " << v2->size();
-            return FN::template vector_vector<LType, RType, ResultType>(v1, n1, v2, n2);
+            return FN::template vector_vector<LType, RType, ResultType>(allocator, v1, n1, v2, n2);
         }
     }
 };
@@ -395,8 +397,8 @@ template <typename NULL_FN, typename FN>
 class LogicPredicateBaseBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                   const NullColumnPtr& rn) {
+    static ColumnPtr vector_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                   const ColumnPtr& rv, const NullColumnPtr& rn) {
         auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
@@ -405,7 +407,7 @@ public:
 
         int size = std::min(lv->size(), rv->size());
 
-        auto null_column = NullColumn::create();
+        auto null_column = NullColumn::create(allocator);
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
@@ -415,7 +417,7 @@ public:
                     lvd[i], lnd[i], rvd[i], rnd[i]);
         }
 
-        auto data_column = RunTimeColumnType<ResultType>::create();
+        auto data_column = RunTimeColumnType<ResultType>::create(allocator);
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
@@ -424,12 +426,12 @@ public:
                     lvd[i], rvd[i]);
         }
 
-        return NullableColumn::create(std::move(data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(data_column), std::move(null_column));
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr const_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                  const NullColumnPtr& rn) {
+    static ColumnPtr const_vector(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                  const ColumnPtr& rv, const NullColumnPtr& rn) {
         const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
@@ -438,7 +440,7 @@ public:
 
         int size = rv->size();
 
-        auto null_column = NullColumn::create();
+        auto null_column = NullColumn::create(allocator);
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
@@ -448,7 +450,7 @@ public:
                     lvd[0], lnd[0], rvd[i], rnd[i]);
         }
 
-        auto data_column = RunTimeColumnType<ResultType>::create();
+        auto data_column = RunTimeColumnType<ResultType>::create(allocator);
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
@@ -457,12 +459,12 @@ public:
                     lvd[0], rvd[i]);
         }
 
-        return NullableColumn::create(std::move(data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(data_column), std::move(null_column));
     }
 
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr vector_const(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
-                                  const NullColumnPtr& rn) {
+    static ColumnPtr vector_const(memory::Allocator* allocator, const ColumnPtr& lv, const NullColumnPtr& ln,
+                                  const ColumnPtr& rv, const NullColumnPtr& rn) {
         const auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->immutable_data().data();
         const auto* rvd = ColumnHelper::cast_to_raw<RType>(rv)->immutable_data().data();
 
@@ -471,7 +473,7 @@ public:
 
         int size = lv->size();
 
-        auto null_column = NullColumn::create();
+        auto null_column = NullColumn::create(allocator);
         null_column->resize_uninitialized(size);
 
         auto* nd = null_column->get_data().data();
@@ -481,7 +483,7 @@ public:
                     lvd[i], lnd[i], rvd[0], rnd[0]);
         }
 
-        auto data_column = RunTimeColumnType<ResultType>::create();
+        auto data_column = RunTimeColumnType<ResultType>::create(allocator);
         data_column->resize_uninitialized(size);
         auto* dd = data_column->get_data().data();
 
@@ -490,7 +492,7 @@ public:
                     lvd[i], rvd[0]);
         }
 
-        return NullableColumn::create(std::move(data_column), std::move(null_column));
+        return NullableColumn::create(allocator, std::move(data_column), std::move(null_column));
     }
 };
 
@@ -504,10 +506,10 @@ template <typename CONST_FN, typename NULLABLE_FN>
 class LogicPredicateBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
         // const/regular
         if (!v1->is_nullable() && !v2->is_nullable()) {
-            return CONST_FN::template evaluate<LType, RType, ResultType>(v1, v2);
+            return CONST_FN::template evaluate<LType, RType, ResultType>(allocator, v1, v2);
         }
 
         ColumnPtr ld;
@@ -519,51 +521,51 @@ public:
         if (v1->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column());
-            auto ld_mut = RunTimeColumnType<LType>::create();
+            auto ld_mut = RunTimeColumnType<LType>::create(allocator);
             ld_mut->append_default();
             ld = std::move(ld_mut);
             ln = p->null_column();
         } else if (v1->is_constant()) {
             ld = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
-            ln = NullColumn::create(v1->size(), 0);
+            ln = NullColumn::create(allocator, v1->size(), 0);
         } else if (v1->is_nullable()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(v1);
             ld = p->data_column();
             ln = p->null_column();
         } else {
             ld = v1;
-            ln = NullColumn::create(v1->size(), 0);
+            ln = NullColumn::create(allocator, v1->size(), 0);
         }
 
         if (v2->only_null()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(
                     ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column());
-            auto rd_mut = RunTimeColumnType<LType>::create();
+            auto rd_mut = RunTimeColumnType<LType>::create(allocator);
             rd_mut->append_default();
             rd = std::move(rd_mut);
             rn = p->null_column();
         } else if (v2->is_constant()) {
             rd = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
-            rn = NullColumn::create(v2->size(), 0);
+            rn = NullColumn::create(allocator, v2->size(), 0);
         } else if (v2->is_nullable()) {
             auto p = ColumnHelper::as_raw_column<NullableColumn>(v2);
             rd = p->data_column();
             rn = p->null_column();
         } else {
             rd = v2;
-            rn = NullColumn::create(v2->size(), 0);
+            rn = NullColumn::create(allocator, v2->size(), 0);
         }
 
         // return must be nullable column
-        auto p = NULLABLE_FN::template evaluate<LType, RType, ResultType>(ld, ln, rd, rn);
+        auto p = NULLABLE_FN::template evaluate<LType, RType, ResultType>(allocator, ld, ln, rd, rn);
 
         // INPUT IS CONSTANT, RETURN CONSTANT
         if (v1->is_constant() && v2->is_constant()) {
             if (p->is_null(0)) {
-                return ConstColumn::create(std::move(p), v1->size());
+                return ConstColumn::create(allocator, std::move(p), v1->size());
             } else {
                 auto np = ColumnHelper::as_raw_column<NullableColumn>(p);
-                return ConstColumn::create(std::move(np->data_column()), v1->size());
+                return ConstColumn::create(allocator, std::move(np->data_column()), v1->size());
             }
         } else {
             return p;
@@ -571,8 +573,8 @@ public:
     }
 
     template <LogicalType Type>
-    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        return evaluate<Type, Type, Type>(v1, v2);
+    static inline ColumnPtr evaluate(memory::Allocator* allocator, const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, Type>(allocator, v1, v2);
     }
 };
 

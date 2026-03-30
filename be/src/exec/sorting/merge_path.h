@@ -375,8 +375,12 @@ public:
                            std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
                            const TupleDescriptor* tuple_desc, const TTopNType::type topn_type, const int64_t offset,
                            const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers,
+                           memory::Allocator* column_allocator = nullptr,
                            TLateMaterializeMode::type mode = TLateMaterializeMode::AUTO);
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
+    memory::Allocator* column_allocator() const {
+        return _column_allocator ? _column_allocator : memory::get_default_allocator();
+    }
     const SortDescs& sort_descs() const { return _sort_descs; }
 
     size_t streaming_batch_size() { return _streaming_batch_size; }
@@ -465,6 +469,7 @@ private:
     const int64_t _offset;
     const int64_t _limit;
     const std::vector<MergePathChunkProvider> _chunk_providers;
+    memory::Allocator* _column_allocator = nullptr;
     Action _finish_merge_action;
 
     // All operations of _stage and _process_cnts must under the protection of _status_m, the critical section

@@ -59,6 +59,12 @@ Status SortedAggregateStreamingSourceOperator::set_finished(RuntimeState* state)
     return _aggregator->set_finished();
 }
 
+Status SortedAggregateStreamingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _aggregator->set_source_allocator(_allocator);
+    return Status::OK();
+}
+
 void SortedAggregateStreamingSourceOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
     SourceOperator::close(state);

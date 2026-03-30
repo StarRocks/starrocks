@@ -45,8 +45,8 @@ public:
     Columns& columns() { return _columns; }
     size_t num_rows() const { return _columns.empty() ? 0 : _columns[0]->size(); }
 
-    void filter(const Buffer<uint8_t>& selection);
-    void filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
+    void filter(const Filter& selection);
+    void filter_range(const Filter& selection, size_t from, size_t to);
 
     ChunkExtraDataPtr clone_empty(size_t size) const override;
     ChunkExtraDataPtr clone() const override;

@@ -132,7 +132,7 @@ private:
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     size_t _build_row_current = 0;
-    mutable Filter _self_build_match_flag;
+    mutable Filter _self_build_match_flag = Filter(memory::get_default_allocator());
 
     // Probe states
     ChunkPtr _probe_chunk = nullptr;

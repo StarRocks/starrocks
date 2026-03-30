@@ -73,7 +73,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
     }
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     std::vector<bool> found(_num_rows, false);
-    Buffer<uint8_t> selections;
+    Filter selections(memory::get_default_allocator());
 
     RETURN_IF_ERROR(_process_key_chunk());
     RETURN_IF_ERROR(_process_value_chunk(found));

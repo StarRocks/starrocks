@@ -36,26 +36,32 @@ class NullableColumn : public CowFactory<ColumnFactory<Column, NullableColumn>, 
 
 public:
     using ValueType = void;
+    using SuperClass = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
 
     inline static MutableColumnPtr wrap_if_necessary(ColumnPtr&& column) {
         if (column->is_nullable()) {
             return std::move(*column).mutate();
         }
-        auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(std::move(*column).mutate(), std::move(null));
+        auto* allocator = column->allocator();
+        auto null = NullColumn::create(allocator, column->size(), 0);
+        return NullableColumn::create(allocator, std::move(*column).mutate(), std::move(null));
     }
 
     inline static ColumnPtr wrap_if_necessary(const ColumnPtr& column) {
         if (column->is_nullable()) {
             return column;
         }
-        auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(column, std::move(null));
+        auto* allocator = column->allocator();
+        auto null = NullColumn::create(allocator, column->size(), 0);
+        return NullableColumn::create(allocator, column, std::move(null));
     }
 
-    NullableColumn() = default;
+    NullableColumn() : SuperClass(memory::get_default_allocator()) {}
+    explicit NullableColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
+    NullableColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                   MutableColumnPtr&& null_column);
 
     DISALLOW_COPY(NullableColumn);
 
@@ -70,14 +76,28 @@ public:
         return *this;
     }
 
-    using Base = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
+    using Base = SuperClass;
+    static Ptr create(memory::Allocator* allocator, const ColumnPtr& data_column, const ColumnPtr& null_column) {
+        return NullableColumn::create(allocator, data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+    }
+
     static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
-        return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+        return NullableColumn::create(memory::get_default_allocator(), data_column, null_column);
+    }
+
+    static MutablePtr create(memory::Allocator* allocator, MutableColumnPtr&& data_column,
+                             MutableColumnPtr&& null_column) {
+        return Base::create(allocator, std::move(data_column), std::move(null_column));
+    }
+
+    template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
+    static MutablePtr create(memory::Allocator* allocator, Args&&... args) {
+        return Base::create(allocator, std::forward<Args>(args)...);
     }
 
     template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
     static MutablePtr create(Args&&... args) {
-        return Base::create(std::forward<Args>(args)...);
+        return NullableColumn::create(memory::get_default_allocator(), std::forward<Args>(args)...);
     }
 
     ~NullableColumn() override = default;
@@ -209,12 +229,14 @@ public:
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
-    MutableColumnPtr clone_empty() const override {
-        return create(_data_column->clone_empty(), _null_column->clone_empty());
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
+        return create(alloc, _data_column->clone_empty(alloc), _null_column->clone_empty(alloc));
     }
 
-    MutableColumnPtr clone() const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
+        auto p = clone_empty(alloc);
         p->append(*this, 0, size());
         return p;
     }
@@ -297,7 +319,7 @@ public:
     void swap_by_data_column(ColumnPtr& src) {
         reset_column();
         _data_column = std::move(src);
-        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
+        null_column_data().append(_data_column->size(), 0);
         update_has_null();
     }
 

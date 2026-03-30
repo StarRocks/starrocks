@@ -113,8 +113,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
     const TupleDescriptor* min_max_tuple_desc = _scanner_ctx.min_max_tuple_desc;
-    ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
-    ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
+    ChunkPtr min_chunk = ChunkHelper::new_chunk(_scanner_ctx.allocator, *min_max_tuple_desc, 0);
+    ChunkPtr max_chunk = ChunkHelper::new_chunk(_scanner_ctx.allocator, *min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
         const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
@@ -236,7 +236,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         ChunkPtr dict_value_chunk = std::make_shared<Chunk>();
         // always assume there is a possibility of null value in ORC column.
         // and we evaluate with null always.
-        ColumnPtr column_ptr = ColumnHelper::create_column(slot_desc->type(), true);
+        ColumnPtr column_ptr = ColumnHelper::create_column(_scanner_ctx.allocator, slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
         auto* nullable_column = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
@@ -268,13 +268,13 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 const char* s = p_start + offset_data[i];
                 size_t old_size = offset_data[i + 1] - offset_data[i];
                 size_t new_size = remove_trailing_spaces(s, old_size);
-                bytes.insert(bytes.end(), s, s + new_size);
+                bytes.append(s, s + new_size);
                 offsets[i] = total_size;
                 total_size += new_size;
             }
             offsets[dict_size] = total_size;
         } else {
-            bytes.insert(bytes.end(), start, end);
+            bytes.append(start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
                 offsets[i] = offset_data[i];
@@ -520,6 +520,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create orc chunk reader .
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
+    _orc_reader->set_allocator(_scanner_ctx.allocator);
     _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_ctx, _orc_reader.get());
     _orc_reader->disable_broker_load_mode();
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
@@ -616,7 +617,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
-        MutableColumnPtr row_delete_filter = BooleanColumn::create();
+        MutableColumnPtr row_delete_filter = BooleanColumn::create(_scanner_ctx.allocator);
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));

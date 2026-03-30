@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "cache/cache_options.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
@@ -83,6 +84,7 @@ struct ColumnReaderOptions {
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
     const FileMetaData* file_meta_data = nullptr;
+    memory::Allocator* allocator = memory::get_default_allocator();
     int64_t modification_time = 0;
     uint64_t file_size = 0;
     const DataCacheOptions* datacache_options;
@@ -111,6 +113,7 @@ class ColumnReader {
 public:
     explicit ColumnReader(const ParquetField* parquet_field) : _parquet_field(parquet_field) {}
     virtual ~ColumnReader() = default;
+    virtual memory::Allocator* allocator() const { return memory::get_default_allocator(); }
     virtual Status prepare() = 0;
 
     virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;

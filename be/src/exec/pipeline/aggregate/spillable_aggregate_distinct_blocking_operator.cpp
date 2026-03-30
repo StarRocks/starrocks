@@ -77,6 +77,7 @@ void SpillableAggregateDistinctBlockingSinkOperator::close(RuntimeState* state) 
 
 Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare(state));
+    _aggregator->set_sink_allocator(_allocator);
     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::prepare_local_state(state));
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
@@ -86,6 +87,9 @@ Status SpillableAggregateDistinctBlockingSinkOperator::prepare(RuntimeState* sta
     }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    if (const auto& sp = _aggregator->spiller(); sp) {
+        sp->set_spill_allocator(_aggregator->sink_allocator());
+    }
     return Status::OK();
 }
 
@@ -182,8 +186,12 @@ OperatorPtr SpillableAggregateDistinctBlockingSinkOperatorFactory::create(int32_
 
 Status SpillableAggregateDistinctBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateDistinctBlockingSourceOperator::prepare(state));
+    _stream_aggregator->set_source_allocator(_allocator);
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
+    if (const auto& sp = _aggregator->spiller(); sp) {
+        sp->set_restore_allocator(_stream_aggregator->source_allocator());
+    }
     _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
 }

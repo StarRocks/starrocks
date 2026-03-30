@@ -54,7 +54,7 @@ public:
     Status next_batch(size_t* n, Column* dst) override {
         Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(dst)->get_data();
         const size_t sz = v.size();
-        raw::stl_vector_resize_uninitialized(&v, sz + *n);
+        v.resize(sz + *n);
         RowIdType* ptr = &v[sz];
         for (size_t i = 0; i < *n; i++) {
             ptr[i] = _current_rowid + i;
@@ -83,7 +83,7 @@ public:
             Range<> r = iter.next(to_read);
             Buffer<RowIdType>& v = down_cast<FixedLengthColumn<RowIdType>*>(dst)->get_data();
             const size_t sz = v.size();
-            raw::stl_vector_resize_uninitialized(&v, sz + r.span_size());
+            v.resize(sz + r.span_size());
             RowIdType* ptr = &v[sz];
             for (size_t i = 0; i < r.span_size(); i++) {
                 ptr[i] = _current_rowid + i;

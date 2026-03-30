@@ -168,7 +168,7 @@ void FileScanner::fill_columns_from_path(starrocks::ChunkPtr& chunk, int slot_st
     for (int i = 0; i < columns_from_path.size(); ++i) {
         auto slot_desc = _src_slot_descriptors.at(i + slot_start);
         if (slot_desc == nullptr) continue;
-        auto col = ColumnHelper::create_column(varchar_type, slot_desc->is_nullable());
+        auto col = ColumnHelper::create_column(_allocator, varchar_type, slot_desc->is_nullable());
         const std::string& column_from_path = columns_from_path[i];
         Slice s(column_from_path.c_str(), column_from_path.size());
         col->append_value_multiple_times(&s, size);
@@ -188,7 +188,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
     int ctx_index = 0;
     int before_rows = cast->num_rows();
-    Filter filter(cast->num_rows(), 1);
+    Filter filter(memory::get_default_allocator(), cast->num_rows(), 1);
 
     // CREATE ROUTINE LOAD routine_load_job_1
     // on table COLUMNS (k1,k2,k3=k1)

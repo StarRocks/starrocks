@@ -52,6 +52,7 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
 Status PartitionSortSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
     DCHECK(this->mem_tracker() != nullptr);
+    _chunks_sorter->set_sink_allocator(allocator());
     _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
 
     return Status::OK();
@@ -69,8 +70,8 @@ StatusOr<ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(chunk.get(), _materialized_tuple_desc,
-                                                                         _sort_exec_exprs, _order_by_types);
+    auto materialize_chunk = ChunksSorter::materialize_chunk_before_sort(
+            chunk.get(), _materialized_tuple_desc, _sort_exec_exprs, _order_by_types, allocator());
     RETURN_IF_ERROR(materialize_chunk);
     TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_chunks_sorter->update(state, materialize_chunk.value())));
 

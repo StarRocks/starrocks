@@ -52,6 +52,12 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     metrics.peak_processing_partition_count = _unique_metrics->AddHighWaterMarkCounter(
             "SpillPeakProcessingPartitionCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
+    _probe_spiller->set_spill_allocator(_join_builder->probe_allocator());
+    _probe_spiller->set_restore_allocator(_join_builder->probe_allocator());
+    const auto& build_spiller = _join_builder->spiller();
+    if (build_spiller) {
+        build_spiller->set_restore_allocator(_join_builder->probe_allocator());
+    }
     auto wg = state->fragment_ctx()->workgroup();
     return Status::OK();
 }
@@ -215,7 +221,7 @@ Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const Chu
 Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     // compute hash
     size_t num_rows = chunk->num_rows();
-    auto hash_column = spill::SpillHashColumn::create(num_rows);
+    auto hash_column = spill::SpillHashColumn::create(allocator(), num_rows);
     auto& hash_values = hash_column->get_data();
 
     // TODO: use another hash function
@@ -250,7 +256,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         } else {
             // maybe has some small chunk problem
             // TODO: add chunk accumulator here
-            auto partitioned_chunk = chunk->clone_empty();
+            auto partitioned_chunk = chunk->clone_empty(_join_builder->probe_allocator());
             (void)partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
             (void)_probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
         }

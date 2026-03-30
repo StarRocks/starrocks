@@ -594,7 +594,7 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
     ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
 
     size_t size = filter_col->size();
-    Buffer<uint8_t> filter(size, 0);
+    Filter filter(memory::get_default_allocator(), size, 0);
     ColumnViewer<TYPE_BOOLEAN> col(filter_col);
     for (size_t i = 0; i < size; ++i) {
         filter[i] = !col.is_null(i) && col.value(i);

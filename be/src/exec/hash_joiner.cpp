@@ -161,6 +161,8 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
     param->join_type = _join_type;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
+    param->build_allocator = _build_allocator;
+    param->probe_allocator = _probe_allocator;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->enable_late_materialization = _enable_late_materialization;
@@ -491,7 +493,7 @@ Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size
                                                            JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
@@ -505,7 +507,7 @@ Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size
 Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
@@ -519,7 +521,7 @@ Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinH
 Status HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
 
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     hash_table.remove_duplicate_index(&filter);
@@ -650,6 +652,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
+            filter->set_allocator(_build_allocator);
             filter->get_membership_filter()->init(ht_row_count);
             RETURN_IF_ERROR(
                     RuntimeFilterBuilder::fill(filter.get(), build_type, columns, kHashJoinKeyColumnOffset, eq_null));

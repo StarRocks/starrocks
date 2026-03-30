@@ -27,18 +27,27 @@ public:
     using Container = Buffer<ValueType>;
     using SuperClass =
             CowFactory<ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>>, FixedLengthColumn<T>, Column>;
-    FixedLengthColumn() = default;
+    FixedLengthColumn() : SuperClass(memory::get_default_allocator()) {}
 
-    explicit FixedLengthColumn(const size_t n) : SuperClass(n) {}
+    explicit FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
 
-    FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(n, x) {}
+    explicit FixedLengthColumn(const size_t n) : SuperClass(memory::get_default_allocator(), n) {}
+
+    FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(memory::get_default_allocator(), n, x) {}
+
+    FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator, const size_t n) : SuperClass(allocator, n) {}
+
+    FixedLengthColumn([[maybe_unused]] memory::Allocator* allocator, const size_t n, const ValueType x)
+            : SuperClass(allocator, n, x) {}
 
     DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
 
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        return allocator ? this->create(allocator) : this->create();
+    }
 
-    MutableColumnPtr clone() const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        auto p = clone_empty(allocator);
         p->append(*this, 0, this->size());
         return p;
     }

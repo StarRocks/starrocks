@@ -39,12 +39,16 @@ namespace starrocks {
 static void append_null_base_payload_rows(BinaryColumn::MutablePtr& metadata_column,
                                           BinaryColumn::MutablePtr& remain_column, size_t count);
 
-VariantColumn::VariantColumn() : SuperClass(0) {
+VariantColumn::VariantColumn() : VariantColumn(memory::get_default_allocator()) {}
+
+VariantColumn::VariantColumn([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator, 0) {
     _metadata_column = BinaryColumn::create();
     _remain_value_column = BinaryColumn::create();
 }
 
-VariantColumn::VariantColumn(size_t size) : SuperClass(0) {
+VariantColumn::VariantColumn(size_t size) : VariantColumn(memory::get_default_allocator(), size) {}
+
+VariantColumn::VariantColumn([[maybe_unused]] memory::Allocator* allocator, size_t size) : SuperClass(allocator, 0) {
     _metadata_column = BinaryColumn::create();
     _remain_value_column = BinaryColumn::create();
     if (size > 0) {
@@ -207,8 +211,8 @@ MutableColumnPtr VariantColumn::deep_copy_shredded(const VariantColumn& src) {
     return std::move(copied);
 }
 
-MutableColumnPtr VariantColumn::clone() const {
-    auto cloned = BaseClass::clone();
+MutableColumnPtr VariantColumn::clone(memory::Allocator* allocator) const {
+    auto cloned = BaseClass::clone(allocator);
     auto* variant_cloned = down_cast<VariantColumn*>(cloned.get());
     // BaseClass::clone() may preserve derived schema members in some clone paths.
     // Reset first to avoid duplicating schema/typed columns.
@@ -219,13 +223,14 @@ MutableColumnPtr VariantColumn::clone() const {
     variant_cloned->_shredded_types = _shredded_types;
     variant_cloned->_typed_columns.reserve(_typed_columns.size());
     for (const auto& column : _typed_columns) {
-        variant_cloned->_typed_columns.emplace_back(column->clone());
+        variant_cloned->_typed_columns.emplace_back(column->clone(allocator));
     }
     if (_metadata_column != nullptr) {
-        variant_cloned->_metadata_column = BinaryColumn::static_pointer_cast(_metadata_column->clone());
+        variant_cloned->_metadata_column = BinaryColumn::static_pointer_cast(_metadata_column->clone(allocator));
     }
     if (_remain_value_column != nullptr) {
-        variant_cloned->_remain_value_column = BinaryColumn::static_pointer_cast(_remain_value_column->clone());
+        variant_cloned->_remain_value_column =
+                BinaryColumn::static_pointer_cast(_remain_value_column->clone(allocator));
     }
     return cloned;
 }

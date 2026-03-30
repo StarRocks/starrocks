@@ -30,10 +30,17 @@ class DecimalV3Column final
                             DecimalV3Column<DecimalType<T>>, Column>;
 
 public:
-    DecimalV3Column() = default;
+    using SuperClass = CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                                  DecimalV3Column<DecimalType<T>>, Column>;
+
+    DecimalV3Column() : DecimalV3Column(memory::get_default_allocator()) {}
+    explicit DecimalV3Column([[maybe_unused]] memory::Allocator* allocator) : SuperClass(allocator) {}
     explicit DecimalV3Column(size_t num_rows);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, size_t num_rows);
     DecimalV3Column(int precision, int scale);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
+    DecimalV3Column([[maybe_unused]] memory::Allocator* allocator, int precision, int scale, size_t num_rows);
 
     DISALLOW_COPY_TEMPLATE(DecimalV3Column, DecimalV3Column<DecimalType<T>>);
 
@@ -44,10 +51,14 @@ public:
     int precision() const;
     int scale() const;
 
-    MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
+        return this->create(alloc, _precision, _scale);
+    }
 
-    MutableColumnPtr clone() const override {
-        auto p = clone_empty();
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        memory::Allocator* alloc = allocator ? allocator : memory::get_default_allocator();
+        auto p = clone_empty(alloc);
         p->append(*this, 0, this->size());
         return p;
     }
@@ -57,8 +68,8 @@ public:
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
 private:
-    int _precision;
-    int _scale;
+    int _precision = decimal_precision_limit<T>;
+    int _scale = 0;
 };
 
 } // namespace starrocks

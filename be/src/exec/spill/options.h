@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
@@ -29,12 +30,18 @@ using AggregatorParamsPtr = std::shared_ptr<AggregatorParams>;
 
 namespace starrocks::spill {
 struct SpilledChunkBuildSchema {
-    void set_schema(const ChunkPtr& chunk) {
-        _chunk = chunk->clone_empty(0);
+    void set_schema(const ChunkPtr& chunk, memory::Allocator* column_allocator = nullptr) {
+        memory::Allocator* alloc = column_allocator ? column_allocator : memory::get_default_allocator();
+        _chunk = chunk->clone_empty(alloc, 0);
         _sample_chunk_memory_usage = chunk->memory_usage();
     }
+    void set_restore_allocator(memory::Allocator* allocator) { _restore_column_allocator = allocator; }
     bool empty() { return _chunk->num_columns() == 0; }
-    ChunkUniquePtr new_chunk() { return _chunk->clone_unique(); }
+    ChunkUniquePtr new_chunk() {
+        memory::Allocator* alloc =
+                _restore_column_allocator ? _restore_column_allocator : memory::get_default_allocator();
+        return _chunk->clone_empty(alloc, 0);
+    }
     size_t column_number() const { return _chunk->num_columns(); }
     size_t chunk_avg_mem_size() const { return _sample_chunk_memory_usage; }
 
@@ -42,6 +49,7 @@ private:
     // Now we'll use the first chunk to represent the average chunk memory size.
     size_t _sample_chunk_memory_usage{};
     ChunkPtr _chunk{new Chunk()};
+    memory::Allocator* _restore_column_allocator = nullptr;
 };
 
 struct ChunkBuilder {

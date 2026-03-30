@@ -36,6 +36,8 @@ public:
     bool is_binary_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_binary(); }
     bool is_struct_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_struct(); }
 
-    MutableColumnPtr clone() const override { return ColumnViewBase::clone(); }
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override {
+        return ColumnViewBase::clone(allocator);
+    }
 };
 } // namespace starrocks

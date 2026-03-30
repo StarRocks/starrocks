@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
 #include "storage/delta_column_group.h"
@@ -44,6 +45,7 @@ struct MetaReaderParams {
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;

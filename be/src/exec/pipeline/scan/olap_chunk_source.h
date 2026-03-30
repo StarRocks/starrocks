@@ -81,7 +81,7 @@ private:
     TInternalScanRange* _scan_range;
 
     PredicateTree _non_pushdown_pred_tree;
-    Filter _selection;
+    Filter _selection = Filter(memory::get_default_allocator());
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;

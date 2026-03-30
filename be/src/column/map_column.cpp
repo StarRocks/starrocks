@@ -59,7 +59,12 @@ void MapColumn::check_or_die() const {
 }
 
 MapColumn::MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets)
-        : _keys(std::move(keys)),
+        : MapColumn(memory::get_default_allocator(), std::move(keys), std::move(values), std::move(offsets)) {}
+
+MapColumn::MapColumn([[maybe_unused]] memory::Allocator* allocator, MutableColumnPtr&& keys, MutableColumnPtr&& values,
+                     MutableColumnPtr&& offsets)
+        : Base(allocator),
+          _keys(std::move(keys)),
           _values(std::move(values)),
           _offsets(UInt32Column::static_pointer_cast(std::move(offsets))) {
     DCHECK(_keys->is_nullable());
@@ -236,7 +241,7 @@ void MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
     }
 
     if (!need_resize) {
-        Buffer<uint32_t> element_idxes;
+        Buffer<uint32_t> element_idxes(this->allocator());
         for (size_t i = 0; i < replace_num; ++i) {
             size_t element_count = src_offsets_data[i + 1] - src_offsets_data[i];
             size_t element_offset = _offsets->get_data()[indexes[i]];
@@ -359,8 +364,10 @@ void MapColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_s
     }
 }
 
-MutableColumnPtr MapColumn::clone_empty() const {
-    return create(_keys->clone_empty(), _values->clone_empty(), UInt32Column::create());
+MutableColumnPtr MapColumn::clone_empty(memory::Allocator* allocator) const {
+    auto* target_allocator = allocator == nullptr ? this->allocator() : allocator;
+    return create(target_allocator, _keys->clone_empty(target_allocator), _values->clone_empty(target_allocator),
+                  UInt32Column::create(target_allocator));
 }
 
 size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
@@ -368,7 +375,7 @@ size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];
     uint32_t elements_end = offsets[to];
-    Filter element_filter(elements_end, 0);
+    Filter element_filter(memory::get_default_allocator(), elements_end, 0);
 
     auto check_offset = from;
     auto result_offset = from;
@@ -714,7 +721,7 @@ void MapColumn::remove_duplicated_keys(bool need_recursive) {
     if (need_recursive && _values->is_map()) {
         down_cast<MapColumn*>(ColumnHelper::get_data_column(_values.get()))->remove_duplicated_keys(true);
     }
-    Filter filter(_keys->size(), 1);
+    Filter filter(memory::get_default_allocator(), _keys->size(), 1);
     // compute hash for all keys
     auto hash = std::make_unique<uint32_t[]>(_keys->size());
     memset(hash.get(), 0, _keys->size() * sizeof(uint32_t));

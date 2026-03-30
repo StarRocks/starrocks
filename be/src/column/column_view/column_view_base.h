@@ -69,7 +69,9 @@ public:
     ColumnViewBase(ColumnViewBase&&) = delete;
     void append_default() override;
 
-    MutableColumnPtr clone_empty() const override { return _default_column->clone_empty(); }
+    MutableColumnPtr clone_empty(memory::Allocator* allocator = nullptr) const override {
+        return _default_column->clone_empty(allocator);
+    }
 
     void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const override;
 
@@ -103,7 +105,7 @@ public:
                                                bool& has_null) override {
         NOT_SUPPORT();
     }
-    MutablePtr clone() const override;
+    MutablePtr clone(memory::Allocator* allocator = nullptr) const override;
     uint32_t serialize_size(size_t idx) const override { NOT_SUPPORT(); }
     size_t filter_range(const Filter& filter, size_t from, size_t to) override { NOT_SUPPORT(); }
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override {

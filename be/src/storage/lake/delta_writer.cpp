@@ -972,7 +972,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
         st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
     }
 
-    Filter filter;
+    Filter filter(memory::get_default_allocator());
     uint32_t gen_num = 0;
     // There are two cases we should allocate full id for this chunk for simplicity:
     // 1. We can not get the tablet meta from cache.

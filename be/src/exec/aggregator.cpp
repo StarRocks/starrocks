@@ -998,7 +998,7 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     // TODO(kks): we should approve memory allocate here
     auto use_intermediate = _use_intermediate_as_output();
-    MutableColumns agg_result_column = _create_agg_result_columns(1, use_intermediate);
+    MutableColumns agg_result_column = _create_agg_result_columns(1, use_intermediate, _source_allocator);
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     if (!use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
@@ -1011,7 +1011,8 @@ Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
         for (size_t i = 0; i < _agg_fn_types.size(); i++) {
             if (_agg_fn_types[i].is_nullable) {
-                agg_result_column[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type, true);
+                agg_result_column[i] =
+                        ColumnHelper::create_column(_source_allocator, _agg_fn_types[i].result_type, true);
                 agg_result_column[i]->append_default();
             }
         }
@@ -1101,7 +1102,7 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
             }
         }
 
-        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true);
+        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true, _sink_allocator);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -1159,7 +1160,7 @@ Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) 
         RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
 
         const auto num_rows = _group_by_columns[0]->size();
-        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true);
+        MutableColumns agg_result_column = _create_agg_result_columns(num_rows, true, _sink_allocator);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -1229,20 +1230,22 @@ Status Aggregator::check_has_error() {
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
-MutableColumns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_intermediate) {
+MutableColumns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_intermediate,
+                                                      memory::Allocator* allocator) {
     MutableColumns agg_result_columns(_agg_fn_types.size());
+    auto* target_allocator = allocator != nullptr ? allocator : _source_allocator;
 
     if (!use_intermediate) {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
             // For count, count distinct, bitmap_union_int such as never return null function,
             // we need to create a not-nullable column.
-            agg_result_columns[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type,
+            agg_result_columns[i] = ColumnHelper::create_column(target_allocator, _agg_fn_types[i].result_type,
                                                                 _agg_fn_types[i].is_result_nullable<false>());
             agg_result_columns[i]->reserve(num_rows);
         }
     } else {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            agg_result_columns[i] = ColumnHelper::create_column(_agg_fn_types[i].serde_type,
+            agg_result_columns[i] = ColumnHelper::create_column(target_allocator, _agg_fn_types[i].serde_type,
                                                                 _agg_fn_types[i].is_result_nullable<true>());
             agg_result_columns[i]->reserve(num_rows);
         }
@@ -1250,11 +1253,12 @@ MutableColumns Aggregator::_create_agg_result_columns(size_t num_rows, bool use_
     return agg_result_columns;
 }
 
-MutableColumns Aggregator::_create_group_by_columns(size_t num_rows) const {
+MutableColumns Aggregator::_create_group_by_columns(size_t num_rows, memory::Allocator* allocator) const {
     MutableColumns group_by_columns(_group_by_types.size());
+    auto* target_allocator = allocator != nullptr ? allocator : _source_allocator;
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
-        group_by_columns[i] =
-                ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
+        group_by_columns[i] = ColumnHelper::create_column(target_allocator, _group_by_types[i].result_type,
+                                                          _group_by_types[i].is_nullable);
         group_by_columns[i]->reserve(num_rows);
     }
     return group_by_columns;
@@ -1362,8 +1366,10 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
         // for nullable column when the real whole chunk data all not-null.
         if (_group_by_types[i].is_nullable && !_group_by_columns[i]->is_nullable()) {
             // TODO: optimized the memory usage
+            auto* target_allocator = is_sink_complete() ? _source_allocator : _sink_allocator;
             _group_by_columns[i] =
-                    NullableColumn::create(_group_by_columns[i], NullColumn::create(_group_by_columns[i]->size(), 0));
+                    NullableColumn::create(target_allocator, _group_by_columns[i],
+                                           NullColumn::create(target_allocator, _group_by_columns[i]->size(), 0));
         } else if (!_group_by_types[i].is_nullable && _group_by_columns[i]->is_nullable()) {
             return Status::InternalError(fmt::format("error nullablel column, index: {}, slot: {}", i,
                                                      _group_by_expr_ctxs[i]->root()->debug_string()));
@@ -1568,7 +1574,7 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
 template <typename HashVariantType>
 void Aggregator::_build_hash_variant(HashVariantType& hash_variant, typename HashVariantType::Type type,
                                      CompressKeyContext&& context) {
-    hash_variant.init(_state, type, _agg_stat);
+    hash_variant.init(_state, type, _agg_stat, _sink_allocator);
     hash_variant.visit([&](auto& variant) {
         if constexpr (is_compressed_fixed_size_key<std::decay_t<decltype(*variant)>>) {
             variant->offsets = std::move(context.offsets);
@@ -1603,7 +1609,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
 
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
-    hash_variant.init(_state, type, _agg_stat);
+    hash_variant.init(_state, type, _agg_stat, _sink_allocator);
 
     hash_variant.visit([&](auto& variant) {
         if constexpr (is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {
@@ -1707,8 +1713,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
         auto use_intermediate = force_use_intermediate_as_output || _use_intermediate_as_output();
-        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
-        MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows, _source_allocator);
+        MutableColumns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate, _source_allocator);
 
         int32_t read_index = 0;
         {
@@ -1812,7 +1818,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
         auto end = hash_set.hash_set.end();
         const auto hash_set_size = _hash_set_variant.size();
         auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
-        MutableColumns group_by_columns = _create_group_by_columns(num_rows);
+        MutableColumns group_by_columns = _create_group_by_columns(num_rows, _source_allocator);
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;

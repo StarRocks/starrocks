@@ -50,11 +50,21 @@ public:
         const ObjectColumn* _column = nullptr;
     };
 
-    ObjectColumn() = default;
+    ObjectColumn() : ObjectColumn(memory::get_default_allocator()) {}
 
-    explicit ObjectColumn(size_t size) : _pool(size) {}
+    explicit ObjectColumn([[maybe_unused]] memory::Allocator* allocator)
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(allocator) {}
 
-    ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
+    explicit ObjectColumn(size_t size) : ObjectColumn(memory::get_default_allocator(), size) {}
+
+    ObjectColumn([[maybe_unused]] memory::Allocator* allocator, size_t size)
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(allocator), _pool(allocator, size) {}
+
+    ObjectColumn(const ObjectColumn& column) = delete;
+
+    ObjectColumn(ObjectColumn&& rhs) noexcept
+            : CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>>(std::move(rhs)),
+              _pool(std::move(rhs._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 
@@ -143,9 +153,9 @@ public:
     uint32_t serialize_size(size_t idx) const override;
     uint32_t max_one_element_serialize_size() const override;
 
-    MutableColumnPtr clone_empty() const override { return this->create(); }
+    MutableColumnPtr clone_empty(memory::Allocator* /*allocator*/ = nullptr) const override { return this->create(); }
 
-    MutableColumnPtr clone() const override;
+    MutableColumnPtr clone(memory::Allocator* allocator = nullptr) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

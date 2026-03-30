@@ -247,7 +247,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     if (_last_columns.empty()) {
         _last_columns.resize(_group_by_columns.size());
         for (int i = 0; i < _last_columns.size(); ++i) {
-            _last_columns[i] = _group_by_columns[i]->clone_empty();
+            _last_columns[i] = _group_by_columns[i]->clone_empty(_sink_allocator);
         }
     }
 
@@ -256,14 +256,14 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     RETURN_IF_ERROR(_update_states(chunk_size, is_update_phase));
 
     // selector[i] == 0 means selected
-    Filter selector(chunk_size);
+    Filter selector(memory::get_default_allocator(), chunk_size, 0);
     _init_selector(selector, chunk_size);
 
     // finalize state
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
     // get result from aggregate values. such as count(*), sum(col)
     bool use_intermediate = _use_intermediate_as_output();
-    auto agg_result_columns = _create_agg_result_columns(chunk_size, use_intermediate);
+    auto agg_result_columns = _create_agg_result_columns(chunk_size, use_intermediate, _sink_allocator);
     RETURN_IF_ERROR(_get_agg_result_columns(chunk_size, selector, agg_result_columns));
 
     DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
@@ -271,7 +271,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     _close_group_by(chunk_size, selector);
 
     // combine group by keys
-    auto res_group_by_columns = _create_group_by_columns(chunk_size);
+    auto res_group_by_columns = _create_group_by_columns(chunk_size, _sink_allocator);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
     auto result_chunk =
             _build_output_chunk(std::move(res_group_by_columns), std::move(agg_result_columns), use_intermediate);
@@ -298,15 +298,15 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t 
     if (_last_columns.empty()) {
         _last_columns.resize(_group_by_columns.size());
         for (int i = 0; i < _last_columns.size(); ++i) {
-            _last_columns[i] = _group_by_columns[i]->clone_empty();
+            _last_columns[i] = _group_by_columns[i]->clone_empty(_sink_allocator);
         }
     }
 
     RETURN_IF_ERROR(_compute_group_by(chunk_size));
     // selector[i] == 0 means selected
-    Filter selector(chunk_size);
+    Filter selector(memory::get_default_allocator(), chunk_size, 0);
     _init_selector(selector, chunk_size);
-    auto res_group_by_columns = _create_group_by_columns(chunk_size);
+    auto res_group_by_columns = _create_group_by_columns(chunk_size, _sink_allocator);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selector, res_group_by_columns));
     auto result_chunk = _build_output_chunk(std::move(res_group_by_columns), {}, false);
 
@@ -365,7 +365,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
         }
 
         // only create the state when selector == 0
-        Filter create_selector(chunk_size);
+        Filter create_selector(memory::get_default_allocator(), chunk_size, 0);
         for (size_t i = 0; i < _cmp_vector.size(); ++i) {
             create_selector[i] = _cmp_vector[i] == 0;
         }
@@ -396,7 +396,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size, bool is_upda
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Buffer<uint8_t>& selector,
+Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const Filter& selector,
                                                           MutableColumns& agg_result_columns) {
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     TRY_CATCH_ALLOC_SCOPE_START()
@@ -462,7 +462,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     }
     SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
     bool use_intermediate = _use_intermediate_as_output();
-    auto agg_result_columns = _create_agg_result_columns(1, use_intermediate);
+    auto agg_result_columns = _create_agg_result_columns(1, use_intermediate, _source_allocator);
     auto group_by_columns = _last_columns;
     if (use_intermediate) {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_last_state, agg_result_columns));

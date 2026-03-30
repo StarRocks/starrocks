@@ -232,8 +232,8 @@ protected:
         const T& operator*() const { return *value; }
         T& operator*() { return *get(); }
 
-        operator const ImmutPtr<T>&() const { return value; }
-        operator ImmutPtr<T>&() & { return value; }
+        operator const ImmutPtr<T> &() const { return value; }
+        operator ImmutPtr<T> &() & { return value; }
 
         operator bool() const { return value.get() != nullptr; }
         bool operator!() const { return value.get() == nullptr; }
@@ -353,8 +353,6 @@ public:
     static MutablePtr create(std::initializer_list<T>&& arg) {
         return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
-
-    typename AncestorBaseType::MutablePtr clone() const override = 0;
 
     // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     static Ptr static_pointer_cast(const BasePtr& ptr) {

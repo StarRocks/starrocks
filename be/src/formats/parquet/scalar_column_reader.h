@@ -144,6 +144,7 @@ public:
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
                                                                  _opts.timezone, &_converter));
+        _converter->set_allocator(_opts.allocator);
         return RawColumnReader::prepare();
     }
 

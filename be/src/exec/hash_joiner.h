@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_allocator.h"
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -266,6 +267,10 @@ public:
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
     bool is_skew_join() const { return _is_skew_join; }
+    void set_build_allocator(memory::Allocator* allocator) { _build_allocator = allocator; }
+    void set_probe_allocator(memory::Allocator* allocator) { _probe_allocator = allocator; }
+    memory::Allocator* build_allocator() const { return _build_allocator; }
+    memory::Allocator* probe_allocator() const { return _probe_allocator; }
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
@@ -444,6 +449,9 @@ private:
     ObjectPool* _pool;
 
     RuntimeState* _runtime_state = nullptr;
+    // TODO: wire allocator propagation from build/probe operators in a follow-up phase.
+    memory::Allocator* _build_allocator = memory::get_default_allocator();
+    memory::Allocator* _probe_allocator = memory::get_default_allocator();
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;

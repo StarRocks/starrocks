@@ -15,6 +15,7 @@
 #include "exprs/bit_functions.h"
 
 #include "exprs/binary_function.h"
+#include "exprs/function_context.h"
 #include "exprs/unary_function.h"
 
 namespace starrocks {
@@ -54,47 +55,50 @@ template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitAnd(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitAndImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitAndImpl>::evaluate<Type>(context->allocator(), l, r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitOr(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitOrImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitOrImpl>::evaluate<Type>(context->allocator(), l, r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitXor(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitXorImpl>::evaluate<Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitXorImpl>::evaluate<Type>(context->allocator(), l, r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftLeft(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type, TYPE_BIGINT, Type>(context->allocator(), l,
+                                                                                               r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftRight(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type, TYPE_BIGINT, Type>(context->allocator(), l,
+                                                                                                r);
 }
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitShiftRightLogical(FunctionContext* context, const Columns& columns) {
     auto& l = VECTORIZED_FN_ARGS(0);
     auto& r = VECTORIZED_FN_ARGS(1);
-    return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type, TYPE_BIGINT, Type>(
+            context->allocator(), l, r);
 }
 template <LogicalType Type>
 StatusOr<ColumnPtr> BitFunctions::bitNot(FunctionContext* context, const Columns& columns) {
     auto& v = VECTORIZED_FN_ARGS(0);
-    return VectorizedStrictUnaryFunction<bitNotImpl>::evaluate<Type>(v);
+    return VectorizedStrictUnaryFunction<bitNotImpl>::evaluate<Type>(context->allocator(), v);
 }
 
 } // namespace starrocks

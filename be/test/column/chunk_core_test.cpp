@@ -80,7 +80,7 @@ TEST_F(ChunkCoreTest, CloneAppendFilter) {
     cols.emplace_back(_make_int_column(20, 6));
     Chunk src(std::move(cols), _make_schema(2));
 
-    auto dst = src.clone_empty(0);
+    auto dst = src.clone_empty(size_t{0});
     dst->append(src, 1, 4);
     ASSERT_EQ(4, dst->num_rows());
     ASSERT_EQ(11, dst->get_column_by_index(0)->get(0).get_int32());

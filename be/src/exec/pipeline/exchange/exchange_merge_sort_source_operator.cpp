@@ -33,7 +33,8 @@ Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, this->observer());
     _stream_recvr->attach_query_ctx(state->query_ctx());
-    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first);
+    return _stream_recvr->create_merger_for_pipeline(state, _sort_exec_exprs, &_is_asc_order, &_nulls_first,
+                                                     allocator());
 }
 
 void ExchangeMergeSortSourceOperator::close(RuntimeState* state) {
@@ -101,7 +102,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             if (_limit > 0 && rewind_size > _limit) {
                 rewind_size = _limit;
             }
-            *chunk = tmp_chunk->clone_empty_with_slot(rewind_size);
+            *chunk = tmp_chunk->clone_empty_with_slot(allocator(), rewind_size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
                 auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);

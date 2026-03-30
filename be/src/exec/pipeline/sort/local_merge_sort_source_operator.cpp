@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 
+#include "base/memory/memory_allocator.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -24,6 +25,14 @@ Status LocalMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
     _sort_context->attach_source_observer(state, observer());
+    memory::Allocator* source_alloc = allocator();
+    for (size_t i = 0; i < _sort_context->num_chunks_sorters(); ++i) {
+        auto* chunks_sorter = _sort_context->get_chunks_sorter(static_cast<int32_t>(i));
+        chunks_sorter->set_source_allocator(source_alloc);
+        if (chunks_sorter->spiller()) {
+            chunks_sorter->spiller()->set_restore_allocator(source_alloc);
+        }
+    }
     return Status::OK();
 }
 void LocalMergeSortSourceOperator::close(RuntimeState* state) {

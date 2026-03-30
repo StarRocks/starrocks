@@ -760,6 +760,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             _disable_column_access_path_hints = true;
         }
     }
+    scanner_params.allocator = _allocator;
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -978,7 +979,7 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
+    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(_allocator, *_tuple_desc, n));
 
     return Status::OK();
 }

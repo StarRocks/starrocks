@@ -257,6 +257,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
     _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.allocator = _scanner_ctx->allocator;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;

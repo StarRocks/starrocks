@@ -24,6 +24,8 @@
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
 
+#include <exception>
+
 #ifdef __APPLE__
 #include <signal.h>
 #ifndef SIGRTMIN
@@ -58,6 +60,10 @@ enum class SymbolizeOptions { kNone = 0, kNoLineNumbers = 1 };
 int GetStackTrace(void** result, int max_depth, int skip_count);
 bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions options = SymbolizeOptions::kNone);
 } // namespace google::glog_internal_namespace_
+
+extern "C" [[noreturn]] __attribute__((weak)) void __cxa_call_terminate(void*) {
+    std::terminate();
+}
 
 namespace starrocks {
 

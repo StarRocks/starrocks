@@ -80,12 +80,12 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
     auto row_pos_desc = _parent->_row_pos_descs.at(_ctx->request_tuple_id);
     for (const auto& slot_id : row_pos_desc->get_fetch_ref_slot_ids()) {
         auto slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
-        auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        auto col = ColumnHelper::create_column(_parent->allocator(), slot_desc->type(), slot_desc->is_nullable());
         request_chunk->append_column(std::move(col), slot_desc->id());
     }
     auto slot_desc = state->desc_tbl().get_slot_descriptor(row_pos_desc->get_row_source_slot_id());
     // row source column from fetch node won't be nullable
-    auto row_source_col = ColumnHelper::create_column(slot_desc->type(), false);
+    auto row_source_col = ColumnHelper::create_column(_parent->allocator(), slot_desc->type(), false);
     request_chunk->append_column(std::move(row_source_col), slot_desc->id());
 
     for (auto& request_ctx : _ctx->request_ctxs) {

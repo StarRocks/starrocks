@@ -36,7 +36,6 @@ public:
     using const_iterator = typename RawBuffer<T, padding>::const_iterator;
     using value_type = typename RawBuffer<T, padding>::value_type;
 
-    Buffer() = delete;
     explicit Buffer(memory::Allocator* allocator) : _allocator(allocator) {}
     Buffer(memory::Allocator* allocator, size_t count) : _allocator(allocator) {
         try {

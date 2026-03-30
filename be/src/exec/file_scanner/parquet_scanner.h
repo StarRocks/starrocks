@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/memory_allocator.h"
 #include "base/string/slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -53,9 +54,9 @@ public:
                                           Column* column, size_t batch_start_idx, size_t column_start_idx,
                                           Filter* chunk_filter, ArrowConvertContext* conv_ctx);
 
-    static Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
-                             MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
-                             bool strict_mode);
+    static Status new_column(memory::Allocator* allocator, const arrow::DataType* arrow_type,
+                             const SlotDescriptor* slot_desc, MutableColumnPtr* column, ConvertFuncTree* conv_func,
+                             Expr** expr, ObjectPool& pool, bool strict_mode);
 
     static Status build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
                              TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
@@ -83,7 +84,7 @@ private:
     std::vector<std::unique_ptr<ConvertFuncTree>> _conv_funcs;
     std::vector<Expr*> _cast_exprs;
     ObjectPool _pool;
-    Filter _chunk_filter;
+    Filter _chunk_filter = Filter(memory::get_default_allocator());
     ArrowConvertContext _conv_ctx;
     int64_t _last_file_size = 0;
     int64_t _last_range_size = 0;

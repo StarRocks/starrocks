@@ -412,7 +412,7 @@ public:
     inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
         const Int32Column* dict_code_column = down_cast<const Int32Column*>(ColumnHelper::get_data_column(column));
         const auto data = dict_code_column->immutable_data();
-        Filter filter(to - from, 1);
+        Filter filter(memory::get_default_allocator(), to - from, 1);
 
         if (column->has_null()) {
             const NullColumn* null_column = down_cast<const NullableColumn*>(column)->null_column().get();

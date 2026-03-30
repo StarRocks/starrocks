@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "base/memory/memory_allocator.h"
 #include "column_reader.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -67,6 +68,7 @@ struct ColumnIteratorOptions {
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
+    memory::Allocator* allocator = memory::get_default_allocator();
 
     void sanity_check() const {
         CHECK_NOTNULL(read_file);
@@ -87,6 +89,8 @@ class ColumnIterator {
 public:
     ColumnIterator() = default;
     virtual ~ColumnIterator() = default;
+
+    memory::Allocator* allocator() const { return _opts.allocator; }
 
     virtual Status init(const ColumnIteratorOptions& opts) {
         _opts = opts;
