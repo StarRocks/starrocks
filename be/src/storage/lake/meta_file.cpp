@@ -511,9 +511,8 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     // Clean up orphan delvec entries whose segment_id does not belong to any current rowset.
     // Such orphans were created by a historical bug where _delvecs was not cleaned in
     // apply_opcompaction, causing _finalize_delvec to re-insert entries for compacted segments.
-    // Doing this here (only during compaction) avoids per-publish overhead, and every tablet
-    // will eventually compact, so all historical orphans get cleaned up after upgrade.
-    {
+    // Gated by config: enable after upgrade to clean up existing orphans, disable once done.
+    if (config::lake_enable_orphan_delvec_cleanup_on_compaction) {
         std::unordered_set<uint32_t> valid_rssids;
         for (const auto& rowset : _tablet_meta->rowsets()) {
             collect_rowset_rssids(rowset, &valid_rssids);

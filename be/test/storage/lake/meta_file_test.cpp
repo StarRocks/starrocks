@@ -20,6 +20,7 @@
 #include <set>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
 #include "fs/fs.h"
@@ -1465,6 +1466,9 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
 
     EXPECT_EQ(4, metadata->delvec_meta().delvecs().size()); // 3 orphans + 1 valid
 
+    // Enable orphan cleanup config for this test
+    config::lake_enable_orphan_delvec_cleanup_on_compaction = true;
+
     // Compact rowset 300 — this triggers orphan cleanup in apply_opcompaction
     {
         metadata->set_version(13);
@@ -1493,6 +1497,8 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         const auto& vtf = metadata->delvec_meta().version_to_file();
         EXPECT_TRUE(vtf.find(5) == vtf.end()) << "version_to_file entry for orphan version 5 should be cleaned up";
     }
+
+    config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
 }
 
 } // namespace starrocks::lake
