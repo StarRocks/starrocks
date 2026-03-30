@@ -232,9 +232,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
             if (result.isDone()) {
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
@@ -591,9 +588,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<Histogram>>> result =
                     connectorHistogramCache.getAll(cacheKeys);
-            if (Config.enable_sync_statistics_load) {
-                result.get();
-            }
             if (result.isDone()) {
                 Map<ConnectorTableColumnKey, Optional<Histogram>> realResult = result.get();
 
