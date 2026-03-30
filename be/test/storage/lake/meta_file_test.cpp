@@ -1452,7 +1452,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
     file_meta.set_size(100);
     (*metadata->mutable_delvec_meta()->mutable_version_to_file())[5] = file_meta;
 
-    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size());  // 3 orphans + 1 valid
+    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size()); // 3 orphans + 1 valid
 
     // Now do a normal publish (no delvec changes) — the finalize should clean up orphans
     {
@@ -1472,8 +1472,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
 
         // The orphan version_to_file entry (version=5) should now be unreferenced and removed
         const auto& vtf = metadata->delvec_meta().version_to_file();
-        EXPECT_TRUE(vtf.find(5) == vtf.end())
-                << "version_to_file entry for orphan version 5 should be cleaned up";
+        EXPECT_TRUE(vtf.find(5) == vtf.end()) << "version_to_file entry for orphan version 5 should be cleaned up";
     }
 }
 
