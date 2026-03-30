@@ -64,6 +64,7 @@ public:
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     using Container = Buffer<Slice>;
+    using BinaryDataProxyContainer = starrocks::BinaryDataProxyContainer;
     using ProxyContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,

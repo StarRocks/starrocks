@@ -380,7 +380,7 @@ public:
             }
             return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
         } else {
-            return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+            return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
         }
     }
 
@@ -394,7 +394,7 @@ public:
             }
             return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
         } else {
-            return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
+            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
         }
     }
 
