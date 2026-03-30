@@ -600,6 +600,27 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
+    // 2.5. Remove orphan delvec entries whose segment_id does not belong to any current rowset.
+    // Such orphans were created by a historical bug where _delvecs was not cleaned in
+    // apply_opcompaction, causing _finalize_delvec to re-insert entries for compacted segments.
+    // This step ensures existing orphans are cleaned up after upgrade.
+    {
+        std::unordered_set<uint32_t> valid_rssids;
+        for (const auto& rowset : _tablet_meta->rowsets()) {
+            collect_rowset_rssids(rowset, &valid_rssids);
+        }
+        auto* delvecs_map = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
+        for (auto it = delvecs_map->begin(); it != delvecs_map->end();) {
+            if (valid_rssids.count(it->first) == 0) {
+                VLOG(2) << "Remove orphan delvec entry, tablet_id: " << _tablet_meta->id()
+                        << ", segment_id: " << it->first << ", version: " << it->second.version();
+                it = delvecs_map->erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     // 3. write to delvec file
     if (_buf.size() > 0) {
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);

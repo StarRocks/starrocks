@@ -1395,4 +1395,86 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
     }
 }
 
+// Test that pre-existing orphan delvec entries in metadata are cleaned up
+// during finalize. This simulates the upgrade scenario where orphan entries
+// accumulated from the historical bug are present in the metadata.
+TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
+    const int64_t tablet_id = 40003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(300);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Create initial metadata
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Add a rowset (id=300, segment rssid=300)
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("valid.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    ASSERT_EQ(300, metadata->rowsets(0).id());
+
+    // Manually inject orphan delvec entries into metadata to simulate
+    // pre-existing orphans from the historical bug.
+    // Segment IDs 100, 200, 999 do not belong to any current rowset.
+    DelvecPagePB orphan_page;
+    orphan_page.set_version(5);
+    orphan_page.set_offset(0);
+    orphan_page.set_size(10);
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[100] = orphan_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[200] = orphan_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[999] = orphan_page;
+
+    // Also add a valid delvec for the existing segment 300
+    DelvecPagePB valid_page;
+    valid_page.set_version(11);
+    valid_page.set_offset(0);
+    valid_page.set_size(10);
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[300] = valid_page;
+
+    // Add version_to_file entries referenced by orphans
+    FileMetaPB file_meta;
+    file_meta.set_name("old_orphan.delvec");
+    file_meta.set_size(100);
+    (*metadata->mutable_delvec_meta()->mutable_version_to_file())[5] = file_meta;
+
+    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size());  // 3 orphans + 1 valid
+
+    // Now do a normal publish (no delvec changes) — the finalize should clean up orphans
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // Orphan entries should be removed
+        const auto& delvecs_map = metadata->delvec_meta().delvecs();
+        EXPECT_TRUE(delvecs_map.find(100) == delvecs_map.end()) << "Orphan segment 100 should be cleaned";
+        EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end()) << "Orphan segment 200 should be cleaned";
+        EXPECT_TRUE(delvecs_map.find(999) == delvecs_map.end()) << "Orphan segment 999 should be cleaned";
+
+        // Valid entry should remain
+        EXPECT_TRUE(delvecs_map.find(300) != delvecs_map.end()) << "Valid segment 300 should be kept";
+        EXPECT_EQ(1, delvecs_map.size());
+
+        // The orphan version_to_file entry (version=5) should now be unreferenced and removed
+        const auto& vtf = metadata->delvec_meta().version_to_file();
+        EXPECT_TRUE(vtf.find(5) == vtf.end())
+                << "version_to_file entry for orphan version 5 should be cleaned up";
+    }
+}
+
 } // namespace starrocks::lake
