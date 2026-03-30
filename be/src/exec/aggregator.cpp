@@ -1703,10 +1703,9 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (MapType::supports_inline_state) {
             if (_use_inline_agg_state) {
-                hash_map_with_key->template build_hash_map_with_limit<true>(chunk_size, _group_by_columns,
-                                                                            _mem_pool.get(), NoAllocFunc{},
-                                                                            &_tmp_agg_states, &_streaming_selection,
-                                                                            _limit);
+                hash_map_with_key->template build_hash_map_with_limit<true>(
+                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        &_streaming_selection, _limit);
                 return;
             }
         }

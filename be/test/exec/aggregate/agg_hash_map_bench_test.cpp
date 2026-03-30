@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/aggregate/agg_hash_map.h"
-
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -22,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregator.h"
 #include "runtime/mem_pool.h"

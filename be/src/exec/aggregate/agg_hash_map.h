@@ -156,7 +156,9 @@ private:
 // Sentinel allocator used for inline-state paths where no external allocation is needed.
 struct NoAllocFunc {
     template <typename T>
-    AggDataPtr operator()(T&&) const { return static_cast<AggDataPtr>(nullptr); }
+    AggDataPtr operator()(T&&) const {
+        return static_cast<AggDataPtr>(nullptr);
+    }
 };
 
 template <typename HashMap, typename Impl>
@@ -302,13 +304,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
         const auto column = down_cast<const ColumnType*>(key_column);
 
         if constexpr (is_no_prefetch_map<HashMap>) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(column, agg_states,
-                                                                                std::forward<Func>(allocate_func),
-                                                                                extra);
+            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
+                    column, agg_states, std::forward<Func>(allocate_func), extra);
         } else if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(column, agg_states,
-                                                                                std::forward<Func>(allocate_func),
-                                                                                extra);
+            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
+                    column, agg_states, std::forward<Func>(allocate_func), extra);
         } else {
             this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(column, agg_states,
                                                                               std::forward<Func>(allocate_func), extra);
@@ -573,9 +573,8 @@ struct AggHashMapWithOneStringKeyWithNullable
         DCHECK(key_column->is_binary());
         const auto* column = down_cast<const BinaryColumn*>(key_column);
         if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(column, agg_states, pool,
-                                                                                std::forward<Func>(allocate_func),
-                                                                                extra);
+            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
+                    column, agg_states, pool, std::forward<Func>(allocate_func), extra);
         } else {
             this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(column, agg_states, pool,
                                                                               std::forward<Func>(allocate_func), extra);
@@ -631,10 +630,9 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto key = column->get_slice(i);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    this->template _emplace_key_with_hash<InlineState, Func>(key, hash_values[i], pool,
-                                                                             std::forward<Func>(allocate_func),
-                                                                             (*agg_states)[i],
-                                                                             [&]() { hash_table_size++; });
+                    this->template _emplace_key_with_hash<InlineState, Func>(
+                            key, hash_values[i], pool, std::forward<Func>(allocate_func), (*agg_states)[i],
+                            [&]() { hash_table_size++; });
                 } else {
                     _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
                 }
@@ -702,8 +700,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         this->template _emplace_key<InlineState, Func>(key, pool, std::forward<Func>(allocate_func),
-                                                                       (*agg_states)[i],
-                                                                       [&]() { hash_table_size++; });
+                                                                       (*agg_states)[i], [&]() { hash_table_size++; });
                     } else {
                         _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
                     }
@@ -857,9 +854,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             buffer = mem_pool->allocate(batch_allocate_size);
         }
         // process by cols
-        return compute_agg_states_by_cols<InlineState, Func, HTBuildOp>(chunk_size, key_columns, pool,
-                                                                         std::move(allocate_func), agg_states, extra,
-                                                                         cur_max_one_row_size);
+        return compute_agg_states_by_cols<InlineState, Func, HTBuildOp>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, extra, cur_max_one_row_size);
     }
 
     // There may be additional virtual function overhead, but the bottleneck point for this branch is serialization
@@ -879,8 +875,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             Slice key = {buffer, serialize_size};
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key<InlineState>(key, pool, allocate_func, (*agg_states)[i],
-                                             [&]() { hash_table_size++; });
+                    _emplace_key<InlineState>(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
                 } else {
                     _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
                 }
@@ -929,8 +924,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key<InlineState>(key, pool, allocate_func, (*agg_states)[i],
-                                             [&]() { hash_table_size++; });
+                    _emplace_key<InlineState>(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
                 } else {
                     _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
                 }
@@ -1202,9 +1196,8 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
 
         if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(chunk_size, key_columns, agg_states,
-                                                                                std::forward<Func>(allocate_func),
-                                                                                extra);
+            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
+                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), extra);
         } else {
             this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(chunk_size, key_columns, agg_states,
                                                                               std::forward<Func>(allocate_func), extra);
@@ -1328,7 +1321,7 @@ struct AggHashMapWithCompressedKeyFixedSize
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key<InlineState>(fixed_keys[i], (*agg_states)[i], allocate_func,
-                                             [&] { hash_table_size++; });
+                                              [&] { hash_table_size++; });
                 } else {
                     _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
                 }

@@ -340,8 +340,7 @@ public:
     bool enable_spill() const { return _query_options.enable_spill; }
 
     bool enable_inline_agg_state() const {
-        return _query_options.__isset.enable_inline_agg_state &&
-               _query_options.enable_inline_agg_state;
+        return _query_options.__isset.enable_inline_agg_state && _query_options.enable_inline_agg_state;
     }
 
     bool enable_hash_join_spill() const {
