@@ -585,6 +585,60 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testRegexpReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('abcd', '.*', 'xx')");
+            assertContains(plan, "<slot 2> : 'xx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('a b c', '(b)', '<\\\\1>')");
+            assertContains(plan, "<slot 2> : 'a <b> c'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('ab\\ncd', 'a.*d', 'xx')");
+            assertContains(plan, "<slot 2> : 'xx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('xxxx', 'xx', '-')");
+            assertContains(plan, "<slot 2> : '--'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('xxxx', 'not', 'xxxxxxxx')");
+            assertContains(plan, "<slot 2> : 'xxxx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace(NULL, 'abc', 'xx')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('', '', 'xx')");
+            assertContains(plan, "regexp_replace('', '', 'xx')");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('abcd', '(unclosed', 'xx')");
+            assertContains(plan, "regexp_replace('abcd', '(unclosed', 'xx')");
+        }
+
+        {
+            String plan = getFragmentPlan("select column_value " +
+                    "from (values ('root'), ('other')) as t(column_value) " +
+                    "where column_value = replace(" +
+                    "regexp_replace(" +
+                    "regexp_replace(" +
+                    "regexp_replace(current_user(), '\\'@.*$', ''), '^\\'', ''), " +
+                    "'^(.*)_dot_(.*)_(tl|bi|dh)_user$', '\\\\1.\\\\2'), '__', '-')");
+            assertContains(plan, "predicates: 1: column_value = 'root'");
+        }
+    }
+
+    @Test
     public void testDivisionByZeroWithSqlMode() throws Exception {
         long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
 

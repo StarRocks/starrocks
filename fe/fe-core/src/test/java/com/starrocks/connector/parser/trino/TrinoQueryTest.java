@@ -1265,6 +1265,6 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testRegexpReplace() throws Exception {
         String sql = "select regexp_replace('123', '321')";
-        assertPlanContains(sql, "regexp_replace('123', '321', '')");
+        assertPlanContains(sql, "<slot 2> : '123'");
     }
 }
