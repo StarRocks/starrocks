@@ -529,8 +529,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
             }
         }
         if (orphan_cnt > 0) {
-            LOG(INFO) << fmt::format("Removed {} orphan delvec entries from tablet {}", orphan_cnt,
-                                     _tablet_meta->id());
+            LOG(INFO) << fmt::format("Removed {} orphan delvec entries from tablet {}", orphan_cnt, _tablet_meta->id());
         }
     }
 
