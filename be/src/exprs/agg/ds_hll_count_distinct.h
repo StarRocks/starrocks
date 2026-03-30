@@ -141,17 +141,7 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             int64_t memory_usage = 0;
             DataSketchesHll hll{log_k, tgt_type, &memory_usage};
-<<<<<<< HEAD
-            if constexpr (lt_is_string<LT>) {
-                Slice s = column->get_slice(i);
-                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-            } else {
-                auto v = column->get_data()[i];
-                value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
-            }
-=======
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
->>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
             if (value != 0) {
                 hll.update(value);
             }
