@@ -527,6 +527,8 @@ public class AnalyzeAggregateTest {
     @Test
     public void testGroupByAllRegressionCases() {
         analyzeSuccess("select v1, sum(v2) + grouping(v1) from t0 group by all");
+        analyzeSuccess("select grouping(v1), sum(v2) from t0 group by all");
+        analyzeSuccess("select grouping(v1) from t0 group by all");
         analyzeSuccess("select *, sum(v1) from t0 group by all");
     }
 }

@@ -123,9 +123,11 @@ public class SelectAnalyzer {
 
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
-            boolean isGroupByAll = groupByClause != null
-                    && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
+        boolean isGroupByAll = groupByClause != null
+                && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
+        boolean isAggregationQuery = AnalyzerUtils.isAggregate(aggregates, groupByExpressions) ||
+                (isGroupByAll && !analyzeState.getGroupingFunctionCallExprs().isEmpty());
+        if (isAggregationQuery) {
             if (!groupByExpressions.isEmpty() &&
                     selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
                     !selectList.isDistinct() &&
@@ -173,7 +175,7 @@ public class SelectAnalyzer {
 
         analyzeWindowFunctions(analyzeState, outputExpressions, orderByExpressions);
 
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions) &&
+        if (isAggregationQuery &&
                 (sortClause != null || havingClause != null)) {
             /*
              * Create scope for order by when aggregation is present.
@@ -609,19 +611,19 @@ public class SelectAnalyzer {
 
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL)) {
-                    // filter other agg columns, all the remain is group by columns
+                    // Collect implicit grouping keys from non-aggregate output expressions.
+                    // GROUPING(expr...) itself is not a grouping key, but its arguments must participate in grouping.
                     for (Expr outputExpr : outputExpressions) {
-                        if (!ExprUtils.containsAggregate(outputExpr)) {
-                            if (groupByExpressions.contains(outputExpr)) {
-                                continue;
+                        if (ExprUtils.containsAggregate(outputExpr)) {
+                            continue;
+                        }
+
+                        if (outputExpr instanceof GroupingFunctionCallExpr groupingExpr) {
+                            for (Expr argument : groupingExpr.getChildren()) {
+                                addGroupByAllExpression(argument, groupByExpressions, analyzeState, sourceScope);
                             }
-                            analyzeExpression(outputExpr, analyzeState, sourceScope);
-                            if (!outputExpr.getType().canGroupBy()) {
-                                throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
-                            }
-                            AnalyzerUtils.verifyNoWindowFunctions(outputExpr, "GROUP BY");
-                            AnalyzerUtils.verifyNoGroupingFunctions(outputExpr, "GROUP BY");
-                            groupByExpressions.add(outputExpr);
+                        } else {
+                            addGroupByAllExpression(outputExpr, groupByExpressions, analyzeState, sourceScope);
                         }
                     }
                 } else {
@@ -631,6 +633,21 @@ public class SelectAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    private void addGroupByAllExpression(Expr expression, List<Expr> groupByExpressions,
+                                         AnalyzeState analyzeState, Scope sourceScope) {
+        if (groupByExpressions.contains(expression)) {
+            return;
+        }
+        analyzeExpression(expression, analyzeState, sourceScope);
+        if (!expression.getType().canGroupBy()) {
+            throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
+        }
+        AnalyzerUtils.verifyNoAggregateFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoWindowFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoGroupingFunctions(expression, "GROUP BY");
+        groupByExpressions.add(expression);
     }
 
     private List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,

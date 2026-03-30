@@ -3603,6 +3603,22 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testGroupByAllWithStandaloneGroupingFunction() throws Exception {
+        String sql = "select grouping(v1), sum(v2) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(2: v2)");
+        assertContains(plan, "group by: 1: v1");
+    }
+
+    @Test
+    public void testGroupByAllWithOnlyGroupingFunction() throws Exception {
+        String sql = "select grouping(v1) from t0 group by all";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "group by: 1: v1");
+        assertContains(plan, "0");
+    }
+
+    @Test
     public void testGroupByAllWithStarProjection() throws Exception {
         String sql = "select *, sum(v1) from t0 group by all";
         String plan = getFragmentPlan(sql);
