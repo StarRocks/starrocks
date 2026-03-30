@@ -105,10 +105,6 @@ set(SRC_FILES
 # keep everything in one library, the object files reference
 # each other
 ADD_BE_LIB(StarRocksGen ${SRC_FILES})
-if (ENABLE_MULTI_DYNAMIC_LIBS AND NOT APPLE)
-    # -Bsymbolic is an ELF/GNU linker option. Keep it off on Darwin builds.
-    target_link_options(StarRocksGen PRIVATE "-Wl,-Bsymbolic")
-endif()
 add_dependencies(StarRocksGen be_proto_codegen be_thrift_codegen)
 set_target_properties(StarRocksGen PROPERTIES CXX_CLANG_TIDY "")
 
