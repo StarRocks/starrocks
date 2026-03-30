@@ -291,7 +291,7 @@ public class PartitionUtilTest {
         };
 
         PCellSortedSet partitionMap =
-                PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
+                MVPartitionCellBuilder.getPartitionKeyRange(table, partitionColumn, null);
         Assertions.assertEquals(partitionMap.size(), partitionNames.size());
         Assertions.assertTrue(partitionMap.containsName("p20221202"));
         PartitionKey upperBound = new PartitionKey();

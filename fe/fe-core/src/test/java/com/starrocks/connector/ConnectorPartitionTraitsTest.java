@@ -36,8 +36,6 @@ import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -176,16 +174,6 @@ public class ConnectorPartitionTraitsTest {
             }
 
             @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-                return null;
-            }
-
-            @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
-                return null;
-            }
-
-            @Override
             public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
                 return Map.of("p1", new PartitionInfo() {
                     @Override
@@ -252,16 +240,6 @@ public class ConnectorPartitionTraitsTest {
             @Override
             public List<Column> getPartitionColumns() {
                 return List.of();
-            }
-
-            @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-                return null;
-            }
-
-            @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
-                return null;
             }
 
             @Override
@@ -333,16 +311,6 @@ public class ConnectorPartitionTraitsTest {
             @Override
             public List<Column> getPartitionColumns() {
                 return List.of();
-            }
-
-            @Override
-            public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-                return null;
-            }
-
-            @Override
-            public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
-                return null;
             }
 
             @Override

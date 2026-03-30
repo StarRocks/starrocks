@@ -120,3 +120,4 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 _codeql_detected_source_root
+test/.venv
