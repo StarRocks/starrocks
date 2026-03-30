@@ -1488,7 +1488,7 @@ remove_stale_homebrew_poco_symlinks() {
         -maxdepth 1 \
         -type l \
         -name 'libPoco*' \
-        -lname '/opt/homebrew/*' \
+        -lname "${HOMEBREW_PREFIX%/}/*" \
         -exec rm -f {} +
 }
 
