@@ -97,6 +97,29 @@ ssize_t SegmentFileWriter::WriteV(const iovec* iov, int iovcnt) {
     }
 }
 
+namespace {
+void fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, const std::string& rowset_path_prefix,
+                                  const std::string& rowset_id, int segment_id, SegmentWriterOptions& opts) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        int64_t index_id = it->second.index_id();
+        opts.vector_index_file_paths[index_id] =
+                IndexDescriptor::vector_index_file_path(rowset_path_prefix, rowset_id, segment_id, index_id);
+    }
+}
+} // namespace
+
 RowsetWriter::RowsetWriter(const RowsetWriterContext& context) : _context(context) {}
 
 Status RowsetWriter::init() {
@@ -583,6 +606,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment
     }
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, path));
     const auto schema = _context.tablet_schema;
+    fill_vector_index_file_paths(schema, _context.rowset_path_prefix, _context.rowset_id.to_string(), _num_segment,
+                                 _writer_options);
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init());
     DCHECK(_segment_encryption_metas.size() == _num_segment);
@@ -1386,6 +1411,8 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_w
                      _fs->new_writable_file(wopts, Rowset::segment_file_path(_context.rowset_path_prefix,
                                                                              _context.rowset_id, _num_segment)));
     const auto schema = _context.tablet_schema;
+    fill_vector_index_file_paths(schema, _context.rowset_path_prefix, _context.rowset_id.to_string(), _num_segment,
+                                 _writer_options);
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
     DCHECK(_segment_encryption_metas.size() == _num_segment);

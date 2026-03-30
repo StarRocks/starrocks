@@ -26,9 +26,9 @@
 #include "column/column_helper.h"
 #include "common/config_vector_index_fwd.h"
 #include "runtime/mem_pool.h"
-#include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 
@@ -64,13 +64,7 @@ protected:
         return tablet_index;
     }
 
-    void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
-        DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
-
-        std::unique_ptr<VectorIndexWriter> vector_index_writer;
-        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
-        CHECK_OK(vector_index_writer->init());
-
+    void append_test_data(VectorIndexWriter* vector_index_writer) {
         // construct columns
         auto element = FixedLengthColumn<float>::create();
         element->append(1);
@@ -95,6 +89,16 @@ protected:
         CHECK_OK(vector_index_writer->append(*array_column));
 
         ASSERT_EQ(vector_index_writer->size(), 11);
+    }
+
+    void write_vector_index(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
+        DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
+
+        std::unique_ptr<VectorIndexWriter> vector_index_writer;
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
+        CHECK_OK(vector_index_writer->init());
+
+        append_test_data(vector_index_writer.get());
 
         uint64_t size = 0;
         CHECK_OK(vector_index_writer->finish(&size));
@@ -102,13 +106,19 @@ protected:
         ASSERT_GT(size, 0);
     }
 
-    void check_empty(const std::string& index_path) {
-        auto res = _fs->new_random_access_file(index_path);
-        CHECK_OK(res);
-        const auto& index_file = res.value();
-        auto data_res = index_file->read_all();
-        CHECK_OK(data_res);
-        ASSERT_EQ(data_res.value(), IndexDescriptor::mark_word);
+    void write_vector_index_below_threshold(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index) {
+        std::unique_ptr<VectorIndexWriter> vector_index_writer;
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
+        CHECK_OK(vector_index_writer->init());
+
+        append_test_data(vector_index_writer.get());
+
+        uint64_t size = 0;
+        CHECK_OK(vector_index_writer->finish(&size));
+
+        // Below threshold: no file generated, size is 0
+        ASSERT_EQ(size, 0);
+        ASSERT_FALSE(fs::path_exist(path));
     }
 };
 
@@ -118,6 +128,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
     tablet_index->add_common_properties("dim", "3");
     tablet_index->add_common_properties("is_vector_normed", "false");
     tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
     tablet_index->add_index_properties("efconstruction", "40");
     tablet_index->add_index_properties("M", "16");
     tablet_index->add_search_properties("efsearch", "40");
@@ -141,8 +152,6 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
     } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
     }
-#else
-    check_empty(index_path);
 #endif
 }
 
@@ -156,9 +165,7 @@ TEST_F(VectorIndexWriterTest, testwrite_with_empty_mark) {
     tablet_index->add_common_properties("metric_type", "l2_distance");
 
     auto index_path = test_vector_index_dir + "/" + empty_index_name;
-    write_vector_index(index_path, tablet_index);
-
-    check_empty(index_path);
+    write_vector_index_below_threshold(index_path, tablet_index);
 }
 
 } // namespace starrocks

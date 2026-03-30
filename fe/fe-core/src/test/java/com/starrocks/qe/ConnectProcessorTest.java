@@ -69,7 +69,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -195,6 +196,9 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @BeforeEach
     public void setUp() throws Exception {
+        Config.run_mode = RunMode.SHARED_NOTHING.getName();
+        RunMode.detectRunMode();
+
         initDbPacket.clear();
         initWarehousePacket.clear();
         pingPacket.clear();
@@ -209,6 +213,12 @@ public class ConnectProcessorTest extends DDLTestBase {
         myContext = new ConnectContext(connection);
         Deencapsulation.setField(myContext, "mysqlChannel", channel);
         super.setUp();
+    }
+
+    @AfterEach
+    public void tearDownRunMode() {
+        Config.run_mode = RunMode.SHARED_NOTHING.getName();
+        RunMode.detectRunMode();
     }
 
     private static MysqlChannel mockChannel(ByteBuffer packet) {
@@ -392,9 +402,9 @@ public class ConnectProcessorTest extends DDLTestBase {
         RunMode.detectRunMode();
         Config.enable_collect_query_detail_info = true;
 
-        WarehouseComputeResourceProvider originalProvider =
+        ComputeResourceProvider originalProvider =
                 Deencapsulation.getField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider");
-        WarehouseComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
+        ComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
         Mockito.doReturn(true).when(spyProvider).isResourceAvailable(Mockito.any());
         Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider", spyProvider);
 
@@ -441,9 +451,9 @@ public class ConnectProcessorTest extends DDLTestBase {
         RunMode.detectRunMode();
         Config.enable_collect_query_detail_info = true;
 
-        WarehouseComputeResourceProvider originalProvider =
+        ComputeResourceProvider originalProvider =
                 Deencapsulation.getField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider");
-        WarehouseComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
+        ComputeResourceProvider spyProvider = Mockito.spy(originalProvider);
         Mockito.doReturn(true).when(spyProvider).isResourceAvailable(Mockito.any());
         Deencapsulation.setField(GlobalStateMgr.getCurrentState().getWarehouseMgr(), "computeResourceProvider", spyProvider);
 

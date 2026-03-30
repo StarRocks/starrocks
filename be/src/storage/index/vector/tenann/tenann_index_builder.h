@@ -31,7 +31,14 @@ public:
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
                             bool is_element_nullable)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
-              _is_element_nullable(is_element_nullable) {}
+              _is_element_nullable(is_element_nullable),
+              _file_writer(nullptr) {}
+
+    TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
+                            bool is_element_nullable, class tenann::IndexFileWriter* file_writer)
+            : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
+              _is_element_nullable(is_element_nullable),
+              _file_writer(file_writer) {}
 
     // proxy should not clean index builder resource
     ~TenAnnIndexBuilderProxy() override { close(); };
@@ -42,7 +49,7 @@ public:
 
     Status flush() override;
 
-    void close() const;
+    void close() const override;
 
 private:
     OnceFlag _init_once;
@@ -54,6 +61,7 @@ private:
     bool _is_input_normalized = false;
 
     const bool _is_element_nullable;
+    tenann::IndexFileWriter* _file_writer = nullptr;
 };
 
 } // namespace starrocks

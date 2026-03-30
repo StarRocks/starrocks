@@ -18,6 +18,8 @@
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "runtime/starrocks_metrics.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/vector/vector_index_file_writer.h"
 
 namespace starrocks {
 
@@ -31,6 +33,8 @@ VectorIndexWriter::VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, 
     DCHECK(_is_element_nullable);
 }
 
+VectorIndexWriter::~VectorIndexWriter() = default;
+
 void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
                                const std::string& vector_index_file_path, bool is_element_nullable,
                                std::unique_ptr<VectorIndexWriter>* res) {
@@ -38,16 +42,15 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
-    auto index_type_iter = _tablet_index->common_properties().find("index_type");
-    if (index_type_iter->second != "ivfpq") {
-        _start_vector_index_build_threshold = 0;
-        return Status::OK();
-    }
-
+    // Step 1: base threshold by algorithm type
+    // TODO
+    // different index type has different default threshold
+    // Step 2: user-specified property has final control over threshold
     auto find_result = _tablet_index->common_properties().find("index_build_threshold");
     if (find_result != _tablet_index->common_properties().end()) {
         _start_vector_index_build_threshold = std::atoi(find_result->second.c_str());
     }
+
     return Status::OK();
 }
 
@@ -92,12 +95,15 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
         if (_index_builder.get() != nullptr) {
             // flush with index
             RETURN_IF_ERROR(_index_builder->flush());
+            // Close the builder to finalize the underlying file.
+            // S3 objects are only visible/readable after close().
+            _index_builder->close();
         } else {
-            // flush with empty mark
-            RETURN_IF_ERROR(VectorIndexBuilder::flush_empty(_vector_index_file_path));
+            // threshold not reached, skip file generation entirely
+            return Status::OK();
         }
         if (index_size) {
-            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path))
+            ASSIGN_OR_RETURN(auto file_ptr, fs::new_random_access_file(_vector_index_file_path));
             ASSIGN_OR_RETURN(auto index_file_size, file_ptr->get_size())
             *index_size += index_file_size;
         }
@@ -117,9 +123,21 @@ uint64_t VectorIndexWriter::estimate_buffer_size() const {
 Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
                      VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index))
+#ifdef WITH_TENANN
+    // Create VectorIndexFileWriter to support remote FS (S3/HDFS) in shared-data mode.
+    // TenANN doesn't understand staros:// scheme, so we create a WritableFile through
+    // StarRocks' FS layer and wrap it in VectorIndexFileWriter for TenANN to use.
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(_vector_index_file_path));
+    auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
+    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
+                                             _tablet_index, _vector_index_file_path, index_builder_type,
+                                             _is_element_nullable, file_writer.get()));
+    _file_writer_holder = std::move(file_writer);
+#else
     ASSIGN_OR_RETURN(_index_builder,
                      VectorIndexBuilderFactory::create_index_builder(_tablet_index, _vector_index_file_path,
                                                                      index_builder_type, _is_element_nullable));
+#endif
     RETURN_IF_ERROR(_index_builder->init());
 
     if (_buffer_column != nullptr) {

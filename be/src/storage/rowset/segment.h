@@ -195,6 +195,9 @@ public:
 
     uint32_t num_rows() const { return _num_rows; }
 
+    // Returns true when footer explicitly marks vector_index_storage_type as NONE
+    bool skip_vector_index() const { return _skip_vector_index; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});
@@ -311,6 +314,7 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    bool _skip_vector_index = false;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added

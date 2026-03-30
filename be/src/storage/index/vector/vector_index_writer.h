@@ -20,7 +20,6 @@
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "fs/fs.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
 #include "storage/rowset/common.h"
 #include "storage/tablet_schema.h"
@@ -29,6 +28,7 @@
 namespace starrocks {
 
 class ArrayColumn;
+class VectorIndexFileWriter;
 
 class VectorIndexWriter {
 public:
@@ -37,6 +37,7 @@ public:
 
     VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
                       bool is_element_nullable);
+    ~VectorIndexWriter();
 
     Status init();
 
@@ -53,6 +54,8 @@ public:
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
     std::string _vector_index_file_path;
+
+    std::unique_ptr<VectorIndexFileWriter> _file_writer_holder;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 
     uint32_t _start_vector_index_build_threshold;

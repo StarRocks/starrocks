@@ -949,6 +949,13 @@ Status SegmentIterator::_init_ann_reader() {
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
     }
+
+    // Footer explicitly marks no vector index file for this segment (threshold not reached during write)
+    if (_segment->skip_vector_index()) {
+        _vector_index_ctx->use_vector_index = false;
+        return Status::OK();
+    }
+
     std::unordered_map<int32_t, TabletIndex> col_map_index;
     for (const auto& index : *_segment->tablet_schema().indexes()) {
         if (index.index_type() == VECTOR) {

@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
@@ -140,6 +141,36 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
     return writer;
 }
 
+namespace {
+void fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
+                                  TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
+                                  SegmentWriterOptions& opts) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        int64_t index_id = it->second.index_id();
+        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
+        std::string full_path;
+        if (location_provider && fs) {
+            full_path = location_provider->segment_location(tablet_id, vi_name);
+        } else {
+            full_path = tablet_mgr->segment_location(tablet_id, vi_name);
+        }
+        opts.vector_index_file_paths[index_id] = std::move(full_path);
+    }
+}
+} // namespace
+
 Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
@@ -153,6 +184,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     }
 
     opts.global_dicts = _global_dicts;
+
+    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -200,6 +233,10 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
         segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
         segment_file_info.num_rows = _seg_writer->num_rows();
+        // Record which vector indexes actually generated .vi files
+        for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
+            segment_file_info.vector_index_ids.push_back(index_id);
+        }
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -341,6 +378,10 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
         segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
         segment_file_info.num_rows = segment_writer->num_rows();
+        // Record which vector indexes actually generated .vi files
+        for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+            segment_file_info.vector_index_ids.push_back(index_id);
+        }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
@@ -404,6 +445,8 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         opts.flat_json_config = std::make_shared<FlatJsonConfig>();
         opts.flat_json_config->update(metadata->flat_json_config());
     }
+
+    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
