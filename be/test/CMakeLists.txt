@@ -116,6 +116,7 @@ set(EXEC_FILES
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
+        ./exprs/agg/aggregate_traits_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/array_element_expr_test.cpp
         ./exprs/decimal_binary_function_test.cpp
