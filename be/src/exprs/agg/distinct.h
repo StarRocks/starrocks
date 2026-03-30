@@ -417,7 +417,7 @@ public:
             }
         } else {
             const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            const auto container_data = GetContainer<LT>::get_data(column);
+            const auto& container_data = GetContainer<LT>::get_data(column);
             build_and_update(container_data);
         }
     }
@@ -464,7 +464,7 @@ public:
             }
         } else {
             const auto* column = down_cast<const ColumnType*>(ColumnHelper::get_data_column(columns[0]));
-            const auto container_data = GetContainer<LT>::get_data(column);
+            const auto& container_data = GetContainer<LT>::get_data(column);
             build_and_update(container_data);
         }
     }
