@@ -157,7 +157,6 @@ set(EXEC_FILES
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
         ./exprs/if_expr_test.cpp
-        ./exprs/jit_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
@@ -356,6 +355,10 @@ if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
+if (STARROCKS_JIT_ENABLE)
+    set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
+endif()
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
@@ -367,7 +370,11 @@ add_subdirectory(fs)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
-SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+if (NOT STARROCKS_JIT_ENABLE)
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+else()
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
