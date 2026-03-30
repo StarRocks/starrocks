@@ -206,8 +206,8 @@ public class CreateFunctionAnalyzer {
         JavaUDFInternalClass stateClass = new JavaUDFInternalClass();
 
         try {
-            System.setSecurityManager(new UDFSecurityManager(UDFInternalClassLoader.class));
             try (URLClassLoader classLoader = UDFInternalClassLoader.create(objectFile, cloudConfiguration)) {
+                System.setSecurityManager(new UDFSecurityManager(UDFInternalClassLoader.class));
                 handleClass.setClazz(classLoader.loadClass(className));
                 handleClass.collectMethods();
 

@@ -41,7 +41,7 @@ public class UDFDownloader {
         } catch (UnsupportedOperationException e) {
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, e.getMessage()));
         } catch (Exception e) {
-            LOG.error("Failed to download remote file from " + remotePath, e);
+            LOG.error("Failed to download remote file from {}", remotePath, e);
             String errMsg = String.format("Failed to download remote file from %s as %s", remotePath, e.getMessage());
             return new Status(new Status(TStatusCode.RUNTIME_ERROR, errMsg));
         }
