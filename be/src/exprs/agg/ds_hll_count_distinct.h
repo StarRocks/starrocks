@@ -120,15 +120,9 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
-<<<<<<< HEAD
                                      ColumnPtr* dst) const override {
-        const ColumnType* column = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>((*dst).get());
-=======
-                                     MutableColumnPtr& dst) const override {
         const auto& datas = GetContainer<LT>::get_data(src[0]);
-        auto* result = down_cast<BinaryColumn*>(dst.get());
->>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
+        auto* result = down_cast<BinaryColumn*>(dst->get());
 
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 10);
