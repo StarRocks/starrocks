@@ -420,6 +420,14 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     using T_DELVEC = std::decay_t<decltype(*delvecs)>;
     int delvec_erase_cnt =
             delete_from_protobuf_map<T_DELVEC>(delvecs, delete_delvec_sids, [](const T_DELVEC& gc_map) {});
+    // Also clean up the builder's in-memory _delvecs buffer for compacted segments.
+    // Without this, _finalize_delvec() would re-insert these entries as "new" delvecs,
+    // creating orphan delvec entries that reference non-existent segments and prevent
+    // the corresponding delvec files from being garbage collected.
+    for (uint32_t sid : delete_delvec_sids) {
+        _delvecs.erase(sid);
+        _segmentid_to_delvec.erase(sid);
+    }
     // delete dcg by input rowsets
     auto dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
     using T_DCG = std::decay_t<decltype(*dcgs)>;
