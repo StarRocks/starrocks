@@ -113,20 +113,6 @@ class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
-    template <typename ColumnType>
-    static inline auto get_row_ref(const ColumnType* column, size_t row) {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            return ColumnHelper::get_binary_slice(column, row);
-        } else {
-            if constexpr (std::is_same_v<std::decay_t<ColumnType>, Column>) {
-                // When called with base Column*, down_cast to the concrete type.
-                return AggDataTypeTraits<LT>::get_row_ref(*down_cast<const RunTimeColumnType<LT>*>(column), row);
-            } else {
-                return AggDataTypeTraits<LT>::get_row_ref(*column, row);
-            }
-        }
-    }
-
     template <typename InputColumnType>
     void do_get_values_helper(ConstAggDataPtr __restrict state, Column* dst, size_t start, size_t end) const {
         DCHECK_GT(end, start);
@@ -478,10 +464,10 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
-            AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
+            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
         }
     }
 
@@ -548,10 +534,10 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
-            AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
+            AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
         }
     }
 
@@ -718,9 +704,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 }
             } else {
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const auto* column = down_cast<const InputColumnType*>(data_column);
                 this->data(state).is_null = false;
-                AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, value_index));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                    AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
             }
         } else {
             // frame_start < peer_group_start is for lag function
@@ -744,8 +730,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             if (!columns[0]->is_null(frame_end - 1)) {
                 this->data(state).is_null = false;
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const auto* column = down_cast<const InputColumnType*>(data_column);
-                AggDataTypeTraits<LT>::assign_value(this->data(state).value, this->get_row_ref(column, frame_end - 1));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).value,
+                                                    AggDataTypeTraits<LT>::get_row_ref(*data_column, frame_end - 1));
             } else {
                 this->data(state).is_null = true;
             }
@@ -833,7 +819,6 @@ public:
                                                  const Column** columns, int64_t peer_group_start,
                                                  int64_t peer_group_end, int64_t frame_start, int64_t frame_end) const {
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
 
         DCHECK(frame_start < frame_end);
         if (frame_start > frame_end) {
@@ -845,13 +830,12 @@ public:
         if (columns[0]->is_null(current_row)) {
             this->data(state).is_null = true;
         } else {
-            auto current_value = ValueWindowFunction<LT, AllocateSessionState<LT>, T>::get_row_ref(column, current_row);
+            auto current_value = AggDataTypeTraits<LT>::get_row_ref(*data_column, current_row);
             if (this->data(state).has_value && current_value - this->data(state).last_not_null_value > delta) {
                 this->data(state).session_id++;
             }
             this->data(state).is_null = false;
-            this->data(state).last_not_null_value =
-                    ValueWindowFunction<LT, AllocateSessionState<LT>, T>::get_row_ref(column, frame_start);
+            this->data(state).last_not_null_value = AggDataTypeTraits<LT>::get_row_ref(*data_column, frame_start);
         }
         this->data(state).has_value = true;
     }
