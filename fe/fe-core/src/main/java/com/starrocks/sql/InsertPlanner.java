@@ -44,6 +44,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -312,10 +313,18 @@ public class InsertPlanner {
         }
 
         if (targetTable.isIcebergTable()) {
+            boolean preserveRowLineage = targetTable instanceof IcebergTable
+                    && IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, (IcebergTable) targetTable);
+            Set<String> columnsToFilter = preserveRowLineage
+                    ? IcebergTable.ICEBERG_META_COLUMNS.stream()
+                            .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                                    && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                            .collect(Collectors.toSet())
+                    : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
             outputFullSchema = outputFullSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
         }
 
         refreshExternalTable(insertStmt.getQueryStatement(), session);

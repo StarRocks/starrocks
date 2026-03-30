@@ -43,6 +43,7 @@ import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -358,14 +359,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         // fill extended column value
         List<SlotDescriptor> slots = desc.getSlots();
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
-        boolean hasRowIdColumn = false;
+        Long firstRowId = task.file() == null ? null : task.file().firstRowId();
+        Long dataSequenceNumber = file.dataSequenceNumber();
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
             // _row_id is handled as a reserved field in BE (not an extended column).
             // It is computed as firstRowId + row_position, or read from the physical Parquet column
             // if present (after compaction).
             if (name.equalsIgnoreCase(ROW_ID)) {
-                hasRowIdColumn = true;
                 continue;
             }
             if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")) {
@@ -373,10 +374,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
             LiteralExpr value;
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
+                value = dataSequenceNumber == null ? new NullLiteral()
+                        : LiteralExprFactory.create(String.valueOf(dataSequenceNumber), IntegerType.BIGINT);
                 setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER)) {
-                value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
+                value = dataSequenceNumber == null ? new NullLiteral()
+                        : LiteralExprFactory.create(String.valueOf(dataSequenceNumber), IntegerType.BIGINT);
                 setExtendedColumns(slot, extendedColumns, value, false);
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
                 value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
@@ -403,19 +406,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 
-        if (hasRowIdColumn) {
-            // Always validate firstRowId when _row_id is requested, regardless of whether
-            // late materialization columns are present. The optimizer may reuse a user-requested
-            // _row_id while also adding _row_source_id/_scan_range_id, so we cannot assume
-            // _row_id is purely internal. Without firstRowId, BE would produce NULL _row_id
-            // which violates the lookup path's non-null assumption (lookup_request.cpp).
-            if (task.file() == null || task.file().firstRowId() == null) {
-                throw new StarRocksConnectorException(
-                        "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
-            }
-            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
-        } else if (task.file() != null && task.file().firstRowId() != null) {
-            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+        if (firstRowId != null) {
+            hdfsScanRange.setFirst_row_id(firstRowId);
         }
 
         return hdfsScanRange;

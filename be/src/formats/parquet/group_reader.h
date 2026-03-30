@@ -159,7 +159,7 @@ private:
 
     Status _create_column_readers();
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
-    StatusOr<int64_t> _get_extended_bigint_value(SlotId slot_id) const;
+    StatusOr<Datum> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
     Status _prepare_column_readers() const;
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices, bool ignore_reserved_field = false);

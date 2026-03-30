@@ -295,6 +295,13 @@ select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from ic
 -- Verify new rows have different _last_updated_sequence_number from compacted rows
 select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
 
+-- Core check: verify _last_updated_sequence_number is preserved per row after compaction
+select s.id, s.name, s.seq_num_before, t._last_updated_sequence_number as seq_num_after
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot s
+    join iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact t on s.id = t.id
+    where s.seq_num_before != t._last_updated_sequence_number
+    order by s.id;
+
 -- Cleanup
 drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot;
 drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;

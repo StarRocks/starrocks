@@ -17,15 +17,21 @@ package com.starrocks.sql.ast;
 public class IcebergRewriteStmt extends InsertStmt {
 
     private final boolean rewriteAll;
+    private final boolean writeRowLineage;
 
-    public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll) {
-        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(), 
+    public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll, boolean writeRowLineage) {
+        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(),
                 base.getQueryStatement(), base.isOverwrite(), base.getProperties(), base.getPos());
         super.setOrigStmt(base.getOrigStmt());
         this.rewriteAll = rewriteAll;
+        this.writeRowLineage = writeRowLineage;
     }
 
     public boolean rewriteAll() {
         return rewriteAll;
+    }
+
+    public boolean writeRowLineage() {
+        return writeRowLineage;
     }
 }

@@ -53,6 +53,7 @@ public class IcebergRewriteDataJob {
     private final boolean rewriteAll;
     private final long minFileSizeBytes;
     private final long batchSize;
+    private final boolean writeRowLineage;
     private final ConnectContext context;
     private final AlterTableStmt originAlterStmt;
     private IcebergRewriteStmt rewriteStmt;
@@ -142,6 +143,7 @@ public class IcebergRewriteDataJob {
                                  long minFileSizeBytes,
                                  long batchSize,
                                  long batchParallelism,
+                                 boolean writeRowLineage,
                                  ConnectContext context,
                                  AlterTableStmt stmt) {
         this.insertSql = insertSql;
@@ -149,6 +151,7 @@ public class IcebergRewriteDataJob {
         this.minFileSizeBytes = minFileSizeBytes;
         this.batchSize = batchSize;
         this.batchParallelism = batchParallelism;
+        this.writeRowLineage = writeRowLineage;
         this.context = context;
         this.originAlterStmt = stmt;
     }
@@ -158,8 +161,8 @@ public class IcebergRewriteDataJob {
                 .parse(insertSql, context.getSessionVariable())
                 .get(0);
 
-        this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-        this.execPlan = StatementPlanner.plan(parsedStmt, context);
+        this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+        this.execPlan = StatementPlanner.plan(rewriteStmt, context);
         this.scanNodes = execPlan.getFragments().stream()
                 .flatMap(fragment -> fragment.collectScanNodes().values().stream())
                 .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
@@ -235,8 +238,9 @@ public class IcebergRewriteDataJob {
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
                     try (var scope = subCtx.bindScope()) {
-                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+                        IcebergRewriteStmt localStmt =
+                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+                        ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
         
                         List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
                                 .flatMap(f -> f.collectScanNodes().values().stream())
