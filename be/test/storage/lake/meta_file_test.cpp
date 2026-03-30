@@ -1274,7 +1274,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         std::shared_ptr<DelVector> ndv;
         std::vector<uint32_t> dels = {1, 3, 5};
         dv.add_dels_as_new_version(dels, 13, &ndv);
-        builder.append_delvec(ndv, 100);  // segment_id = 100, belongs to rowset 100
+        builder.append_delvec(ndv, 100); // segment_id = 100, belongs to rowset 100
 
         // Step 2: Compaction removes rowset 100
         TxnLogPB_OpCompaction op_compaction;
@@ -1390,10 +1390,8 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
 
         // Both delvec entries for compacted segments should be gone
         const auto& delvecs_map = metadata->delvec_meta().delvecs();
-        EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end())
-                << "Orphan delvec for segment 200";
-        EXPECT_TRUE(delvecs_map.find(201) == delvecs_map.end())
-                << "Orphan delvec for segment 201";
+        EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end()) << "Orphan delvec for segment 200";
+        EXPECT_TRUE(delvecs_map.find(201) == delvecs_map.end()) << "Orphan delvec for segment 201";
     }
 }
 
