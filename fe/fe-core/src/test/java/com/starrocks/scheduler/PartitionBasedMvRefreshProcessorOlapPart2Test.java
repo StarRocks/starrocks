@@ -54,6 +54,7 @@ import java.util.Set;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
+import static com.starrocks.scheduler.TaskRun.TASK_PRIORITY;
 
 @TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
@@ -391,6 +392,84 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
     }
 
     @Test
+    public void testRefreshPriorityOfAsync() {
+        int oldValue = Config.materialized_view_min_refresh_interval;
+        starRocksAssert.withTable(new MTable("tbl6", "k2",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                        )
+                ),
+                () -> {
+                    Config.materialized_view_min_refresh_interval = 1;
+                    String mvName = "mv_refresh_priority";
+                    starRocksAssert.withMaterializedView("create materialized view test.mv_refresh_priority\n" +
+                            "partition by date_trunc('month',k1) \n" +
+                            "distributed by hash(k2) buckets 10\n" +
+                            "refresh async every(interval 1 second)\n" +
+                            "properties('replication_num' = '1', 'partition_refresh_number'='1', 'task_priority'='71')\n" +
+                            "as select k1, k2 from tbl6;");
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
+                    Assertions.assertEquals("71", mv.getTableProperty().getProperties().get(TaskRun.TASK_PRIORITY));
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    Task task = tm.getTask(TaskBuilder.getMvTaskName(mv.getId()));
+                    Assertions.assertEquals("71", task.getProperties().get(TaskRun.TASK_PRIORITY));
+
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+
+                    TGetTasksParams params = new TGetTasksParams();
+                    params.setTask_name(task.getName());
+                    List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
+                    while (statuses.size() != 1) {
+                        statuses = tm.getMatchedTaskRunStatus(params);
+                        Thread.sleep(100);
+                    }
+                    Assertions.assertEquals(1, statuses.size());
+                    TaskRunStatus status = statuses.get(0);
+                    Assertions.assertEquals(71, status.getPriority());
+
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+                    while (statuses.size() != 2) {
+                        statuses = tm.getMatchedTaskRunStatus(params);
+                        Thread.sleep(100);
+                    }
+                    Assertions.assertEquals(2, statuses.size());
+                    statuses.sort((o1, o2) -> Long.compare(o2.getCreateTime(), o1.getCreateTime()));
+                    status = statuses.get(0);
+                    Assertions.assertEquals(71, status.getPriority());
+
+                    String alterMvSql = "alter materialized view mv_refresh_priority set ('task_priority' = '72')";
+                    starRocksAssert.alterMvProperties(alterMvSql);
+                    Assertions.assertEquals("72", mv.getTableProperty().getProperties().get(TaskRun.TASK_PRIORITY));
+                    Assertions.assertEquals("72", task.getProperties().get(TaskRun.TASK_PRIORITY));
+
+                    executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+                    while (statuses.size() != 3) {
+                        statuses = tm.getMatchedTaskRunStatus(params);
+                        Thread.sleep(100);
+                    }
+                    Assertions.assertEquals(3, statuses.size());
+                    statuses.sort((o1, o2) -> Long.compare(o2.getCreateTime(), o1.getCreateTime()));
+                    status = statuses.get(0);
+                    Assertions.assertEquals(72, status.getPriority());
+
+                    starRocksAssert.dropMaterializedView("mv_refresh_priority");
+                    Config.materialized_view_min_refresh_interval = oldValue;
+                }
+        );
+    }
+
+    @Test
     public void testRefreshPriority() {
         starRocksAssert.withTable(new MTable("tbl6", "k2",
                         List.of(
@@ -464,6 +543,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                             "distributed by hash(k2) buckets 10\n" +
                             "refresh deferred manual\n" +
                             "properties(" +
+                            "   'task_priority' = '71', " +
                             "   'replication_num' = '1', " +
                             "   'session.enable_materialized_view_rewrite' = 'true', \n" +
                             "   'session.enable_materialized_view_for_insert' = 'true',  \n" +
@@ -505,8 +585,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Assertions.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-                                Assertions.assertEquals(2, properties.size());
+                                Assertions.assertEquals(3, properties.size());
                                 Assertions.assertTrue(properties.containsKey(MV_ID));
+                                Assertions.assertTrue(properties.containsKey(TASK_PRIORITY));
                                 Assertions.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
                                 // Ensure that table properties are not passed to the task run
                                 Assertions.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));

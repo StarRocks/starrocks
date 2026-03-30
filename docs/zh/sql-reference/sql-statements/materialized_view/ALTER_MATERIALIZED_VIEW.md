@@ -29,6 +29,7 @@ displayed_sidebar: docs
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `task_priority`
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../System_variable.md)。
 
 :::tip

@@ -26,6 +26,7 @@ ALTER MATERIALIZED VIEW can:
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `task_priority`
   - All session variable-related properties. For information on session variables, see [System variables](../../System_variable.md).
 
 :::tip

@@ -56,6 +56,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -1445,7 +1446,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async EVERY(INTERVAL 2 MINUTE)" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"task_priority\" = \"91\"\n" +
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
         try {
@@ -1459,6 +1461,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Assertions.assertEquals(2, ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
             Assertions.assertEquals("MINUTE",
                     asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            Assertions.assertEquals("91", createMaterializedViewStatement.getProperties().get(TaskRun.TASK_PRIORITY));
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         } finally {
@@ -1482,6 +1485,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assertions.assertInstanceOf(AsyncRefreshSchemeDesc.class, refreshSchemeDesc);
+            Assertions.assertNull(createMaterializedViewStatement.getProperties().get(TaskRun.TASK_PRIORITY));
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -1503,6 +1507,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeClause refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             Assertions.assertInstanceOf(ManualRefreshSchemeDesc.class, refreshSchemeDesc);
+            Assertions.assertNull(createMaterializedViewStatement.getProperties().get(TaskRun.TASK_PRIORITY));
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
