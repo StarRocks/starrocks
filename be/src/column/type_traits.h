@@ -321,7 +321,7 @@ template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 
 template <LogicalType Type>
-using RunTimeImmContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
+using RunTimeProxyContainerType = typename RunTimeTypeTraits<Type>::ProxyContainerType;
 
 template <LogicalType Type>
 using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
