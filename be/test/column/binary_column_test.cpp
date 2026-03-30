@@ -671,7 +671,7 @@ PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
 
 <<<<<<< HEAD
 =======
-class BinaryColumnAppendSelectiveTestFixture : public ::testing::TestWithParam<std::tuple<uint32_t>> {};
+class BinaryColumnAppendSelectiveTestFixture : public ::testing::TestWithParam<std::tuple<uint32_t> > {};
 
 TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
     const uint32_t num_rows = std::get<0>(GetParam());
