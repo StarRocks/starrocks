@@ -1258,4 +1258,13 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select null is not distinct from null";
         analyzeSuccess(sql);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRegexpReplace() throws Exception {
+        String sql = "select regexp_replace('123', '321')";
+        assertPlanContains(sql, "<slot 2> : '123'");
+    }
+>>>>>>> 2294eaab17 ([Enhancement] Support constant folding for regexp_replace in FE (#70804))
 }
