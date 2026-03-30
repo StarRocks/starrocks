@@ -1396,9 +1396,9 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
 }
 
 // Test that pre-existing orphan delvec entries in metadata are cleaned up
-// during finalize. This simulates the upgrade scenario where orphan entries
+// during compaction. This simulates the upgrade scenario where orphan entries
 // accumulated from the historical bug are present in the metadata.
-TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
+TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     const int64_t tablet_id = 40003;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -1413,20 +1413,31 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
         ASSERT_OK(builder.finalize(next_id()));
     }
 
-    // Add a rowset (id=300, segment rssid=300)
+    // Add two rowsets: id=300 ("a.dat") and id=301 ("b.dat")
     {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("valid.dat");
+        rs.add_segments("a.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("b.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
         ASSERT_OK(builder.finalize(next_id()));
     }
 
-    ASSERT_EQ(1, metadata->rowsets_size());
+    ASSERT_EQ(2, metadata->rowsets_size());
     ASSERT_EQ(300, metadata->rowsets(0).id());
+    ASSERT_EQ(301, metadata->rowsets(1).id());
 
     // Manually inject orphan delvec entries into metadata to simulate
     // pre-existing orphans from the historical bug.
@@ -1439,12 +1450,12 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
     (*metadata->mutable_delvec_meta()->mutable_delvecs())[200] = orphan_page;
     (*metadata->mutable_delvec_meta()->mutable_delvecs())[999] = orphan_page;
 
-    // Also add a valid delvec for the existing segment 300
+    // Also add a valid delvec for existing segment 301
     DelvecPagePB valid_page;
-    valid_page.set_version(11);
+    valid_page.set_version(12);
     valid_page.set_offset(0);
     valid_page.set_size(10);
-    (*metadata->mutable_delvec_meta()->mutable_delvecs())[300] = valid_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[301] = valid_page;
 
     // Add version_to_file entries referenced by orphans
     FileMetaPB file_meta;
@@ -1452,27 +1463,36 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs) {
     file_meta.set_size(100);
     (*metadata->mutable_delvec_meta()->mutable_version_to_file())[5] = file_meta;
 
-    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size()); // 3 orphans + 1 valid
+    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size());  // 3 orphans + 1 valid
 
-    // Now do a normal publish (no delvec changes) — the finalize should clean up orphans
+    // Compact rowset 300 — this triggers orphan cleanup in apply_opcompaction
     {
-        metadata->set_version(12);
+        metadata->set_version(13);
         MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(300);
+        RowsetMetadataPB output_rs;
+        output_rs.add_segments("compacted.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 300, 0));
         ASSERT_OK(builder.finalize(next_id()));
 
-        // Orphan entries should be removed
+        // All orphan entries should be removed by the compaction cleanup
         const auto& delvecs_map = metadata->delvec_meta().delvecs();
         EXPECT_TRUE(delvecs_map.find(100) == delvecs_map.end()) << "Orphan segment 100 should be cleaned";
         EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end()) << "Orphan segment 200 should be cleaned";
         EXPECT_TRUE(delvecs_map.find(999) == delvecs_map.end()) << "Orphan segment 999 should be cleaned";
+        // Segment 300's delvec was also removed (rowset 300 was compacted, had no delvec anyway)
+        EXPECT_TRUE(delvecs_map.find(300) == delvecs_map.end());
 
-        // Valid entry should remain
-        EXPECT_TRUE(delvecs_map.find(300) != delvecs_map.end()) << "Valid segment 300 should be kept";
+        // Valid entry for segment 301 (non-compacted rowset) should remain
+        EXPECT_TRUE(delvecs_map.find(301) != delvecs_map.end()) << "Valid segment 301 should be kept";
         EXPECT_EQ(1, delvecs_map.size());
 
         // The orphan version_to_file entry (version=5) should now be unreferenced and removed
         const auto& vtf = metadata->delvec_meta().version_to_file();
-        EXPECT_TRUE(vtf.find(5) == vtf.end()) << "version_to_file entry for orphan version 5 should be cleaned up";
+        EXPECT_TRUE(vtf.find(5) == vtf.end())
+                << "version_to_file entry for orphan version 5 should be cleaned up";
     }
 }
 
