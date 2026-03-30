@@ -1296,15 +1296,15 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         EXPECT_EQ(2, metadata->rowsets_size());
 
         // Verify: version_to_file should not hold unreferenced entries
-        for (const auto& [version, file_meta] : metadata->delvec_meta().version_to_file()) {
+        for (const auto& vtf_entry : metadata->delvec_meta().version_to_file()) {
             bool referenced = false;
-            for (const auto& [seg_id, page] : delvecs_map) {
-                if (page.version() == version) {
+            for (const auto& dv_entry : delvecs_map) {
+                if (dv_entry.second.version() == vtf_entry.first) {
                     referenced = true;
                     break;
                 }
             }
-            EXPECT_TRUE(referenced) << "version_to_file entry for version " << version
+            EXPECT_TRUE(referenced) << "version_to_file entry for version " << vtf_entry.first
                                     << " is not referenced by any delvec";
         }
     }
@@ -1384,7 +1384,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         RowsetMetadataPB output_rs;
         output_rs.add_segments("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
-        ASSERT_OK(builder.apply_opcompaction(op_compaction, 201, 0));
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 200, 0));
 
         ASSERT_OK(builder.finalize(next_id()));
 

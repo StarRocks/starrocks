@@ -428,6 +428,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         _delvecs.erase(sid);
         _segmentid_to_delvec.erase(sid);
     }
+    // If all pending delvecs were for compacted segments, clear _buf to avoid
+    // writing an unnecessary delvec file during _finalize_delvec().
+    if (_delvecs.empty()) {
+        _buf.clear();
+    }
     // delete dcg by input rowsets
     auto dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
     using T_DCG = std::decay_t<decltype(*dcgs)>;
