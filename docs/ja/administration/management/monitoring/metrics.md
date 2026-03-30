@@ -2086,9 +2086,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - 説明: パイプによるロード済み総行数。`db_id` と `pipe_type` でラベル付けされます。
 
-### Iceberg delete FE メトリクス
-
-#### iceberg_delete_total
+### Iceberg metadata FE メトリクス
 
 #### iceberg_time_travel_query_total
 
@@ -2096,6 +2094,13 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - ラベル: 分類済み系列には `time_travel_type` が付き、値は `branch`、`tag`、`snapshot`、`timestamp` のいずれかです。
 - 説明: Iceberg の time travel クエリ総数。ラベルなし系列は各 time travel クエリを 1 回だけカウントします。ラベル付き系列は、そのクエリで使用された各 time travel タイプごとにカウントします。`snapshot` は `FOR VERSION AS OF <snapshot_id>`、`branch` と `tag` は `FOR VERSION AS OF <reference_name>`、`timestamp` は `FOR TIMESTAMP AS OF ...` を意味します。
+
+#### iceberg_metadata_table_query_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `metadata_table` (`refs`, `history`, `metadata_log_entries`, `snapshots`, `manifests`, `files`, `partitions`, または `properties`)
+- 説明: Iceberg metadata table にアクセスする SQL クエリの総数。各クエリは、アクセス先の metadata table を表す `metadata_table` ラベルごとに集計されます。
 
 ### Iceberg delete FE メトリクス
 
