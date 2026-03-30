@@ -166,19 +166,22 @@ public class GlobalLateMaterializationRewriter {
                 // remove projection from the original operator and create a new one
                 PhysicalProjectOperator projectOperator = new PhysicalProjectOperator(
                         projection.getColumnRefMap(), projection.getCommonSubOperatorMap());
+                RowOutputInfo projectedRowOutputInfo = optExpression.getRowOutputInfo();
 
                 op.setProjection(null);
                 op.clearRowOutputInfo();
 
-                RowOutputInfo newRowOutputInfo = optExpression.getRowOutputInfo();
-                LogicalProperty newLogicalProperty = new LogicalProperty(optExpression.getLogicalProperty());
+                RowOutputInfo childRowOutputInfo = optExpression.getRowOutputInfo();
+                LogicalProperty childLogicalProperty = new LogicalProperty(optExpression.getLogicalProperty());
 
-                newLogicalProperty.setOutputColumns(newRowOutputInfo.getOutputColumnRefSet());
+                childLogicalProperty.setOutputColumns(childRowOutputInfo.getOutputColumnRefSet());
 
-                optExpression.setLogicalProperty(newLogicalProperty);
+                optExpression.setLogicalProperty(childLogicalProperty);
 
                 OptExpression result = OptExpression.create(projectOperator, optExpression);
-                result.setLogicalProperty(optExpression.getLogicalProperty());
+                LogicalProperty projectLogicalProperty = new LogicalProperty(childLogicalProperty);
+                projectLogicalProperty.setOutputColumns(projectedRowOutputInfo.getOutputColumnRefSet());
+                result.setLogicalProperty(projectLogicalProperty);
                 result.setStatistics(optExpression.getStatistics());
                 return result;
             }
