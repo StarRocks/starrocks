@@ -43,7 +43,7 @@ GRANT SELECT ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;
 
 ## 访问 StarRocks Web 控制台 `http://<fe_ip>:<fe_http_port>` 需要哪些权限？
 
-用户必须具有 `cluster_admin` 角色。
+用户必须具有 `db_admin` 和 `user_admin` 角色。
 
 ## StarRocks v3.0 前后的权限保留机制有何变化？
 
