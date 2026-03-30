@@ -89,14 +89,14 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationRegexpReplace() {
-        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, Type.VARCHAR,
                 Lists.newArrayList(
                         ConstantOperator.createVarchar("a b c"),
                         ConstantOperator.createVarchar("(b)"),
                         ConstantOperator.createVarchar("<\\1>")));
 
         Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
-                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+                new Type[] {Type.VARCHAR, Type.VARCHAR, Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -112,14 +112,14 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationRegexpReplaceFallbackToBE() {
-        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, Type.VARCHAR,
                 Lists.newArrayList(
                         ConstantOperator.createVarchar("abcd"),
                         ConstantOperator.createVarchar("(unclosed"),
                         ConstantOperator.createVarchar("xx")));
 
         Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
-                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+                new Type[] {Type.VARCHAR, Type.VARCHAR, Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -134,14 +134,14 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationRegexpReplaceEmptyPatternFallbackToBE() {
-        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, Type.VARCHAR,
                 Lists.newArrayList(
                         ConstantOperator.createVarchar(""),
                         ConstantOperator.createVarchar(""),
                         ConstantOperator.createVarchar("xx")));
 
         Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
-                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+                new Type[] {Type.VARCHAR, Type.VARCHAR, Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
@@ -156,14 +156,14 @@ public class ScalarOperatorEvaluatorTest {
 
     @Test
     public void evaluationRegexpReplaceGlobal() {
-        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, VarcharType.VARCHAR,
+        CallOperator operator = new CallOperator(FunctionSet.REGEXP_REPLACE, Type.VARCHAR,
                 Lists.newArrayList(
                         ConstantOperator.createVarchar("xxxx"),
                         ConstantOperator.createVarchar("xx"),
                         ConstantOperator.createVarchar("-")));
 
         Function fn = new Function(new FunctionName(FunctionSet.REGEXP_REPLACE),
-                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
+                new Type[] {Type.VARCHAR, Type.VARCHAR, Type.VARCHAR}, Type.VARCHAR, false);
 
         new Expectations(operator) {
             {
