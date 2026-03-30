@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.List;
+import java.util.Map;
 
 public class StorageVolumeAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -53,19 +54,27 @@ public class StorageVolumeAnalyzer {
                         StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
             }
 
-            List<String> locations = statement.getStorageLocations();
-            if (locations.isEmpty()) {
-                throw new SemanticException("'location' field is required to create the storage volume");
-            }
-            for (String location : locations) {
-                if (location.isEmpty()) {
-                    throw new SemanticException("'location' field is required to create the storage volume");
-                }
-            }
-
             String svType = statement.getStorageVolumeType();
             if (Strings.isNullOrEmpty((svType))) {
                 throw new SemanticException("'storage volume type' can not be null or empty");
+            }
+            List<String> locations = statement.getStorageLocations();
+            if (svType.equalsIgnoreCase(StorageVolumeMgr.COMPOSITE)) {
+                Map<String, String> properties = statement.getProperties();
+                String childVolumes = properties.getOrDefault("child_volumes", "");
+                if (childVolumes.trim().isEmpty()) {
+                    throw new SemanticException(
+                            "'child_volumes' property is required to create COMPOSITE storage volume");
+                }
+            } else {
+                if (locations.isEmpty()) {
+                    throw new SemanticException("'location' field is required to create the storage volume");
+                }
+                for (String location : locations) {
+                    if (location.isEmpty()) {
+                        throw new SemanticException("'location' field is required to create the storage volume");
+                    }
+                }
             }
 
             FeNameFormat.checkStorageVolumeName(svName);

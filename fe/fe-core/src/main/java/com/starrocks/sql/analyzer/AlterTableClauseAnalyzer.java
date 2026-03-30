@@ -500,6 +500,18 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Property " + PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE +
                                 " must be bool type(false/true)");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+            // Validate storage_volume: only cloud-native tables support changing storage volume
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property '" + PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME +
+                                "' is only supported for cloud-native (shared-data) tables");
+            }
+            String volumeName = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            if (volumeName == null || volumeName.isEmpty()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property '" + PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME + "' must not be empty");
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

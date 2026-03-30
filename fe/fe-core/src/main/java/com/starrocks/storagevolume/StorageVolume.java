@@ -58,7 +58,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         HDFS,
         AZBLOB,
         ADLS2,
-        GS
+        GS,
+        /** Composite SV: logical aggregation of multiple regular SVs, persisted in StarOS. */
+        COMPOSITE
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -105,12 +107,59 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
 
     public static String CREDENTIAL_MASK = "******";
+    public static final String COMPOSITE_CHILD_FS_KEYS = "child_fs_keys";
+    public static final int COMPOSITE_FS_TYPE_VALUE = 5;
+
+    /**
+     * Detect whether a FileStoreInfo is a Composite SV definition.
+     *
+     * <p>Relying on fsTypeValue alone is unsafe because StarOS enum values may overlap with
+     * regular types (for example GS). Composite SV definitions always carry
+     * {@link #COMPOSITE_CHILD_FS_KEYS} in properties, so we use it as an extra discriminator.
+     */
+    public static boolean isCompositeFileStoreInfo(FileStoreInfo fsInfo) {
+        return fsInfo != null
+                && fsInfo.getFsTypeValue() == COMPOSITE_FS_TYPE_VALUE
+                && fsInfo.getPropertiesMap().containsKey(COMPOSITE_CHILD_FS_KEYS);
+    }
 
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
         Map<String, String> maskedParams = new HashMap<>(params);
         addMaskForCredential(maskedParams);
         return gson.toJson(maskedParams);
+    }
+
+    /** Private no-arg constructor used ONLY by {@link #createCompositeWrapper}. */
+    private StorageVolume() {
+        this.id = "";
+        this.name = "";
+        this.svt = StorageVolumeType.COMPOSITE;
+        this.locations = new ArrayList<>();
+        this.params = new HashMap<>();
+        this.comment = "";
+        this.enabled = true;
+        this.cloudConfiguration = null;
+    }
+
+    /**
+     * Create a lightweight wrapper StorageVolume for a {@link CompositeStorageVolume}.
+     * Skips cloud-config validation intentionally (composite has no bucket/credentials of its own).
+     */
+    public static StorageVolume createCompositeWrapper(String id, String name,
+                                                       boolean enabled, String comment) {
+        StorageVolume sv = new StorageVolume();
+        sv.id = id;
+        sv.name = name;
+        sv.svt = StorageVolumeType.COMPOSITE;
+        sv.enabled = enabled;
+        sv.comment = (comment == null) ? "" : comment;
+        return sv;
+    }
+
+    /** Returns true if this StorageVolume is of COMPOSITE type. */
+    public boolean isComposite() {
+        return svt == StorageVolumeType.COMPOSITE;
     }
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
@@ -122,11 +171,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.comment = comment;
         this.enabled = enabled;
         this.params = new HashMap<>(params);
-        Map<String, String> configurationParams = new HashMap<>(params);
-        preprocessAuthenticationIfNeeded(configurationParams);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+        if (this.svt != StorageVolumeType.COMPOSITE) {
+            Map<String, String> configurationParams = new HashMap<>(params);
+            preprocessAuthenticationIfNeeded(configurationParams);
+            this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
+            if (!isValidCloudConfiguration()) {
+                throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+            }
+        } else {
+            this.cloudConfiguration = null;
         }
         validateStorageVolumeConstraints();
     }
@@ -140,8 +193,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.enabled = sv.enabled;
         this.vTabletId = sv.vTabletId;
         this.vTabletGroupId = sv.vTabletGroupId;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
+        if (this.svt != StorageVolumeType.COMPOSITE) {
+            this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
+        } else {
+            this.cloudConfiguration = null;
+        }
         validateStorageVolumeConstraints();
     }
 
@@ -249,6 +306,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.ADLS2;
             case "gs":
                 return StorageVolumeType.GS;
+            case "composite":
+                return StorageVolumeType.COMPOSITE;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -266,6 +325,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.AZURE;
             case GS:
                 return cloudConfiguration.getCloudType() == CloudType.GCP;
+            case COMPOSITE:
+                // Composite SV has no cloud config of its own; always valid.
+                return true;
             default:
                 return false;
         }
@@ -303,6 +365,17 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        if (svt == StorageVolumeType.COMPOSITE) {
+            return FileStoreInfo.newBuilder()
+                    .setFsTypeValue(COMPOSITE_FS_TYPE_VALUE)
+                    .setFsKey(id)
+                    .setFsName(this.name)
+                    .setComment(this.comment)
+                    .setEnabled(this.enabled)
+                    .putAllProperties(params)
+                    .addAllLocations(locations)
+                    .build();
+        }
         Map<String, String> properties = new HashMap<>();
         if (vTabletId != -1L) {
             properties.put(V_SHARD_ID, String.valueOf(vTabletId));
@@ -321,7 +394,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
-        String svt = fsInfo.getFsType().toString();
+        String svt = (isCompositeFileStoreInfo(fsInfo))
+                ? StorageVolumeType.COMPOSITE.name()
+                : fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
@@ -357,6 +432,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
         Map<String, String> params = new HashMap<>();
+        if (isCompositeFileStoreInfo(fsInfo)) {
+            params.putAll(fsInfo.getPropertiesMap());
+            return params;
+        }
         switch (fsInfo.getFsType()) {
             case S3:
                 S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
@@ -490,6 +569,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        if (svt == StorageVolumeType.COMPOSITE) {
+            cloudConfiguration = null;
+        } else {
+            cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        }
     }
 }

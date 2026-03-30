@@ -14,11 +14,17 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.storagevolume.CompositeStorageVolume;
 import com.starrocks.storagevolume.StorageVolume;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class StorageVolumeProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> STORAGE_VOLUME_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -47,6 +53,35 @@ public class StorageVolumeProcNode implements ProcNodeInterface {
         if (sv == null) {
             return result;
         }
+
+        // Composite SVs are stored only in FE and have no StarOS cloud configuration.
+        // Build a dedicated row that shows child SV names in the Params column so that
+        // DESC STORAGE VOLUME <composite_sv> gives useful output (TC-SMOKE-01).
+        if (sv.isComposite()) {
+            CompositeStorageVolume csv =
+                    storageVolumeMgr.getCompositeStorageVolumeByName(storageVolumeName);
+            if (csv != null) {
+                // Resolve child IDs → names; fall back to raw ID on lookup failure
+                List<String> childNames = csv.getChildVolumeIds().stream()
+                        .map(id -> {
+                            StorageVolume child = storageVolumeMgr.getStorageVolume(id);
+                            return child != null ? child.getName() : id;
+                        })
+                        .collect(Collectors.toList());
+                String childVolumesCsv = Joiner.on(",").join(childNames);
+                boolean isDefault = storageVolumeMgr.getDefaultStorageVolumeId().equals(csv.getId());
+                result.addRow(Lists.newArrayList(
+                        csv.getName(),
+                        "COMPOSITE",
+                        String.valueOf(isDefault),
+                        "",   // Location: not applicable for Composite SV
+                        "{\"child_volumes\":\"" + childVolumesCsv + "\"}",
+                        String.valueOf(csv.isEnabled()),
+                        csv.getComment()));
+                return result;
+            }
+        }
+
         sv.getProcNodeData(result);
         return result;
     }

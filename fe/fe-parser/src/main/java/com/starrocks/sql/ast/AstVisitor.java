@@ -855,6 +855,14 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAddStorageVolumeChildClause(AddStorageVolumeChildClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitRemoveStorageVolumeChildClause(RemoveStorageVolumeChildClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAlterTableColumnClause(AlterTableColumnClause clause, C context) {
         return visitNode(clause, context);
     }

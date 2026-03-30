@@ -14,37 +14,22 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Maps;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
+public class RemoveStorageVolumeChildClause extends AlterStorageVolumeClause {
+    private final String childVolumeName;
 
-public abstract class AlterStorageVolumeClause implements ParseNode {
-    public enum AlterOpType {
-        ALTER_COMMENT,
-        MODIFY_PROPERTIES,
-        ADD_VOLUME,
-        REMOVE_VOLUME
-    }
-    protected AlterOpType opType;
-
-    protected final NodePosition pos;
-
-    protected AlterStorageVolumeClause(AlterOpType opType, NodePosition pos) {
-        this.pos = pos;
-        this.opType = opType;
+    public RemoveStorageVolumeChildClause(String childVolumeName, NodePosition pos) {
+        super(AlterOpType.REMOVE_VOLUME, pos);
+        this.childVolumeName = childVolumeName;
     }
 
-    public Map<String, String> getProperties() {
-        return Maps.newHashMap();
-    }
-
-    public AlterOpType getOpType() {
-        return opType;
+    public String getChildVolumeName() {
+        return childVolumeName;
     }
 
     @Override
-    public NodePosition getPos() {
-        return pos;
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRemoveStorageVolumeChildClause(this, context);
     }
 }

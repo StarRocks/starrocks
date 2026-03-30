@@ -95,12 +95,24 @@ public class StorageVolumeAnalysisTest {
         Assertions.assertTrue(stmt instanceof CreateStorageVolumeStmt);
         Assertions.assertEquals("CREATE STORAGE VOLUME hdfsvolume TYPE = HDFS " +
                 "LOCATIONS = ('hdfs://abc')", AstToStringBuilder.toString(stmt));
+
+        sql = "CREATE STORAGE VOLUME comp_volume TYPE = COMPOSITE " +
+                "PROPERTIES (\"child_volumes\"=\"sv_a,sv_b\")";
+        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assertions.assertTrue(stmt instanceof CreateStorageVolumeStmt);
+        Assertions.assertEquals("CREATE STORAGE VOLUME comp_volume TYPE = COMPOSITE " +
+                "PROPERTIES (\"child_volumes\" = \"sv_a,sv_b\")", stmt.toSql());
+
+        sql = "CREATE STORAGE VOLUME comp_volume_missing TYPE = COMPOSITE";
+        AnalyzeTestUtil.analyzeFail(sql,
+                "'child_volumes' property is required to create COMPOSITE storage volume");
     }
 
     @Test
     public void testAlterStorageVolumeParserAndAnalyzer() {
         String sql = "ALTER STORAGE VOLUME storage_volume_1";
-        AnalyzeTestUtil.analyzeFail(sql, "Unexpected input '<EOF>', the most similar input is {'SET', 'COMMENT'}");
+        AnalyzeTestUtil.analyzeFail(sql,
+                "Unexpected input '<EOF>', the most similar input is {'REMOVE', 'SET', 'COMMENT', 'ADD'}");
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment', " +
                 "SET (\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
@@ -139,6 +151,30 @@ public class StorageVolumeAnalysisTest {
         Assertions.assertEquals("ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.access_key\" = \"***\", " +
                 "\"aws.s3.secret_key\" = \"***\", \"azure.blob.shared_key\" = \"***\", \"azure.blob.sas_token\" = \"***\")",
                 AstToStringBuilder.toString(stmt));
+    }
+
+    @Test
+    public void testAlterStorageVolumeDuplicateClausesFail() {
+        // Multiple ADD VOLUME
+        AnalyzeTestUtil.analyzeFail(
+                "ALTER STORAGE VOLUME sv ADD VOLUME a, ADD VOLUME b",
+                "Multiple ADD VOLUME clauses are not allowed");
+        // Multiple REMOVE VOLUME
+        AnalyzeTestUtil.analyzeFail(
+                "ALTER STORAGE VOLUME sv REMOVE VOLUME a, REMOVE VOLUME b",
+                "Multiple REMOVE VOLUME clauses are not allowed");
+        // ADD + REMOVE combined
+        AnalyzeTestUtil.analyzeFail(
+                "ALTER STORAGE VOLUME sv ADD VOLUME a, REMOVE VOLUME b",
+                "Cannot combine ADD VOLUME and REMOVE VOLUME");
+        // Multiple COMMENT
+        AnalyzeTestUtil.analyzeFail(
+                "ALTER STORAGE VOLUME sv COMMENT = 'c1', COMMENT = 'c2'",
+                "Multiple COMMENT clauses are not allowed");
+        // Multiple SET
+        AnalyzeTestUtil.analyzeFail(
+                "ALTER STORAGE VOLUME sv SET (\"enabled\"=\"true\"), SET (\"enabled\"=\"false\")",
+                "Multiple SET clauses are not allowed");
     }
 
     @Test

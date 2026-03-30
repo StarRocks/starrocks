@@ -53,6 +53,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.storagevolume.CompositeStorageVolume;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
@@ -77,6 +78,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -154,6 +156,11 @@ public class SharedDataStorageVolumeMgrTest {
             public void updateFileStore(FileStoreInfo fsInfo) {
                 FileStoreInfo fileStoreInfo = fileStores.get(fsInfo.getFsKey());
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
+            }
+
+            @Mock
+            public List<FileStoreInfo> listFileStore() {
+                return new ArrayList<>(fileStores.values());
             }
         };
     }
@@ -1211,4 +1218,373 @@ public class SharedDataStorageVolumeMgrTest {
 
         svm.removeStorageVolume(storageVolumeName);
     }
+
+    // ========== Composite Storage Volume Tests ==========
+    // These tests verify that Composite SV definitions are persisted solely in StarOS FileStore
+    // (via the mocked StarOSAgent) and that FE has no local cache for them.
+
+    /**
+     * Helper: create two child SVs and return their keys. Shared setup for composite SV tests.
+     */
+    private String[] createChildSVs(StorageVolumeMgr svm) throws Exception {
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_REGION, "region");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String child1Key = svm.createStorageVolume("child1", "S3",
+                Arrays.asList("s3://bucket1"), params, Optional.of(true), "child 1");
+        String child2Key = svm.createStorageVolume("child2", "S3",
+                Arrays.asList("s3://bucket2"), params, Optional.of(true), "child 2");
+        return new String[] {child1Key, child2Key};
+    }
+
+    @Test
+    public void testCreateCompositeStorageVolumeViaTypeRoute() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("child_volumes", "child1,child2");
+        String csvId = svm.createStorageVolume("comp_by_type", "COMPOSITE", Collections.emptyList(),
+                properties, Optional.of(true), "created via generic route");
+        Assertions.assertNotNull(csvId);
+
+        CompositeStorageVolume csv = svm.getCompositeStorageVolumeByName("comp_by_type");
+        Assertions.assertNotNull(csv);
+        Assertions.assertEquals(2, csv.getChildVolumeIds().size());
+
+        Map<String, String> missingChildProps = new HashMap<>();
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.createStorageVolume("comp_missing_child", "COMPOSITE", Collections.emptyList(),
+                        missingChildProps, Optional.of(true), ""));
+    }
+
+    @Test
+    public void testCompositeStorageVolumeAddChildValidation() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+
+        Map<String, String> hdfsParams = new HashMap<>();
+        svm.createStorageVolume("hdfs_child", "HDFS", Arrays.asList("hdfs://cluster/path"),
+                hdfsParams, Optional.of(true), "hdfs child");
+
+        svm.createCompositeStorageVolume("comp_add_validation", Arrays.asList("child1"), true, "");
+
+        // Composite not found
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.addChildToCompositeStorageVolume("not_exists_comp", "child2"));
+        // Child not found
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.addChildToCompositeStorageVolume("comp_add_validation", "not_exists_child"));
+        // Nested composite is not allowed
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.addChildToCompositeStorageVolume("comp_add_validation", "comp_add_validation"));
+        // Type mismatch with existing children is not allowed
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.addChildToCompositeStorageVolume("comp_add_validation", "hdfs_child"));
+    }
+
+    @Test
+    public void testCompositeStorageVolumeRemoveChildValidation() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_REGION, "region");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        svm.createStorageVolume("child3", "S3", Arrays.asList("s3://bucket3"), params, Optional.of(true), "");
+        svm.createCompositeStorageVolume("comp_remove_validation", Arrays.asList("child1", "child2"), true, "");
+
+        // Composite not found
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("not_exists_comp", "child1"));
+        // Child not found
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("comp_remove_validation", "not_exists_child"));
+        // Child not in composite
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("comp_remove_validation", "child3"));
+    }
+
+    @Test
+    public void testRemoveChildFromDefaultCompositeStorageVolume() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+        svm.createCompositeStorageVolume("comp_default", Arrays.asList("child1", "child2"), true, "");
+        svm.setDefaultStorageVolume("comp_default");
+
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("comp_default", "child2"));
+    }
+
+    @Test
+    public void testDropCompositeStorageVolumeWithBindings() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+        svm.createCompositeStorageVolume("comp_drop_bindings", Arrays.asList("child1", "child2"), true, "");
+
+        svm.bindTableToStorageVolume("comp_drop_bindings", 10001L, 10002L);
+        Assertions.assertThrows(IllegalStateException.class,
+                () -> svm.removeStorageVolume("comp_drop_bindings"));
+
+        svm.unbindTableToStorageVolume(10002L);
+        svm.removeStorageVolume("comp_drop_bindings");
+        Assertions.assertFalse(svm.exists("comp_drop_bindings"));
+    }
+
+    @Test
+    public void testGetStorageVolumeCompositeWrapperById() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+        String csvId = svm.createCompositeStorageVolume("comp_wrapper", Arrays.asList("child1", "child2"), true, "");
+
+        StorageVolume wrapper = svm.getStorageVolume(csvId);
+        Assertions.assertNotNull(wrapper);
+        Assertions.assertTrue(wrapper.isComposite());
+        Assertions.assertEquals("comp_wrapper", wrapper.getName());
+    }
+
+    @Test
+    public void testCompositeStorageVolumeCRUD() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+
+        // CREATE composite SV
+        String csvId = svm.createCompositeStorageVolume("comp1",
+                Arrays.asList("child1", "child2"), true, "my composite");
+        Assertions.assertNotNull(csvId);
+        Assertions.assertTrue(svm.exists("comp1"));
+
+        // GET by name
+        CompositeStorageVolume csv = svm.getCompositeStorageVolumeByName("comp1");
+        Assertions.assertNotNull(csv);
+        Assertions.assertEquals("comp1", csv.getName());
+        Assertions.assertEquals(2, csv.getChildVolumeIds().size());
+        Assertions.assertTrue(csv.isEnabled());
+        Assertions.assertEquals("my composite", csv.getComment());
+
+        // GET by id
+        CompositeStorageVolume csvById = svm.getCompositeStorageVolume(csvId);
+        Assertions.assertNotNull(csvById);
+        Assertions.assertEquals(csv.getName(), csvById.getName());
+        Assertions.assertEquals(csv.getChildVolumeIds(), csvById.getChildVolumeIds());
+
+        // UPDATE: change comment and disable
+        svm.updateStorageVolume("comp1", "", Collections.emptyList(),
+                new HashMap<>(), Optional.of(false), "updated comment");
+        csv = svm.getCompositeStorageVolumeByName("comp1");
+        Assertions.assertFalse(csv.isEnabled());
+        Assertions.assertEquals("updated comment", csv.getComment());
+
+        // UPDATE: reject cloud config params on composite SV
+        Map<String, String> invalidParams = new HashMap<>();
+        invalidParams.put(AWS_S3_REGION, "us-east-1");
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume("comp1", "", Collections.emptyList(),
+                        invalidParams, Optional.empty(), ""));
+
+        // REMOVE composite SV
+        svm.removeStorageVolume("comp1");
+        Assertions.assertFalse(svm.exists("comp1"));
+        Assertions.assertNull(svm.getCompositeStorageVolumeByName("comp1"));
+    }
+
+    @Test
+    public void testCompositeStorageVolumeCreateValidation() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm);
+
+        // Cannot create with empty children
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.createCompositeStorageVolume("comp_empty",
+                        Collections.emptyList(), true, ""));
+
+        // Cannot create with non-existent child
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.createCompositeStorageVolume("comp_bad",
+                        Arrays.asList("child1", "nonexistent"), true, ""));
+
+        // Create a composite, then cannot create another with the same name
+        svm.createCompositeStorageVolume("comp1",
+                Arrays.asList("child1", "child2"), true, "");
+        Assertions.assertThrows(AlreadyExistsException.class,
+                () -> svm.createCompositeStorageVolume("comp1",
+                        Arrays.asList("child1"), true, ""));
+
+        // Cannot create a regular SV with the same name as an existing composite SV
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_REGION, "region");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        Assertions.assertThrows(AlreadyExistsException.class,
+                () -> svm.createStorageVolume("comp1", "S3",
+                        Arrays.asList("s3://bucket3"), params, Optional.of(true), ""));
+    }
+
+    @Test
+    public void testCompositeStorageVolumeAddRemoveChild() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        String[] childKeys = createChildSVs(svm);
+
+        // Create composite with only child1
+        String csvId = svm.createCompositeStorageVolume("comp1",
+                Arrays.asList("child1"), true, "");
+
+        CompositeStorageVolume csv = svm.getCompositeStorageVolumeByName("comp1");
+        Assertions.assertEquals(1, csv.getChildVolumeIds().size());
+
+        // ADD child2
+        svm.addChildToCompositeStorageVolume("comp1", "child2");
+        csv = svm.getCompositeStorageVolumeByName("comp1");
+        Assertions.assertEquals(2, csv.getChildVolumeIds().size());
+
+        // ADD duplicate child — should fail
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.addChildToCompositeStorageVolume("comp1", "child2"));
+
+        // REMOVE child2 — should succeed (no bound tables)
+        svm.removeChildFromCompositeStorageVolume("comp1", "child2");
+        csv = svm.getCompositeStorageVolumeByName("comp1");
+        Assertions.assertEquals(1, csv.getChildVolumeIds().size());
+        Assertions.assertEquals(childKeys[0], csv.getChildVolumeIds().get(0));
+
+        // REMOVE child that is not in composite — should fail
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("comp1", "child2"));
+
+        // Bind a table to the composite SV, then REMOVE should fail
+        svm.storageVolumeToTables.computeIfAbsent(csvId, k -> new HashSet<>()).add(100L);
+        svm.addChildToCompositeStorageVolume("comp1", "child2");
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.removeChildFromCompositeStorageVolume("comp1", "child2"));
+
+        // Clean up binding
+        svm.storageVolumeToTables.get(csvId).clear();
+    }
+
+    @Test
+    public void testCheckNotReferencedAsChildSv() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        String[] childKeys = createChildSVs(svm);
+
+        // Before creating composite, dropping child should succeed (no composite references it)
+        svm.checkNotReferencedAsChildSv(childKeys[0], "child1");
+
+        // Create composite SV referencing both children
+        svm.createCompositeStorageVolume("comp1",
+                Arrays.asList("child1", "child2"), true, "");
+
+        // Now dropping child1 should be blocked
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.checkNotReferencedAsChildSv(childKeys[0], "child1"));
+
+        // Dropping child2 should also be blocked
+        Assertions.assertThrows(DdlException.class,
+                () -> svm.checkNotReferencedAsChildSv(childKeys[1], "child2"));
+
+        // Remove the composite SV
+        svm.removeStorageVolume("comp1");
+
+        // Now dropping children should succeed
+        svm.checkNotReferencedAsChildSv(childKeys[0], "child1");
+        svm.checkNotReferencedAsChildSv(childKeys[1], "child2");
+    }
+
+    @Test
+    public void testCompositePartitionRoundRobin() throws Exception {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        String[] childKeys = createChildSVs(svm);
+
+        // Create composite SV with 2 children
+        String csvId = svm.createCompositeStorageVolume("comp_rr",
+                Arrays.asList("child1", "child2"), true, "round-robin test");
+
+        // Bind table 1000 to the composite SV
+        long tableId = 1000L;
+        svm.bindTableToStorageVolume("comp_rr", 100L, tableId);
+
+        StorageVolume child1 = svm.getStorageVolumeByName("child1");
+        StorageVolume child2 = svm.getStorageVolumeByName("child2");
+
+        // Build distinguishable FilePathInfo for each child SV
+        FilePathInfo pathInfoChild1 = FilePathInfo.newBuilder()
+                .setFullPath("s3://bucket1/path").build();
+        FilePathInfo pathInfoChild2 = FilePathInfo.newBuilder()
+                .setFullPath("s3://bucket2/path").build();
+
+        new Expectations() {
+            {
+                starOSAgent.allocatePartitionFilePathInfoForChildSv(child1.getId(), 100L, tableId, anyLong);
+                result = pathInfoChild1;
+                minTimes = 0;
+
+                starOSAgent.allocatePartitionFilePathInfoForChildSv(child2.getId(), 100L, tableId, anyLong);
+                result = pathInfoChild2;
+                minTimes = 0;
+            }
+        };
+
+        // Verify round-robin: partitionId % 2 determines child selection
+        // Even partitionId → child[0] (child1), Odd partitionId → child[1] (child2)
+        FilePathInfo result0 = svm.resolveCompositePartitionFilePathInfo(
+                createMockOlapTable(tableId), 100L, 0L, 100L);
+        Assertions.assertNotNull(result0);
+        Assertions.assertEquals("s3://bucket1/path", result0.getFullPath());
+
+        FilePathInfo result1 = svm.resolveCompositePartitionFilePathInfo(
+                createMockOlapTable(tableId), 100L, 1L, 101L);
+        Assertions.assertNotNull(result1);
+        Assertions.assertEquals("s3://bucket2/path", result1.getFullPath());
+
+        FilePathInfo result2 = svm.resolveCompositePartitionFilePathInfo(
+                createMockOlapTable(tableId), 100L, 2L, 102L);
+        Assertions.assertNotNull(result2);
+        Assertions.assertEquals("s3://bucket1/path", result2.getFullPath());
+
+        FilePathInfo result3 = svm.resolveCompositePartitionFilePathInfo(
+                createMockOlapTable(tableId), 100L, 3L, 103L);
+        Assertions.assertNotNull(result3);
+        Assertions.assertEquals("s3://bucket2/path", result3.getFullPath());
+
+        // Verify non-composite table returns null
+        long regularTableId = 2000L;
+        FilePathInfo resultNonComposite = svm.resolveCompositePartitionFilePathInfo(
+                createMockOlapTable(regularTableId), 100L, 0L, 200L);
+        Assertions.assertNull(resultNonComposite);
+    }
+
+    /**
+     * Helper: create a mock OlapTable with the given table ID for testing.
+     */
+    private com.starrocks.catalog.OlapTable createMockOlapTable(long tableId) {
+        com.starrocks.catalog.OlapTable table = new com.starrocks.catalog.OlapTable();
+        table.setId(tableId);
+        return table;
+    }
+
+    @Test
+    public void testCompositeStorageVolumeNoLocalCache() throws Exception {
+        // Verifies that Composite SV state is read from StarOS (mocked), not from FE memory.
+        // After creating a Composite SV with one StorageVolumeMgr instance and creating a
+        // fresh instance, the new instance should still find the Composite SV because the
+        // StarOS mock (fileStores map) is shared across instances.
+        StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        createChildSVs(svm1);
+
+        String csvId = svm1.createCompositeStorageVolume("comp_persist",
+                Arrays.asList("child1", "child2"), true, "persistent");
+
+        // "Simulate FE failover" — create a brand-new StorageVolumeMgr instance.
+        // Since composite SV definitions are in StarOS (mocked via static MockUp), the new
+        // instance should see the composite SV without any EditLog replay or cache transfer.
+        StorageVolumeMgr svm2 = new SharedDataStorageVolumeMgr();
+
+        Assertions.assertTrue(svm2.exists("comp_persist"));
+        CompositeStorageVolume csv = svm2.getCompositeStorageVolumeByName("comp_persist");
+        Assertions.assertNotNull(csv);
+        Assertions.assertEquals(csvId, csv.getId());
+        Assertions.assertEquals(2, csv.getChildVolumeIds().size());
+        Assertions.assertEquals("persistent", csv.getComment());
+    }
+
 }
