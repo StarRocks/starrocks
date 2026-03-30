@@ -75,15 +75,8 @@ public:
         // but they can not be compiled into SIMD instructions.
 
         // Use lambdas to make the compiler to better analyze code within smaller scopes, thereby ensuring vectorization.
-<<<<<<< HEAD
         auto check_range = [](uint8_t* __restrict__ local_res, const CppType* __restrict__ local_values,
                               const size_t local_size, const CppType min_value, const CppType max_value) {
-=======
-        using ImmutableContainer = std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer,
-                                                      typename RunTimeColumnType<Type>::ImmContainer>;
-        auto check_range = [](uint8_t* __restrict__ local_res, ImmutableContainer local_values, const size_t local_size,
-                              const CppType min_value, const CppType max_value) {
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
             for (int i = 0; i < local_size; i++) {
                 local_res[i] = (local_values[i] >= min_value) & (local_values[i] <= max_value);
             }
