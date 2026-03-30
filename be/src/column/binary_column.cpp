@@ -120,8 +120,7 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
     bool dst_is_large = std::is_same_v<T, uint64_t>;
     bool src_is_large_binary = src.is_large_binary();
     CHECK(false) << "BinaryColumnBase::append: incompatible column type"
-                 << " dst_is_large=" << dst_is_large
-                 << " src_is_large_binary=" << src_is_large_binary;
+                 << " dst_is_large=" << dst_is_large << " src_is_large_binary=" << src_is_large_binary;
 }
 
 template <typename T>
