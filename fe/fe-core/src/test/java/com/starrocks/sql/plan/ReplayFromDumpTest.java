@@ -670,9 +670,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (<slot 79> 79: mock_004)"), plan);
+                "     - filter_id = 4, probe_expr = (<slot 81> 81: mock_004)"), plan);
         Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (<slot 62> 62: mock_004)"), plan);
+                "     - filter_id = 3, probe_expr = (<slot 64> 64: mock_004)"), plan);
     }
 
     @Test
