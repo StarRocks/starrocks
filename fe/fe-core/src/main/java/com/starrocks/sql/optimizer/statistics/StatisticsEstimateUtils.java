@@ -63,7 +63,35 @@ public class StatisticsEstimateUtils {
                 .setNullsFraction(newNullFraction)
                 .setAverageRowSize(newAverageRowSize)
                 .setDistinctValuesCount(newRange.getDistinctValues());
+
+        // Merge MCVs from both sides. MCVs are combined by summing frequencies for shared keys
+        // and keeping unique keys as-is.
+        final var mergedHistogram = mergeHistogramsForUnion(left.getHistogram(), right.getHistogram());
+        if (mergedHistogram != null) {
+            builder.setHistogram(mergedHistogram);
+        }
+
         return builder.build();
+    }
+
+    private static Histogram mergeHistogramsForUnion(Histogram left, Histogram right) {
+        if (left == null && right == null) {
+            return null;
+        }
+
+        Map<String, Long> leftMcv = left != null ? left.getMCV() : Map.of();
+        Map<String, Long> rightMcv = right != null ? right.getMCV() : Map.of();
+
+        if (leftMcv.isEmpty() && rightMcv.isEmpty()) {
+            return null;
+        }
+
+        final var mergedMcv = new HashMap<>(leftMcv);
+        for (final var entry : rightMcv.entrySet()) {
+            mergedMcv.merge(entry.getKey(), entry.getValue(), Long::sum);
+        }
+
+        return new Histogram(List.of(), mergedMcv);
     }
 
     public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
