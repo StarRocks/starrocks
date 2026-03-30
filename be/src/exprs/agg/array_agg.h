@@ -145,10 +145,6 @@ public:
                 size_t row_num) const override {
         if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
             auto slice = ColumnHelper::get_binary_slice(columns[0], row_num);
             this->data(state).update_with_slice(mem_pool, slice);
         } else {
@@ -169,10 +165,6 @@ public:
         auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
         if constexpr (lt_is_string_or_binary<LT>) {
             MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
             size_t end = offset_size.first + offset_size.second;
             ColumnHelper::with_binary_data_column(&array_element, [&](const auto* typed_column) {
                 for (size_t i = offset_size.first; i < end; ++i) {
@@ -227,69 +219,6 @@ public:
         }
     }
 
-<<<<<<< HEAD
-=======
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).reset();
-    }
-
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
-                    size_t end) const override {
-        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        const auto& data_column = state_impl.get_data_column();
-        auto* array_column = down_cast<ArrayColumn*>(dst);
-        for (auto i = start; i < end; i++) {
-            array_column->append_array_element(*data_column, state_impl.null_count);
-            if (UNLIKELY(state_impl.check_overflow(*array_column, ctx))) {
-                return;
-            }
-        }
-    }
-
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
-        if constexpr (lt_is_string_or_binary<LT>) {
-            // For distinct mode, data_column used as a result cache for get_values method, any updates to
-            // this state should invalidate the cache.
-            this->data(state).data_column.resize(0);
-            MemPool* mem_pool = ctx->mem_pool();
-            if constexpr (std::is_same_v<State<LT, is_distinct, MyHashSet>,
-                                         ArrayAggWindowState<LT, is_distinct, MyHashSet>>) {
-                mem_pool = &this->data(state).mem_pool;
-            }
-            // Hoist type checks out of the loop
-            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            auto update_loop = [&](const auto* typed_column) {
-                for (auto i = frame_start; i < frame_end; ++i) {
-                    this->data(state).update_with_slice(mem_pool, typed_column->get_slice(i));
-                }
-            };
-            if (data_column->is_large_binary()) {
-                update_loop(down_cast<const LargeBinaryColumn*>(data_column));
-            } else {
-                update_loop(down_cast<const BinaryColumn*>(data_column));
-            }
-            this->data(state).check_overflow(ctx);
-            return;
-        }
-        // For distinct mode, data_column used as a result cache for get_values method, any updates to
-        // this state should invalidate the cache.
-        this->data(state).data_column.resize(0);
-        const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        this->data(state).update(ctx->mem_pool(), *column, frame_start, frame_end - frame_start);
-        this->data(state).check_overflow(ctx);
-    }
-
-    void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
-                                  int64_t peer_group_end) const override {
-        // For distinct mode, data_column used as a result cache for get_values method, any updates to
-        // this state should invalidate the cache.
-        this->data(state).data_column.resize(0);
-        this->data(state).append_null(peer_group_end - peer_group_start);
-    }
-
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     std::string get_name() const override { return is_distinct ? "array_agg_distinct" : "array_agg"; }
 };
 

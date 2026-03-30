@@ -612,18 +612,13 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
-<<<<<<< HEAD
-                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
-=======
                 if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                     ColumnHelper::ensure_large_binary_column(_agg_intput_columns[i][j]);
                 }
-                TRY_CATCH_BAD_ALLOC(
-                        _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
+                TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
                 // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
-                Column* agg_column = _agg_intput_columns[i][j]->as_mutable_raw_ptr();
+                Column* agg_column = _agg_intput_columns[i][j].get();
                 ASSIGN_OR_RETURN(auto upgrade_col, agg_column->upgrade_if_overflow());
                 if (upgrade_col != nullptr) {
                     _agg_intput_columns[i][j] = std::move(upgrade_col);

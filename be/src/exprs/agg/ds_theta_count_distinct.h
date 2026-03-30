@@ -57,20 +57,12 @@ public:
         uint64_t value = 0;
         const Column* column = ColumnHelper::get_data_column(columns[0]);
 
-<<<<<<< HEAD
-        if constexpr (lt_is_string<LT>) {
-            Slice s = column->get_slice(row_num);
-            value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-        } else {
-            const auto& v = column->get_data();
-=======
         if constexpr (lt_is_string_or_binary<LT>) {
             Slice s = ColumnHelper::get_binary_slice(column, row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
             const auto* typed = down_cast<const ColumnType*>(column);
-            const auto v = typed->immutable_data();
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
+            const auto& v = typed->get_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
         update_state(ctx, state, value);
@@ -81,16 +73,6 @@ public:
                                               int64_t frame_end) const override {
         // init state if needed
         _init_if_needed(state);
-<<<<<<< HEAD
-        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
-        if constexpr (lt_is_string<LT>) {
-            uint64_t value = 0;
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                Slice s = column->get_slice(i);
-                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-                if (value != 0) {
-                    update_state(ctx, state, value);
-=======
         const Column* column = ColumnHelper::get_data_column(columns[0]);
         if constexpr (lt_is_string_or_binary<LT>) {
             auto hash_loop = [&](const auto* typed_col) {
@@ -101,7 +83,6 @@ public:
                     if (value != 0) {
                         update_state(ctx, state, value);
                     }
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
                 }
             };
             if (column->is_large_binary()) {
@@ -111,12 +92,8 @@ public:
             }
         } else {
             uint64_t value = 0;
-<<<<<<< HEAD
-            const auto& v = column->get_data();
-=======
             const auto* typed = down_cast<const ColumnType*>(column);
-            const auto v = typed->immutable_data();
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
+            const auto& v = typed->get_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
 

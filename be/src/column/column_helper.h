@@ -371,7 +371,7 @@ public:
     }
 
     template <LogicalType Type, typename ColumnPtrType>
-    static inline auto get_container_data(const ColumnPtrType& column) {
+    static inline const auto& get_container_data(const ColumnPtrType& column) {
         using ColumnType = RunTimeColumnType<Type>;
         if constexpr (lt_is_string_or_binary<Type>) {
             const Column* data_column = get_data_column(column.get());
@@ -380,12 +380,12 @@ public:
             }
             return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
         } else {
-            return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+            return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
         }
     }
 
     template <LogicalType Type>
-    static inline auto get_container_data(const Column* column) {
+    static inline const auto& get_container_data(const Column* column) {
         using ColumnType = RunTimeColumnType<Type>;
         if constexpr (lt_is_string_or_binary<Type>) {
             const Column* data_column = get_data_column(column);
@@ -394,7 +394,7 @@ public:
             }
             return get_proxy_data(down_cast<const BinaryColumn*>(data_column));
         } else {
-            return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
+            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
         }
     }
 
@@ -467,12 +467,6 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
-<<<<<<< HEAD
-=======
-    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
-    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
-    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
-
     static inline Slice get_binary_slice(const Column* column, size_t row) {
         const Column* data_column = get_data_column(column);
         size_t index = column->is_constant() ? 0 : row;
@@ -493,7 +487,7 @@ public:
 
     template <typename ColumnPtrType>
     static inline void ensure_large_binary_column(ColumnPtrType& column) {
-        Column* data_column = get_data_column(column->as_mutable_raw_ptr());
+        Column* data_column = get_data_column(column.get());
         if (!data_column->is_binary()) {
             return;
         }
@@ -510,29 +504,29 @@ public:
         src_offsets.resize(1);
         src_offsets[0] = 0;
         if (column->is_nullable()) {
-            auto* nullable_column = down_cast<NullableColumn*>(column->as_mutable_raw_ptr());
+            auto* nullable_column = down_cast<NullableColumn*>(column.get());
             nullable_column->data_column() = std::move(large_column);
         } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column() = std::move(large_column);
         } else {
             column = std::move(large_column);
         }
     }
 
-    static inline BinaryDataProxyContainer get_proxy_data(const BinaryColumn* column) {
+    static inline const BinaryDataProxyContainer& get_proxy_data(const BinaryColumn* column) {
         return column->get_proxy_data();
     }
 
-    static inline BinaryDataProxyContainer get_proxy_data(const LargeBinaryColumn* column) {
+    static inline const BinaryDataProxyContainer& get_proxy_data(const LargeBinaryColumn* column) {
         return column->get_proxy_data();
     }
 
     static inline size_t get_binary_bytes_size(const Column* column) {
         if (column->is_large_binary()) {
-            return down_cast<const LargeBinaryColumn*>(column)->get_immutable_bytes().size();
+            return down_cast<const LargeBinaryColumn*>(column)->get_bytes().size();
         }
-        return down_cast<const BinaryColumn*>(column)->get_immutable_bytes().size();
+        return down_cast<const BinaryColumn*>(column)->get_bytes().size();
     }
 
     template <typename Func>
@@ -559,7 +553,6 @@ public:
         }
     }
 
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
     static bool is_all_const(const Columns& columns);
 
     // Returns
@@ -634,19 +627,8 @@ struct ChunkSliceTemplate {
 template <LogicalType ltype>
 struct GetContainer {
     using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-<<<<<<< HEAD
-    static const auto& get_data(const Column* column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
-    }
-    static const auto& get_data(const ColumnPtr& column) {
-        return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
-=======
-    static const auto get_data(const Column* column) { return ColumnHelper::get_container_data<ltype>(column); }
-    static const auto get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
-    static const auto get_data(const MutableColumnPtr& column) {
-        return ColumnHelper::get_container_data<ltype>(column);
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
-    }
+    static const auto& get_data(const Column* column) { return ColumnHelper::get_container_data<ltype>(column); }
+    static const auto& get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
 };
 
 #define GET_CONTAINER(ltype)                                                            \

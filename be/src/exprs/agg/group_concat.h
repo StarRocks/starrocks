@@ -118,20 +118,6 @@ public:
         if (ctx->get_num_args() > 1) {
             const Column* column_val = ColumnHelper::get_data_column(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-<<<<<<< HEAD
-                const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              column_sep->get_bytes().size());
-            } else {
-                auto const_column_sep = ctx->get_constant_column(1);
-                Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              sep.get_size() * chunk_size);
-            }
-        } else {
-            const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
-=======
                 const Column* column_sep = ColumnHelper::get_data_column(columns[1]);
                 auto val_bytes = ColumnHelper::get_binary_bytes_size(column_val);
                 auto sep_bytes = ColumnHelper::get_binary_bytes_size(column_sep);
@@ -146,7 +132,6 @@ public:
             const Column* column_val = ColumnHelper::get_data_column(columns[0]);
             auto val_bytes = ColumnHelper::get_binary_bytes_size(column_val);
             this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
->>>>>>> 09d05689d5 ([Enhancement] upgrade LargeBinaryColumn in window operator (#69067))
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
