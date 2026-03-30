@@ -270,7 +270,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 FROM TB1 CROSS JOIN TB2;
                 """;
         String plan = getVerboseExplain(sql);
-        String expected = "  12:Project\n" +
+        String expected = "  10:Project\n" +
                 "  |  output columns:\n" +
                 "  |  5 <-> named_struct[('col1', DictDecode(11: VARCHAR_COL, [<place-holder>], 13: " +
                 "row.col1[true])); args: VARCHAR,VARCHAR; result: struct<col1 " +
