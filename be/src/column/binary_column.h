@@ -30,7 +30,7 @@ namespace starrocks {
 template <typename T>
 class BinaryColumnBase;
 
-class BinaryDataProxyContainer{
+class BinaryDataProxyContainer {
 public:
     BinaryDataProxyContainer() = default;
 
