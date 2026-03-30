@@ -118,34 +118,4 @@ Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionCont
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    (void)has_null;
-    const int size = c0->size();
-    int32_t width = c1->get(0).get_int32();
-    uint8_t* raw_null_flags = null_flags->get_data().data();
-    auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
-    ColumnBuilder<TYPE_BINARY> result(size);
-    const auto raw_c0 = col->immutable_data();
-
-#define SLICE_SIZE_MIN(x, y) x < y ? x : y
-    for (auto i = 0; i < size; i++) {
-        if (raw_null_flags[i]) {
-            result.append_null();
-        } else {
-            Slice src_value = raw_c0[i];
-            result.append(Slice(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size())));
-        }
-    }
-#undef SLICE_SIZE_MIN
-    return result.build(ColumnHelper::is_all_const(columns));
-}
-
->>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 } // namespace starrocks

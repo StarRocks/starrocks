@@ -180,24 +180,6 @@ public:
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);
 
-<<<<<<< HEAD
-=======
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                            _range_or_ranges, _build_tie));
-        restore_inline_permutation(inlined, _permutation);
-    }
-    else {
-        using ItemType = InlinePermuteItem<Slice>;
-        auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
-            return lhs.inline_value.compare(rhs.inline_value);
-        };
-
-        auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.immutable_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                            _range_or_ranges, _build_tie));
-        restore_inline_permutation(inlined, _permutation);
-    }
->>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
         return Status::OK();
     }
 
@@ -302,23 +284,16 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using ImmContainer = typename BinaryColumnBase<T>::ImmContainer;
+            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-<<<<<<< HEAD
             std::vector<const Container*> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
                 containers.push_back(&real->get_proxy_data());
-=======
-            std::vector<ImmContainer> containers;
-            for (const auto& col : _vertical_columns) {
-                const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(real->immutable_data());
->>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);

@@ -214,21 +214,7 @@ public:
 
     const Container& get_data() const { return _data; }
 
-<<<<<<< HEAD
     Datum get(size_t n) const override { return Datum(_data[n]); }
-=======
-    const ImmContainer immutable_data() const {
-        if (!_resource.empty()) {
-            return _resource.span<T>();
-        }
-        return _data;
-    }
-
-    Datum get(size_t n) const override {
-        const auto datas = immutable_data();
-        return Datum(datas[n]);
-    }
->>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 
     std::string debug_item(size_t idx) const override;
 
