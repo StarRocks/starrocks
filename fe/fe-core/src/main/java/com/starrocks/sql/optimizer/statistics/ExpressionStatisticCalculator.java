@@ -100,16 +100,20 @@ public class ExpressionStatisticCalculator {
                 return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
                         operator.getType().getTypeSize(), 0);
             }
-            OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
-            final var mcv = Collections.singletonMap(operator.toString(), (long) rowCount);
-            final var histogram = new Histogram(Collections.emptyList(), mcv);
 
             var builder = ColumnStatistic.builder() //
                     .setNullsFraction(0) //
                     .setAverageRowSize(operator.getType().getTypeSize()) //
-                    .setDistinctValuesCount(1) //
-                    .setHistogram(histogram);
+                    .setDistinctValuesCount(1);
 
+            operator.castTo(VarcharType.VARCHAR)
+                    .map(ConstantOperator::toString)
+                    .ifPresent(key -> {
+                        final var mcv = Collections.singletonMap(key, (long) rowCount);
+                        builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
+                    });
+
+            OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
                 builder.setMinValue(value.getAsDouble()) //
                         .setMaxValue(value.getAsDouble());
