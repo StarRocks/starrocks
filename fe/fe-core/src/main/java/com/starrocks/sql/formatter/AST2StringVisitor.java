@@ -575,13 +575,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             sqlBuilder.append("(")
                     .append(Joiner.on(", ").join(relation.getColumnOutputNames())).append(")");
         }
-        sqlBuilder.append(" AS ");
+        sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
         if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
-            sqlBuilder.append("MATERIALIZED ");
+            sqlBuilder.append("[materialized] ");
         } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
-            sqlBuilder.append("NOT MATERIALIZED ");
+            sqlBuilder.append("[not_materialized] ");
         }
-        sqlBuilder.append("(").append(visit(relation.getCteQueryStatement())).append(") ");
         return sqlBuilder.toString();
     }
 

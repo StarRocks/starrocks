@@ -15,10 +15,10 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import org.apache.commons.lang3.StringUtils;
@@ -1203,8 +1203,8 @@ public class CTEPlanTest extends PlanTestBase {
         String planNoHint = getFragmentPlan(sqlNoHint);
         assertNotContains(planNoHint, "MultiCastDataSinks");
 
-        // With MATERIALIZED hint: forced reuse regardless of cost
-        String sqlHint = "with xx as MATERIALIZED (select * from t0) " +
+        // With [materialized] hint: forced reuse regardless of cost
+        String sqlHint = "with xx as (select * from t0) [materialized] " +
                 "select v1 from xx union all select v2 from xx;";
         String planHint = getFragmentPlan(sqlHint);
         assertContains(planHint, "MultiCastDataSinks");
@@ -1222,8 +1222,8 @@ public class CTEPlanTest extends PlanTestBase {
         String planNoHint = getFragmentPlan(sqlNoHint);
         assertContains(planNoHint, "MultiCastDataSinks");
 
-        // With NOT MATERIALIZED hint: forced inline
-        String sqlHint = "with xx as NOT MATERIALIZED (select * from t0) " +
+        // With [not_materialized] hint: forced inline
+        String sqlHint = "with xx as (select * from t0) [not_materialized] " +
                 "select v1 from xx union all select v2 from xx;";
         String planHint = getFragmentPlan(sqlHint);
         assertNotContains(planHint, "MultiCastDataSinks");
@@ -1235,8 +1235,8 @@ public class CTEPlanTest extends PlanTestBase {
     public void testCTEMixedMaterializationHints(int forceReuseNodeCount) throws Exception {
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
 
-        String sql = "with x0 as MATERIALIZED (select * from t0), " +
-                "x1 as NOT MATERIALIZED (select * from t1) " +
+        String sql = "with x0 as (select * from t0) [materialized], " +
+                "x1 as (select * from t1) [not_materialized] " +
                 "select * from (" +
                 "select * from x0 union all select * from x0 union all " +
                 "select * from x1 union all select * from x1) tt;";
@@ -1258,8 +1258,8 @@ public class CTEPlanTest extends PlanTestBase {
         String planNoHint = getFragmentPlan(sqlNoHint);
         assertNotContains(planNoHint, "MultiCastDataSinks");
 
-        // With MATERIALIZED hint, even single-referenced CTE is materialized
-        String sqlHint = "with xx as MATERIALIZED (select * from t0) select * from xx;";
+        // With [materialized] hint, even single-referenced CTE is materialized
+        String sqlHint = "with xx as (select * from t0) [materialized] select * from xx;";
         String planHint = getFragmentPlan(sqlHint);
         assertContains(planHint, "MultiCastDataSinks");
     }
@@ -1269,8 +1269,8 @@ public class CTEPlanTest extends PlanTestBase {
     public void testCTENotMaterializedWithJoin(int forceReuseNodeCount) throws Exception {
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
 
-        // CTE used in a self-join with NOT MATERIALIZED: both references should be inlined
-        String sql = "with xx as NOT MATERIALIZED (select * from t0) " +
+        // CTE used in a self-join with [not_materialized]: both references should be inlined
+        String sql = "with xx as (select * from t0) [not_materialized] " +
                 "select x1.v1 from xx x1 join xx x2 on x1.v2 = x2.v3;";
         String plan = getFragmentPlan(sql);
         assertNotContains(plan, "MultiCastDataSinks");
@@ -1290,8 +1290,8 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(planNoHint, "MultiCastDataSinks");
         assertContains(planNoHint, "rand()");
 
-        // With MATERIALIZED hint: both hint and ForceCTEReuseRule agree, should materialize
-        String sqlHint = "with xx as MATERIALIZED (select rand() as r, v1 from t0) " +
+        // With [materialized] hint: both hint and ForceCTEReuseRule agree, should materialize
+        String sqlHint = "with xx as (select rand() as r, v1 from t0) [materialized] " +
                 "select r from xx union all select r from xx;";
         String planHint = getFragmentPlan(sqlHint);
         assertContains(planHint, "MultiCastDataSinks");
@@ -1309,8 +1309,8 @@ public class CTEPlanTest extends PlanTestBase {
         String planNoHint = getFragmentPlan(sqlNoHint);
         assertContains(planNoHint, "MultiCastDataSinks");
 
-        // With NOT MATERIALIZED hint: hint overrides ForceCTEReuseRule, CTE is inlined
-        String sqlHint = "with xx as NOT MATERIALIZED (select rand() as r, v1 from t0) " +
+        // With [not_materialized] hint: hint overrides ForceCTEReuseRule, CTE is inlined
+        String sqlHint = "with xx as (select rand() as r, v1 from t0) [not_materialized] " +
                 "select r from xx union all select r from xx;";
         String planHint = getFragmentPlan(sqlHint);
         assertNotContains(planHint, "MultiCastDataSinks");
@@ -1323,8 +1323,8 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
         connectContext.getSessionVariable().setCboCTERuseRatio(10000000);
 
-        String sql = "with x0 as MATERIALIZED (select rand() as r, v1 from t0), " +
-                "x1 as NOT MATERIALIZED (select random() as r, v4 from t1) " +
+        String sql = "with x0 as (select rand() as r, v1 from t0) [materialized], " +
+                "x1 as (select random() as r, v4 from t1) [not_materialized] " +
                 "select * from (" +
                 "select r, v1 from x0 union all select r, v1 from x0 union all " +
                 "select r, v4 from x1 union all select r, v4 from x1) tt;";
@@ -1340,16 +1340,16 @@ public class CTEPlanTest extends PlanTestBase {
     public void testRecursiveCTERejectsMaterializationHint() {
         Assertions.assertThrows(SemanticException.class,
                 () -> getFragmentPlan(
-                        "with recursive cte(a) as MATERIALIZED (" +
-                        "select 1 union all select a + 1 from cte where a < 10) " +
+                        "with recursive cte(a) as (" +
+                        "select 1 union all select a + 1 from cte where a < 10) [materialized] " +
                         "select * from cte"),
-                "MATERIALIZED/NOT MATERIALIZED hints are not allowed on recursive CTEs");
+                "[materialized]/[not_materialized] hints are not allowed on recursive CTEs");
 
         Assertions.assertThrows(SemanticException.class,
                 () -> getFragmentPlan(
-                        "with recursive cte(a) as NOT MATERIALIZED (" +
-                        "select 1 union all select a + 1 from cte where a < 10) " +
+                        "with recursive cte(a) as (" +
+                        "select 1 union all select a + 1 from cte where a < 10) [not_materialized] " +
                         "select * from cte"),
-                "MATERIALIZED/NOT MATERIALIZED hints are not allowed on recursive CTEs");
+                "[materialized]/[not_materialized] hints are not allowed on recursive CTEs");
     }
 }

@@ -372,7 +372,7 @@ public class QueryAnalyzer {
                 if (isRecursive
                         && withQuery.getMaterializationHint() != CTERelation.CTEMaterializationHint.NONE) {
                     throw new SemanticException(
-                            "MATERIALIZED/NOT MATERIALIZED hints are not allowed on recursive CTEs",
+                            "[materialized]/[not_materialized] hints are not allowed on recursive CTEs",
                             withQuery.getPos());
                 }
                 if (!isRecursive) {

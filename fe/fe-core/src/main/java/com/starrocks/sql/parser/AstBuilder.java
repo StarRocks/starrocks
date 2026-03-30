@@ -6010,11 +6010,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
 
         CTERelation.CTEMaterializationHint hint = CTERelation.CTEMaterializationHint.NONE;
-        if (context.MATERIALIZED() != null) {
-            if (context.NOT() != null) {
-                hint = CTERelation.CTEMaterializationHint.NOT_MATERIALIZED;
-            } else {
+        if (context.bracketHint() != null) {
+            String hintText = ((Identifier) visit(context.bracketHint().identifier(0))).getValue().toLowerCase();
+            if (hintText.equals("materialized")) {
                 hint = CTERelation.CTEMaterializationHint.MATERIALIZED;
+            } else if (hintText.equals("not_materialized")) {
+                hint = CTERelation.CTEMaterializationHint.NOT_MATERIALIZED;
             }
         }
 
