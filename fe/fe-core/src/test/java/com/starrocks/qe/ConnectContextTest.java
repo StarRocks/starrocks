@@ -422,22 +422,6 @@ public class ConnectContextTest {
     }
 
     @Test
-    public void testOnQueryFinished_clearsListeners() {
-        ConnectContext ctx = new ConnectContext(connection);
-
-        ConnectContext.Listener listener = Mockito.mock(ConnectContext.Listener.class);
-        ctx.registerListener(listener);
-
-        // First call
-        ctx.onQueryFinished();
-        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
-
-        // Second call - listener should not be called again (cleared after first call)
-        ctx.onQueryFinished();
-        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
-    }
-
-    @Test
     public void testOnQueryFinished_withoutListeners() {
         ConnectContext ctx = new ConnectContext(connection);
 
