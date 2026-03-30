@@ -117,32 +117,16 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
-<<<<<<< HEAD
                                      ColumnPtr* dst) const override {
-        const ColumnType* input = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>((*dst).get());
-=======
-                                     MutableColumnPtr& dst) const override {
         const auto& datas = GetContainer<LT>::get_data(src[0]);
-        auto* result = down_cast<BinaryColumn*>(dst.get());
->>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
+        auto* result = down_cast<BinaryColumn*>(dst->get());
 
         Bytes& bytes = result->get_bytes();
         result->get_offset().resize(chunk_size + 1);
 
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
-<<<<<<< HEAD
-            if constexpr (lt_is_string<LT>) {
-                Slice s = input->get_slice(i);
-                value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-            } else {
-                auto v = input->get_data()[i];
-                value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
-            }
-=======
             uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
->>>>>>> 18240c9a01 ([Refactor] Add template function: murmur_hash64A (#70789))
 
             int64_t memory_usage = 0;
             DataSketchesTheta theta{&memory_usage};
