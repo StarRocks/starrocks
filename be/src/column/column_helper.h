@@ -631,4 +631,8 @@ struct GetContainer {
     static const auto& get_data(const ColumnPtr& column) { return ColumnHelper::get_container_data<ltype>(column); }
 };
 
+using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
+using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
+
 } // namespace starrocks
