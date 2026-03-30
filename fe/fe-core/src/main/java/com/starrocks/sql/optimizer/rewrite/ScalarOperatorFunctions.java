@@ -37,13 +37,10 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-<<<<<<< HEAD
-import com.starrocks.analysis.DecimalLiteral;
-=======
 import com.google.re2j.Matcher;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
->>>>>>> 2294eaab17 ([Enhancement] Support constant folding for regexp_replace in FE (#70804))
+import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
