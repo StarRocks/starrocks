@@ -67,6 +67,7 @@ void BinaryColumnBase<T>::append(const Slice& str) {
 template <typename T>
 template <typename SrcOffset>
 void BinaryColumnBase<T>::_append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count) {
+    static_assert(sizeof(SrcOffset) <= sizeof(Offset));
     const auto& src_offsets = src.get_offset();
     const uint8_t* src_base = src.continuous_data();
     auto& dst_bytes = get_bytes();
@@ -116,7 +117,7 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
         }
     }
 
-    DCHECK(false) << "BinaryColumnBase::append: incompatible column type";
+    CHECK(false) << "BinaryColumnBase::append: incompatible column type";
 }
 
 template <typename T>
