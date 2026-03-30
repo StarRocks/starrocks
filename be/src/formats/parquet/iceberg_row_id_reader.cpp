@@ -20,8 +20,8 @@
 #include "column/datum.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
-#include "storage/range.h"
 #include "runtime/types.h"
+#include "storage/range.h"
 
 namespace starrocks::parquet {
 
