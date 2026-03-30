@@ -385,7 +385,7 @@ public:
     }
 
     template <LogicalType Type>
-    static inline auto get_container_data(const Column* column) {
+    static inline const auto& get_container_data(const Column* column) {
         using ColumnType = RunTimeColumnType<Type>;
         if constexpr (lt_is_string_or_binary<Type>) {
             const Column* data_column = get_data_column(column);
