@@ -56,13 +56,7 @@ public:
         if constexpr (lt_is_string_or_binary<LT>) {
             value = HashUtil::murmur_hash64A(v.data, v.size, HashUtil::MURMUR_SEED);
         } else {
-<<<<<<< HEAD
-            const auto* column = down_cast<const ColumnType*>(columns[0]);
-            const auto& v = column->get_data();
-            value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
-=======
             value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
->>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
         }
 
         if (value != 0) {
@@ -84,11 +78,6 @@ public:
             }
         } else {
             uint64_t value = 0;
-<<<<<<< HEAD
-            const auto* column = down_cast<const ColumnType*>(columns[0]);
-            const auto& v = column->get_data();
-=======
->>>>>>> 9bc4fbe6dc ([Refactor] Use GetContainer to handle the large binary check in agg functions (#70782))
             for (size_t i = frame_start; i < frame_end; ++i) {
                 value = HashUtil::murmur_hash64A(&datas[i], sizeof(datas[i]), HashUtil::MURMUR_SEED);
 
