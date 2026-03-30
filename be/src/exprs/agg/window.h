@@ -785,26 +785,19 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
 
         // get default value
         const Column* arg2 = args[2].get();
-        DCHECK(arg2 != nullptr);
-
-        if (arg2->is_constant()) {
-            this->data(state).default_value_is_constant = true;
-            const auto* default_column = down_cast<const ConstColumn*>(arg2);
-            if (default_column->is_nullable()) {
-                this->data(state).default_is_null = true;
-            } else {
-                if constexpr (lt_is_array<LT>) {
-                    const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
-                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
-                } else {
-                    auto value = ColumnHelper::get_const_value<LT>(arg2);
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
-                }
-            }
+        DCHECK(arg2->is_constant());
+        const auto* default_column = down_cast<const ConstColumn*>(arg2);
+        if (default_column->is_nullable()) {
+            this->data(state).default_is_null = true;
         } else {
-            this->data(state).default_value_is_constant = false;
-            this->data(state).default_is_null = false;
+            if constexpr (lt_is_array<LT>) {
+                const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
+                                                    AggDataTypeTraits<LT>::get_row_ref(*column, 0));
+            } else {
+                auto value = ColumnHelper::get_const_value<LT>(arg2);
+                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+            }
         }
 
         if constexpr (ignoreNulls) {
