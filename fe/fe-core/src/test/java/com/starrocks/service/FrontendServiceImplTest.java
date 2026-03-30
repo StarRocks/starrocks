@@ -30,6 +30,7 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
@@ -60,6 +61,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetProfileRequest;
+import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -125,6 +128,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1948,6 +1953,23 @@ public class FrontendServiceImplTest {
 
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request1)));
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request2)));
+        }
+    }
+
+    @Test
+    public void testGetQueryProfileWithoutRequestAllFrontendDoesNotForward() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList("3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90"));
+        request.setIs_request_all_frontend(false);
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class)) {
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile("3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90")).thenReturn(null);
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(""), response.getQuery_result());
         }
     }
 
