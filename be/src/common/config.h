@@ -1176,6 +1176,11 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Enable cleanup of orphan delvec entries during compaction.
+// Orphan delvecs are leaked metadata entries from a historical bug that reference
+// non-existent segments and prevent delvec file garbage collection.
+// Turn this on after upgrade to clean up existing orphans, then turn it off once done.
+CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
