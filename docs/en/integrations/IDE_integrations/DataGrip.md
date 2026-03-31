@@ -30,7 +30,7 @@ Download the StarRocks JDBC driver JAR. See [StarRocks JDBC Driver](../JDBC_driv
 
    - Set the **Name** to `StarRocks`.
    - Under **Driver Files**, click **+** and add the StarRocks JDBC driver JAR you downloaded.
-   - Set the **Class** to `com.starrocks.jdbc.Driver`.
+   - Set the **Class** to `com.starrocks.cj.jdbc.Driver`.
    - Set the **URL template** to:
      ```
      jdbc:starrocks://{host}:{port}/{catalog}.{database}

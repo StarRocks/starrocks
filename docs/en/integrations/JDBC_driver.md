@@ -13,38 +13,35 @@ StarRocks provides a native JDBC driver that enables direct connectivity from an
 
 ## Download
 
-:::note
-TODO: Add download link to Starrocks JDBC driver. 
-:::
+The StarRocks JDBC driver is available on [Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j).
+
+You can download the JAR directly from Maven Central, or add it as a dependency in your project using the instructions below.
 
 ## Use the JAR in your project
 
 ### Maven
 
-Install the JAR into your local Maven repository, then reference it as a dependency:
-
-```bash
-mvn install:install-file \
-  -Dfile=/path/to/starrocks-connector-j-<version>.jar \
-  -DgroupId=com.starrocks \
-  -DartifactId=starrocks-connector-j \
-  -Dversion=<version> \
-  -Dpackaging=jar
-```
-
-Then add the dependency to your `pom.xml`:
+Add the following dependency to your `pom.xml`:
 
 ```xml
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-connector-j</artifactId>
-    <version>x.y.z</version>
+    <version>1.1.1</version>
 </dependency>
+```
+
+### Gradle
+
+Add the following dependency to your `build.gradle`:
+
+```groovy
+implementation 'com.starrocks:starrocks-connector-j:1.1.1'
 ```
 
 ### Plain Java
 
-Add the JAR to the classpath when compiling and running:
+Download the JAR from [Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j) and add it to the classpath when compiling and running:
 
 ```bash
 javac -cp starrocks-connector-j-<version>.jar MyApp.java
