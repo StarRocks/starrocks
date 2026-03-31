@@ -397,6 +397,29 @@ public class JDBCScanner {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private long computeTimezoneOffsetMillis(long sourceMillis) {
+        // Build the query-zone local datetime from sourceMillis, then resolve it in JVM default timezone.
+        // This matches Timestamp.valueOf(LocalDateTime) behavior, including DST gap/overlap resolution.
+        Calendar queryCalendar = Calendar.getInstance(TimeZone.getTimeZone(queryTimeZone));
+        queryCalendar.setTimeInMillis(sourceMillis);
+
+        Calendar defaultCalendar = Calendar.getInstance(TimeZone.getDefault());
+        defaultCalendar.clear();
+        defaultCalendar.setLenient(true);
+        defaultCalendar.set(Calendar.ERA, queryCalendar.get(Calendar.ERA));
+        defaultCalendar.set(queryCalendar.get(Calendar.YEAR),
+                queryCalendar.get(Calendar.MONTH),
+                queryCalendar.get(Calendar.DAY_OF_MONTH),
+                queryCalendar.get(Calendar.HOUR_OF_DAY),
+                queryCalendar.get(Calendar.MINUTE),
+                queryCalendar.get(Calendar.SECOND));
+        defaultCalendar.set(Calendar.MILLISECOND, queryCalendar.get(Calendar.MILLISECOND));
+        return defaultCalendar.getTimeInMillis() - sourceMillis;
+    }
+
+>>>>>>> 262dcbd52b ([BugFix] fix pg date time bug (#71016))
     private Time convertPostgresTimeWithTimezoneValue(Time sourceValue) {
         if (sourceValue == null || queryTimeZone == null) {
             return sourceValue;
