@@ -2530,4 +2530,148 @@ TEST_P(LakePrimaryKeyPublishTest, test_preload_update_state_slow_log) {
     ASSERT_TRUE(read(tablet_id, 2).ok());
 }
 
+// Test that parallel segment reads during persistent index rebuild produce correct results.
+// This exercises the code path in LakePersistentIndex::load_from_lake_tablet where
+// multiple segments are read concurrently.
+TEST_P(LakePrimaryKeyPublishTest, test_parallel_rebuild_persistent_index_multi_segments) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Step 1: Write multiple chunks with small write_buffer_size to create multiple segments
+    // per rowset, ensuring rebuild will have multiple segments to read in parallel.
+    const int64_t old_write_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1; // force flush per write -> multiple segments
+    const auto old_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10; // force sstable flush for cloud native index
+
+    // Write 3 rowsets, each with 3 segments (3 chunks per write)
+    for (int r = 0; r < 3; r++) {
+        auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, r * 3, true, true);
+        auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, r * 3 + 1, true, true);
+        auto [chunk2, indexes2] = gen_data_and_index(kChunkSize, r * 3 + 2, true, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
+        ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
+        ASSERT_OK(delta_writer->write(*chunk2, indexes2.data(), indexes2.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    config::write_buffer_size = old_write_buffer_size;
+
+    // Verify initial data: 9 non-overlapping ranges, each kChunkSize rows
+    ASSERT_EQ(kChunkSize * 9, read_rows(tablet_id, version));
+
+    // Step 2: Remove persistent index to force rebuild on next publish
+    _update_mgr->unload_and_remove_primary_index(tablet_id);
+
+    // Step 3: Write more data, which triggers rebuild with multiple segments read in parallel
+    auto [chunk_new, indexes_new] = gen_data_and_index(kChunkSize, 9, true, true);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk_new, indexes_new.data(), indexes_new.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 4: Verify data correctness after parallel rebuild
+    ASSERT_EQ(kChunkSize * 10, read_rows(tablet_id, version));
+
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
+// Test parallel rebuild with overlapping data (upserts) to verify correctness
+// of insert ordering when segments are read in parallel.
+TEST_P(LakePrimaryKeyPublishTest, test_parallel_rebuild_persistent_index_with_upserts) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    const auto old_l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+
+    // Write 3 rowsets with overlapping keys (same shift=0 means same key range)
+    for (int r = 0; r < 3; r++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Should have kChunkSize rows (overlapping upserts)
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+
+    // Remove persistent index to force rebuild
+    _update_mgr->unload_and_remove_primary_index(tablet_id);
+
+    // Write again with overlapping data to trigger rebuild + upsert
+    auto [chunk_new, indexes_new] = gen_data_and_index(kChunkSize, 0, true, true);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk_new, indexes_new.data(), indexes_new.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Still kChunkSize rows after upsert
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake
