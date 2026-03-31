@@ -19,12 +19,6 @@
 #include <ctime>
 #include <set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/uid_util.h"
->>>>>>> bce72cf9ed ([BugFix] Fix delvec orphan entries caused by write-before-compaction in same publish batch (#71001))
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
