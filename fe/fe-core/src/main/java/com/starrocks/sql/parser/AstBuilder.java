@@ -5461,14 +5461,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 ((Identifier) visit(context.name)).getValue(),
                 getColumnNames(context.columnAliases()),
                 new QueryStatement(queryRelation),
-<<<<<<< HEAD
-                queryRelation.getPos());
-=======
-                false,
-                true,
                 queryRelation.getPos(),
                 hint);
->>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
     }
 
     @Override

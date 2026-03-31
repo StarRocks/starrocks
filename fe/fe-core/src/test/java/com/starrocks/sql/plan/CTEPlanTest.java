@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import org.apache.commons.lang3.StringUtils;
@@ -26,7 +25,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -931,20 +929,20 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
         String sql =
                 "with input1 as (\n" +
-                "  select [1,2,3] as x\n" +
-                "),\n" +
-                "input2 AS (\n" +
-                "  SELECT\n" +
-                "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
-                "  FROM\n" +
-                "    input1\n" +
-                "),\n" +
-                "input3 as (\n" +
-                "  select x+1 as a, x+2 as b, x+3 as c\n" +
-                "  from input2\n" +
-                ")\n" +
-                "SELECT * from input3\n" +
-                "where a + b + c <10";
+                        "  select [1,2,3] as x\n" +
+                        "),\n" +
+                        "input2 AS (\n" +
+                        "  SELECT\n" +
+                        "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                        "  FROM\n" +
+                        "    input1\n" +
+                        "),\n" +
+                        "input3 as (\n" +
+                        "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                        "  from input2\n" +
+                        ")\n" +
+                        "SELECT * from input3\n" +
+                        "where a + b + c <10";
 
         connectContext.getSessionVariable().setEnableLambdaPushdown(false);
         defaultCTEReuse();
@@ -1334,22 +1332,5 @@ public class CTEPlanTest extends PlanTestBase {
         Assertions.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
         // x1 with NOT MATERIALIZED: inlined even though it has random(), t1 scanned twice
         Assertions.assertEquals(2, StringUtils.countMatches(plan, "TABLE: t1"));
-    }
-
-    @Test
-    public void testRecursiveCTERejectsMaterializationHint() {
-        Assertions.assertThrows(SemanticException.class,
-                () -> getFragmentPlan(
-                        "with recursive cte(a) as (" +
-                        "select 1 union all select a + 1 from cte where a < 10) [materialized] " +
-                        "select * from cte"),
-                "[materialized]/[not_materialized] hints are not allowed on recursive CTEs");
-
-        Assertions.assertThrows(SemanticException.class,
-                () -> getFragmentPlan(
-                        "with recursive cte(a) as (" +
-                        "select 1 union all select a + 1 from cte where a < 10) [not_materialized] " +
-                        "select * from cte"),
-                "[materialized]/[not_materialized] hints are not allowed on recursive CTEs");
     }
 }

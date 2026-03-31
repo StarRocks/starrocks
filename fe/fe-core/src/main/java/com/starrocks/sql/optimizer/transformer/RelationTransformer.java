@@ -154,11 +154,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-<<<<<<< HEAD
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-=======
 import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.MATERIALIZED;
->>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
