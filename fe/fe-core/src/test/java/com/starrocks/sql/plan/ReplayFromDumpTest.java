@@ -109,17 +109,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testSSB10() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/ssb10"), SV);
-        Assertions.assertTrue(replayPair.second.contains("  14:Project\n" +
-                "  |  output columns:\n" +
-                "  |  13 <-> [13: lo_revenue, INT, false]\n" +
-                "  |  22 <-> [22: d_year, INT, false]\n" +
-                "  |  38 <-> [38: c_city, VARCHAR, false]\n" +
-                "  |  46 <-> [46: s_city, VARCHAR, false]\n" +
-                "  |  cardinality: 28532"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("  |----7:EXCHANGE\n" +
-                "  |       distribution type: BROADCAST\n" +
-                "  |       cardinality: 30"), replayPair.second);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/ssb10"), SV);
+            Assertions.assertTrue(replayPair.second.contains("  14:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  13 <-> [13: lo_revenue, INT, false]\n" +
+                    "  |  22 <-> [22: d_year, INT, false]\n" +
+                    "  |  51 <-> [51: s_city, INT, false]\n" +
+                    "  |  53 <-> [53: c_city, INT, false]\n" +
+                    "  |  cardinality: 28532"), replayPair.second);
+            Assertions.assertTrue(replayPair.second.contains("  |----7:EXCHANGE\n" +
+                    "  |       distribution type: BROADCAST\n" +
+                    "  |       cardinality: 30"), replayPair.second);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 
     @Test
@@ -291,15 +296,20 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testMultiCountDistinct() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), SV, TExplainLevel.NORMAL);
-        String plan = replayPair.second;
-        Assertions.assertTrue(plan.contains("AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
-                " multi_distinct_count(128: case), max(103: count)\n" +
-                "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
-                "127: concat, 9: upc, 108: upc_desc"), plan);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), SV, TExplainLevel.NORMAL);
+            String plan = replayPair.second;
+            Assertions.assertTrue(plan.contains("AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: multi_distinct_count(141: order_id), multi_distinct_count(143: delivery_phone)," +
+                    " multi_distinct_count(128: case), max(103: count)\n" +
+                    "  |  group by: 145: city, 150: division_en, 104: department, 106: category, 126: concat, " +
+                    "127: concat, 142: upc, 158: upc_desc"), plan);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 
     @Test
@@ -309,7 +319,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), SV,
                         TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assertions.assertTrue(plan.contains(" 11:Decode\n" +
+        Assertions.assertTrue(plan.contains(" 10:Decode\n" +
                 "  |  <dict id 41> : <string id 18>\n" +
                 "  |  <dict id 42> : <string id 23>"), plan);
         FeConstants.USE_MOCK_DICT_MANAGER = false;
@@ -349,11 +359,16 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testLogicalAggWithOneTablet() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), SV,
-                        TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
-                "  |  output: multi_distinct_count(4: t0d)"), replayPair.second);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/local_agg_with_one_tablet"), SV,
+                            TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)\n" +
+                    "  |  output: multi_distinct_count(9: t0d)"), replayPair.second);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 
     @Test
@@ -798,16 +813,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testListPartitionPrunerWithNEExpr() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/list_partition_prune_dump"), SV);
-        // partitions should not be pruned
-        Assertions.assertTrue(!replayPair.second.contains("partitionsRatio=2/3, tabletsRatio=20/20"),
-                replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("0:OlapScanNode\n" +
-                "     table: partitions2_keys311, rollup: partitions2_keys311\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [7: undef_signed_not_null, VARCHAR, false] != 'j'\n" +
-                "     partitionsRatio=3/3, tabletsRatio=30/30"), replayPair.second);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/list_partition_prune_dump"), SV);
+            // partitions should not be pruned
+            Assertions.assertTrue(!replayPair.second.contains("partitionsRatio=2/3, tabletsRatio=20/20"),
+                    replayPair.second);
+            Assertions.assertTrue(replayPair.second.contains("0:OlapScanNode\n" +
+                    "     table: partitions2_keys311, rollup: partitions2_keys311\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: DictDecode([13: undef_signed_not_null, INT, false], [<place-holder> != 'j'])\n" +
+                    "     dict_col=undef_signed_not_null\n" +
+                    "     partitionsRatio=3/3, tabletsRatio=30/30"), replayPair.second);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 
     @Test
@@ -965,44 +986,49 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testEliminateConstantCTEAndNestLoopJoin() throws Exception {
-        String dumpString = getDumpInfoFromFile("query_dump/eliminate_nestloop_join");
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
-                TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("  29:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----28:EXCHANGE\n" +
-                "  |    \n" +
-                "  18:Project\n" +
-                "  |  <slot 119> : 119: mock_189\n" +
-                "  |  \n" +
-                "  17:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 286: mock_278 = 67: mock_216\n" +
-                "  |  \n" +
-                "  |----16:EXCHANGE\n" +
-                "  |    \n" +
-                "  3:EXCHANGE\n" +
-                "\n" +
-                "PLAN FRAGMENT 6\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 28\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  27:Project\n" +
-                "  |  <slot 603> : array_contains(601: array_agg, 'asdfasdfasdf')\n" +
-                "  |  \n" +
-                "  26:AGGREGATE (merge finalize)\n" +
-                "  |  output: array_agg(601: array_agg)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  25:EXCHANGE"), replayPair.second);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            String dumpString = getDumpInfoFromFile("query_dump/eliminate_nestloop_join");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("  29:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  \n" +
+                    "  |----28:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  18:Project\n" +
+                    "  |  <slot 621> : 621: mock_189\n" +
+                    "  |  \n" +
+                    "  17:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 286: mock_278 = 67: mock_216\n" +
+                    "  |  \n" +
+                    "  |----16:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  3:EXCHANGE\n" +
+                    "\n" +
+                    "PLAN FRAGMENT 6\n" +
+                    " OUTPUT EXPRS:\n" +
+                    "  PARTITION: UNPARTITIONED\n" +
+                    "\n" +
+                    "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 28\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  27:Project\n" +
+                    "  |  <slot 603> : array_contains(DictDecode(625: array_agg, [<place-holder>]), 'asdfasdfasdf')\n" +
+                    "  |  \n" +
+                    "  26:AGGREGATE (merge finalize)\n" +
+                    "  |  output: array_agg(625: array_agg)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  25:EXCHANGE"), replayPair.second);
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 
     @Test
@@ -1115,11 +1141,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                     TExplainLevel.NORMAL);
             String plan = replayPair.second;
-            Assertions.assertTrue(plan.contains("  30:Project\n"
+            Assertions.assertTrue(plan.contains("  28:Project\n"
                     + "  |  <slot 113> : 113: mock_field_111\n"
                     + "  |  <slot 268> : lower(142: jl_str)\n"
                     + "  |  \n"
-                    + "  29:TableValueFunction\n"
+                    + "  27:TableValueFunction\n"
                     + "  |  tableFunctionName: unnest\n"
                     + "  |  columns: [unnest]\n"
                     + "  |  returnTypes: [VARCHAR(65533)]"), plan);
