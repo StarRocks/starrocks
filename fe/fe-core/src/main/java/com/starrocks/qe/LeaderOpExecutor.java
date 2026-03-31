@@ -218,7 +218,7 @@ public class LeaderOpExecutor {
         TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
-        result = ThriftRPCRequestExecutor.call(
+        result = ThriftRPCRequestExecutor.callAndDestroy(
                 ThriftConnectionPool.frontendPool,
                 thriftAddress,
                 thriftTimeoutMs,
@@ -314,4 +314,3 @@ public class LeaderOpExecutor {
         return params;
     }
 }
-

@@ -30,14 +30,15 @@ public class ThriftRPCRequestExecutor {
             call(ThriftConnectionPool<SERVER_CLIENT> genericPool,
                  TNetworkAddress address,
                  MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
-        return call(genericPool, address, genericPool.getDefaultTimeoutMs(), Config.thrift_rpc_retry_times, callable);
+        return callInternal(genericPool, address, genericPool.getDefaultTimeoutMs(),
+                Config.thrift_rpc_retry_times, callable, false);
     }
 
     public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
             callNoRetry(ThriftConnectionPool<SERVER_CLIENT> genericPool,
                 TNetworkAddress address,
                 MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
-        return call(genericPool, address, genericPool.getDefaultTimeoutMs(), 1, callable);
+        return callInternal(genericPool, address, genericPool.getDefaultTimeoutMs(), 1, callable, false);
     }
 
     public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
@@ -45,7 +46,15 @@ public class ThriftRPCRequestExecutor {
                  TNetworkAddress address,
                  int timeoutMs,
                  MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
-        return call(genericPool, address, timeoutMs, Config.thrift_rpc_retry_times, callable);
+        return callInternal(genericPool, address, timeoutMs, Config.thrift_rpc_retry_times, callable, false);
+    }
+
+    public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
+            callAndDestroy(ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                           TNetworkAddress address,
+                           int timeoutMs,
+                           MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+        return callInternal(genericPool, address, timeoutMs, Config.thrift_rpc_retry_times, callable, true);
     }
 
     public static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
@@ -53,6 +62,15 @@ public class ThriftRPCRequestExecutor {
             TNetworkAddress address,
             int timeoutMs, int tryTimes,
             MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+        return callInternal(genericPool, address, timeoutMs, tryTimes, callable, false);
+    }
+
+    private static <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT
+            callInternal(ThriftConnectionPool<SERVER_CLIENT> genericPool,
+            TNetworkAddress address,
+            int timeoutMs, int tryTimes,
+            MethodCallable<SERVER_CLIENT, RESULT> callable,
+            boolean destroyConnectionAfterCall) throws TException {
         SERVER_CLIENT client;
         try {
             client = genericPool.borrowObject(address, timeoutMs);
@@ -85,7 +103,7 @@ public class ThriftRPCRequestExecutor {
                 }
             }
         } finally {
-            if (isConnValid) {
+            if (isConnValid && !destroyConnectionAfterCall) {
                 genericPool.returnObject(address, client);
             } else {
                 genericPool.invalidateObject(address, client);
