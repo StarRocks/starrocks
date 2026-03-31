@@ -14,16 +14,17 @@
 
 package com.starrocks.qe;
 
+import com.google.gson.JsonObject;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.thrift.TQueryStatisticsInfo;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 
 import static com.starrocks.common.proc.CurrentGlobalQueryStatisticsProcDirTest.QUERY_ONE_LOCAL;
 
@@ -64,43 +65,53 @@ public class QueryStatisticsInfoTest {
 
     @Test
     public void testGetExecProgress() throws Exception {
-        HttpClient mockHttpClient = Mockito.mock(HttpClient.class);
-        HttpResponse mockResponse = Mockito.mock(HttpResponse.class);
-        HttpRequest mockRequest = Mockito.mock(HttpRequest.class);
-        Mockito.when(mockRequest.uri()).thenReturn(URI.create("http://localhost:8030/api/query/progress?query_id=123"));
-        Mockito.when(mockHttpClient.send(Mockito.any(HttpRequest.class), Mockito.any())).thenReturn(mockResponse);
-        QueryStatisticsInfo info = new QueryStatisticsInfo();
+        ProfileManager manager = ProfileManager.getInstance();
+        manager.clearProfiles();
 
-        //1.check query progress result    
-        String response1 = "{\"query_id\":\"123\",\"state\":\"Running\",\"progress_info\"" +
-                ":{\"total_operator_num\":5,\"finished_operator_num\":3,\"progress_percent\":\"60.00%\"}}";
-        Mockito.when(mockResponse.statusCode()).thenReturn(200);
-        Mockito.when(mockResponse.body()).thenReturn(response1);
+        RuntimeProfile profile = new RuntimeProfile("");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, "123");
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, "Running");
+        profile.addChild(summaryProfile);
 
-        String result1 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assertions.assertEquals("60.00%", result1);
+        try {
+            new MockUp<ExplainAnalyzer>() {
+                @Mock
+                public String getQueryProgress() throws StarRocksException {
+                    JsonObject progressInfo = new JsonObject();
+                    progressInfo.addProperty("total_operator_num", 5);
+                    progressInfo.addProperty("finished_operator_num", 3);
+                    progressInfo.addProperty("progress_percent", "60.00%");
 
-        //2.check query id not found, like set enable_profile=false
-        String response2 = "query id 123 not found.";
-        Mockito.when(mockResponse.statusCode()).thenReturn(404);
-        Mockito.when(mockResponse.body()).thenReturn(response2);
+                    JsonObject result = new JsonObject();
+                    result.addProperty("query_id", "123");
+                    result.addProperty("state", "Running");
+                    result.add("progress_info", progressInfo);
+                    return result.toString();
+                }
+            };
 
-        String result2 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assertions.assertEquals(result2, "");
+            manager.pushProfile(new ProfilingExecPlan(), profile);
+            Assertions.assertEquals("60.00%", QueryStatisticsInfo.getExecProgress("123"));
 
-        //3.check short circuit query
-        String response3 = "short circuit point query doesn't suppot get query progress, " +
-                             "you can set it off by using set enable_short_circuit=false";
-        Mockito.when(mockResponse.statusCode()).thenReturn(200);
-        Mockito.when(mockResponse.body()).thenReturn(response3);
+            manager.clearProfiles();
+            Assertions.assertEquals("", QueryStatisticsInfo.getExecProgress("123"));
 
-        String result3 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assertions.assertEquals(result3, "");
+            manager.pushProfile(null, profile);
+            Assertions.assertEquals("", QueryStatisticsInfo.getExecProgress("123"));
 
-        //4.check special case, like fe_ip:http_port is unreachable
-        Mockito.doThrow(new IOException("Network is unreachable")).when(mockHttpClient)
-                               .send(Mockito.any(HttpRequest.class), Mockito.any());
-        String result4 = info.getExecProgress("localhost", "123", mockHttpClient);
-        Assertions.assertEquals(result4, "");
+            manager.clearProfiles();
+            manager.pushProfile(new ProfilingExecPlan(), profile);
+            new MockUp<ExplainAnalyzer>() {
+                @Mock
+                public String getQueryProgress() throws StarRocksException {
+                    throw new StarRocksException("mock failure");
+                }
+            };
+            Assertions.assertEquals("", QueryStatisticsInfo.getExecProgress("123"));
+        } finally {
+            manager.clearProfiles();
+        }
     }
 }
