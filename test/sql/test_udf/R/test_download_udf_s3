@@ -1,0 +1,22 @@
+-- name: test_download @no_arrow_flight_sql
+set enable_group_execution = true;
+-- result:
+-- !result
+CREATE FUNCTION echo_array_int(array<int>)
+RETURNS array<int>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "oss://${oss_bucket}/starrocks-jdbc/ArrayMap.jar",
+  "aws.s3.access_key" = "${oss_ak}",
+  "aws.s3.secret_key" = "${oss_sk}",
+  "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+select echo_array_int([1,2,3]);
+-- result:
+[1,2,3]
+-- !result
