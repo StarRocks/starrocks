@@ -30,8 +30,8 @@ displayed_sidebar: docs
   支持为 Iceberg 表写入 position delete 文件，从而可以直接在 StarRocks 中对 Iceberg 表执行 DELETE 操作。覆盖 Plan、Sink、Commit 和 Audit 全流程。 [#67259](https://github.com/StarRocks/starrocks/pull/67259) [#67277](https://github.com/StarRocks/starrocks/pull/67277) [#67421](https://github.com/StarRocks/starrocks/pull/67421) [#67567](https://github.com/StarRocks/starrocks/pull/67567)
 - **Hive 与 Iceberg 表的 TRUNCATE**
   支持对外部 Hive 和 Iceberg 表执行 TRUNCATE TABLE。 [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
-- **Iceberg 与 Paimon 上的增量物化视图**
-  将增量物化视图刷新能力扩展至 Iceberg Append-only 表和 Paimon 表，无需全表刷新即可实现查询加速。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **Iceberg 上的增量物化视图**
+  将增量物化视图刷新能力扩展至 Iceberg Append-only 表，无需全表刷新即可实现查询加速。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
 - **面向 Iceberg 半结构化数据的 VARIANT 类型**
   Iceberg Catalog 支持 VARIANT 数据类型，用于灵活的 Schema-on-read 半结构化数据存储与查询。支持读写、类型转换及 Parquet 集成。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - 支持读取 Iceberg 表中的文件路径和行位置元数据列。 [#67003](https://github.com/StarRocks/starrocks/pull/67003)

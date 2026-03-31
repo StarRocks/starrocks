@@ -30,8 +30,8 @@ displayed_sidebar: docs
   Iceberg テーブルに対して position delete ファイルを書き込み可能にし、StarRocks から直接 DELETE を実行可能にしました。Plan、Sink、Commit、Audit の全パイプラインに対応します。 [#67259](https://github.com/StarRocks/starrocks/pull/67259) [#67277](https://github.com/StarRocks/starrocks/pull/67277) [#67421](https://github.com/StarRocks/starrocks/pull/67421) [#67567](https://github.com/StarRocks/starrocks/pull/67567)
 - **Hive および Iceberg テーブルの TRUNCATE**
   外部 Hive および Iceberg テーブルに対する TRUNCATE TABLE をサポート。 [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
-- **Iceberg および Paimon に対する増分マテリアライズドビュー**
-  Iceberg append-only テーブルおよび Paimon テーブルで増分リフレッシュをサポートし、フルリフレッシュなしでクエリ高速化を実現。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **Iceberg に対する増分マテリアライズドビュー**
+  Iceberg append-only テーブルで増分リフレッシュをサポートし、フルリフレッシュなしでクエリ高速化を実現。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
 - **Iceberg における半構造化データ用 VARIANT 型**
   Iceberg Catalog における VARIANT データ型をサポートし、半構造化データの柔軟なスキーマオンリード方式による保存とクエリを可能にします。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - Iceberg テーブルのファイルパスおよび行位置メタデータ列を読み取り可能。 [#67003](https://github.com/StarRocks/starrocks/pull/67003)
