@@ -63,19 +63,6 @@ void BinaryColumnBase<T>::_append_binary_impl(const BinaryColumnBase<SrcOffset>&
     auto& dst_bytes = get_bytes();
     dst_bytes.insert(dst_bytes.end(), src_base + src_offsets[offset], src_base + src_offsets[offset + count]);
 
-<<<<<<< HEAD
-    const unsigned char* p = &b._bytes[b._offsets[offset]];
-    const unsigned char* e = &b._bytes[b._offsets[offset + count]];
-    _bytes.insert(_bytes.end(), p, e);
-
-    // `new_offsets[i] = offsets[(num_prev_offsets + i - 1) + 1]` is the end offset of the new i-th string.
-    // new_offsets[i] = new_offsets[i - 1] + (b._offsets[offset + i + 1] - b._offsets[offset + i])
-    //    = b._offsets[offset + i + 1] + (new_offsets[i - 1] - b._offsets[offset + i])
-    //    = b._offsets[offset + i + 1] + delta
-    // where `delta` is always the difference between the start offset of the num_prev_offsets-th destination string
-    // and the start offset of the offset-th source string.
-=======
->>>>>>> db72de7cbb ([Enhancement] Support appending BinaryColumn into LargeBinaryColumn (#70967))
     const size_t num_prev_offsets = _offsets.size();
     _offsets.resize(num_prev_offsets + count);
     auto* new_offsets = _offsets.data() + num_prev_offsets;
@@ -102,9 +89,6 @@ void BinaryColumnBase<T>::_append_binary_impl(const BinaryColumnBase<SrcOffset>&
 }
 
 template <typename T>
-<<<<<<< HEAD
-void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
-=======
 void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
     DCHECK(offset + count <= src.size());
 
@@ -132,7 +116,6 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                            const uint32_t size) {
->>>>>>> db72de7cbb ([Enhancement] Support appending BinaryColumn into LargeBinaryColumn (#70967))
     if (src.is_binary_view()) {
         down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
         return;
