@@ -365,13 +365,7 @@ public class QueryStatisticsInfo {
                     .withDb(item.getDb())
                     .withUser(item.getUser())
                     .withExecTime(item.getQueryExecTime())
-<<<<<<< HEAD
-                    .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), 
-                                                      item.getQueryId(), httpClient))
-=======
                     .withExecProgress(getExecProgress(item.getQueryId()))
-                    .withExecState(item.getExecState())
->>>>>>> 623efce11a ([BugFix] Remove query progress HTTP loopback from current_queries (#71032))
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
