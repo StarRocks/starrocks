@@ -31,7 +31,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AlterMaterializedViewTest extends MVTestBase {
     @BeforeAll
@@ -465,5 +468,61 @@ public class AlterMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(3, mv.getColumns().size());
 
         alterMVDropColumn(dropStmt, true);
+    }
+
+    @Test
+    public void testMVColumnUniqueIdNoDuplicateAfterMultipleAddColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl_uid\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    v1 int, \n" +
+                "    v2 int, \n" +
+                "    v3 int \n" +
+                ")\n" +
+                "DUPLICATE KEY(`k1`)" +
+                "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_uid_test\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, sum(v1) from base_tbl_uid group by k1;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv_uid_test");
+
+        // Verify initial columns have valid unique ids (not -1)
+        List<Column> initialColumns = mv.getBaseSchema();
+        Assertions.assertEquals(2, initialColumns.size());
+        for (Column col : initialColumns) {
+            Assertions.assertTrue(col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "Column " + col.getName() + " should have a valid unique id, but got " + col.getUniqueId());
+        }
+
+        // First ADD COLUMN
+        String addStmt1 = "alter materialized view mv_uid_test add column v2_col as v2";
+        alterMVAddColumn(addStmt1, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertEquals(3, mv.getColumns().size());
+
+        // Second ADD COLUMN
+        String addStmt2 = "alter materialized view mv_uid_test add column v3_col as v3";
+        alterMVAddColumn(addStmt2, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertEquals(4, mv.getColumns().size());
+
+        // Verify all column unique ids are valid and unique (no duplicates)
+        List<Column> allColumns = mv.getBaseSchema();
+        Set<Integer> uniqueIds = new HashSet<>();
+        for (Column col : allColumns) {
+            Assertions.assertTrue(col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "Column " + col.getName() + " should have a valid unique id, but got " + col.getUniqueId());
+            Assertions.assertTrue(uniqueIds.add(col.getUniqueId()),
+                    "Duplicate column unique id " + col.getUniqueId() + " found for column " + col.getName());
+        }
+        Assertions.assertEquals(4, uniqueIds.size());
     }
 }
