@@ -14,6 +14,8 @@
 
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
+#include <future>
+
 #include "base/debug/trace.h"
 #include "common/config_exec_fwd.h"
 #include "runtime/current_thread.h"
@@ -25,6 +27,71 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+
+// Batch-load delvecs for a set of rssids in parallel.
+// This avoids sequential remote IO (S3/OSS) calls when many delvecs need to be loaded
+// during compaction conflict resolution.
+static Status batch_load_delvecs(const CompactConflictResolveParams& params,
+                                 const std::vector<uint32_t>& rssids_to_load,
+                                 std::map<uint32_t, DelVectorPtr>* rssid_to_delvec) {
+    if (rssids_to_load.empty()) {
+        return Status::OK();
+    }
+
+    // For small batches, load sequentially to avoid thread overhead
+    static constexpr size_t kParallelThreshold = 4;
+    if (rssids_to_load.size() <= kParallelThreshold) {
+        for (uint32_t rssid : rssids_to_load) {
+            DelVectorPtr delvec_ptr;
+            RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid}, params.base_version, &delvec_ptr));
+            (*rssid_to_delvec)[rssid] = std::move(delvec_ptr);
+        }
+        return Status::OK();
+    }
+
+    // Load delvecs in parallel using async tasks
+    struct LoadResult {
+        uint32_t rssid;
+        DelVectorPtr delvec;
+        Status status;
+    };
+
+    std::vector<std::future<LoadResult>> futures;
+    futures.reserve(rssids_to_load.size());
+
+    for (uint32_t rssid : rssids_to_load) {
+        futures.push_back(std::async(std::launch::async, [&params, rssid]() -> LoadResult {
+            LoadResult result;
+            result.rssid = rssid;
+            result.status = params.delvec_loader->load({params.tablet_id, rssid}, params.base_version, &result.delvec);
+            return result;
+        }));
+    }
+
+    // Collect results
+    for (auto& future : futures) {
+        auto result = future.get();
+        if (!result.status.ok()) {
+            return result.status;
+        }
+        (*rssid_to_delvec)[result.rssid] = std::move(result.delvec);
+    }
+
+    return Status::OK();
+}
+
+// Extract unique rssids from rssid_rowids that are not already in the cache.
+static std::vector<uint32_t> collect_missing_rssids(const std::vector<uint64_t>& rssid_rowids,
+                                                     const std::map<uint32_t, DelVectorPtr>& rssid_to_delvec) {
+    std::set<uint32_t> unique_rssids;
+    for (const auto& rssid_rowid : rssid_rowids) {
+        uint32_t rssid = rssid_rowid >> 32;
+        if (rssid_to_delvec.count(rssid) == 0) {
+            unique_rssids.insert(rssid);
+        }
+    }
+    return {unique_rssids.begin(), unique_rssids.end()};
+}
 
 Status PrimaryKeyCompactionConflictResolver::execute() {
     Schema pkey_schema = generate_pkey_schema();
@@ -76,19 +143,17 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 std::vector<uint32_t> replace_indexes;
                                 RETURN_IF_ERROR(mapper_iter.next_values(chunk->num_rows(), &rssid_rowids));
                                 DCHECK(chunk->num_rows() == rssid_rowids.size());
+
+                                // Batch-prefetch delvecs for this chunk's unique rssids
+                                {
+                                    TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
+                                    auto missing = collect_missing_rssids(rssid_rowids, rssid_to_delvec);
+                                    RETURN_IF_ERROR(batch_load_delvecs(params, missing, &rssid_to_delvec));
+                                }
+
                                 for (int i = 0; i < rssid_rowids.size(); i++) {
                                     const uint32_t rssid = rssid_rowids[i] >> 32;
                                     const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
-                                    if (rssid_to_delvec.count(rssid) == 0) {
-                                        // get delvec by loader
-                                        DelVectorPtr delvec_ptr;
-                                        {
-                                            TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
-                                            RETURN_IF_ERROR(params.delvec_loader->load(
-                                                    {params.tablet_id, rssid}, params.base_version, &delvec_ptr));
-                                        }
-                                        rssid_to_delvec[rssid] = delvec_ptr;
-                                    }
                                     if (!rssid_to_delvec[rssid]->empty() &&
                                         rssid_to_delvec[rssid]->roaring()->contains(rowid)) {
                                         // Input row had been deleted, so we need to delete it from output rowset
@@ -142,19 +207,19 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                     std::vector<uint64_t> rssid_rowids;
                     RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
                     DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
+
+                    // Batch-prefetch all delvecs for this segment's unique rssids in parallel.
+                    // This replaces sequential per-rssid loading which caused 3-10s latency
+                    // with 500 input rowsets due to remote IO (S3/OSS) per delvec.
+                    {
+                        TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
+                        auto missing = collect_missing_rssids(rssid_rowids, rssid_to_delvec);
+                        RETURN_IF_ERROR(batch_load_delvecs(params, missing, &rssid_to_delvec));
+                    }
+
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;
                         const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
-                        if (rssid_to_delvec.count(rssid) == 0) {
-                            // get delvec by loader
-                            DelVectorPtr delvec_ptr;
-                            {
-                                TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
-                                RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
-                                                                           params.base_version, &delvec_ptr));
-                            }
-                            rssid_to_delvec[rssid] = delvec_ptr;
-                        }
                         if (!rssid_to_delvec[rssid]->empty() && rssid_to_delvec[rssid]->roaring()->contains(rowid)) {
                             // Input row had been deleted, so we need to delete it from output rowset
                             tmp_deletes.push_back(i);
