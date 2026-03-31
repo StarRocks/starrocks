@@ -290,6 +290,8 @@ dependencies {
     implementation("org.threeten:threeten-extra:1.7.2")
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:glue")
+    implementation("software.amazon.awssdk:dynamodb")
+    implementation("software.amazon.awssdk:kms")
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:sts")
     implementation("software.amazon.awssdk:url-connection-client")
