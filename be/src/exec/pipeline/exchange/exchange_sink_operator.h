@@ -87,18 +87,11 @@ public:
 
     std::string get_name() const override;
 
-<<<<<<< HEAD
-=======
-    bool releaseable() const override { return true; }
-
-    void set_execute_mode(int performance_level) override;
-
 #ifdef BE_TEST
     // For testing only: inject a custom codec to simulate exceed_max_input_size scenarios.
     void set_compress_codec_for_testing(const BlockCompressionCodec* codec) { _compress_codec = codec; }
 #endif
 
->>>>>>> 2113b39f95 ([Enhancement] Skip compression instead of erroring when chunk size exceeds codec max input size (#70918))
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
