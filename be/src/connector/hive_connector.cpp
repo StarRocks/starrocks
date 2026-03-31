@@ -139,8 +139,7 @@ bool HiveDataSource::should_prune_by_rf_min_max_stats() const {
     if (_scan_range.min_max_values.empty()) return false;
 
     for (const auto& [_, probe] : _runtime_filters->descriptors()) {
-        const RuntimeFilter* filter =
-                probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
+        const RuntimeFilter* filter = probe->runtime_filter(runtime_membership_filter_eval_context.driver_sequence);
         if (filter == nullptr) continue;
 
         const RuntimeFilter* mmf = filter->get_min_max_filter();

@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive_connector.h"
-
 #include <gtest/gtest.h>
 
 #include "common/object_pool.h"
+#include "connector/hive_connector.h"
 #include "exprs/runtime_filter.h"
 #include "types/date_value.h"
 #include "types/logical_type_infra.h"
