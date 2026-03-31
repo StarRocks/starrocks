@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
@@ -367,6 +368,12 @@ public class QueryAnalyzer {
                 boolean isRecursive = stmt.isHasRecursiveCTE();
                 if (isRecursive) {
                     isRecursive = tryProcessRecursiveCte(withQuery, cteScope);
+                }
+                if (isRecursive
+                        && withQuery.getMaterializationHint() != CTERelation.CTEMaterializationHint.NONE) {
+                    throw new SemanticException(
+                            "[materialized]/[not_materialized] hints are not allowed on recursive CTEs",
+                            withQuery.getPos());
                 }
                 if (!isRecursive) {
                     processCteRelation(withQuery, cteScope);
@@ -662,7 +669,8 @@ public class QueryAnalyzer {
                         // cte used in outer query and sub-query can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
                                 withRelation.getColumnOutputNames(), withRelation.getCteQueryStatement(),
-                                withRelation.isRecursive(), false);
+                                withRelation.isRecursive(), false, NodePosition.ZERO,
+                                withRelation.getMaterializationHint());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(

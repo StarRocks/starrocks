@@ -6020,7 +6020,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitCommonTableExpression(com.starrocks.sql.parser.StarRocksParser.CommonTableExpressionContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
-        // Regenerate cteID when generating plan
+
+        CTERelation.CTEMaterializationHint hint = CTERelation.CTEMaterializationHint.NONE;
+        if (context.bracketHint() != null) {
+            List<Identifier> hintIdentifiers = visit(context.bracketHint().identifier(), Identifier.class);
+            if (hintIdentifiers.size() != 1) {
+                throw new ParsingException(
+                        "CTE hint must be a single [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
+            }
+            String hintText = hintIdentifiers.get(0).getValue().toLowerCase();
+            if (hintText.equals("materialized")) {
+                hint = CTERelation.CTEMaterializationHint.MATERIALIZED;
+            } else if (hintText.equals("not_materialized")) {
+                hint = CTERelation.CTEMaterializationHint.NOT_MATERIALIZED;
+            } else {
+                throw new ParsingException(
+                        "Unknown CTE hint [" + hintText + "]. Use [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
+            }
+        }
+
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
                 normalizeName(((Identifier) visit(context.name)).getValue()),
@@ -6028,7 +6048,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 new QueryStatement(queryRelation),
                 false,
                 true,
-                queryRelation.getPos());
+                queryRelation.getPos(),
+                hint);
     }
 
     @Override
