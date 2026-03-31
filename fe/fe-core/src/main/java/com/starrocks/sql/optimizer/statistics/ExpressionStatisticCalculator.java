@@ -389,9 +389,10 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 12;
                     break;
                 case FunctionSet.WEEKOFYEAR:
+                case FunctionSet.WEEK_ISO:
                     minValue = 1;
-                    maxValue = 54;
-                    distinctValue = 54;
+                    maxValue = 53;
+                    distinctValue = 53;
                     break;
                 case FunctionSet.DAY:
                 case FunctionSet.DAYOFMONTH:
@@ -400,6 +401,7 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 31;
                     break;
                 case FunctionSet.DAYOFWEEK:
+                case FunctionSet.DAYOFWEEK_ISO:
                     minValue = 1;
                     maxValue = 7;
                     distinctValue = 7;
@@ -553,6 +555,12 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.DROUND:
                 case FunctionSet.TRUNCATE:
                 case FunctionSet.UPPER:
+                case FunctionSet.LOWER:
+                case FunctionSet.LCASE:
+                case FunctionSet.TRIM:
+                case FunctionSet.LTRIM:
+                case FunctionSet.RTRIM:
+                case FunctionSet.REVERSE:
                     // Just use the input's statistics as output's statistics
                     break;
                 case FunctionSet.TO_BITMAP:
@@ -762,15 +770,16 @@ public class ExpressionStatisticCalculator {
 
         private double calcDistinctValForWeek(ColumnStatistic col) {
             if (col.hasNaNValue() || col.isInfiniteRange()) {
-                return 54;
+                return 53;
             }
             LocalDateTime min = Utils.getDatetimeFromLong((long) col.getMinValue());
             LocalDateTime max = Utils.getDatetimeFromLong((long) col.getMaxValue());
 
             // the range is more than one year
             if (min.plusYears(1).compareTo(max) <= 0) {
-                return 54;
+                return 53;
             } else if (min.getYear() < max.getYear()) {
+                // 54 = 53 + 1 to include startWeek itself in the count (inclusive)
                 return (54 - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)) + max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
             } else {
                 return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
