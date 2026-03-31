@@ -22,8 +22,8 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
 #include "storage/options.h"
+#include "storage/range.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
 
