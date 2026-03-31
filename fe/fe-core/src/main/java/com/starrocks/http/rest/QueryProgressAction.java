@@ -36,24 +36,23 @@ package com.starrocks.http.rest;
 
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ProfileManager;
+<<<<<<< HEAD
 import com.starrocks.common.util.RuntimeProfileParser;
+=======
+import com.starrocks.common.util.QueryProgressUtils;
+>>>>>>> 623efce11a ([BugFix] Remove query progress HTTP loopback from current_queries (#71032))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.sql.ExplainAnalyzer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 // This class is a RESTFUL interface to get query progress.
 // It will be used in query monitor.
 // Usage:
 //   http://fe_host:fe_http_port/api/query/progress?query_id=123456
 public class QueryProgressAction extends RestBaseAction {
-
-    private static final Logger LOG = LogManager.getLogger(QueryProgressAction.class);
 
     public QueryProgressAction(ActionController controller) {
         super(controller);
@@ -74,6 +73,7 @@ public class QueryProgressAction extends RestBaseAction {
 
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         if (profileElement != null) {
+<<<<<<< HEAD
             String result = "";
             //For short circuit query, 'ProfileElement#plan' is null
             if (profileElement.plan == null &&
@@ -92,6 +92,9 @@ public class QueryProgressAction extends RestBaseAction {
                 }
             }
             response.getContent().append(result);
+=======
+            response.getContent().append(QueryProgressUtils.getQueryProgress(queryId, profileElement));
+>>>>>>> 623efce11a ([BugFix] Remove query progress HTTP loopback from current_queries (#71032))
             sendResult(request, response);
         } else {
             response.getContent().append("query id " + queryId + " not found.");
