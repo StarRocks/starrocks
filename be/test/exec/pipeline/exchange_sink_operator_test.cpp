@@ -92,8 +92,7 @@ public:
                 /*is_pipeline_level_shuffle*/ false, /*num_shuffles_per_channel*/ 1,
                 /*sender_id*/ 0, /*dest_node_id*/ 0, /*partition_exprs*/ std::vector<ExprContext*>(),
                 /*enable_exchange_pass_through*/ false, /*enable_exchange_perf*/ false, _fragment_context.get(),
-                /*output_columns*/ std::vector<int32_t>(),
-                /*bucket_properties*/ std::vector<TBucketProperty>());
+                /*output_columns*/ std::vector<int32_t>());
         _factory->set_runtime_state(_runtime_state.get());
     }
 
