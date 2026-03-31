@@ -27,6 +27,8 @@ set(UDF_FILES
   python/env.cpp
   python/callstub.cpp
   udf_call_stub.cpp
+  udf_downloader.cpp
+  udf_downloader.h
 )
 
 add_library(Udf STATIC ${UDF_FILES})

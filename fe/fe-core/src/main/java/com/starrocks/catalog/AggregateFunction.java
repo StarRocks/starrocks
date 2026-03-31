@@ -38,7 +38,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.analysis.FunctionName;
+=======
+import com.starrocks.credential.CloudConfiguration;
+>>>>>>> 269dccb955 ([Feature] Support  loading UDF on S3  (#64541))
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TAggregateFunction;
@@ -244,6 +248,7 @@ public class AggregateFunction extends Function {
         Type intermediateType;
         String objectFile;
         String symbolName;
+        CloudConfiguration cloudConfiguration;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -293,6 +298,11 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder cloudConfiguration(CloudConfiguration cloudConfiguration) {
+            this.cloudConfiguration = cloudConfiguration;
+            return this;
+        }
+
         public void setIntermediateType(Type intermediateType) {
             this.intermediateType = intermediateType;
         }
@@ -304,6 +314,7 @@ public class AggregateFunction extends Function {
             fn.setBinaryType(binaryType);
             fn.symbolName = symbolName;
             fn.setLocation(new HdfsURI(objectFile));
+            fn.setCloudConfiguration(cloudConfiguration);
             return fn;
         }
     }

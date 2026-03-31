@@ -33,13 +33,19 @@ const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
 }
 
 Status init_udaf_context(int64_t id, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context) {
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration) {
     RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";
     auto func_cache = UserFunctionCache::instance();
+<<<<<<< HEAD
     RETURN_IF_ERROR(func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath));
     auto* udaf_ctx = context->udaf_ctxs();
+=======
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
+    auto udaf_ctx = std::make_unique<JavaUDAFContext>();
+>>>>>>> 269dccb955 ([Feature] Support  loading UDF on S3  (#64541))
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();
     RETURN_IF_ERROR(udf_classloader->init());
