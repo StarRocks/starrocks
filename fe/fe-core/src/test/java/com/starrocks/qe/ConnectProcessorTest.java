@@ -70,6 +70,9 @@ import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -384,6 +387,71 @@ public class ConnectProcessorTest extends DDLTestBase {
             processor.processOnce();
             Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
         }
+    }
+
+    @Test
+    public void testMultiStatementAuditPerStatement() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> auditedSqls = new ArrayList<>();
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditedSqls.add(origStmt);
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertEquals(2, auditedSqls.size());
+        Assertions.assertFalse(auditedSqls.get(0).contains(";"));
+        Assertions.assertFalse(auditedSqls.get(1).contains(";"));
+    }
+
+    @Test
+    public void testMultiStatementAuditStopsAfterFailure() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> auditRecords = new ArrayList<>();
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                if (stmtIdx == 1) {
+                    throw new IOException("mock stmt failure");
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertEquals(2, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("ERR:"));
+        Assertions.assertFalse(auditRecords.get(0).contains(";"));
+        Assertions.assertFalse(auditRecords.get(1).contains("; select 3"));
     }
 
     @Test
