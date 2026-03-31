@@ -42,9 +42,6 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
     private final MVPCTBasedRefreshProcessor pctProcessor;
     private final MVIVMBasedRefreshProcessor ivmProcessor;
 
-    // This map is used to store the temporary tvr version range for each base table
-    private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
-
     public MVHybridBasedRefreshProcessor(Database db,
                                          MaterializedView mv,
                                          MvTaskRunContext mvContext,
@@ -108,19 +105,21 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         // If the refresh is transferred to pct, we need to refresh the changed partitions once
         // and cannot generate multi-task-runs.
         pctProcessor.getMvRefreshParams().setCanGenerateNextTaskRun(false);
+        final Map<BaseTableInfo, TvrVersionRange> pendingBaseTableTvrVersionRangeMap =
+                getPendingBaseTableTvrVersionRangeMap();
 
         // try get the tvr version range map from ivm processor
         final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
-            TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableChangedVersionRange(snapshotInfo,
-                    mvTvrVersionRangeMap, this.currentRefreshMode);
+            TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
+                    snapshotInfo, mvTvrVersionRangeMap);
             logger.info("Base table: {}, changed version range: {}",
                     snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
             // collect changed version range
             TvrTableSnapshotInfo tvrTableSnapshotInfo = new TvrTableSnapshotInfo(snapshotInfo.getBaseTableInfo(),
                     snapshotInfo.getBaseTable());
-            tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+            pendingBaseTableTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
             // update the snapshot info with the changed version range
             tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
         }
@@ -163,8 +162,9 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
             if (mvContext.hasNextBatchPartition()) {
                 updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
             } else {
-                // if this is the last task run for a refresh job, update tempMvTvrVersionRangeMap instead.
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tempMvTvrVersionRangeMap);
+                // if this is the last task run for a refresh job, update the pending tvr version ranges instead.
+                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions,
+                        getPendingBaseTableTvrVersionRangeMap());
             }
         }
     }
