@@ -403,14 +403,14 @@ inline size_t BinaryDataProxyContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
 }
 
-inline size_t BinaryImmContainer::immutable_bytes_size() const {
+inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
     if (_column == nullptr) {
         return 0;
     }
     if (_is_large) {
-        return down_cast<const LargeBinaryColumn*>(_column)->get_immutable_bytes().size();
+        return down_cast<const LargeBinaryColumn*>(_column)->get_bytes().size();
     }
-    return down_cast<const BinaryColumn*>(_column)->get_immutable_bytes().size();
+    return down_cast<const BinaryColumn*>(_column)->get_bytes().size();
 }
 
 template <typename T>
