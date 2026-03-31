@@ -683,8 +683,8 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                // https://github.com/StarRocks/starrocks/pull/43065 will confirm _agg_expr_cts->evaluate
-                // will not generate one column large then 4GB.
+                // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
+                // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 TRY_CATCH_BAD_ALLOC(
