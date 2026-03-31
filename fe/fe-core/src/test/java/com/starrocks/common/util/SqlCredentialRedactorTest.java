@@ -38,6 +38,39 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactInsertSelectFromFilesCredentials() {
+        String sql = "INSERT INTO t0 SELECT * FROM FILES(\n" +
+                "        \"path\" = \"s3://bucket/data.parquet\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = \"AKIA_INSERT_SOURCE\",\n" +
+                "        \"aws.s3.secret_key\" = \"SOURCE_SECRET\"\n" +
+                ")";
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("AKIA_INSERT_SOURCE"),
+                "FILES source access key should be redacted");
+        Assertions.assertFalse(redacted.contains("SOURCE_SECRET"),
+                "FILES source secret key should be redacted");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
+    public void testRedactInsertIntoFilesCredentials() {
+        String sql = "INSERT INTO FILES(\n" +
+                "        \"path\" = \"s3://bucket/output/\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = \"AKIA_INSERT_TARGET\",\n" +
+                "        \"aws.s3.secret_key\" = \"TARGET_SECRET\"\n" +
+                ")\n" +
+                "SELECT 1";
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("AKIA_INSERT_TARGET"),
+                "FILES target access key should be redacted");
+        Assertions.assertFalse(redacted.contains("TARGET_SECRET"),
+                "FILES target secret key should be redacted");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
     public void testRedactAzureCredentials() {
         String sql = "CREATE EXTERNAL TABLE test (\n" +
                 "    id INT\n" +

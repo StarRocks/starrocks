@@ -226,6 +226,23 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testGetRedactedOriginStmtInStringWithFilesCredentials() {
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT * FROM FILES(" +
+                        "\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"format\"=\"parquet\", " +
+                        "\"aws.s3.access_key\"=\"AKIA_STMT_EXECUTOR\", " +
+                        "\"aws.s3.secret_key\"=\"STMT_EXECUTOR_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
+
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("AKIA_STMT_EXECUTOR"));
+        Assertions.assertFalse(redacted.contains("STMT_EXECUTOR_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
     public void testExecTimeout() {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
