@@ -155,7 +155,7 @@ CONF_mInt64(lake_compaction_max_rowset_size, "4294967296");
 
 CONF_mBool(lake_enable_compaction_async_write, "false");
 
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "200");
 
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 
