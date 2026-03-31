@@ -410,3 +410,73 @@ be/test/exec/workgroup/
 4. **Unit tests for composition layer**: Workgroup vruntime selection, cancel semantics, semaphore blocking/wakeup
 5. **Stress tests**: High-contention scenarios with 64+ threads, measuring throughput and fairness
 6. **Integration**: Run existing pipeline/scan test suites with feature flag enabled
+
+## Benchmark
+
+Benchmark code in `be/src/bench/`, using Google Benchmark framework (consistent with existing benchmarks in the codebase).
+
+### Benchmark Targets
+
+#### 1. ScanTaskQueue Benchmark (`be/src/bench/lock_free_scan_task_queue_bench.cpp`)
+
+Compare `LockFreeScanTaskQueue` + `LockFreeWorkGroupScanTaskQueue` vs current `PriorityScanTaskQueue` + `WorkGroupScanTaskQueue`.
+
+**Scenarios**:
+
+| Scenario | Description | Measures |
+|----------|-------------|----------|
+| Single-WG enqueue throughput | N producer threads enqueue to 1 workgroup | Enqueue ops/sec, scalability with thread count |
+| Single-WG dequeue throughput | N consumer threads dequeue from 1 workgroup | Dequeue ops/sec, scalability with thread count |
+| Single-WG mixed put/take | N threads both enqueue and dequeue (simulates ScanExecutor workers) | Total ops/sec under contention |
+| Multi-WG mixed put/take | N threads, M workgroups, mixed enqueue/dequeue | Cross-workgroup scheduling overhead |
+| Producer-consumer split | P producer threads + C consumer threads (simulates Driver Executor → ScanExecutor pattern) | Throughput when producer/consumer are disjoint pools |
+
+**Thread counts**: 1, 4, 8, 16, 32, 64, 128 (to show scalability curve)
+
+**Workgroup counts** (for multi-WG): 1, 2, 4, 8
+
+#### 2. PipelineDriverQueue Benchmark (`be/src/bench/lock_free_driver_queue_bench.cpp`)
+
+Compare `LockFreeDriverQueue` + `LockFreeWorkGroupDriverQueue` vs current `QuerySharedDriverQueue` + `WorkGroupDriverQueue`.
+
+**Scenarios**:
+
+| Scenario | Description | Measures |
+|----------|-------------|----------|
+| Single-WG enqueue throughput | N worker threads put_back drivers | Enqueue ops/sec |
+| Single-WG dequeue throughput | N worker threads take drivers | Dequeue ops/sec |
+| Single-WG mixed put_back/take | N threads simulate executor loop: take → execute → put_back | End-to-end scheduling latency and throughput |
+| Multi-WG mixed put_back/take | N threads, M workgroups with different cpu_weight | Workgroup fairness + throughput |
+| Mixed with external producers | N executor workers + 1 poller thread + P external submit threads | Contention between internal and external producers |
+| Cancel under load | N threads mixed put_back/take + periodic cancel | Cancel overhead impact on throughput |
+
+**Thread counts**: 1, 4, 8, 16, 32, 64, 128
+
+**Workgroup counts** (for multi-WG): 1, 2, 4, 8
+
+### Key Metrics
+
+Each benchmark reports:
+- **Throughput**: ops/sec (operations per second)
+- **Latency**: p50, p99, p999 per-operation latency (ns)
+- **Scalability**: throughput ratio relative to single-thread baseline
+- **Fairness** (for multi-WG): actual CPU time distribution vs expected (based on cpu_weight)
+
+### Mock Objects
+
+Benchmarks use lightweight mock objects to avoid pulling in full pipeline/scan dependencies:
+- `MockDriver`: Minimal struct with workgroup pointer, accumulated execution time, and MLFQ level
+- `MockScanTask`: Minimal struct with priority value and workgroup pointer
+- `MockWorkGroup`: Minimal struct with cpu_weight, vruntime counter, and queue pointers
+
+### Build Tips
+
+To speed up benchmark iteration, temporarily comment out other benchmark cases in `be/src/bench/CMakeLists.txt` so only the new benchmark files are compiled.
+
+### File Layout
+
+```
+be/src/bench/
+├── lock_free_scan_task_queue_bench.cpp
+├── lock_free_driver_queue_bench.cpp
+```
