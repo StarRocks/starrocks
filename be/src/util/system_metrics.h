@@ -19,6 +19,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include "base/metrics.h"
 
@@ -161,6 +162,7 @@ private:
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
     std::vector<IOMetrics*> _io_metrics;
 
+    std::mutex _update_mutex;
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;
     MetricRegistry* _registry = nullptr;
