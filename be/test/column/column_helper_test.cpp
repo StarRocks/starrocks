@@ -151,4 +151,25 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
 }
 
+// ColumnHelper::append_column_value
+TEST_F(ColumnHelperTest, append_column_value_int32) {
+    auto col = Int32Column::create();
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 42);
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 99);
+    EXPECT_EQ(col->debug_string(), "[42, 99]");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_varchar) {
+    auto col = BinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("hello"));
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("world"));
+    EXPECT_EQ(col->debug_string(), "['hello', 'world']");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
+    EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
+}
 } // namespace starrocks

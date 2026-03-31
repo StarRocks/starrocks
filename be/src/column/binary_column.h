@@ -43,6 +43,8 @@ public:
 
     size_t size() const;
 
+    size_t immutable_bytes_size() const;
+
 private:
     template <typename T>
     void init(const BinaryColumnBase<T>& column);
@@ -399,6 +401,16 @@ inline Slice BinaryDataProxyContainer::operator[](size_t index) const {
 
 inline size_t BinaryDataProxyContainer::size() const {
     return _column == nullptr ? 0 : _column->size();
+}
+
+inline size_t BinaryDataProxyContainer::immutable_bytes_size() const {
+    if (_column == nullptr) {
+        return 0;
+    }
+    if (_is_large) {
+        return down_cast<const LargeBinaryColumn*>(_column)->get_bytes().size();
+    }
+    return down_cast<const BinaryColumn*>(_column)->get_bytes().size();
 }
 
 template <typename T>

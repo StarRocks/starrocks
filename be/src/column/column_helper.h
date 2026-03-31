@@ -439,12 +439,18 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
-    static inline void append_binary_value(Column* column, const Slice& value) {
-        Column* data_column = get_data_column(column);
-        if (data_column->is_large_binary()) {
-            down_cast<LargeBinaryColumn*>(data_column)->append(value);
+    template <LogicalType LT>
+    static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if constexpr (lt_is_string_or_binary<LT>) {
+            using LargeColumnType = RunTimeLargeColumnType<LT>;
+            if (column->is_large_binary()) {
+                down_cast<LargeColumnType*>(column)->append(value);
+            } else {
+                down_cast<ColumnType*>(column)->append(value);
+            }
         } else {
-            down_cast<BinaryColumn*>(data_column)->append(value);
+            down_cast<ColumnType*>(column)->append(value);
         }
     }
 
@@ -475,13 +481,6 @@ public:
         } else {
             column = std::move(large_column);
         }
-    }
-
-    static inline size_t get_binary_bytes_size(const Column* column) {
-        if (column->is_large_binary()) {
-            return down_cast<const LargeBinaryColumn*>(column)->get_bytes().size();
-        }
-        return down_cast<const BinaryColumn*>(column)->get_bytes().size();
     }
 
     template <typename Func>
