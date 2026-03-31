@@ -1,0 +1,57 @@
+-- name: test_no_full_group_by_correlated_subquery
+-- Test Point: correlated subquery referencing non-GROUP-BY outer columns should
+-- succeed when ONLY_FULL_GROUP_BY is disabled, and be rejected when enabled (issue #70996)
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table orders (
+  order_id INT,
+  customer_id INT,
+  amount DECIMAL(10,2),
+  status VARCHAR(20)
+) ENGINE=OLAP
+DUPLICATE KEY(order_id)
+DISTRIBUTED BY HASH(order_id) BUCKETS 2
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into orders values (1, 101, 100.00, 'complete'), (2, 101, 200.00, 'pending'), (3, 102, 300.00, 'complete'), (4, 102, 150.00, 'pending');
+-- result:
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select customer_id, max(amount), (select count(*) from orders o2 where o2.customer_id = o.customer_id and o2.status = o.status) as cnt from orders o group by customer_id order by customer_id;
+-- result:
+101	200.00	1
+102	300.00	1
+-- !result
+set sql_mode = 'ONLY_FULL_GROUP_BY';
+-- result:
+-- !result
+select customer_id, max(amount), (select count(*) from orders o2 where o2.customer_id = o.customer_id and o2.status = o.status) as cnt from orders o group by customer_id order by customer_id;
+-- result:
+[REGEX].*must be an aggregate expression or appear in GROUP BY clause.*
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select customer_id, max(amount), (select count(*) from orders o2 where o2.customer_id = o.customer_id and o2.status = o.status and o2.amount = o.amount) as cnt from orders o group by customer_id order by customer_id;
+-- result:
+101	200.00	1
+102	300.00	1
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+select customer_id, max(amount) from orders o group by customer_id having max(amount) > (select count(*) from orders o2 where o2.customer_id = o.customer_id and o2.status = o.status) order by customer_id;
+-- result:
+101	200.00
+102	300.00
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result
