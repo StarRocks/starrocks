@@ -20,11 +20,18 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class CTERelation extends Relation {
+    public enum CTEMaterializationHint {
+        NONE,
+        MATERIALIZED,
+        NOT_MATERIALIZED
+    }
+
     private final int cteMouldId;
     private final String name;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
     private int refs = 0; // consume refs
+<<<<<<< HEAD
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
                        QueryStatement cteQueryStatement) {
@@ -33,12 +40,32 @@ public class CTERelation extends Relation {
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
                        QueryStatement cteQueryStatement, NodePosition pos) {
+=======
+    private boolean isRecursive;
+    private final CTEMaterializationHint materializationHint;
+
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
+                       QueryStatement cteQueryStatement, boolean isRecursive, boolean isAnchor) {
+        this(cteMouldId, name, columnOutputNames, cteQueryStatement, isRecursive, isAnchor, NodePosition.ZERO,
+                CTEMaterializationHint.NONE);
+    }
+
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement,
+                       boolean isRecursive, boolean isAnchor, NodePosition pos,
+                       CTEMaterializationHint materializationHint) {
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
         super(pos);
         this.cteMouldId = cteMouldId;
         this.name = name;
         this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
         this.refs = 0;
+<<<<<<< HEAD
+=======
+        this.isRecursive = isRecursive;
+        this.isAnchor = isAnchor;
+        this.materializationHint = materializationHint;
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
     }
 
     public int getCteMouldId() {
@@ -69,6 +96,25 @@ public class CTERelation extends Relation {
         return resolvedInFromClause;
     }
 
+<<<<<<< HEAD
+=======
+    public void setRecursive(boolean recursive) {
+        isRecursive = recursive;
+    }
+
+    public boolean isRecursive() {
+        return isRecursive;
+    }
+
+    public boolean isAnchor() {
+        return isAnchor;
+    }
+
+    public CTEMaterializationHint getMaterializationHint() {
+        return materializationHint;
+    }
+
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
     @Override
     public String toString() {
         return name == null ? String.valueOf(cteMouldId) : name;

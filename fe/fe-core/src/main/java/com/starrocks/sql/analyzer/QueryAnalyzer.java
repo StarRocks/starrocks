@@ -91,6 +91,15 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
+import org.apache.commons.collections.CollectionUtils;
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -339,6 +348,7 @@ public class QueryAnalyzer {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                     }
                 }
+<<<<<<< HEAD
 
                 /*
                  * use cte column name as output scope of subquery relation fields
@@ -353,6 +363,16 @@ public class QueryAnalyzer {
                     outputFields.add(
                             new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
                                     originField.getOriginExpression()));
+=======
+                if (isRecursive
+                        && withQuery.getMaterializationHint() != CTERelation.CTEMaterializationHint.NONE) {
+                    throw new SemanticException(
+                            "[materialized]/[not_materialized] hints are not allowed on recursive CTEs",
+                            withQuery.getPos());
+                }
+                if (!isRecursive) {
+                    processCteRelation(withQuery, cteScope);
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
                 }
 
                 /*
@@ -552,8 +572,14 @@ public class QueryAnalyzer {
                         //                "having v1 in (select v3 from w where v2 = 2)
                         // cte used in outer query and sub-query can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
+<<<<<<< HEAD
                                 withRelation.getColumnOutputNames(),
                                 withRelation.getCteQueryStatement());
+=======
+                                withRelation.getColumnOutputNames(), withRelation.getCteQueryStatement(),
+                                withRelation.isRecursive(), false, NodePosition.ZERO,
+                                withRelation.getMaterializationHint());
+>>>>>>> 9791a17b75 ([Enhancement] Support materialization hints for CTEs (#70802))
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(

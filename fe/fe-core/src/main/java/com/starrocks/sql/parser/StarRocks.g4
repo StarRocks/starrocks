@@ -2294,7 +2294,7 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' queryRelation ')'
+    : name=identifier (columnAliases)? AS '(' queryRelation ')' bracketHint?
     ;
 
 setQuantifier
