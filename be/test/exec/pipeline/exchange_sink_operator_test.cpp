@@ -16,11 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_network_fwd.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
@@ -30,8 +26,10 @@
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "util/compression/block_compression.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -75,7 +73,6 @@ public:
         _fragment_context->set_fragment_instance_id(_fragment_id);
         _fragment_context->set_runtime_state(std::shared_ptr{_runtime_state});
         _runtime_state->set_fragment_ctx(_fragment_context.get());
-        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());
@@ -128,7 +125,7 @@ protected:
 // serialize_chunk should succeed (skip compression rather than error).
 TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
     auto op = _factory->create(1, 0);
-    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
+    ASSERT_OK(op->prepare(_runtime_state.get()));
 
     auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
     sink->set_compress_codec_for_testing(&_overflow_codec);
@@ -150,7 +147,7 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
 // serialize_chunk should return InternalError.
 TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_disabled) {
     auto op = _factory->create(1, 0);
-    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
+    ASSERT_OK(op->prepare(_runtime_state.get()));
 
     auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
     sink->set_compress_codec_for_testing(&_overflow_codec);
