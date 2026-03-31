@@ -683,12 +683,10 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
+                // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                // When chunk's column is const, maybe need to unpack it.
-                if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                    ColumnHelper::ensure_large_binary_column(_agg_intput_columns[i][j]);
-                }
                 TRY_CATCH_BAD_ALLOC(
                         _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
@@ -704,9 +702,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
-            if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                ColumnHelper::ensure_large_binary_column(_partition_columns[i]);
-            }
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
@@ -719,9 +714,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
-            if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                ColumnHelper::ensure_large_binary_column(_order_columns[i]);
-            }
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
