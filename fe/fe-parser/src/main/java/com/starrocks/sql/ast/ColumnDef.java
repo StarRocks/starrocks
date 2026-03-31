@@ -95,6 +95,9 @@ public class ColumnDef implements ParseNode {
     private DefaultValueDef defaultValueDef;
     private final String comment;
     private boolean isPartitionColumn = false;
+    // True only for columns defined directly by SQL column syntax. Derived ColumnDef instances
+    // created by CTAS/MV/internal builders should keep the default false value.
+    private boolean explicitSqlType = false;
 
     private final NodePosition pos;
 
@@ -233,6 +236,14 @@ public class ColumnDef implements ParseNode {
 
     public boolean isPartitionColumn() {
         return isPartitionColumn;
+    }
+
+    public boolean isExplicitSqlType() {
+        return explicitSqlType;
+    }
+
+    public void setExplicitSqlType(boolean explicitSqlType) {
+        this.explicitSqlType = explicitSqlType;
     }
 
     public TypeDef getTypeDef() {

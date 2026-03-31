@@ -550,10 +550,7 @@ import com.starrocks.type.AnyMapType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -1192,14 +1189,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             columnType = TypeParser.getType(context.type());
         }
 
-        // Only plain column definitions should materialize the documented 1MB default
-        // length for VARBINARY. Agg-state columns must keep their opaque intermediate type.
-        if (aggStateDesc == null && columnType.isScalarType()) {
-            ScalarType scalarType = (ScalarType) columnType;
-            if (scalarType.getPrimitiveType() == PrimitiveType.VARBINARY && scalarType.getLength() < 0) {
-                columnType = TypeFactory.createVarbinary(TypeFactory.getOlapMaxVarcharLength());
-            }
-        }
         NodePosition pos = context.type() == null ? NodePosition.ZERO : createPos(context.type());
         TypeDef typeDef = new TypeDef(columnType, pos);
         String charsetName = context.charsetName() != null ?
@@ -1264,8 +1253,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
-        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
-                isAutoIncrement, expr, comment, createPos(context));
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc,
+                isAllowNull, defaultValueDef, isAutoIncrement, expr, comment, createPos(context));
+        columnDef.setExplicitSqlType(true);
+        return columnDef;
     }
 
     @Override
