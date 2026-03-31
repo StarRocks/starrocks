@@ -18,8 +18,6 @@
 
 #include "butil/file_util.h"
 #include "common/config.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -40,7 +38,9 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
