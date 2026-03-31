@@ -466,4 +466,41 @@ public class AlterMaterializedViewTest extends MVTestBase {
 
         alterMVDropColumn(dropStmt, true);
     }
+
+    @Test
+    public void testDropColumnOnUnionMV() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_t1_union\n" +
+                "(\n" +
+                "    id int,\n" +
+                "    a int,\n" +
+                "    b int\n" +
+                ")\n" +
+                "DUPLICATE KEY(`id`)" +
+                "DISTRIBUTED BY HASH (id) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withTable("CREATE TABLE base_t2_union\n" +
+                "(\n" +
+                "    id int,\n" +
+                "    a int,\n" +
+                "    b int\n" +
+                ")\n" +
+                "DUPLICATE KEY(`id`)" +
+                "DISTRIBUTED BY HASH (id) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_union_test\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, a, b FROM base_t1_union UNION ALL SELECT id, a, b FROM base_t2_union;");
+
+        // DROP COLUMN on a UNION MV should fail with a clear error, not ClassCastException
+        String dropStmt = "alter materialized view mv_union_test drop column b";
+        alterMVDropColumn(dropStmt, true);
+
+        // ADD COLUMN on a UNION MV should also fail with a clear error
+        String addStmt = "alter materialized view mv_union_test add column cnt as count(a)";
+        alterMVAddColumn(addStmt, true);
+    }
 }
