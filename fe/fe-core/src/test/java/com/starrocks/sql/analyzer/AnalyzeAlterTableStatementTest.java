@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -30,6 +31,9 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -218,6 +222,18 @@ public class AnalyzeAlterTableStatementTest {
     public void testAlterWithTimeType() {
         analyzeFail("alter table t0 add column testcol TIME");
         analyzeFail("alter table t0 modify column v0 TIME");
+    }
+
+    @Test
+    public void testAlterAddVarbinaryWithoutLengthMaterializesDefaultLength() {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 add column testcol varbinary");
+        Assertions.assertEquals(1, alterTableStmt.getAlterClauseList().size());
+        Assertions.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof AddColumnClause);
+
+        AddColumnClause clause = (AddColumnClause) alterTableStmt.getAlterClauseList().get(0);
+        ScalarType type = (ScalarType) clause.getColumnDef().getType();
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
     }
 
     @Test
