@@ -30,67 +30,70 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_meta.h"
 
-namespace starrocks::lake {
+        namespace starrocks::lake {
 
-class TabletManager;
+    class TabletManager;
 
-class ReplicationTxnManager {
-public:
-    explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
+    class ReplicationTxnManager {
+    public:
+        explicit ReplicationTxnManager(lake::TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
 
-    Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
+        Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
-    Status replicate_snapshot(const TReplicateSnapshotRequest& request);
+        Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
-    Status clear_snapshots(const TxnLogPtr& txn_slog);
+        Status clear_snapshots(const TxnLogPtr& txn_slog);
 
-    DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
+        DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
 
 <<<<<<< HEAD
 =======
-    static FileConverterCreatorFunc build_file_converters(
-            const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
-            const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-            std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
+        static FileConverterCreatorFunc build_file_converters(
+                const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
+                const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
+                std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                std::vector<std::string>& files_to_delete);
 
-    // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
-    // into DeltaColumnGroupMetadataPB for shared-data replication.
-    // Also populates filename_map with old->new .cols filename mappings.
-    static Status convert_dcg_meta_for_non_pk(
-            const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
-            const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
-            DeltaColumnGroupMetadataPB* dcg_meta,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
+        // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
+        // into DeltaColumnGroupMetadataPB for shared-data replication.
+        // Also populates filename_map with old->new .cols filename mappings.
+        static Status convert_dcg_meta_for_non_pk(
+                const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
+                const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
+                DeltaColumnGroupMetadataPB* dcg_meta,
+                std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
 
-    // Convert DeltaColumnGroupList from shared-nothing PK table snapshot
-    // into DeltaColumnGroupMetadataPB for shared-data replication.
-    // Also populates filename_map with old->new .cols filename mappings.
-    static Status convert_dcg_meta_for_pk(
-            const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups,
-            TTransactionId transaction_id, DeltaColumnGroupMetadataPB* dcg_meta,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
+        // Convert DeltaColumnGroupList from shared-nothing PK table snapshot
+        // into DeltaColumnGroupMetadataPB for shared-data replication.
+        // Also populates filename_map with old->new .cols filename mappings.
+        static Status convert_dcg_meta_for_pk(
+                const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups,
+                TTransactionId transaction_id, DeltaColumnGroupMetadataPB* dcg_meta,
+                std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
 
-    // Convert column unique IDs in DCG metadata using the provided column_unique_id_map.
-    static Status convert_dcg_column_unique_ids(DeltaColumnGroupMetadataPB* dcg_meta,
-                                                const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map);
+        // Convert column unique IDs in DCG metadata using the provided column_unique_id_map.
+        static Status convert_dcg_column_unique_ids(DeltaColumnGroupMetadataPB* dcg_meta,
+                                                    const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map);
 
 >>>>>>> 2ea7d19398 ([Enhancement] Support DCG files synchronization during shared-nothing to shared-data replication (#69339))
-private:
-    Status make_remote_snapshot(const TRemoteSnapshotRequest& request, const std::vector<Version>* missed_versions,
-                                const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
-                                std::string* src_snapshot_path);
 
-    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request, const TSnapshotInfo& src_snapshot_info,
-                                     const TabletMetadataPtr& tablet_metadata);
+    private:
+        Status make_remote_snapshot(const TRemoteSnapshotRequest& request, const std::vector<Version>* missed_versions,
+                                    const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
+                                    std::string* src_snapshot_path);
 
-    static Status convert_rowset_meta(
-            const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
-            std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* segment_filename_map);
+        Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                         const TSnapshotInfo& src_snapshot_info,
+                                         const TabletMetadataPtr& tablet_metadata);
 
-    static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
+        static Status convert_rowset_meta(
+                const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
+                std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* segment_filename_map);
 
-private:
-    lake::TabletManager* _tablet_manager;
-};
+        static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
+
+    private:
+        lake::TabletManager* _tablet_manager;
+    };
 
 } // namespace starrocks::lake
