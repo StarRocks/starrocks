@@ -956,10 +956,35 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             } else {
                 // Primitive array: [Z [B [S [I [J [F [D
                 elem_is_box = false;
-		elem_type = TYPE_UNKNOWN;
+                switch (sign[i]) {
+                case 'Z':
+                    elem_type = TYPE_BOOLEAN;
+                    break;
+                case 'B':
+                    elem_type = TYPE_TINYINT;
+                    break;
+                case 'S':
+                    elem_type = TYPE_SMALLINT;
+                    break;
+                case 'I':
+                    elem_type = TYPE_INT;
+                    break;
+                case 'J':
+                    elem_type = TYPE_BIGINT;
+                    break;
+                case 'F':
+                    elem_type = TYPE_FLOAT;
+                    break;
+                case 'D':
+                    elem_type = TYPE_DOUBLE;
+                    break;
+                default:
+                    break;
+                }
+                elem_type = TYPE_UNKNOWN;
             }
 
-            desc->emplace_back(MethodTypeDescriptor{elem_type, elem_is_box});
+            desc->emplace_back(MethodTypeDescriptor{elem_type, elem_is_box, true});
             continue;
         }
         if (sign[i] == 'L') {

@@ -489,7 +489,7 @@ private:
 struct MethodTypeDescriptor {
     LogicalType type;
     bool is_box;
-    bool is_array;
+    bool is_array = false;
 };
 
 struct JavaMethodDescriptor {
