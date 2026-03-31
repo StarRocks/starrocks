@@ -82,7 +82,7 @@ static Status batch_load_delvecs(const CompactConflictResolveParams& params,
 
 // Extract unique rssids from rssid_rowids that are not already in the cache.
 static std::vector<uint32_t> collect_missing_rssids(const std::vector<uint64_t>& rssid_rowids,
-                                                     const std::map<uint32_t, DelVectorPtr>& rssid_to_delvec) {
+                                                    const std::map<uint32_t, DelVectorPtr>& rssid_to_delvec) {
     std::set<uint32_t> unique_rssids;
     for (const auto& rssid_rowid : rssid_rowids) {
         uint32_t rssid = rssid_rowid >> 32;
