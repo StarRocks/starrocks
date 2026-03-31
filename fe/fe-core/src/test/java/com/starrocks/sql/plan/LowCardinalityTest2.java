@@ -2321,7 +2321,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
-    
+
     @Test
     public void testWindowFunction() throws Exception {
         String sql = "SELECT\n" +
@@ -2706,5 +2706,19 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
                 "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+
+    @Test
+    public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
+        String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 9>\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, lead(10: S_ADDRESS, 1, NULL), ]\n" +
+                "  |  order by: 1: S_SUPPKEY ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING");
     }
 }
