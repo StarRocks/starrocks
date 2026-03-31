@@ -3739,6 +3739,7 @@ public class StmtExecutor {
 
     @VisibleForTesting
     String getRedactedOriginStmtInString() {
+        // Keep sensitive properties masked before they enter logs/query metadata sinks.
         return SqlCredentialRedactor.redact(getOriginStmtInString());
     }
 
