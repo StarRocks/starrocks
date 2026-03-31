@@ -256,15 +256,9 @@ public:
         } else {
             DCHECK(to[0]->is_numeric());
         }
-<<<<<<< HEAD
-        DCHECK((*to[1]).is_numeric());
+        DCHECK(to[1]->is_numeric());
         auto* column0 = down_cast<InputColumnType*>(to[0].get());
         auto* column1 = down_cast<Int64Column*>(to[1].get());
-=======
-        DCHECK(to[1]->is_numeric());
-        auto* column0 = down_cast<InputColumnType*>(to[0]->as_mutable_raw_ptr());
-        auto* column1 = down_cast<Int64Column*>(to[1]->as_mutable_raw_ptr());
->>>>>>> d1099e5b2e ([Enhancement] And function append_column_value to handle large binary column append (#70805))
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?
