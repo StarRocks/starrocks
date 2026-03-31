@@ -17,8 +17,10 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "fmt/format.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
+#include "udf/udf_downloader.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
 #include "util/uuid_generator.h"
@@ -26,61 +28,20 @@
 namespace starrocks {
 
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
-                              const std::string& expected_checksum) {
-    auto success = false;
+                              const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
     auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
-    auto fp = fopen(tmp_file.c_str(), "w");
-    DeferOp defer([&]() {
-        if (fp != nullptr) {
-            fclose(fp);
-        }
-        if (!success) {
-            // delete tmp file
-            (void)remove(tmp_file.c_str());
-        }
-    });
-
-    if (fp == nullptr) {
-        std::string errmsg = strerror(errno);
-        LOG(ERROR) << fmt::format("fail to open file. file = {}, error = {}", tmp_file, errmsg);
-        return Status::InternalError(
-                fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
-    }
-
-    Md5Digest digest;
-    HttpClient client;
-    RETURN_IF_ERROR(client.init(url));
-    Status status;
-
-    auto download_cb = [&status, &tmp_file, fp, &digest, &url](const void* data, size_t length) {
-        digest.update(data, length);
-        auto res = fwrite(data, length, 1, fp);
-        if (res != 1) {
-            LOG(ERROR) << fmt::format("fail to write data to file {}, error={}", tmp_file, ferror(fp));
-            status =
-                    Status::InternalError(strings::Substitute("file to write data when downloading file from $0", url));
-            return false;
-        }
-        return true;
-    };
-    RETURN_IF_ERROR(client.execute(download_cb));
-    RETURN_IF_ERROR(status);
-
-    digest.digest();
-    if (!boost::iequals(digest.hex(), expected_checksum)) {
-        LOG(ERROR) << fmt::format("Download file's checksum is not equal, expected={}, actual={}", expected_checksum,
-                                  digest.hex());
-        return Status::InternalError("Download file's checksum is not match");
-    }
-
-    // rename tmporary file to target file
+    udf_downloader downloader;
+    FSOptions options(&cloud_configuration);
+    RETURN_IF_ERROR(downloader.do_download(tmp_file, url, expected_checksum, options));
+    // rename temporary file to target file
     auto ret = rename(tmp_file.c_str(), target_file.c_str());
     if (ret != 0) {
-        LOG(ERROR) << fmt::format("fail to rename file {} to {}", tmp_file, target_file);
-        return Status::InternalError(fmt::format("fail to rename file from {} to {}", tmp_file, target_file));
+        (void)remove(tmp_file.c_str());
+        auto err = fmt::format("fail to rename file {} to {}", tmp_file, target_file);
+        LOG(ERROR) << err;
+        return Status::InternalError(err);
     }
-
-    success = true;
     return Status::OK();
 }
+
 } // namespace starrocks
