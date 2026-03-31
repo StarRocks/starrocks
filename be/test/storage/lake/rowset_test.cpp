@@ -1236,13 +1236,11 @@ TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
 
     // First call injects error; subsequent calls succeed normally.
     // total_hits >= 2 proves DeferOp waited for all tasks before returning.
-    SyncPoint::GetInstance()->SetCallBack(
-            "Rowset::load_segments::parallel_load",
-            [&](void* arg) {
-                if (total_hits.fetch_add(1) == 0) {
-                    *static_cast<Status*>(arg) = Status::IOError("injected");
-                }
-            });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void* arg) {
+        if (total_hits.fetch_add(1) == 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected");
+        }
+    });
 
     // Create rowset after config is set (Rowset captures _parallel_load in constructor)
     auto rowset =

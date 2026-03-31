@@ -1244,13 +1244,11 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
 
     // First call injects error; subsequent calls succeed normally.
     // total_hits >= 2 proves DeferOp waited for all tasks before returning.
-    SyncPoint::GetInstance()->SetCallBack(
-            "TabletReader::get_segment_iterators::parallel_read",
-            [&](void* arg) {
-                if (total_hits.fetch_add(1) == 0) {
-                    *static_cast<Status*>(arg) = Status::IOError("injected");
-                }
-            });
+    SyncPoint::GetInstance()->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void* arg) {
+        if (total_hits.fetch_add(1) == 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected");
+        }
+    });
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
