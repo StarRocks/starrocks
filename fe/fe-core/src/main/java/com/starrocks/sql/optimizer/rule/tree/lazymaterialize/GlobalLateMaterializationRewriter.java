@@ -83,6 +83,11 @@ public class GlobalLateMaterializationRewriter {
         if (!hasLimit(root)) {
             return root;
         }
+
+        boolean enableCostBased = context.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
+        if (enableCostBased && !hasTopNWithLimit(root) && !hasLimitAfterJoin(root)) {
+            return root;
+        }
         // stage A split projection
         root = root.getOp().accept(new SplitProjectionRewriter(), root, null);
 
@@ -92,10 +97,7 @@ public class GlobalLateMaterializationRewriter {
         root.getOp().accept(columnCollector, root, collectorContext);
 
         mergeFetchPosition(root, collectorContext, context);
-        boolean enableCostBased = context.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
-        if (enableCostBased && !hasTopNWithLimit(root) && !hasLimitAfterJoin(root)) {
-            return root;
-        }
+
         collectorContext.costBasedGlm = enableCostBased;
         root = rewrite(root, collectorContext);
 
