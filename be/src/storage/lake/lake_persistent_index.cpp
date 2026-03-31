@@ -1000,7 +1000,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
 
     // Holds the pre-read PK data and index values for one chunk batch in a segment.
     struct PKBatch {
-        ColumnPtr pk_col;       // encoded PK column (owned)
+        ColumnPtr pk_col; // encoded PK column (owned)
         std::vector<IndexValue> values;
         bool is_binary = false; // whether pk_col is binary type
     };
@@ -1094,8 +1094,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             if (local_pk_column) {
                 int64_t t2 = GetCurrentTimeMicros();
                 local_pk_column->reset_column();
-                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(),
-                                          local_pk_column.get(), pk_encoding_type);
+                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(), local_pk_column.get(),
+                                          pk_encoding_type);
                 result.pk_encode_cost_us += GetCurrentTimeMicros() - t2;
                 // Clone the pk column data so it outlives this iteration
                 batch.pk_col = local_pk_column->clone_shared();
@@ -1161,9 +1161,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         for (auto& batch : result.batches) {
             Column* pkc = batch.pk_col.get();
             if (batch.is_binary) {
-                RETURN_IF_ERROR(
-                        insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                               batch.values.data(), rowset_version));
+                RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
+                                       batch.values.data(), rowset_version));
             } else {
                 std::vector<Slice> keys;
                 keys.reserve(pkc->size());
@@ -1172,9 +1171,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     keys.emplace_back(fkeys, _key_size);
                     fkeys += _key_size;
                 }
-                RETURN_IF_ERROR(
-                        insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()),
-                               batch.values.data(), rowset_version));
+                RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), batch.values.data(),
+                                       rowset_version));
             }
         }
     }
