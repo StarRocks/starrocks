@@ -144,8 +144,9 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     }
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(col_result),
-                                      down_cast<const NullableColumn*>(arg0.get())->null_column());
+        auto null_column = NullColumn::static_pointer_cast(
+                Column::mutate(down_cast<const NullableColumn*>(arg0.get())->null_column()));
+        return NullableColumn::create(std::move(col_result), std::move(null_column));
     } else {
         return col_result;
     }
