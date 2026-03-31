@@ -1032,10 +1032,15 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             for (int32_t si = 0; si < rowset->num_segments(); si++) {
                 uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), si);
                 if (rssid == rebuild_rss_id) {
-                    uint32_t start_rowid = (rebuild_rss_rowid_point & 0xFFFFFFFF) + 1;
-                    auto range = std::make_shared<SparseRange<>>();
-                    range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
-                    rowid_ranges[si] = std::move(range);
+                    uint32_t low_rowid = rebuild_rss_rowid_point & 0xFFFFFFFF;
+                    if (low_rowid < std::numeric_limits<uint32_t>::max()) {
+                        uint32_t start_rowid = low_rowid + 1;
+                        auto range = std::make_shared<SparseRange<>>();
+                        range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
+                        rowid_ranges[si] = std::move(range);
+                    }
+                    // If low_rowid == UINT32_MAX, the entire segment is covered,
+                    // and will be skipped by the rssid < rebuild_rss_id check below.
                     break;
                 }
             }
