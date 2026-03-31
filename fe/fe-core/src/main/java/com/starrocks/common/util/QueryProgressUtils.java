@@ -68,7 +68,9 @@ public final class QueryProgressUtils {
         }
 
         try {
-            return ExplainAnalyzer.analyze(profileElement.plan, profileElement.getRuntimeProfile());
+            return ExplainAnalyzer.analyze(profileElement.plan,
+                    RuntimeProfileParser.parseFrom(
+                            CompressionUtils.gzipDecompressString(profileElement.profileContent)));
         } catch (Exception e) {
             String result = "Failed to get query progress, query_id:" + queryId;
             LOG.warn(result, e);
