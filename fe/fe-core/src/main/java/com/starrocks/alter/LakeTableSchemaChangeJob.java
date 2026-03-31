@@ -49,9 +49,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
-import com.starrocks.planner.DescriptorTable;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
@@ -594,24 +591,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
                     TAlterTabletMaterializedColumnReq generatedColumnReq = null;
                     if (hasNewGeneratedColumn) {
-                        DescriptorTable descTbl = new DescriptorTable();
-                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
-                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
-
-                        /*
-                         * The expression substitution is needed here, because all slotRefs in
-                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                         * the column location in a chunk.
-                         */
-                        for (Column col : table.getFullSchema()) {
-                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
-                            slotDesc.setType(col.getType());
-                            slotDesc.setColumn(new Column(col));
-                            slotDesc.setIsMaterialized(true);
-                            slotDesc.setIsNullable(col.isAllowNull());
-
-                            slotDescByName.put(col.getName(), slotDesc);
+                        // Build slotId mapping from fullSchema (slot ids = positional index)
+                        Map<String, Integer> slotIdByName = new HashMap<>();
+                        for (int i = 0; i < table.getFullSchema().size(); i++) {
+                            slotIdByName.put(table.getFullSchema().get(i).getName(), i);
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
@@ -619,16 +602,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : table.getBaseSchema()) {
-                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-
-                                if (slotDesc == null) {
-                                    throw new AlterCancelException("Expression for generated column can not find " +
-                                            "the ref column");
+                                Integer slotId = slotIdByName.get(col.getName());
+                                if (slotId == null) {
+                                    throw new AlterCancelException(
+                                            "Expression for generated column can not find the ref column: "
+                                                    + col.getName());
                                 }
-
-                                SlotRef slotRef = new SlotRef(slotDesc);
-                                slotRef.setColumnName(col.getName());
-                                outputExprs.add(slotRef);
+                                outputExprs.add(SlotRef.createAnalyzed(slotId,
+                                        col.getName(), col.getType(), col.isAllowNull()));
                             }
 
                             TableName tableName = new TableName(db.getFullName(), table.getName());
