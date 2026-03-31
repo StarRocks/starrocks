@@ -383,12 +383,12 @@ public:
     }
 
     static Column* get_data_column(Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<ConstColumn*>(column);
+            return get_data_column(const_column->mutable_data_column());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(column);
             return nullable_column->mutable_data_column();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column);
-            return const_column->mutable_data_column();
         } else {
             return column;
         }
@@ -397,12 +397,12 @@ public:
     template <LogicalType LT>
     static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
         using ColumnType = RunTimeColumnType<LT>;
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column_by_type<LT>(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
             return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
-        } else if (column->is_constant()) {
-            const auto* const_column = down_cast<const ConstColumn*>(column);
-            return down_cast<const ColumnType*>(const_column->data_column().get());
         } else {
             return reinterpret_cast<const ColumnType*>(column);
         }
@@ -422,12 +422,12 @@ public:
     }
 
     static const Column* get_data_column(const Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
             return nullable_column->data_column().get();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<const ConstColumn*>(column);
-            return const_column->data_column().get();
         } else {
             return column;
         }
