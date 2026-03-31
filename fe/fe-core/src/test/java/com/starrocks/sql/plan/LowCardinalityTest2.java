@@ -2687,19 +2687,18 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testUnionWithAllConstants() throws Exception {
         String sql = """
-                  SELECT
-                      C_USER a, C_USER as b, C_USER as c
-                    FROM
-                      low_card_t1
-                  UNION ALL
-                  SELECT
-                    NULL, 'zzz', NULL
+                SELECT
+                    C_USER a, C_USER as b, C_USER as c
                   FROM
-                      supplier
-                  """;
+                    low_card_t1
+                UNION ALL
+                SELECT
+                  NULL, 'zzz', NULL
+                FROM
+                    supplier
+                """;
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
@@ -2707,7 +2706,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  child exprs:\n" +
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
                 "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
-=======
+    }
+
+    @Test
     public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
         String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
         String plan = getFragmentPlan(sql);
@@ -2719,20 +2720,5 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  functions: [, lead(10: S_ADDRESS, 1, NULL), ]\n" +
                 "  |  order by: 1: S_SUPPKEY ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING");
-    }
-
-    @Test
-    public void testCreateDecodeInfoDoesNotReturnSharedMutableSingleton() {
-        DecodeInfo empty1 = DecodeInfo.create();
-        DecodeInfo empty2 = DecodeInfo.create();
-
-        DecodeInfo d1 = empty1.createDecodeInfo();
-        d1.getDecodeStringColumns().union(new com.starrocks.sql.optimizer.base.ColumnRefSet(1));
-
-        DecodeInfo d2 = empty2.createDecodeInfo();
-        Assertions.assertTrue(d2.getOutputStringColumns().isEmpty());
-        Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
-        Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
->>>>>>> 7590a9c37d ([BugFix] Fix low-cardinality rewrite crash for LEAD/LAG window functions (#69170))
     }
 }
