@@ -132,7 +132,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
     RETURN_IF_ERROR(result);
 
     if (nullable_array != nullptr) {
-        return NullableColumn::create(std::move(result.value()), nullable_array->null_column());
+        auto null_column = NullColumn::static_pointer_cast(Column::mutate(nullable_array->null_column()));
+        return NullableColumn::create(std::move(result.value()), std::move(null_column));
     }
     return result;
 }
@@ -366,7 +367,8 @@ private:
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target))
             DCHECK_EQ(nullable->size(), result->size());
-            return NullableColumn::create(std::move(result), nullable->null_column());
+            auto null_column = NullColumn::static_pointer_cast(Column::mutate(nullable->null_column()));
+            return NullableColumn::create(std::move(result), std::move(null_column));
         }
 
         return _array_remove_non_nullable(down_cast<const ArrayColumn&>(*array), *target);
@@ -1758,7 +1760,8 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
 
     auto result = ArrayColumn::create(result_elements, result_offsets);
     if (src_nullable_column != nullptr) {
-        return NullableColumn::create(result, src_nullable_column->null_column());
+        auto null_column = NullColumn::static_pointer_cast(Column::mutate(src_nullable_column->null_column()));
+        return NullableColumn::create(result, std::move(null_column));
     }
     return result;
 }
