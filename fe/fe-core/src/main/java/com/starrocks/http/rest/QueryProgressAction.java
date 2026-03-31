@@ -34,13 +34,8 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ProfileManager;
-<<<<<<< HEAD
-import com.starrocks.common.util.RuntimeProfileParser;
-=======
 import com.starrocks.common.util.QueryProgressUtils;
->>>>>>> 623efce11a ([BugFix] Remove query progress HTTP loopback from current_queries (#71032))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -73,28 +68,7 @@ public class QueryProgressAction extends RestBaseAction {
 
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         if (profileElement != null) {
-<<<<<<< HEAD
-            String result = "";
-            //For short circuit query, 'ProfileElement#plan' is null
-            if (profileElement.plan == null &&
-                    profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
-                    !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
-                result = "short circuit point query doesn't suppot get query progress, " +
-                        "you can set it off by using set enable_short_circuit=false";
-            } else {
-                try {
-                    result = ExplainAnalyzer.analyze(profileElement.plan,
-                            RuntimeProfileParser.parseFrom(
-                                    CompressionUtils.gzipDecompressString(profileElement.profileContent)));
-                } catch (Exception e) {
-                    result = "Failed to get query progress, query_id:" + queryId;
-                    LOG.warn(result, e);
-                }
-            }
-            response.getContent().append(result);
-=======
             response.getContent().append(QueryProgressUtils.getQueryProgress(queryId, profileElement));
->>>>>>> 623efce11a ([BugFix] Remove query progress HTTP loopback from current_queries (#71032))
             sendResult(request, response);
         } else {
             response.getContent().append("query id " + queryId + " not found.");
