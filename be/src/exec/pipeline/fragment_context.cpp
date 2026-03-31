@@ -47,6 +47,24 @@
 
 namespace starrocks::pipeline {
 
+// RAII guard for pass-through chunk buffer lifecycle.
+class PassThroughChunkBufferGuard {
+public:
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id)
+            : _stream_mgr(stream_mgr), _query_id(query_id) {
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+    }
+
+    ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
+
+    PassThroughChunkBufferGuard(const PassThroughChunkBufferGuard&) = delete;
+    PassThroughChunkBufferGuard& operator=(const PassThroughChunkBufferGuard&) = delete;
+
+private:
+    DataStreamMgr* _stream_mgr;
+    TUniqueId _query_id;
+};
+
 FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
@@ -382,12 +400,11 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    _pass_through_chunk_buffer_guard =
+            std::make_unique<PassThroughChunkBufferGuard>(_runtime_state->exec_env()->stream_mgr(), _query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
-    if (_runtime_state) {
-        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
-    }
+    _pass_through_chunk_buffer_guard.reset();
 }
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
