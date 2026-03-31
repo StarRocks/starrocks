@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -23,8 +24,12 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +37,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import java.util.Map;
+import java.util.Set;
 
 @TestMethodOrder(MethodName.class)
 public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase {
@@ -597,6 +605,55 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             mockListTableDeltaTraits();
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
             Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+        }
+    }
+
+    /**
+     * Test that IVM refresh records complete PCT metadata without batch truncation.
+     *
+     * Before the fix, updatePCTToRefreshMetas in IVM path went through filterPartitionByRefreshNumber,
+     * which truncated the partition list based on partition_refresh_number (default 1).
+     * This caused incomplete visibleVersionMap updates — partitions that were actually refreshed by IVM
+     * (via TVR delta) would still appear stale in PCT metadata, breaking MV query rewrite.
+     *
+     * The fix passes skipBatchFilter=true so that detectMVPartitionsToRefresh is used instead of
+     * getMVToRefreshedPartitions, skipping all batch filtering.
+     */
+    @Test
+    public void testIVMPCTMetadataNotTruncatedByPartitionRefreshNumber() throws Exception {
+        // Create a PARTITIONED MV on partitioned Iceberg table t1 (4 partitions: date=2020-01-01..04).
+        // partition_refresh_number=1 would truncate to 1 partition in the old code path.
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        // Initial refresh: all 4 partitions detected as new
+        {
+            advanceTableVersionTo(2);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+            TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+
+            // Verify IVM path was used (auto mode -> hybrid -> IVM)
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+            MVHybridBasedRefreshProcessor hybridProcessor =
+                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+
+            // Verify PCT metadata records ALL partitions, not truncated to 1.
+            // Before the fix, partition_refresh_number=1 would truncate mvPartitionsToRefresh to 1 partition.
+            // After the fix (skipBatchFilter=true), all detected partitions should be recorded.
+            MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+            MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
+            Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
+            Assertions.assertNotNull(mvPartitionsToRefresh,
+                    "mvPartitionsToRefresh should not be null");
+            // t1 has 4 partitions -> MV should have 4 corresponding partitions, all recorded
+            Assertions.assertTrue(mvPartitionsToRefresh.size() > 1,
+                    "IVM should record all detected partitions in PCT metadata, " +
+                            "not truncated by partition_refresh_number. " +
+                            "Expected >1 but got: " + mvPartitionsToRefresh);
         }
     }
 }
