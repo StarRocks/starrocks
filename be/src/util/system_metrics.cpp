@@ -166,6 +166,18 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
 }
 
 void SystemMetrics::update() {
+<<<<<<< HEAD
+=======
+    // Use try_lock to avoid blocking concurrent callers since metrics collection
+    // is best-effort and the data will be refreshed on the next collection cycle.
+    std::unique_lock lock(_update_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return;
+    }
+
+    update_memory_metrics();
+
+>>>>>>> ad79495f4e ([BugFix] Fix double-free crash in SystemMetrics due to concurrent getline access (#71040))
     _update_cpu_metrics();
     _update_memory_metrics();
     _update_disk_metrics();
