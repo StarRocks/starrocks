@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultSinkType;
 
@@ -79,8 +80,36 @@ public class MultiCastPlanFragment extends PlanFragment {
             streamSink.setFragment(this);
             streamSink.setOutputColumnIds(f.getReceiveColumns());
             streamSink.setLimit(f.getLimit());
+            if (f.getMultiCastConjuncts() != null) {
+                streamSink.setConjuncts(f.getMultiCastConjuncts());
+            }
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
+        }
+    }
+
+    public void collectRuntimeFiltersForDataStreamSinks() {
+        if (sink == null) {
+            return;
+        }
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null || !ctx.getSessionVariable().isEnableMultiCastFilterPushDown()) {
+            return;
+        }
+        MultiCastDataSink multiCastDataSink = (MultiCastDataSink) sink;
+        List<DataStreamSink> dataStreamSinks = multiCastDataSink.getDataStreamSinks();
+        for (int i = 0; i < destNodeList.size(); i++) {
+            ExchangeNode exchangeNode = destNodeList.get(i);
+            List<RuntimeFilterDescription> rfs = exchangeNode.getProbeRuntimeFilters();
+            if (!rfs.isEmpty()) {
+                dataStreamSinks.get(i).setRuntimeFilters(rfs);
+                for (RuntimeFilterDescription rf : rfs) {
+                    if (!rf.isHasRemoteTargets()) {
+                        rf.setHasRemoteTargets(true);
+                    }
+                    probeRuntimeFilters.put(rf.getFilterId(), rf);
+                }
+            }
         }
     }
 

@@ -432,6 +432,14 @@ public class PlanFragmentBuilder {
         fragments.forEach(PlanFragment::collectBuildRuntimeFilters);
         fragments.forEach(PlanFragment::collectProbeRuntimeFilters);
 
+        // Collect per-consumer runtime filters from ExchangeNodes onto MultiCast DataStreamSinks,
+        // so that RFs can be applied at the sender side (ExchangeSink) before network transmission.
+        for (PlanFragment fragment : fragments) {
+            if (fragment instanceof MultiCastPlanFragment) {
+                ((MultiCastPlanFragment) fragment).collectRuntimeFiltersForDataStreamSinks();
+            }
+        }
+
         if (useQueryCache(execPlan)) {
             for (PlanFragment fragment : execPlan.getFragments()) {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
@@ -3803,17 +3811,32 @@ public class PlanFragmentBuilder {
             consumeFragment.setQueryGlobalDictExprs(cteFragment.getQueryGlobalDictExprs());
             consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
 
-            // add filter node
+            boolean filterPushedDown = false;
             if (consume.getPredicate() != null) {
-                List<Expr> predicates = Utils.extractConjuncts(consume.getPredicate()).stream()
-                        .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                SelectNode selectNode =
-                        new SelectNode(context.getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
-                this.currentExecGroup.add(selectNode, true);
-                selectNode.computeStatistics(optExpression.getStatistics());
-                consumeFragment.setPlanRoot(selectNode);
+                if (ConnectContext.get().getSessionVariable().isEnableMultiCastFilterPushDown()) {
+                    ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
+                            consume.getCteOutputColumnRefMap());
+                    List<ScalarOperator> producePredicates = Utils.extractConjuncts(consume.getPredicate())
+                            .stream().map(rewriter::rewrite).collect(Collectors.toList());
+
+                    List<Expr> conjuncts = producePredicates.stream()
+                            .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+
+                    exchangeNode.setMultiCastConjuncts(conjuncts);
+                    filterPushedDown = true;
+                } else {
+                    List<Expr> predicates = Utils.extractConjuncts(consume.getPredicate()).stream()
+                            .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+                    SelectNode selectNode =
+                            new SelectNode(context.getNextNodeId(), consumeFragment.getPlanRoot(), predicates);
+                    this.currentExecGroup.add(selectNode, true);
+                    selectNode.computeStatistics(optExpression.getStatistics());
+                    consumeFragment.setPlanRoot(selectNode);
+                }
             }
 
             // if multi cast limit push down is enabled and there is no predicate, the limit can be added at the source of the
@@ -3821,8 +3844,9 @@ public class PlanFragmentBuilder {
             // fragment. Otherwise, especially if there is a predicate, limit push down can not be performed and the limit will
             // be applied after the predicate.
             if (consume.hasLimit()) {
-                if (ConnectContext.get().getSessionVariable().isEnableMultiCastLimitPushDown()
-                        && consume.getPredicate() == null) {
+                if (filterPushedDown
+                        || (ConnectContext.get().getSessionVariable().isEnableMultiCastLimitPushDown()
+                            && consume.getPredicate() == null)) {
                     exchangeNode.setLimit(consume.getLimit());
                 } else {
                     consumeFragment.getPlanRoot().setLimit(consume.getLimit());

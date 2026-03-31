@@ -53,6 +53,7 @@ public class CTEPlanTest extends PlanTestBase {
     @BeforeEach
     public void alwaysCTEReuse() {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        connectContext.getSessionVariable().setEnableMultiCastFilterPushDown(false);
     }
 
     @AfterEach
@@ -60,6 +61,7 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(0);
         connectContext.getSessionVariable().setCboCTEForceReuseLimitWithoutOrderBy(true);
+        connectContext.getSessionVariable().setEnableMultiCastFilterPushDown(true);
     }
 
     @ParameterizedTest
@@ -1187,5 +1189,26 @@ public class CTEPlanTest extends PlanTestBase {
         // Should not force CTE reuse when variable is disabled
         // (CTE reuse decision will be based on other factors like ratio and consume count)
         // Note: The actual behavior depends on CTE reuse ratio and consume count
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testMultiCastRuntimeFilterPushDown(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        connectContext.getSessionVariable().setEnableMultiCastFilterPushDown(true);
+        connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
+
+        String sql = "with cte as (select * from t0) " +
+                "select * from cte c1 join [broadcast] t1 on c1.v1 = t1.v4 where c1.v2 > 100 " +
+                "union all " +
+                "select * from cte c2 join [broadcast] t1 on c2.v2 = t1.v5 where c2.v3 < 50";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "MultiCastDataSinks");
+        assertContains(plan, "CONJUNCTS:");
+        assertContains(plan, "RUNTIME FILTERS:");
+        assertNotContains(plan, "SELECT");
     }
 }

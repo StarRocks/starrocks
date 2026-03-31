@@ -164,7 +164,10 @@ StatusOr<ChunkPtr> MemLimitedChunkQueue::pop(int32_t consumer_index) {
         if (_opened_sink_number == 0) {
             return Status::EndOfFile("no more data");
         }
-        return Status::InternalError("unreachable path");
+        // With DOP > 1, can_pop may return true for multiple drivers, but another
+        // driver may consume the chunk before this one calls pop. Return nullptr
+        // to let the driver retry.
+        return nullptr;
     }
     // if the block is flushed forcely between can_pop and pop,
     // we should return null and trigger load io task in next can_pop
