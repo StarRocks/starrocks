@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -552,8 +553,8 @@ public class QueryAnalyzer {
                         //                "having v1 in (select v3 from w where v2 = 2)
                         // cte used in outer query and sub-query can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
-                                withRelation.getColumnOutputNames(),
-                                withRelation.getCteQueryStatement());
+                                withRelation.getColumnOutputNames(), withRelation.getCteQueryStatement(),
+                                NodePosition.ZERO, withRelation.getMaterializationHint());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
