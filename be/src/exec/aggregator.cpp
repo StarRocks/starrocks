@@ -151,7 +151,8 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context, bool use_cache = false, bool* cache_hit_out = nullptr);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -294,7 +295,8 @@ Status Aggregator::open(RuntimeState* state) {
                     {
                         SCOPED_TIMER(_agg_stat->udaf_load_timer);
                         st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                               _agg_fn_ctxs[i], use_cache, use_cache ? &cache_hit : nullptr);
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
                     }
                     if (use_cache) {
                         if (cache_hit) {

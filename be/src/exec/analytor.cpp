@@ -49,7 +49,8 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context, bool use_cache,
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
                                bool* cache_hit_out = nullptr);
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
@@ -376,7 +377,8 @@ Status Analytor::open(RuntimeState* state) {
                 {
                     SCOPED_TIMER(_udaf_load_timer);
                     st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                 _agg_fn_ctxs[i], use_cache, use_cache ? &cache_hit : nullptr);
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
                 }
                 if (use_cache) {
                     if (cache_hit) {
