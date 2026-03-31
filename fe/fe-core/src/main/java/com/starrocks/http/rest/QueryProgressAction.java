@@ -35,23 +35,19 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.QueryProgressUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.sql.ExplainAnalyzer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 // This class is a RESTFUL interface to get query progress.
 // It will be used in query monitor.
 // Usage:
 //   http://fe_host:fe_http_port/api/query/progress?query_id=123456
 public class QueryProgressAction extends RestBaseAction {
-
-    private static final Logger LOG = LogManager.getLogger(QueryProgressAction.class);
 
     public QueryProgressAction(ActionController controller) {
         super(controller);
@@ -72,23 +68,7 @@ public class QueryProgressAction extends RestBaseAction {
 
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         if (profileElement != null) {
-            String result = "";
-            //For short circuit query, 'ProfileElement#plan' is null
-            if (profileElement.plan == null &&
-                    profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
-                    !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
-                result = "short circuit point query doesn't suppot get query progress, " +
-                        "you can set it off by using set enable_short_circuit=false";
-            } else {
-                try {
-                    result = ExplainAnalyzer.analyze(profileElement.plan,
-                            profileElement.getRuntimeProfile());
-                } catch (Exception e) {
-                    result = "Failed to get query progress, query_id:" + queryId;
-                    LOG.warn(result, e);
-                }
-            }
-            response.getContent().append(result);
+            response.getContent().append(QueryProgressUtils.getQueryProgress(queryId, profileElement));
             sendResult(request, response);
         } else {
             response.getContent().append("query id " + queryId + " not found.");
