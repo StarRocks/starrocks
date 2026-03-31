@@ -104,6 +104,7 @@ public abstract class BaseMVRefreshProcessor {
     protected final MaterializedView mv;
     protected final IMaterializedViewMetricsEntity mvEntity;
     protected final MvTaskRunContext mvContext;
+    protected final MvTaskRunContext.MVRefreshRuntimeState refreshRuntimeState;
     protected final Logger logger;
     // Collect all bases tables of the mv to be updated meta after mv refresh success.
     // format :     table id -> <base table info, snapshot table>
@@ -112,9 +113,8 @@ public abstract class BaseMVRefreshProcessor {
     // current refresh mode, can be changed in the refresh's runtime for `auto` mode
     protected MaterializedView.RefreshMode currentRefreshMode;
 
-    // Collect all base table snapshot infos for the mv which the snapshot infos are kept
-    // and used in the final update meta.
-    protected Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
+    // Per-task-run shared snapshot infos bound once from mvContext. Mutate the map contents only.
+    protected final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables;
     // PCT related fields
     protected PCellSortedSet pctMVToRefreshedPartitions = null;
     protected PCellSetMapping pctRefTablePartitionNames = null;
@@ -144,6 +144,7 @@ public abstract class BaseMVRefreshProcessor {
         this.db = db;
         this.mv = mv;
         this.mvContext = mvContext;
+        this.refreshRuntimeState = mvContext.getRefreshRuntimeState();
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
         this.mvRefreshParams = new MVRefreshParams(mv, mvContext.getProperties());
@@ -151,6 +152,7 @@ public abstract class BaseMVRefreshProcessor {
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
         this.currentRefreshMode = refreshMode;
         this.isEnableExternalTablePreciseRefresh = isEnableExternalTablePreciseRefresh();
+        this.snapshotBaseTables = refreshRuntimeState.getSnapshotBaseTables();
         // init the refresh mode
         updateTaskRunStatus(status -> {
             status.getMvTaskRunExtraMessage().setRefreshMode(currentRefreshMode.name());
@@ -244,6 +246,14 @@ public abstract class BaseMVRefreshProcessor {
      */
     public TaskRun getNextTaskRun() {
         return nextTaskRun;
+    }
+
+    protected void setSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+        refreshRuntimeState.replaceSnapshotBaseTables(snapshotBaseTables);
+    }
+
+    protected Map<BaseTableInfo, TvrVersionRange> getPendingBaseTableTvrVersionRangeMap() {
+        return refreshRuntimeState.getPendingBaseTableTvrVersionRangeMap();
     }
 
     /**
@@ -427,7 +437,7 @@ public abstract class BaseMVRefreshProcessor {
     protected boolean syncPartitions() throws AnalysisException, LockTimeoutException {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
-        this.snapshotBaseTables = collectBaseTableSnapshotInfos();
+        setSnapshotBaseTables(collectBaseTableSnapshotInfos());
 
         if (!mvContext.isExplain() && mvRefreshParams.isNonTentativeForce()) {
             // drop existing partitions for force refresh
