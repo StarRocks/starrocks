@@ -49,32 +49,44 @@ static Status batch_load_delvecs(const CompactConflictResolveParams& params,
         return Status::OK();
     }
 
-    // Load delvecs in parallel using async tasks
+    // Load delvecs in parallel using async tasks, capped at kMaxParallel
+    // to avoid unbounded thread creation under heavy compaction load.
     struct LoadResult {
         uint32_t rssid;
         DelVectorPtr delvec;
         Status status;
     };
 
-    std::vector<std::future<LoadResult>> futures;
-    futures.reserve(rssids_to_load.size());
+    static constexpr size_t kMaxParallel = 16;
+    auto* mem_tracker = tls_thread_status.mem_tracker();
 
-    for (uint32_t rssid : rssids_to_load) {
-        futures.push_back(std::async(std::launch::async, [&params, rssid]() -> LoadResult {
-            LoadResult result;
-            result.rssid = rssid;
-            result.status = params.delvec_loader->load({params.tablet_id, rssid}, params.base_version, &result.delvec);
-            return result;
-        }));
-    }
+    for (size_t start = 0; start < rssids_to_load.size(); start += kMaxParallel) {
+        size_t end = std::min(start + kMaxParallel, rssids_to_load.size());
+        std::vector<std::future<LoadResult>> futures;
+        futures.reserve(end - start);
 
-    // Collect results
-    for (auto& future : futures) {
-        auto result = future.get();
-        if (!result.status.ok()) {
-            return result.status;
+        for (size_t i = start; i < end; i++) {
+            futures.push_back(
+                    std::async(std::launch::async, [&params, rssid = rssids_to_load[i], mem_tracker]() -> LoadResult {
+                        // Attach parent thread's memory tracker so allocations inside
+                        // load() are properly accounted against compaction memory limits.
+                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                        LoadResult result;
+                        result.rssid = rssid;
+                        result.status = params.delvec_loader->load({params.tablet_id, rssid}, params.base_version,
+                                                                   &result.delvec);
+                        return result;
+                    }));
         }
-        (*rssid_to_delvec)[result.rssid] = std::move(result.delvec);
+
+        // Collect results for this batch before launching next batch
+        for (auto& future : futures) {
+            auto result = future.get();
+            if (!result.status.ok()) {
+                return result.status;
+            }
+            (*rssid_to_delvec)[result.rssid] = std::move(result.delvec);
+        }
     }
 
     return Status::OK();
