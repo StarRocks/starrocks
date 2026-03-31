@@ -57,19 +57,10 @@ bool LockFreeWorkGroupScanTaskQueue::take(ScanTask& task, bool blocking) {
             return false;
         }
 
-        auto* wg_entity = _pick_next_wg();
-        if (wg_entity != nullptr) {
-            // Find the corresponding LockFreeScanTaskQueue for this workgroup.
-            LockFreeScanTaskQueue* wg_queue = nullptr;
-            {
-                std::lock_guard lock(_wg_queues_mutex);
-                auto it = _wg_queues.find(wg_entity->workgroup());
-                if (it != _wg_queues.end()) {
-                    wg_queue = it->second.get();
-                }
-            }
-
-            if (wg_queue != nullptr && wg_queue->try_take(task)) {
+        // Try ALL workgroups in ascending vruntime order before blocking.
+        auto candidates = _pick_sorted_wgs();
+        for (auto& [vruntime, wg_queue] : candidates) {
+            if (wg_queue->try_take(task)) {
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
                 return true;
             }
@@ -83,16 +74,15 @@ bool LockFreeWorkGroupScanTaskQueue::take(ScanTask& task, bool blocking) {
 }
 
 void LockFreeWorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
-    // Update workgroup scan vruntime.
     auto* entity = task.workgroup->scan_sched_entity();
+    // NOTE: incr_runtime_ns writes to non-atomic _vruntime_ns.
+    // Task 8 must make _vruntime_ns atomic before enabling this code.
     entity->incr_runtime_ns(runtime_ns);
 }
 
 void LockFreeWorkGroupScanTaskQueue::close() {
     _closed.store(true, std::memory_order_release);
-    // Wake all potential waiters. Use a large count to ensure all blocked
-    // consumer threads are woken.
-    _sema.signal(1024);
+    _sema.signal(_num_workers);
 }
 
 size_t LockFreeWorkGroupScanTaskQueue::size() const {
@@ -100,7 +90,14 @@ size_t LockFreeWorkGroupScanTaskQueue::size() const {
 }
 
 LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(WorkGroup* wg) {
-    std::lock_guard lock(_wg_queues_mutex);
+    {
+        std::shared_lock read_lock(_wg_queues_mutex);
+        auto it = _wg_queues.find(wg);
+        if (it != _wg_queues.end()) {
+            return it->second.get();
+        }
+    }
+    std::unique_lock write_lock(_wg_queues_mutex);
     auto it = _wg_queues.find(wg);
     if (it != _wg_queues.end()) {
         return it->second.get();
@@ -109,42 +106,32 @@ LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(W
     return inserted_it->second.get();
 }
 
-WorkGroupScanSchedEntity* LockFreeWorkGroupScanTaskQueue::_pick_next_wg() {
-    auto* wg_manager = ExecEnv::GetInstance()->workgroup_manager();
-    if (wg_manager == nullptr) {
-        return nullptr;
+LockFreeWorkGroupScanTaskQueue::CandidateList LockFreeWorkGroupScanTaskQueue::_pick_sorted_wgs() {
+    CandidateList candidates;
+
+    // Snapshot all workgroup queues under one shared lock acquisition.
+    std::vector<std::pair<WorkGroup*, LockFreeScanTaskQueue*>> snapshot;
+    {
+        std::shared_lock read_lock(_wg_queues_mutex);
+        snapshot.reserve(_wg_queues.size());
+        for (auto& [wg, queue] : _wg_queues) {
+            if (queue->size() > 0) {
+                snapshot.emplace_back(wg, queue.get());
+            }
+        }
     }
 
-    WorkGroupScanSchedEntity* best = nullptr;
-    int64_t best_vruntime = INT64_MAX;
+    // Score by vruntime without holding any lock.
+    candidates.reserve(snapshot.size());
+    for (auto& [wg, queue] : snapshot) {
+        int64_t vrt = wg->scan_sched_entity()->vruntime_ns();
+        candidates.push_back({vrt, queue});
+    }
 
-    // Iterate all registered workgroups and find the one with minimum vruntime
-    // that has tasks queued in our internal map.
-    wg_manager->for_each_workgroup([&](const WorkGroup& wg) {
-        const auto* entity = wg.scan_sched_entity();
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
 
-        // Check if this workgroup has a queue in our map with queued tasks.
-        LockFreeScanTaskQueue* queue = nullptr;
-        {
-            std::lock_guard lock(_wg_queues_mutex);
-            auto it = _wg_queues.find(const_cast<WorkGroup*>(&wg));
-            if (it != _wg_queues.end()) {
-                queue = it->second.get();
-            }
-        }
-
-        if (queue != nullptr && queue->size() > 0) {
-            int64_t vrt = entity->vruntime_ns();
-            if (vrt < best_vruntime) {
-                best_vruntime = vrt;
-                // const_cast is safe here: the entity is owned by a non-const WorkGroup;
-                // we receive const ref from for_each_workgroup's consumer signature.
-                best = const_cast<WorkGroup&>(wg).scan_sched_entity();
-            }
-        }
-    });
-
-    return best;
+    return candidates;
 }
 
 } // namespace starrocks::workgroup

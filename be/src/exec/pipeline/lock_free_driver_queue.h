@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 
@@ -66,10 +67,6 @@ private:
     // execution time. Drivers that have consumed more CPU time are placed at
     // higher (lower-priority) levels.
     int _compute_driver_level(DriverRawPtr driver) const;
-
-    // Scan all levels and return the index of the non-empty level with the
-    // minimum accu_time_ns / factor. Returns -1 if all levels are empty.
-    int _select_best_level() const;
 
     WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 

@@ -55,29 +55,29 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
-    int best = _select_best_level();
-    if (best < 0) {
-        return false;
-    }
-
-    // Try the best level first.
-    if (_queue.try_dequeue(best, driver)) {
-        return true;
-    }
-
-    // The best level may have become empty between _select_best_level and try_dequeue
-    // due to concurrent consumers. Fall back to scanning all levels in ascending
-    // weighted-time order (which is simply ascending index order for levels with
-    // equal accu_time, but we do a simple linear scan of all non-empty levels).
+    // Build a sorted order of levels by weighted accu_time.
+    // With only 8 elements, this is cheaper than the CAS operations in try_dequeue.
+    std::array<std::pair<double, int>, QUEUE_SIZE> scored;
+    int non_empty_count = 0;
     for (int i = 0; i < QUEUE_SIZE; ++i) {
-        if (i == best) {
-            continue;
-        }
-        if (_queue.try_dequeue(i, driver)) {
+        if (_queue.empty(i)) continue;
+        double weighted_time =
+                static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
+                _level_stats[i].factor;
+        scored[non_empty_count++] = {weighted_time, i};
+    }
+
+    if (non_empty_count == 0) return false;
+
+    // Sort only the non-empty entries (at most 8 — negligible overhead).
+    std::sort(scored.begin(), scored.begin() + non_empty_count);
+
+    // Try levels in ascending weighted-time order.
+    for (int j = 0; j < non_empty_count; ++j) {
+        if (_queue.try_dequeue(scored[j].second, driver)) {
             return true;
         }
     }
-
     return false;
 }
 
@@ -100,24 +100,5 @@ int LockFreeDriverQueue::_compute_driver_level(DriverRawPtr driver) const {
     return QUEUE_SIZE - 1;
 }
 
-int LockFreeDriverQueue::_select_best_level() const {
-    int best = -1;
-    double best_weighted_time = 0.0;
-
-    for (int i = 0; i < QUEUE_SIZE; ++i) {
-        if (_queue.empty(i)) {
-            continue;
-        }
-        double weighted_time =
-                static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
-                _level_stats[i].factor;
-        if (best < 0 || weighted_time < best_weighted_time) {
-            best_weighted_time = weighted_time;
-            best = i;
-        }
-    }
-
-    return best;
-}
 
 } // namespace starrocks::pipeline

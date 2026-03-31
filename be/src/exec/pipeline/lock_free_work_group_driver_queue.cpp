@@ -41,21 +41,12 @@ bool LockFreeWorkGroupDriverQueue::take(DriverRawPtr& driver, bool blocking) {
             return false;
         }
 
-        auto* wg_entity = _pick_next_wg();
-        if (wg_entity != nullptr) {
-            // Find the corresponding LockFreeDriverQueue for this workgroup.
-            LockFreeDriverQueue* wg_queue = nullptr;
-            {
-                std::lock_guard lock(_wg_queues_mutex);
-                auto it = _wg_queues.find(wg_entity->workgroup());
-                if (it != _wg_queues.end()) {
-                    wg_queue = it->second.get();
-                }
-            }
-
-            if (wg_queue != nullptr && wg_queue->try_take(driver)) {
+        // Collect all workgroup candidates sorted by vruntime, then try each.
+        // This ensures we try ALL workgroups before blocking (fix for I3).
+        auto candidates = _pick_sorted_wgs();
+        for (auto* [vruntime, wg_queue] : candidates) {
+            if (wg_queue->try_take(driver)) {
                 _num_drivers.fetch_sub(1, std::memory_order_relaxed);
-                // Check if this driver was cancelled.
                 if (_cancel_set.erase(driver)) {
                     driver->set_driver_state(DriverState::CANCELED);
                 }
@@ -72,8 +63,6 @@ bool LockFreeWorkGroupDriverQueue::take(DriverRawPtr& driver, bool blocking) {
 
 void LockFreeWorkGroupDriverQueue::cancel(DriverRawPtr driver) {
     _cancel_set.insert(driver);
-    // Signal to wake a consumer that might be blocking, so it can process
-    // the cancelled driver when it eventually dequeues it.
     _sema.signal();
 }
 
@@ -81,20 +70,20 @@ void LockFreeWorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) 
     int level = driver->get_driver_queue_level();
     int64_t time_spent = driver->driver_acct().get_last_time_spent();
 
-    // Update per-level MLFQ stats in the workgroup's queue.
     auto* wg_queue = _get_or_create_wg_queue(driver->workgroup());
     wg_queue->update_statistics(level, time_spent);
 
     // Update workgroup vruntime.
+    // NOTE: incr_runtime_ns writes to non-atomic _vruntime_ns.
+    // This is a data race if called concurrently from multiple threads.
+    // Task 8 (integration) must make _vruntime_ns atomic before enabling this code.
     auto* entity = driver->workgroup()->driver_sched_entity();
     entity->incr_runtime_ns(time_spent);
 }
 
 void LockFreeWorkGroupDriverQueue::close() {
     _closed.store(true, std::memory_order_release);
-    // Wake all potential waiters. Use a large count to ensure all blocked
-    // consumer threads are woken.
-    _sema.signal(1024);
+    _sema.signal(_num_workers);
 }
 
 size_t LockFreeWorkGroupDriverQueue::size() const {
@@ -102,7 +91,16 @@ size_t LockFreeWorkGroupDriverQueue::size() const {
 }
 
 LockFreeDriverQueue* LockFreeWorkGroupDriverQueue::_get_or_create_wg_queue(workgroup::WorkGroup* wg) {
-    std::lock_guard lock(_wg_queues_mutex);
+    // Fast path: read lock to check existing entry.
+    {
+        std::shared_lock read_lock(_wg_queues_mutex);
+        auto it = _wg_queues.find(wg);
+        if (it != _wg_queues.end()) {
+            return it->second.get();
+        }
+    }
+    // Slow path: exclusive lock to create.
+    std::unique_lock write_lock(_wg_queues_mutex);
     auto it = _wg_queues.find(wg);
     if (it != _wg_queues.end()) {
         return it->second.get();
@@ -111,42 +109,33 @@ LockFreeDriverQueue* LockFreeWorkGroupDriverQueue::_get_or_create_wg_queue(workg
     return inserted_it->second.get();
 }
 
-workgroup::WorkGroupDriverSchedEntity* LockFreeWorkGroupDriverQueue::_pick_next_wg() {
-    auto* wg_manager = ExecEnv::GetInstance()->workgroup_manager();
-    if (wg_manager == nullptr) {
-        return nullptr;
+LockFreeWorkGroupDriverQueue::CandidateList LockFreeWorkGroupDriverQueue::_pick_sorted_wgs() {
+    CandidateList candidates;
+
+    // Take a snapshot of all workgroup queues under the read lock (one acquisition).
+    std::vector<std::pair<workgroup::WorkGroup*, LockFreeDriverQueue*>> snapshot;
+    {
+        std::shared_lock read_lock(_wg_queues_mutex);
+        snapshot.reserve(_wg_queues.size());
+        for (auto& [wg, queue] : _wg_queues) {
+            if (queue->size() > 0) {
+                snapshot.emplace_back(wg, queue.get());
+            }
+        }
     }
 
-    workgroup::WorkGroupDriverSchedEntity* best = nullptr;
-    int64_t best_vruntime = INT64_MAX;
+    // Now score by vruntime without holding any lock.
+    candidates.reserve(snapshot.size());
+    for (auto& [wg, queue] : snapshot) {
+        int64_t vrt = wg->driver_sched_entity()->vruntime_ns();
+        candidates.push_back({vrt, queue});
+    }
 
-    // Iterate all registered workgroups and find the one with minimum vruntime
-    // that has drivers queued in our internal map.
-    wg_manager->for_each_workgroup([&](const workgroup::WorkGroup& wg) {
-        const auto* entity = wg.driver_sched_entity();
+    // Sort by vruntime ascending (min first).
+    std::sort(candidates.begin(), candidates.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
 
-        // Check if this workgroup has a queue in our map with queued drivers.
-        LockFreeDriverQueue* queue = nullptr;
-        {
-            std::lock_guard lock(_wg_queues_mutex);
-            auto it = _wg_queues.find(const_cast<workgroup::WorkGroup*>(&wg));
-            if (it != _wg_queues.end()) {
-                queue = it->second.get();
-            }
-        }
-
-        if (queue != nullptr && queue->size() > 0) {
-            int64_t vrt = entity->vruntime_ns();
-            if (vrt < best_vruntime) {
-                best_vruntime = vrt;
-                // const_cast is safe here: the entity is owned by a non-const WorkGroup;
-                // we receive const ref from for_each_workgroup's consumer signature.
-                best = const_cast<workgroup::WorkGroup&>(wg).driver_sched_entity();
-            }
-        }
-    });
-
-    return best;
+    return candidates;
 }
 
 } // namespace starrocks::pipeline
