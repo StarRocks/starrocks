@@ -51,6 +51,8 @@ class FragmentDictState;
 
 namespace pipeline {
 
+class PassThroughChunkBufferGuard;
+
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
@@ -236,6 +238,8 @@ private:
     Status _s_status;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+
+    std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
