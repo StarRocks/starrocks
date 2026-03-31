@@ -173,6 +173,30 @@ public class JDBCTableTest {
     }
 
     @Test
+    public void testToThriftWithTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306/";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0", jdbcTable.getJdbc_url());
+    }
+
+    @Test
+    public void testToThriftWithJdbcParamAndTrailingSlash(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306/?key=value";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0?key=value", jdbcTable.getJdbc_url());
+    }
+
+    @Test
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,
                                            @Mocked ResourceMgr resourceMgr) {
         assertThrows(DdlException.class, () -> {
