@@ -378,6 +378,9 @@ public:
     Status capacity_limit_reached() const override;
 
 private:
+    template <typename SrcOffset>
+    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+
     void _build_slices() const;
 
     Bytes _bytes;
