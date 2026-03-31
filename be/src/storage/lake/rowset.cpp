@@ -475,10 +475,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const Schema& schema,
-                                                                                      int64_t version,
-                                                                                      const MetaFileBuilder* builder,
-                                                                                      OlapReaderStatistics* stats) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
+        const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+        const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
@@ -506,6 +505,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
+        }
+        // Apply per-segment rowid range if provided
+        if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
+            seg_options.rowid_range_option = (*rowid_range_per_segment)[i];
+        } else {
+            seg_options.rowid_range_option = nullptr;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
