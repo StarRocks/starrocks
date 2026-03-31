@@ -86,9 +86,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->lake_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // If we want read this parquet file with iceberg/paimon schema,
-        // we also need to make sure it contains parquet field id.
+    if (_scanner_ctx->lake_schema != nullptr) {
         return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
                                                 _scanner_ctx->lake_schema);
     } else {
@@ -211,8 +209,8 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
-                                       existed_column_names);
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _scanner_ctx->column_access_paths,
+                                       _group_reader_param.read_cols, existed_column_names);
     _no_materialized_column_scan =
             (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
 }

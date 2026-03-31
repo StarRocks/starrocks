@@ -14,6 +14,8 @@
 
 #include "meta_helper.h"
 
+#include <optional>
+
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
@@ -22,14 +24,50 @@
 
 namespace starrocks::parquet {
 
+namespace {
+
+struct ExtendedVariantVirtualBinding {
+    const ColumnAccessPath* access_path = nullptr;
+    std::string leaf_path;
+};
+
+std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_binding(
+        const std::vector<ColumnAccessPathPtr>* column_access_paths, std::string_view slot_name) {
+    if (column_access_paths == nullptr) {
+        return std::nullopt;
+    }
+    for (const auto& access_path : *column_access_paths) {
+        if (access_path == nullptr || !access_path->is_extended()) {
+            continue;
+        }
+        if (access_path->linear_path() != slot_name || access_path->children().empty()) {
+            continue;
+        }
+        ExtendedVariantVirtualBinding binding;
+        binding.access_path = access_path.get();
+        binding.leaf_path = access_path->children()[0]->linear_path();
+        return binding;
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                                             const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
         const SlotDescriptor* slotDesc = materialized_column.slot_desc;
+        auto extended_variant_binding =
+                find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
         int32_t field_idx = -1;
-        if (slotDesc->col_unique_id() != -1) {
+        if (extended_variant_binding.has_value()) {
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(
+                    extended_variant_binding->access_path->path());
+            if (field_idx < 0) continue;
+        } else if (slotDesc->col_unique_id() != -1) {
             field_idx = _file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
             if (field_idx < 0) continue;
         } else if (!slotDesc->col_physical_name().empty()) {
@@ -42,13 +80,19 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is type is invalid
-        if (!_is_valid_type(parquet_field, &materialized_column.slot_desc->type())) {
+        if (!extended_variant_binding.has_value() &&
+            !_is_valid_type(parquet_field, &materialized_column.slot_desc->type())) {
             continue;
         }
 
         auto parquet_type = parquet_field->physical_type;
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
                                                         materialized_column.decode_needed);
+        if (extended_variant_binding.has_value()) {
+            column.is_extended_variant_virtual = true;
+            column.source_variant_column_name = std::string(extended_variant_binding->access_path->path());
+            column.variant_virtual_leaf_path = std::move(extended_variant_binding->leaf_path);
+        }
         read_cols.emplace_back(column);
         existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
@@ -166,34 +210,62 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             return true;
         }
 
-        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema{};
-        std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
-        for (const auto& field : field_schema->children) {
-            field_id_2_lake_schema.emplace(field.field_id, &field);
-            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
-                if (type_descriptor->field_names[i] == field.name) {
-                    field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
+        if (_file_metadata->schema().exist_filed_id()) {
+            std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema{};
+            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
+            for (const auto& field : field_schema->children) {
+                field_id_2_lake_schema.emplace(field.field_id, &field);
+                for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
+                    if (type_descriptor->field_names[i] == field.name) {
+                        field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
+                        break;
+                    }
+                }
+            }
+
+            for (const auto& child_parquet_field : parquet_field->children) {
+                auto it = field_id_2_lake_schema.find(child_parquet_field.field_id);
+                if (it == field_id_2_lake_schema.end()) {
+                    continue;
+                }
+
+                auto it_td = field_id_2_type.find(child_parquet_field.field_id);
+                if (it_td == field_id_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+                    has_valid_child = true;
                     break;
                 }
             }
-        }
-
-        // start to check struct type
-        for (const auto& child_parquet_field : parquet_field->children) {
-            auto it = field_id_2_lake_schema.find(child_parquet_field.field_id);
-            if (it == field_id_2_lake_schema.end()) {
-                continue;
+        } else {
+            std::unordered_map<std::string, const TIcebergSchemaField*> field_name_2_lake_schema{};
+            std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
+            for (const auto& field : field_schema->children) {
+                field_name_2_lake_schema.emplace(Utils::format_name(field.name, _case_sensitive), &field);
+            }
+            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
+                field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[i], _case_sensitive),
+                                          &type_descriptor->children[i]);
             }
 
-            auto it_td = field_id_2_type.find(child_parquet_field.field_id);
-            if (it_td == field_id_2_type.end()) {
-                continue;
-            }
+            for (const auto& child_parquet_field : parquet_field->children) {
+                const auto formatted_child_name = Utils::format_name(child_parquet_field.name, _case_sensitive);
+                auto it = field_name_2_lake_schema.find(formatted_child_name);
+                if (it == field_name_2_lake_schema.end()) {
+                    continue;
+                }
 
-            // is compelx type, recursive check it's children
-            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
-                has_valid_child = true;
-                break;
+                auto it_td = field_name_2_type.find(formatted_child_name);
+                if (it_td == field_name_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+                    has_valid_child = true;
+                    break;
+                }
             }
         }
     }
@@ -202,10 +274,18 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
 }
 
 void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                                          const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                           std::vector<GroupReaderParam::Column>& read_cols,
                                           std::unordered_set<std::string>& existed_column_names) const {
+    const bool parquet_has_field_id = _file_metadata->schema().exist_filed_id();
     for (auto& materialized_column : materialized_columns) {
-        const std::string& formatted_name = Utils::format_name(materialized_column.name(), _case_sensitive);
+        auto extended_variant_binding =
+                find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
+        const std::string formatted_name =
+                extended_variant_binding.has_value()
+                        ? Utils::format_name(std::string(extended_variant_binding->access_path->path()),
+                                             _case_sensitive)
+                        : Utils::format_name(materialized_column.name(), _case_sensitive);
         auto lake_it = _field_name_2_lake_field.find(formatted_name);
         if (lake_it == _field_name_2_lake_field.end()) {
             continue;
@@ -213,12 +293,20 @@ void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::
 
         int32_t field_id = lake_it->second->field_id;
 
-        int32_t field_idx = _file_metadata->schema().get_field_idx_by_field_id(field_id);
+        int32_t field_idx = parquet_has_field_id
+                                    ? _file_metadata->schema().get_field_idx_by_field_id(field_id)
+                                    : _file_metadata->schema().get_field_idx_by_column_name(
+                                              extended_variant_binding.has_value()
+                                                      ? std::string(extended_variant_binding->access_path->path())
+                                                      : materialized_column.name());
         if (field_idx < 0) continue;
 
-        const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_id(field_id);
+        const ParquetField* parquet_field =
+                parquet_has_field_id ? _file_metadata->schema().get_stored_column_by_field_id(field_id)
+                                     : _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is type is invalid
-        if (!_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
+        if (!extended_variant_binding.has_value() &&
+            !_is_valid_type(parquet_field, lake_it->second, &materialized_column.slot_desc->type())) {
             continue;
         }
 
@@ -226,8 +314,13 @@ void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::
 
         GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
                                                         materialized_column.decode_needed, lake_it->second);
+        if (extended_variant_binding.has_value()) {
+            column.is_extended_variant_virtual = true;
+            column.source_variant_column_name = std::string(extended_variant_binding->access_path->path());
+            column.variant_virtual_leaf_path = std::move(extended_variant_binding->leaf_path);
+        }
         read_cols.emplace_back(column);
-        existed_column_names.emplace(formatted_name);
+        existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
 }
 
