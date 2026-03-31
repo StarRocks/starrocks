@@ -75,6 +75,12 @@ public abstract class MetadataCollectJob {
         this.context = buildConnectContext(sessionVariable);
     }
 
+    public void init(ConnectContext originContext) {
+        this.sql = buildCollectMetadataSQL();
+        this.context = buildConnectContext(originContext.getSessionVariable());
+        this.context.setAuthToken(originContext.getAuthToken());
+    }
+
     protected String getCatalogName() {
         return catalogName;
     }

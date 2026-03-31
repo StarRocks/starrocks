@@ -103,6 +103,9 @@ public class ConnectScheduler {
                     ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
                     for (Long connectId : connectionIds) {
                         ConnectContext connectContext = connectionMap.get(connectId);
+                        if (connectContext == null) {
+                            continue;
+                        }
                         try (var guard = connectContext.bindScope()) {
                             connectContext.checkTimeout(now);
                         }
@@ -113,6 +116,9 @@ public class ConnectScheduler {
                             new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
                     for (String token : arrowFlightSqlConnections) {
                         ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
+                        if (connectContext == null) {
+                            continue;
+                        }
                         try (var guard = connectContext.bindScope()) {
                             connectContext.checkTimeout(now);
                         }

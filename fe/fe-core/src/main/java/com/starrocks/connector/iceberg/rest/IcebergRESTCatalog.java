@@ -413,6 +413,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private SessionCatalog.SessionContext buildContext(ConnectContext context) {
+        if (context == null) {
+            return SessionCatalog.SessionContext.createEmpty();
+        }
         String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
 
         Map<String, String> credentials;
