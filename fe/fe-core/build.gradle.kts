@@ -294,6 +294,8 @@ dependencies {
     implementation("software.amazon.awssdk:kms")
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:sts")
+    implementation("software.amazon.awssdk:sso")
+    implementation("software.amazon.awssdk:ssooidc")
     implementation("software.amazon.awssdk:url-connection-client")
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
