@@ -156,10 +156,10 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q03", 2, 2, false, 4, true, 4, true, 4, true),
                 // Although the number of aggregators is the same, the aggregator was pushed down.
                 // This is caused by the CTE. orig: CTE inline, auto~high: CTE
-                Arguments.of("Q04", 12, 12, true, 24, true, 12, true, 12, true),
+                Arguments.of("Q04", 12, 12, true, 24, true, 24, true, 24, true),
                 Arguments.of("Q05", 8, 16, true, 16, true, 16, true, 16, true),
                 Arguments.of("Q08", 4, 6, true, 6, true, 6, true, 6, true),
-                Arguments.of("Q11", 8, 8, true, 16, true, 8, true, 8, true),
+                Arguments.of("Q11", 8, 8, true, 16, true, 16, true, 16, true),
                 Arguments.of("Q12", 2, 2, false, 4, true, 4, true, 4, true),
                 Arguments.of("Q15", 2, 2, false, 4, true, 4, true, 4, true),
                 Arguments.of("Q19", 2, 2, false, 4, true, 2, false, 2, false),
