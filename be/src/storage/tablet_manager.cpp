@@ -62,6 +62,7 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "testutil/sync_point.h"
 #include "util/path_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -1174,6 +1175,8 @@ Status TabletManager::start_trash_sweep() {
         sweep_shutdown_tablet(info, finished_tablets_redundant);
     }
 
+    TEST_SYNC_POINT("TabletManager::start_trash_sweep:1");
+
     if (!finished_tablets.empty() || !finished_tablets_redundant.empty()) {
         std::unique_lock l(_shutdown_tablets_lock);
         for (const auto& tablet_info_finished : finished_tablets) {
@@ -1877,9 +1880,28 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     auto iter = _shutdown_tablets.find(tablet_id);
     if (iter != _shutdown_tablets.end()) {
         if ((iter->second).tablet != nullptr) {
-            auto st = _remove_tablet_meta((iter->second).tablet);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+            // Re-check the on-disk meta before destructive cleanup. During rapid re-migration
+            // a stale shutdown entry may still exist after ownership has already moved to a
+            // newer tablet instance on the same path. For PK tablets, _remove_tablet_meta()
+            // can clear rowset meta by tablet_id, so running it from the stale entry would
+            // wipe the new tablet's metadata. When uid/state no longer matches, leave this
+            // entry to the normal shutdown queues instead of eagerly clearing meta here.
+            auto& tablet = (iter->second).tablet;
+            TabletMeta tablet_meta;
+            Status st = TabletMetaManager::get_tablet_meta(tablet->data_dir(), tablet->tablet_id(),
+                                                           tablet->schema_hash(), &tablet_meta);
+            if (st.ok() &&
+                (tablet_meta.tablet_uid() != tablet->tablet_uid() || tablet_meta.tablet_state() != TABLET_SHUTDOWN)) {
+                LOG(INFO) << "Skip removing stale shutdown tablet meta due to "
+                          << (tablet_meta.tablet_uid() != tablet->tablet_uid() ? "uid mismatch" : "state mismatch")
+                          << ". tablet_id=" << tablet->tablet_id() << ", path=" << tablet->data_dir()->path()
+                          << ", state=" << tablet_meta.tablet_state();
+            } else {
+                // just try to remove the tablet meta. if failed, it will be removed in sweep_shutdown_tablet
+                st = _remove_tablet_meta(tablet);
+                if (!st.ok()) {
+                    LOG(WARNING) << "Fail to remove previous tablet meta, id: " << tablet_id << " status: " << st;
+                }
             }
         }
         auto drop_info_redundant = iter->second;
