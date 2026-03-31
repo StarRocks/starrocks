@@ -2321,7 +2321,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
-    
+
     @Test
     public void testWindowFunction() throws Exception {
         String sql = "SELECT\n" +
@@ -2689,16 +2689,16 @@ public class LowCardinalityTest2 extends PlanTestBase {
     @Test
     public void testUnionWithAllConstants() throws Exception {
         String sql = """
-                SELECT
-                    C_USER a, C_USER as b, C_USER as c
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    NULL, 'zzz', NULL
                   FROM
-                    low_card_t1
-                UNION ALL
-                SELECT
-                  NULL, 'zzz', NULL
-                FROM
-                    supplier
-                """;
+                      supplier
+                  """;
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
