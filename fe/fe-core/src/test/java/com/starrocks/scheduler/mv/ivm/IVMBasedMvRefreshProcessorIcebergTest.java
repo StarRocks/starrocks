@@ -14,8 +14,14 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrDeltaStats;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
@@ -533,6 +539,45 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
             Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
         }
+    }
+
+    @Test
+    public void testAutoRefreshFallbackCanPersistCheckpointForNextIvm() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid1 =
+                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        MaterializedView refreshedMv = getMv("test_mv1");
+        TvrVersionRange checkpoint = refreshedMv.getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap()
+                .values()
+                .iterator()
+                .next();
+        Assertions.assertTrue(checkpoint instanceof TvrTableSnapshot);
+        Assertions.assertEquals(2L, checkpoint.to().getVersion());
+
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(2L, 3L),
+                        TvrDeltaStats.EMPTY)
+        ));
+
+        MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid2 =
+                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
     }
 
     @Test

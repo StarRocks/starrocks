@@ -19,6 +19,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -90,7 +91,11 @@ public class MVVersionManager {
             final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
             for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
-                mvTvrVersionRangeMap.put(entry.getKey(), entry.getValue());
+                TvrVersionRange versionRange = entry.getValue();
+                if (versionRange == null || versionRange.isEmpty()) {
+                    continue;
+                }
+                mvTvrVersionRangeMap.put(entry.getKey(), TvrTableSnapshot.of(versionRange.to()));
             }
         }
 
