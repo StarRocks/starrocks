@@ -82,7 +82,7 @@ public class ThreadPoolManager {
     private static final String[] POOL_METRIC_TYPES = {"pool_size", "active_thread_num", "task_in_queue",
             "completed_task_count"};
 
-    private static final long KEEP_ALIVE_TIME = 60L;
+    private static final long KEEP_ALIVE_TIME = 86400L;
 
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
             ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-dict");
