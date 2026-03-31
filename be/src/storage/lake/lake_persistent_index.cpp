@@ -14,6 +14,8 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <future>
+
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_cache_fwd.h"
@@ -991,22 +993,37 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        // more than one key column or big endian encoding
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
-    }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     int64_t get_next_cost_us = 0;
     int64_t pk_encode_cost_us = 0;
     int64_t build_values_cost_us = 0;
-    // Rowset whose version is between max_sstable_version and base_version should be recovered.
+
+    // Holds the pre-read PK data and index values for one chunk batch in a segment.
+    struct PKBatch {
+        ColumnPtr pk_col;       // encoded PK column (owned)
+        std::vector<IndexValue> values;
+        bool is_binary = false; // whether pk_col is binary type
+    };
+    // Holds all pre-read results for one segment.
+    struct SegmentReadResult {
+        Status status;
+        std::vector<PKBatch> batches;
+        int64_t get_next_cost_us = 0;
+        int64_t pk_encode_cost_us = 0;
+        int64_t build_values_cost_us = 0;
+        int64_t rebuild_index_num_rows = 0;
+    };
+
+    // Phase 1: Collect all segment tasks that need rebuild.
+    struct SegmentTask {
+        ChunkIteratorPtr itr;
+        uint32_t rssid;
+        int64_t rowset_version;
+    };
+    std::vector<SegmentTask> segment_tasks;
+    // Track rowsets with del files (processed after parallel reads).
+    std::vector<std::pair<RowsetPtr, int64_t>> rowsets_with_dels;
+
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
         TRACE_COUNTER_INCREMENT("total_num_rows", rowset->num_rows());
@@ -1021,78 +1038,152 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto itr = itrs[i].get();
-            if (itr == nullptr) {
+            if (itrs[i] == nullptr) {
                 continue;
             }
-            DeferOp close_iter([&] { itr->close(); });
             uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
             if (rssid < rebuild_rss_id) {
-                // lower than rebuild point, skip
-                // Notice: segment id that equal `rebuild_rss_id` can't be skip because
-                // there are maybe some rows need to rebuild.
+                itrs[i]->close();
                 continue;
             }
-            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                int64_t t1 = GetCurrentTimeMicros();
-                auto st = itr->get_next(chunk, &rowids);
-                get_next_cost_us += GetCurrentTimeMicros() - t1;
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        int64_t t2 = GetCurrentTimeMicros();
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = const_cast<Column*>(chunk->columns()[0].get());
-                    }
-                    int64_t t3 = GetCurrentTimeMicros();
-                    uint64_t base = ((uint64_t)rssid) << 32;
-                    std::vector<IndexValue> values;
-                    values.reserve(pkc->size());
-                    DCHECK(pkc->size() <= rowids.size());
-                    for (uint32_t i = 0; i < pkc->size(); i++) {
-                        values.emplace_back(base + rowids[i]);
-                    }
-                    build_values_cost_us += GetCurrentTimeMicros() - t3;
-                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
-                        // lower AND equal than rebuild point, skip
-                        continue;
-                    }
-                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
-                    } else {
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
-                        }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
-                    }
-                }
-            }
+            segment_tasks.push_back({std::move(itrs[i]), rssid, rowset_version});
         }
-        // Rebuild from del files
         if (rowset->metadata().del_files_size() > 0) {
-            RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+            rowsets_with_dels.emplace_back(rowset, rowset_version);
         }
     }
+
+    // Phase 2: Parallel read + encode PK for each segment.
+    // This overlaps remote IO across segments to reduce wall-clock time.
+    std::vector<SegmentReadResult> seg_results(segment_tasks.size());
+
+    auto read_segment = [&](size_t seg_idx) {
+        auto& task = segment_tasks[seg_idx];
+        auto& result = seg_results[seg_idx];
+
+        auto itr = task.itr.get();
+        DeferOp close_iter([&] { itr->close(); });
+
+        // Per-thread local buffers
+        auto local_chunk_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+        auto local_chunk = local_chunk_ptr.get();
+        MutableColumnPtr local_pk_column;
+        if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+            if (!PrimaryKeyEncoder::create_column(pkey_schema, &local_pk_column, pk_encoding_type).ok()) {
+                result.status = Status::InternalError("create column for primary key encoder failed");
+                return;
+            }
+        }
+        vector<uint32_t> local_rowids;
+        local_rowids.reserve(4096);
+
+        while (true) {
+            local_chunk->reset();
+            local_rowids.clear();
+            int64_t t1 = GetCurrentTimeMicros();
+            auto st = itr->get_next(local_chunk, &local_rowids);
+            result.get_next_cost_us += GetCurrentTimeMicros() - t1;
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                result.status = st;
+                return;
+            }
+
+            PKBatch batch;
+            if (local_pk_column) {
+                int64_t t2 = GetCurrentTimeMicros();
+                local_pk_column->reset_column();
+                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(),
+                                          local_pk_column.get(), pk_encoding_type);
+                result.pk_encode_cost_us += GetCurrentTimeMicros() - t2;
+                // Clone the pk column data so it outlives this iteration
+                batch.pk_col = local_pk_column->clone_shared();
+                batch.is_binary = local_pk_column->is_binary();
+            } else {
+                batch.pk_col = local_chunk->columns()[0]->clone_shared();
+                batch.is_binary = local_chunk->columns()[0]->is_binary();
+            }
+
+            int64_t t3 = GetCurrentTimeMicros();
+            uint64_t base = ((uint64_t)task.rssid) << 32;
+            batch.values.reserve(batch.pk_col->size());
+            DCHECK(batch.pk_col->size() <= local_rowids.size());
+            for (uint32_t j = 0; j < batch.pk_col->size(); j++) {
+                batch.values.emplace_back(base + local_rowids[j]);
+            }
+            result.build_values_cost_us += GetCurrentTimeMicros() - t3;
+
+            if (batch.values.back().get_value() <= rebuild_rss_rowid_point) {
+                continue;
+            }
+            result.rebuild_index_num_rows += batch.pk_col->size();
+            result.batches.push_back(std::move(batch));
+        }
+        result.status = Status::OK();
+    };
+
+    if (segment_tasks.size() > 1) {
+        // Submit all but the last segment to thread pool, run the last one in current thread.
+        std::vector<std::future<void>> futures;
+        futures.reserve(segment_tasks.size() - 1);
+        for (size_t i = 0; i < segment_tasks.size() - 1; i++) {
+            auto task = std::make_shared<std::packaged_task<void()>>([&read_segment, i]() { read_segment(i); });
+            auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
+            if (!st.ok()) {
+                // Fallback: run serially if thread pool is full
+                read_segment(i);
+            } else {
+                futures.push_back(task->get_future());
+            }
+        }
+        // Run the last segment in current thread
+        read_segment(segment_tasks.size() - 1);
+        // Wait for all parallel tasks
+        for (auto& f : futures) {
+            f.get();
+        }
+    } else if (segment_tasks.size() == 1) {
+        read_segment(0);
+    }
+
+    // Phase 3: Sequential insert into persistent index (insert is not thread-safe).
+    for (size_t seg_idx = 0; seg_idx < seg_results.size(); seg_idx++) {
+        auto& result = seg_results[seg_idx];
+        RETURN_IF_ERROR(result.status);
+        get_next_cost_us += result.get_next_cost_us;
+        pk_encode_cost_us += result.pk_encode_cost_us;
+        build_values_cost_us += result.build_values_cost_us;
+        TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+        TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", result.rebuild_index_num_rows);
+
+        const int64_t rowset_version = segment_tasks[seg_idx].rowset_version;
+        for (auto& batch : result.batches) {
+            Column* pkc = batch.pk_col.get();
+            if (batch.is_binary) {
+                RETURN_IF_ERROR(
+                        insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
+                               batch.values.data(), rowset_version));
+            } else {
+                std::vector<Slice> keys;
+                keys.reserve(pkc->size());
+                const auto* fkeys = pkc->continuous_data();
+                for (size_t j = 0; j < pkc->size(); ++j) {
+                    keys.emplace_back(fkeys, _key_size);
+                    fkeys += _key_size;
+                }
+                RETURN_IF_ERROR(
+                        insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()),
+                               batch.values.data(), rowset_version));
+            }
+        }
+    }
+
+    // Process del files sequentially
+    for (auto& [rowset, rowset_version] : rowsets_with_dels) {
+        RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
+    }
+
     TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
     TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
     TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
