@@ -53,6 +53,7 @@ StarRocks 支持单独和组合使用数据分布方式。
 | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Random 分布       | 随机分桶                                                     | 一张表为一个分区，表中数据随机分布至不同分桶。该方式为默认数据分布方式。 |
 | Hash 分布         | 哈希分桶                                                     | 一张表为一个分区，对表中数据的分桶键值使用哈希函数进行计算后，得出其哈希值，分布到对应分桶。 |
+| Range 分布        | 基于范围分桶                                                | 从 v4.1 版本起支持。一张表为一个分区，表中的数据会根据表键的取值范围分布至不同分桶。 |
 | Range+Random 分布 | <ol><li>Range 分区</li><li>随机分桶</li></ol> | <ol><li>表的数据根据分区列值所属范围，分布至对应分区。</li><li>同一分区的数据随机分布至不同分桶。</li></ol> |
 | Range+Hash 分布   | <ol><li>Range 分区</li><li>哈希分桶</li></ol> | <ol><li>表的数据根据分区列值所属范围，分布至对应分区。</li><li>对同一分区的数据的分桶键值使用哈希函数进行计算，得出其哈希值，分布到对应分桶。</li></ol> |
 | List+Random 分布  | <ol><li>表达式分区或者 List 分区</li><li>随机分桶</li></ol>  | <ol><li>表的数据根据分区列值所属枚举值列表，分布至对应分区。</li><li>同一分区的数据随机分布至不同分桶。</li></ol> |
@@ -88,6 +89,25 @@ StarRocks 支持单独和组合使用数据分布方式。
     -- 设置分桶方式为哈希分桶，并且必须指定分桶键
     DISTRIBUTED BY HASH(event_day,site_id); 
     ```
+
+- Range 分布
+
+  从 v4.1 起，StarRocks 引入了**基于范围的分布语义**（默认关闭），通过 FE 配置项 `enable_range_distribution` 控制。启用后，数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。
+
+  :::note
+  要启用此语义，必须将 FE 配置 `enable_range_distribution` 设置为 `true`。
+  :::
+
+  ```SQL
+  CREATE TABLE users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL
+  ) 
+  PRIMARY KEY (user_id);
+  -- 由于未配置分桶方法，但在指定了键列的情况下，系统会使用基于范围的分桶。
+  ```
 
 - Range + Random 分布
 
@@ -740,6 +760,91 @@ DISTRIBUTED BY HASH(site_id,city_code);
 > - 短查询是指扫描数据量不大、单机就能完成扫描的查询。
 >
 > - 长查询是指扫描数据量大、多机并行扫描能显著提升性能的查询。
+
+### 基于范围的分桶
+
+从 v4.1 起，StarRocks 引入了**基于范围的分布语义**（默认关闭），通过 FE 配置项 `enable_range_distribution` 控制。启用后，数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。
+
+该分布语义与默认行为的差异如下：
+
+- 如果显式指定了键类型（AGGREGATE KEY / UNIQUE KEY / PRIMARY KEY / DUPLICATE KEY），但未指定 `DISTRIBUTED BY` 子句，则默认采用基于范围的分布。
+- 如果未指定键类型、`DISTRIBUTED BY` 子句以及 `ORDER BY` 子句，则会创建一个采用随机分桶策略的明细表。
+- 如果未指定键类型和 `DISTRIBUTED BY` 子句，但指定了 `ORDER BY` 子句，则会创建一个采用基于范围分布的明细表。在这种情况下，`DUPLICATE KEY` 与 `ORDER BY` 等价，可以互相替代。
+- 如果同时指定了 `DUPLICATE KEY` 和 `ORDER BY`，仅 `ORDER BY` 生效，`DUPLICATE KEY` 会被忽略。
+
+#### 优点
+
+**概念更少，使用更简单**
+
+- 大多数情况下，建表只需定义列和 `ORDER BY` 子句。
+- 用户无需显式指定 `DISTRIBUTED BY` 子句。
+
+**应对数据倾斜**
+
+- Tablet 支持自动拆分与合并，可动态调整数据分布，从而缓解数据倾斜问题。详见 [ALTER TABLE - Split or merge tablets](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#拆分或合并-tablet)。
+
+**兼顾数据本地性与分布均衡**
+
+- 小规模租户的数据可集中在单个 BE/CN 节点上，提高数据本地性。
+- 大规模租户的数据可分布在多个 BE/CN 节点上，以保证扩展性与性能。
+
+**无需依赖时间分区**
+
+- 数据管理不再强制依赖时间分区。
+- 单个分区即可承载大规模数据，不同分区之间的数据量可以差异较大，用户可以根据业务需求灵活设计分区策略。
+
+#### 注意事项
+
+- 该语义从 v4.1 开始支持，且默认关闭。
+- 启用该功能需将 FE 配置项 `enable_range_distribution` 设置为 `true`。
+
+#### 示例
+
+以下示例省略了分区语法。
+
+**明细表：**
+
+```SQL
+-- 指定 DUPLICATE KEY 时，数据按键列范围分布。
+CREATE TABLE dup_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+DUPLICATE KEY (tenant_id, created_time, id);
+
+-- 指定 ORDER BY 时，会创建明细表，数据按排序键范围分布。
+CREATE TABLE dup_table_order (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+ORDER BY (tenant_id, created_time, id);
+
+-- 未指定 DUPLICATE KEY 和 ORDER BY 时，创建采用随机分桶的明细表。
+CREATE TABLE random_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+);
+```
+
+**主键表 / 聚合表 / 更新表：**
+
+```SQL
+-- 以主键表为例：
+-- 指定键类型及键列后，数据按键列范围分布。
+CREATE TABLE pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id);
+```
 
 ### 设置分桶数量
 
