@@ -105,7 +105,7 @@ inline void update_bf(BloomFilter* bf, const StorageCppType<type>& v) {
 // high cardinality key columns and none-agg value columns for high selectivity and storage
 // efficiency.
 // This builder builds a bloom filter page by every data page, with a page id index.
-// Meanwhile, It adds an ordinal index to load bloom filter index according to requirement.
+// Meanwhile, it adds an ordinal index to load bloom filter index according to requirement.
 //
 template <LogicalType field_type>
 class OriginalBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {

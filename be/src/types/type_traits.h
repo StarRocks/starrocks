@@ -46,8 +46,8 @@
 
 namespace starrocks {
 
-// CppTypeTraits:
-// Infer on-disk type(CppType) from LogicalType
+// StorageTypeTraits:
+// Infer on-disk storage CppType from LogicalType
 template <LogicalType field_type>
 struct StorageTypeTraits {};
 
