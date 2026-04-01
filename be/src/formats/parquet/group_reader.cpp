@@ -176,12 +176,14 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
     VariantPathReader reader;
     reader.prepare(variant_column, &path);
 
+    // Hoist is_constant() out of the loop: it does not change per row.
+    const bool src_is_const = variant_src->is_constant();
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_src->is_null(row)) {
             builder.append_null();
             continue;
         }
-        size_t variant_row = variant_src->is_constant() ? 0 : row;
+        size_t variant_row = src_is_const ? 0 : row;
         VariantReadResult read = reader.read_row(variant_row);
         if (read.state != VariantReadState::kValue) {
             builder.append_null();
@@ -783,30 +785,31 @@ Status GroupReader::_create_column_readers() {
             auto physical_it = physical_variant_slots_by_name.find(column.source_variant_column_name);
             if (physical_it != physical_variant_slots_by_name.end()) {
                 projection.source_slot_id = physical_it->second;
-            } else if (_hidden_variant_sources.find(column.source_variant_column_name) ==
-                       _hidden_variant_sources.end()) {
-                const auto* source_schema_node =
-                        _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
-                if (source_schema_node == nullptr) {
-                    return Status::InternalError(strings::Substitute(
-                            "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
-                            column.idx_in_parquet, column.slot_id()));
+            } else {
+                // Find or create the hidden variant source for this column name.
+                auto hidden_it = _hidden_variant_sources.find(column.source_variant_column_name);
+                if (hidden_it == _hidden_variant_sources.end()) {
+                    const auto* source_schema_node =
+                            _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
+                    if (source_schema_node == nullptr) {
+                        return Status::InternalError(strings::Substitute(
+                                "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
+                                column.idx_in_parquet, column.slot_id()));
+                    }
+                    if (source_schema_node->type != ColumnType::STRUCT) {
+                        return Status::InternalError(strings::Substitute(
+                                "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
+                                column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
+                    }
+                    VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
+                    ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
+                                                                 _column_reader_opts, source_schema_node, hints));
+                    auto [inserted_it, _] = _hidden_variant_sources.emplace(
+                            column.source_variant_column_name,
+                            HiddenVariantSource{.slot_id = _next_hidden_slot_id--, .reader = std::move(hidden_reader)});
+                    hidden_it = inserted_it;
                 }
-                if (source_schema_node->type != ColumnType::STRUCT) {
-                    return Status::InternalError(strings::Substitute(
-                            "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
-                            column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
-                }
-                VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
-                ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
-                                                             _column_reader_opts, source_schema_node, hints));
-                _hidden_variant_sources.emplace(
-                        column.source_variant_column_name,
-                        HiddenVariantSource{.slot_id = _next_hidden_slot_id--, .reader = std::move(hidden_reader)});
-            }
-            if (physical_it == physical_variant_slots_by_name.end()) {
-                projection.source_slot_id =
-                        _hidden_variant_sources.find(column.source_variant_column_name)->second.slot_id;
+                projection.source_slot_id = hidden_it->second.slot_id;
             }
             _variant_virtual_projections.emplace(column.slot_id(), std::move(projection));
             continue;
@@ -848,8 +851,8 @@ Status GroupReader::_create_column_readers() {
                 std::optional<int64_t> first_row_id =
                         _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
                                 ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
+                        : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
+                                                   : std::nullopt;
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
@@ -1181,16 +1184,11 @@ StatusOr<bool> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_c
     SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
 
     // Build eval_chunk: one projected column per virtual slot.
+    // Iterate _variant_virtual_projections directly to avoid scanning _param.read_cols.
     // Physical variant source → found in active_chunk (shared with _read_chunk).
     // Hidden variant source   → found in _read_chunk (synthetic negative slot ids).
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
-    for (const auto& column : _param.read_cols) {
-        if (!column.is_extended_variant_virtual) continue;
-        SlotId slot_id = column.slot_id();
-        auto proj_it = _variant_virtual_projections.find(slot_id);
-        if (proj_it == _variant_virtual_projections.end()) continue;
-
-        const auto& projection = proj_it->second;
+    for (const auto& [slot_id, projection] : _variant_virtual_projections) {
         ASSIGN_OR_RETURN(ColumnPtr source_col,
                          get_variant_projection_source_column(active_chunk, active_chunk, _read_chunk,
                                                               projection.source_slot_id));
@@ -1198,6 +1196,12 @@ StatusOr<bool> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_c
                          project_variant_leaf_column(source_col, projection.parsed_path, projection.target_type,
                                                      _get_variant_projection_timezone()));
         eval_chunk->append_column(std::move(result_col), slot_id);
+    }
+
+    // Guard: if no columns were projected (shouldn't happen in normal flow), treat as
+    // all-pass to avoid undefined behaviour in eval_conjuncts_into_filter.
+    if (eval_chunk->num_columns() == 0) {
+        return true;
     }
 
     Filter filter(active_chunk->num_rows(), 1);
@@ -1226,11 +1230,11 @@ StatusOr<bool> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_c
 //   3. _read_chunk  – hidden variant sources (synthetic *negative* slot ids)
 Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     active_chunk->check_or_die();
+    // Pass 1: physical columns.  Skip slots that have a virtual projection so we don't
+    // call fill_dst_column for them (they have no entry in _column_readers).
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
-        if (_variant_virtual_projections.find(slot_id) != _variant_virtual_projections.end()) {
-            continue;
-        }
+        if (_variant_virtual_projections.count(slot_id)) continue;
         RETURN_IF_ERROR(_column_readers[slot_id]->fill_dst_column((*chunk)->get_column_by_slot_id(slot_id),
                                                                   active_chunk->get_column_by_slot_id(slot_id)));
     }
@@ -1242,14 +1246,9 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
         }
     }
 
-    for (const auto& column : _param.read_cols) {
-        SlotId slot_id = column.slot_id();
-        auto projection_it = _variant_virtual_projections.find(slot_id);
-        if (projection_it == _variant_virtual_projections.end()) {
-            continue;
-        }
-
-        const auto& projection = projection_it->second;
+    // Pass 2: virtual projections.  Iterate the projection map directly to avoid
+    // scanning _param.read_cols again.
+    for (const auto& [slot_id, projection] : _variant_virtual_projections) {
         // Search order: *chunk (physical cols just filled) → active_chunk (same backing
         // store) → _read_chunk (hidden variant sources with negative slot ids).
         ASSIGN_OR_RETURN(
