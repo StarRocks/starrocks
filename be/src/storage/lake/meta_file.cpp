@@ -347,9 +347,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     // Without this, _finalize_delvec() would re-insert these entries as "new" delvecs,
     // creating orphan delvec entries that reference non-existent segments and prevent
     // the corresponding delvec files from being garbage collected.
-    for (uint32_t sid : delete_delvec_sids) {
-        _delvecs.erase(sid);
-        _segmentid_to_delvec.erase(sid);
+    for (const auto& [start, end] : delete_delvec_sid_range) {
+        for (uint32_t sid = start; sid <= end; sid++) {
+            _delvecs.erase(sid);
+            _segmentid_to_delvec.erase(sid);
+        }
     }
     // If all pending delvecs were for compacted segments, clear _buf to avoid
     // writing an unnecessary delvec file during _finalize_delvec().
@@ -435,7 +437,11 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     if (config::lake_enable_orphan_delvec_cleanup_on_compaction) {
         std::unordered_set<uint32_t> valid_rssids;
         for (const auto& rowset : _tablet_meta->rowsets()) {
-            collect_rowset_rssids(rowset, &valid_rssids);
+            uint32_t start = rowset.id();
+            uint32_t end = start + std::max(rowset.segments_size(), 1) - 1;
+            for (uint32_t sid = start; sid <= end; sid++) {
+                valid_rssids.insert(sid);
+            }
         }
         auto* remaining_delvecs = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
         int orphan_cnt = 0;
