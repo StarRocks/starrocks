@@ -705,8 +705,6 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     ASSERT_EQ(1, persisted->rowsets_size());
     ASSERT_EQ(3, persisted->rowsets(0).del_files_size());
 }
-<<<<<<< HEAD
-=======
 
 TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     const int64_t tablet_id = 30003;
@@ -1267,5 +1265,4 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
 }
 
->>>>>>> 9da08b0ee2 ([BugFix] Fix delvec orphan entries caused by write-before-compaction in same publish batch (backport #71001) (#71049))
 } // namespace starrocks::lake
