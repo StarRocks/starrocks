@@ -108,6 +108,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
 import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
+import static com.starrocks.common.ErrorCode.ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class Load {
@@ -758,6 +759,53 @@ public class Load {
         }
     }
 
+    static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                Expr expr = column.getDefaultExpr().obtainExpr();
+                if (expr == null) {
+                    throw new StarRocksException("Column(" + column + ") has invalid default expr object");
+                }
+                return expr;
+            }
+            return new StringLiteral(column.calculatedDefaultValue());
+        } else if (defaultValueType == Column.DefaultValueType.VARY) {
+            if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
+                return column.getDefaultExpr().obtainExpr();
+            }
+            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
+                    + column.getDefaultExpr().getExpr());
+        } else if (defaultValueType == Column.DefaultValueType.NULL) {
+            if (column.isAllowNull()) {
+                return NullLiteral.create(column.getType());
+            }
+        }
+        return null;
+    }
+
+    private static Expr resolveGeneratedColumnRefExpr(Table tbl, SlotRef slot, Map<String, Expr> exprsByName,
+                                                      Map<String, SlotDescriptor> slotDescByName)
+            throws StarRocksException {
+        Expr replaceExpr = exprsByName.get(slot.getColumnName());
+        if (replaceExpr != null) {
+            return replaceExpr;
+        }
+
+        SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
+        if (slotDesc != null) {
+            SlotRef slotRef = new SlotRef(slotDesc);
+            slotRef.setColumnName(slot.getColumnName());
+            return slotRef;
+        }
+
+        Column refColumn = tbl.getColumn(slot.getColumnName());
+        if (refColumn == null) {
+            return null;
+        }
+        return buildLoadDefaultExpr(refColumn);
+    }
+
     private static void analyzeMappingExprs(Table tbl, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                             Map<String, Expr> exprsByName, Map<String, Expr> mvDefineExpr,
                                             Map<String, SlotDescriptor> slotDescByName, boolean useVectorizedLoad)
@@ -824,31 +872,17 @@ public class Load {
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
-                SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
-                // In this case, generated column ref some mapping column
-                // and the expression should be replace by mapping column expression.
-
-                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
-                // it means that the ref columns are both in column list and expression list.
-                // In this case, we should rewrite the generated column expression using
-                // the expression in expression list instead of column list.
-                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
-                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
-                    }
-                    smap.put(slot, replaceExpr);
-                } else {
-                    SlotRef slotRef = new SlotRef(slotDesc);
-                    slotRef.setColumnName(slot.getColumnName());
-                    Expr replaceExpr = slotRef;
-                    if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
-                    }
-                    smap.put(slot, replaceExpr);
+                // Generated columns should prefer the mapping expression when a referenced column
+                // exists in both the input column list and the expression list.
+                Expr replaceExpr = resolveGeneratedColumnRefExpr(tbl, slot, exprsByName, slotDescByName);
+                if (replaceExpr == null) {
+                    ErrorReport.reportAnalysisException(ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN, entry.getKey());
                 }
+                if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
+                        !replaceExpr.getType().matchesType(slot.getType())) {
+                    replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
+                }
+                smap.put(slot, replaceExpr);
             }
             Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
 
