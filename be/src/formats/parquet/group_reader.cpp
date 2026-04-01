@@ -785,32 +785,34 @@ Status GroupReader::_create_column_readers() {
             auto physical_it = physical_variant_slots_by_name.find(column.source_variant_column_name);
             if (physical_it != physical_variant_slots_by_name.end()) {
                 projection.source_slot_id = physical_it->second;
-            } else {
-                // Find or create the hidden variant source for this column name.
-                auto hidden_it = _hidden_variant_sources.find(column.source_variant_column_name);
-                if (hidden_it == _hidden_variant_sources.end()) {
-                    const auto* source_schema_node =
-                            _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
-                    if (source_schema_node == nullptr) {
-                        return Status::InternalError(strings::Substitute(
-                                "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
-                                column.idx_in_parquet, column.slot_id()));
-                    }
-                    if (source_schema_node->type != ColumnType::STRUCT) {
-                        return Status::InternalError(strings::Substitute(
-                                "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
-                                column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
-                    }
-                    VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
-                    ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
-                                                                 _column_reader_opts, source_schema_node, hints));
-                    auto [inserted_it, _] = _hidden_variant_sources.emplace(
-                            column.source_variant_column_name,
-                            HiddenVariantSource{.slot_id = _next_hidden_slot_id--, .reader = std::move(hidden_reader)});
-                    hidden_it = inserted_it;
-                }
-                projection.source_slot_id = hidden_it->second.slot_id;
+                _variant_virtual_projections.emplace(column.slot_id(), std::move(projection));
+                continue;
             }
+
+            // Find or create the hidden variant source for this column name.
+            auto hidden_it = _hidden_variant_sources.find(column.source_variant_column_name);
+            if (hidden_it == _hidden_variant_sources.end()) {
+                const auto* source_schema_node =
+                        _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
+                if (source_schema_node == nullptr) {
+                    return Status::InternalError(strings::Substitute(
+                            "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
+                            column.idx_in_parquet, column.slot_id()));
+                }
+                if (source_schema_node->type != ColumnType::STRUCT) {
+                    return Status::InternalError(strings::Substitute(
+                            "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
+                            column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
+                }
+                VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
+                ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
+                                                             _column_reader_opts, source_schema_node, hints));
+                auto [inserted_it, _] = _hidden_variant_sources.emplace(
+                        column.source_variant_column_name,
+                        HiddenVariantSource{.slot_id = _next_hidden_slot_id--, .reader = std::move(hidden_reader)});
+                hidden_it = inserted_it;
+            }
+            projection.source_slot_id = hidden_it->second.slot_id;
             _variant_virtual_projections.emplace(column.slot_id(), std::move(projection));
             continue;
         }
@@ -851,8 +853,8 @@ Status GroupReader::_create_column_readers() {
                 std::optional<int64_t> first_row_id =
                         _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
                                 ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
+                        : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
+                                                   : std::nullopt;
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
