@@ -245,9 +245,17 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             for (const auto& field : field_schema->children) {
                 field_name_2_lake_schema.emplace(Utils::format_name(field.name, _case_sensitive), &field);
             }
-            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
-                field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[i], _case_sensitive),
-                                          &type_descriptor->children[i]);
+            if (!type_descriptor->field_physical_names.empty()) {
+                for (size_t i = 0; i < type_descriptor->children.size(); i++) {
+                    field_name_2_type.emplace(
+                            Utils::format_name(type_descriptor->field_physical_names[i], _case_sensitive),
+                            &type_descriptor->children[i]);
+                }
+            } else {
+                for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
+                    field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[i], _case_sensitive),
+                                              &type_descriptor->children[i]);
+                }
             }
 
             for (const auto& child_parquet_field : parquet_field->children) {
