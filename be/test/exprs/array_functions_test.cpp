@@ -54,6 +54,9 @@ protected:
     void _check_array_nullable(const Buffer<CppType>& check_values, const Buffer<uint8_t>& nulls,
                                const DatumArray& value);
 
+    void _assert_nullable_result_has_independent_null_column(const ColumnPtr& input, const ColumnPtr& result,
+                                                             const Filter& filter);
+
     FunctionContext _ctx;
 };
 
@@ -126,6 +129,25 @@ void ArrayFunctionsTest::_check_array_nullable(const Buffer<CppType>& check_valu
     } else {
         ASSERT_TRUE(false);
     }
+}
+
+void ArrayFunctionsTest::_assert_nullable_result_has_independent_null_column(const ColumnPtr& input,
+                                                                             const ColumnPtr& result,
+                                                                             const Filter& filter) {
+    auto input_nullable = NullableColumn::dynamic_pointer_cast(input);
+    auto result_nullable = NullableColumn::dynamic_pointer_cast(result);
+
+    ASSERT_TRUE(input_nullable != nullptr);
+    ASSERT_TRUE(result_nullable != nullptr);
+    EXPECT_NE(input_nullable->null_column().get(), result_nullable->null_column().get());
+
+    const size_t result_data_size = result_nullable->data_column()->size();
+    const size_t result_null_size = result_nullable->null_column()->size();
+
+    input->filter(filter);
+
+    EXPECT_EQ(result_data_size, result_nullable->data_column()->size());
+    EXPECT_EQ(result_null_size, result_nullable->null_column()->size());
 }
 
 // NOLINTNEXTLINE
@@ -247,6 +269,68 @@ TEST_F(ArrayFunctionsTest, array_length) {
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(4, result->get(1).get_int32());
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_length_result_should_not_share_null_column_with_input) {
+    MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    input->append_datum(Datum(DatumArray{}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1)}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)}));
+
+    auto result = ArrayFunctions::array_length(nullptr, {input}).value();
+    _assert_nullable_result_has_independent_null_column(input, result, {1, 0, 1, 0, 1});
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_append_result_should_not_share_null_column_with_input) {
+    MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1)}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{}));
+    input->append_datum(Datum(DatumArray{Datum((int32_t)2), Datum((int32_t)3)}));
+
+    MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    target->append_datum(Datum((int32_t)9));
+    target->append_datum(Datum((int32_t)9));
+    target->append_datum(Datum((int32_t)9));
+    target->append_datum(Datum((int32_t)9));
+
+    auto result = ArrayFunctions::array_append(nullptr, {input, target}).value();
+    _assert_nullable_result_has_independent_null_column(input, result, {1, 0, 1, 0});
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_remove_result_should_not_share_null_column_with_input) {
+    MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum((int32_t)2)}));
+    input->append_datum(Datum(DatumArray{}));
+
+    MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    target->append_datum(Datum((int32_t)2));
+    target->append_datum(Datum((int32_t)2));
+    target->append_datum(Datum((int32_t)2));
+    target->append_datum(Datum((int32_t)2));
+
+    auto result = ArrayFunctions::array_remove(nullptr, {input, target}).value();
+    _assert_nullable_result_has_independent_null_column(input, result, {1, 0, 1, 0});
+}
+
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_flatten_result_should_not_share_null_column_with_input) {
+    MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
+    input->append_datum(Datum(DatumArray{Datum(DatumArray{Datum((int32_t)1)}),
+                                         Datum(DatumArray{Datum((int32_t)2), Datum((int32_t)3)})}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum(DatumArray{})}));
+    input->append_datum(Datum(DatumArray{Datum(DatumArray{Datum((int32_t)4)}), Datum(DatumArray{})}));
+
+    auto result = ArrayFunctions::array_flatten(nullptr, {input}).value();
+    _assert_nullable_result_has_independent_null_column(input, result, {1, 0, 1, 0});
 }
 
 // NOLINTNEXTLINE
