@@ -37,7 +37,7 @@ fixed_jars = [
     "kudu-client-1.17.1.jar",
     "paimon-bundle-1.3.1.jar",
     "bundle-2.29.52.jar",
-    "hadoop-client-runtime-3.4.1.jar",
+    "hadoop-client-runtime-3.4.3.jar",
     "gcs-connector-hadoop3-2.2.26-shaded.jar",
     "cos_api-bundle-5.6.137.2.jar",
     # hudi related jars
@@ -48,9 +48,11 @@ fixed_jars = [
     "hbase-shaded-miscellaneous-4.1.1.jar",
     "grpc-netty-shaded-1.63.0.jar",
     "grpc-netty-shaded-1.67.1.jar",
+    "parquet-hadoop-bundle-1.15.2.jar",
+    "parquet-jackson-1.15.2.jar",
+    "parquet-jackson-1.16.0.jar",
     # extra scan from docker scout
     "spark-network-common_2.12-3.5.5.jar",
-    "spark-core_2.12-3.5.5.jar",
 ]
 
 
