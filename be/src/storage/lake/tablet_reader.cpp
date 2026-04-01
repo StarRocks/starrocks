@@ -17,8 +17,6 @@
 #include <future>
 #include <utility>
 
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
@@ -40,6 +38,8 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/json_flattener.h"
 
 namespace starrocks::lake {

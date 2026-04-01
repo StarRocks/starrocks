@@ -16,8 +16,6 @@
 
 #include <future>
 
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -34,7 +32,9 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
+#include "testutil/sync_point.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
