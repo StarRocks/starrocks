@@ -98,8 +98,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
             std::vector<std::future<void>> futures;
             futures.reserve(num_sstables - 1);
             for (int i = 0; i < num_sstables - 1; i++) {
-                auto task =
-                        std::make_shared<std::packaged_task<void()>>([&open_sstable, i]() { open_sstable(i); });
+                auto task = std::make_shared<std::packaged_task<void()>>([&open_sstable, i]() { open_sstable(i); });
                 auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
                 if (!st.ok()) {
                     open_sstable(i);
