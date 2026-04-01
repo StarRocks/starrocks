@@ -827,8 +827,9 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
 
 Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
                           int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets) {
+                          std::vector<uint64_t>* offsets, const Slice& extra_data, uint64_t* extra_data_offset) {
     if (old_delvec_files.empty()) {
+        DCHECK(extra_data.empty()) << "extra_data provided but no delvec files to merge";
         return Status::OK();
     }
 
@@ -867,6 +868,14 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
         ASSIGN_OR_RETURN(auto content, reader->read_all());
         RETURN_IF_ERROR(writer->append(Slice(content.data(), content.size())));
         total_size += content.size();
+    }
+
+    if (!extra_data.empty()) {
+        if (extra_data_offset != nullptr) {
+            *extra_data_offset = total_size;
+        }
+        RETURN_IF_ERROR(writer->append(extra_data));
+        total_size += extra_data.size;
     }
 
     RETURN_IF_ERROR(writer->close());
