@@ -749,15 +749,23 @@ jobs:
 
   fe-ut:
     runs-on: [self-hosted, normal]
-    needs: 
+    needs:
       - fe-codestyle-check
       - fe-checker
+      - thirdparty-info
     name: FE UT
+    if: >
+      always() &&
+      needs.fe-codestyle-check.result == 'success' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled'
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+      LINUX_DISTRO: ubuntu
     steps:
       - name: clean
         run: |
@@ -766,11 +774,11 @@ jobs:
 
       - name: BRANCH INFO
         id: branch
-        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_ut_conclusion != 'success' 
+        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_ut_conclusion != 'success'
         run: |
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
       - name: UPDATE ECI & RUN UT
@@ -782,7 +790,11 @@ jobs:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
+          if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
+              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: Clean ECI
         if: always() && steps.run_ut.outputs.ECI_ID != ''
