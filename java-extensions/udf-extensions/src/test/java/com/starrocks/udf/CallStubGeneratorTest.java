@@ -126,6 +126,41 @@ public class CallStubGeneratorTest {
             return v1 + v2;
         }
     }
+    
+    public static class VarargsConcat {
+        public String evaluate(String... args) {
+            if (args == null || args.length == 0) {
+                return "";
+            }
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] != null) {
+                    if (i > 0) {
+                        result.append(" ");
+                    }
+                    result.append(args[i]);
+                }
+            }
+            return result.toString();
+        }
+    }
+    
+    public static class VarargsSum {
+        public static class State {
+            public int sum = 0;
+        }
+        
+        public void update(State state, Integer... values) {
+            if (values != null) {
+                for (Integer val : values) {
+                    if (val != null) {
+                        state.sum += val;
+                    }
+                }
+            }
+        }
+    }
+    
     @Test
     public void testScalarCallStub()
             throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
@@ -155,5 +190,182 @@ public class CallStubGeneratorTest {
         for (int i = 0; i < testSize; i++) {
             Assertions.assertEquals(expects[i], res[i]);
         }
+    }
+    
+    @Test
+    public void testVarargsScalarUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = VarargsConcat.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        // numActualVarArgs = 3: the UDF is called with 3 string columns
+        Method m = clazz.getMethod("evaluate", String[].class);
+        final byte[] updates =
+                CallStubGenerator.generateScalarCallStub(clazz, m, 3);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, updates);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        VarargsConcat concat = new VarargsConcat();
+        int testSize = 100;
+
+        // Stub signature: (int rows, VarargsConcat obj, String[] col0, String[] col1, String[] col2) String[]
+        String[] inputs1 = new String[testSize];
+        String[] inputs2 = new String[testSize];
+        String[] inputs3 = new String[testSize];
+        String[] expects = new String[testSize];
+
+        for (int i = 0; i < testSize; i++) {
+            inputs1[i] = "a" + i;
+            inputs2[i] = "b" + i;
+            inputs3[i] = "c" + i;
+            expects[i] = inputs1[i] + " " + inputs2[i] + " " + inputs3[i];
+        }
+
+        // batchCallV(rows, obj, col0, col1, col2) - each colN is a String[] column
+        final String[] res = (String[]) batchCall.invoke(null, testSize, concat, inputs1, inputs2, inputs3);
+        for (int i = 0; i < testSize; i++) {
+            Assertions.assertEquals(expects[i], res[i]);
+        }
+    }
+
+    @Test
+    public void testVarargsAggUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = VarargsSum.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        // numActualVarArgs = 3: the UDAF is called with 3 integer columns
+        Method m = clazz.getMethod("update", VarargsSum.State.class, Integer[].class);
+        final byte[] updates =
+                CallStubGenerator.generateCallStubV(clazz, m, 3);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, updates);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        VarargsSum sum = new VarargsSum();
+        VarargsSum.State state = new VarargsSum.State();
+
+        int testSize = 100;
+        Integer[] inputs1 = new Integer[testSize];
+        Integer[] inputs2 = new Integer[testSize];
+        Integer[] inputs3 = new Integer[testSize];
+        int expect = 0;
+
+        for (int i = 0; i < testSize; i++) {
+            inputs1[i] = i;
+            inputs2[i] = i * 2;
+            inputs3[i] = i * 3;
+            expect += inputs1[i] + inputs2[i] + inputs3[i];
+        }
+
+        // batchCallV(rows, obj, state, col0, col1, col2) - each colN is an Integer[] column
+        assert batchCall != null;
+        batchCall.invoke(null, testSize, sum, state, inputs1, inputs2, inputs3);
+
+        Assertions.assertEquals(expect, state.sum);
+    }
+
+    // Mixed varargs: fixed param(s) before the varargs parameter
+
+    public static class MixedVarargsConcat {
+        // Fixed param 'prefix', then varargs 'parts'
+        public String evaluate(String prefix, String... parts) {
+            StringBuilder sb = new StringBuilder(prefix != null ? prefix : "");
+            if (parts != null) {
+                for (String p : parts) {
+                    if (p != null) {
+                        sb.append(p);
+                    }
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    public static class MixedVarargsSum {
+        public static class State {
+            public String result = "";
+        }
+
+        // Fixed param 'sep', then varargs 'values'
+        public void update(State state, String sep, Integer... values) {
+            if (values != null) {
+                for (Integer v : values) {
+                    if (v != null) {
+                        if (!state.result.isEmpty()) {
+                            state.result += sep;
+                        }
+                        state.result += v;
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testMixedVarargsScalarUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = MixedVarargsConcat.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        // Mixed: 1 fixed param (prefix) + 2 actual varargs columns
+        Method m = clazz.getMethod("evaluate", String.class, String[].class);
+        final byte[] bytes = CallStubGenerator.generateScalarCallStub(clazz, m, 2);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, bytes);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        MixedVarargsConcat udf = new MixedVarargsConcat();
+        int testSize = 10;
+
+        // Stub signature: (int rows, UDF obj, String[] prefixCol, String[] partCol0, String[] partCol1) String[]
+        String[] prefixCol = new String[testSize];
+        String[] partCol0  = new String[testSize];
+        String[] partCol1  = new String[testSize];
+        String[] expects   = new String[testSize];
+
+        for (int i = 0; i < testSize; i++) {
+            prefixCol[i] = "P" + i + ":";
+            partCol0[i]  = "A" + i;
+            partCol1[i]  = "B" + i;
+            expects[i]   = prefixCol[i] + partCol0[i] + partCol1[i];
+        }
+
+        assert batchCall != null;
+        final String[] res = (String[]) batchCall.invoke(null, testSize, udf, prefixCol, partCol0, partCol1);
+        for (int i = 0; i < testSize; i++) {
+            Assertions.assertEquals(expects[i], res[i]);
+        }
+    }
+
+    @Test
+    public void testMixedVarargsAggUDF()
+            throws NoSuchMethodException, ClassNotFoundException, InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = MixedVarargsSum.class;
+        final String genClassName = CallStubGenerator.CLAZZ_NAME.replace("/", ".");
+        // Mixed: state + 1 fixed param (sep) + 2 actual varargs columns
+        Method m = clazz.getMethod("update", MixedVarargsSum.State.class, String.class, Integer[].class);
+        final byte[] bytes = CallStubGenerator.generateCallStubV(clazz, m, 2);
+
+        ClassLoader classLoader = new TestClassLoader(genClassName, bytes);
+        final Class<?> stubClazz = classLoader.loadClass(genClassName);
+        Method batchCall = getFirstMethod(stubClazz, "batchCallV");
+
+        MixedVarargsSum udaf = new MixedVarargsSum();
+        MixedVarargsSum.State state = new MixedVarargsSum.State();
+
+        int testSize = 3;
+        // Stub signature: (int rows, UDAF obj, State state, String[] sepCol, Integer[] valCol0, Integer[] valCol1) V
+        String[]  sepCol  = new String[]  {",", ",", ","};
+        Integer[] valCol0 = new Integer[] {1, 2, 3};
+        Integer[] valCol1 = new Integer[] {10, 20, 30};
+
+        assert batchCall != null;
+        batchCall.invoke(null, testSize, udaf, state, sepCol, valCol0, valCol1);
+
+        // update called 3 times: row0=(sep=",",vals=1,10), row1=(sep=",",vals=2,20), row2=(sep=",",vals=3,30)
+        // state.result = "1,10,2,20,3,30"
+        Assertions.assertEquals("1,10,2,20,3,30", state.result);
     }
 }

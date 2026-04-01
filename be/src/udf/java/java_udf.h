@@ -472,7 +472,9 @@ public:
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
     // get batch call stub
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+    // numActualVarArgs: actual number of varargs input columns; only meaningful when the method uses varargs
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
+                                   int numActualVarArgs = 0);
 
     Status init();
 
@@ -487,7 +489,7 @@ private:
 struct MethodTypeDescriptor {
     LogicalType type;
     bool is_box;
-    bool is_array;
+    bool is_array = false;
 };
 
 struct JavaMethodDescriptor {
