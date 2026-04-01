@@ -26,7 +26,7 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>main</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -982,6 +982,22 @@ under the License.
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>starrocks-version.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>starrocks-version.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>

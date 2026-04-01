@@ -214,14 +214,26 @@ mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
-# Explicitly put fe-core-main.jar at the front of classpath to ensure StarRocks' 
-# customized classes (e.g., HiveMetaStoreClient) are loaded before the original 
+# Explicitly put fe-core jar at the front of classpath to ensure StarRocks'
+# customized classes (e.g., HiveMetaStoreClient) are loaded before the original
 # ones from third-party JARs (e.g., hive-apache-3.1.2-22.jar).
-# This prevents ClassLoader conflicts where the original HiveMetaStoreClient 
+# This prevents ClassLoader conflicts where the original HiveMetaStoreClient
 # (which uses old thrift paths like org.apache.thrift.transport.TFramedTransport)
 # might be loaded instead of StarRocks' version (which uses the correct new paths
 # like org.apache.thrift.transport.layered.TFramedTransport).
-export CLASSPATH=${STARROCKS_HOME}/lib/fe-core-main.jar:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
+# Support both fe-core-main.jar (default) and versioned jar names (e.g., fe-core-4.1.0.jar)
+FE_CORE_JAR=""
+if [ -f ${STARROCKS_HOME}/lib/fe-core-main.jar ]; then
+    FE_CORE_JAR=${STARROCKS_HOME}/lib/fe-core-main.jar
+else
+    # Find the first fe-core-*.jar file (sorted alphabetically)
+    FE_CORE_JAR=$(ls -1 ${STARROCKS_HOME}/lib/fe-core-*.jar 2>/dev/null | head -1)
+    if [ -z "$FE_CORE_JAR" ]; then
+        echo "Error: fe-core jar not found in ${STARROCKS_HOME}/lib/"
+        exit 1
+    fi
+fi
+export CLASSPATH=${FE_CORE_JAR}:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
 
 pidfile=$PID_DIR/fe.pid
 
