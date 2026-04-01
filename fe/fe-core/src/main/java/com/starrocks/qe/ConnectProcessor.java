@@ -513,7 +513,7 @@ public class ConnectProcessor {
         return parsedStmt;
     }
 
-    private boolean shouldTerminateBeforeStmtExecution(StatementBase parsedStmt) {
+    private boolean shouldTerminateBeforeStmtExecution(StatementBase parsedStmt, String originStmt) {
         try {
             if (ctx.getTxnId() != 0) {
                 ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
@@ -534,6 +534,9 @@ public class ConnectProcessor {
             }
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             return true;
+        } catch (Throwable e) {
+            auditStmtFailureForStmt(e, parsedStmt, originStmt);
+            throw e;
         }
     }
 
@@ -697,7 +700,7 @@ public class ConnectProcessor {
             }
             parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
             auditBeforeExec(getAuditSql(parsedStmt, originStmt), parsedStmt);
-            if (shouldTerminateBeforeStmtExecution(parsedStmt)) {
+            if (shouldTerminateBeforeStmtExecution(parsedStmt, originStmt)) {
                 auditCurrentStmt(getAuditSql(parsedStmt, originStmt), parsedStmt);
                 return new QueryAttemptResult(allStatementsAreSet, true);
             }

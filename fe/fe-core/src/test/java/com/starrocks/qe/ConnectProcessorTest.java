@@ -61,6 +61,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.LargeInPredicateException;
@@ -68,6 +69,7 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
@@ -728,6 +730,96 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:OK:"));
         Assertions.assertTrue(auditRecords.get(4).startsWith("BEFORE:2:"));
         Assertions.assertTrue(auditRecords.get(5).startsWith("AFTER:2:OK:"));
+    }
+
+    @Test
+    public void testMultiStatementPreExecutionFailureAuditsFailedStmt() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.setTxnId(1);
+        List<String> auditRecords = new ArrayList<>();
+        int[] executeCounts = new int[3];
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<ExplicitTxnStatementValidator>() {
+            @Mock
+            public void validate(StatementBase statement, ConnectContext context) {
+                if (statement.getOrigStmt().idx == 1) {
+                    throw new SemanticException("mock pre execution failure");
+                }
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) {
+                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                executeCounts[stmtExecutor.getParsedStmt().getOrigStmt().idx]++;
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertArrayEquals(new int[] {1, 0, 0}, executeCounts);
+        Assertions.assertEquals(2, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("ERR:"));
+        Assertions.assertFalse(auditRecords.get(0).contains(";"));
+        Assertions.assertFalse(auditRecords.get(1).contains("; select 3"));
+    }
+
+    @Test
+    public void testMultiStatementPreExecutionFailureHasBeforeAndAfterAudit() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.setTxnId(1);
+        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
+        List<String> auditRecords = new ArrayList<>();
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
+            }
+
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<ExplicitTxnStatementValidator>() {
+            @Mock
+            public void validate(StatementBase statement, ConnectContext context) {
+                if (statement.getOrigStmt().idx == 1) {
+                    throw new SemanticException("mock pre execution failure");
+                }
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertEquals(4, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
+        Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
+        Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:ERR:"));
     }
 
     @Test
