@@ -695,7 +695,7 @@ DROP Catalog paimon_catalog_fs;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
