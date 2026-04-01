@@ -823,6 +823,8 @@ public class ConnectProcessor {
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
             String originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
+            ctx.setIsLastStmt(true);
+            ctx.setSingleStmt(true);
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);
             ctx.getState().setIsQuery(isQuery);
@@ -845,6 +847,9 @@ public class ConnectProcessor {
 
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
+            if (enableAudit) {
+                auditBeforeExec(originStmt, executeStmt);
+            }
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
