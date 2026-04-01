@@ -22,8 +22,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "testutil/sync_point.h"
-#include "util/crc32c.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
@@ -31,6 +29,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/options.h"
+#include "testutil/sync_point.h"
+#include "util/crc32c.h"
 
 namespace starrocks::lake {
 
