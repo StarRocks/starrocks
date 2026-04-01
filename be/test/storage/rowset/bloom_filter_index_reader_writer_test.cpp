@@ -64,7 +64,7 @@ protected:
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
                                        size_t null_count, ColumnIndexMetaPB* index_meta) {
         TypeInfoPtr type_info = get_type_info(type);
-        using CppType = typename CppTypeTraits<type>::CppType;
+        using CppType = StorageCppType<type>;
         std::string fname = kTestDir + "/" + file_name;
         {
             ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
@@ -104,12 +104,11 @@ protected:
     }
 
     template <LogicalType Type>
-    void test_bloom_filter_index_reader_writer_template(const std::string file_name,
-                                                        typename TypeTraits<Type>::CppType* val, size_t num,
-                                                        size_t null_num,
-                                                        typename TypeTraits<Type>::CppType* not_exist_value,
+    void test_bloom_filter_index_reader_writer_template(const std::string file_name, StorageCppType<Type>* val,
+                                                        size_t num, size_t null_num,
+                                                        StorageCppType<Type>* not_exist_value,
                                                         bool is_slice_type = false) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+        using CppType = StorageCppType<Type>;
         ColumnIndexMetaPB meta;
         write_bloom_filter_index_file<Type>(file_name, val, num, null_num, &meta);
         {

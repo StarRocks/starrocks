@@ -1004,7 +1004,7 @@ std::unique_ptr<HashIndex> create_hash_index() {
     } else if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
         return std::make_unique<ShardByLengthSliceHashIndex>();
     } else {
-        return std::make_unique<HashIndexImpl<typename CppTypeTraits<LT>::CppType>>();
+        return std::make_unique<HashIndexImpl<StorageCppType<LT>>>();
     }
 }
 

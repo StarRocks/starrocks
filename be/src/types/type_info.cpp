@@ -173,7 +173,7 @@ private:
 // Base implementation for ScalarTypeInfo, use as default
 template <LogicalType field_type>
 struct ScalarTypeInfoImplBase {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
     static const LogicalType type = field_type;
     static const int32_t size = sizeof(CppType);
@@ -827,9 +827,9 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
-    static const LogicalType type = TYPE_VARCHAR;
-    static const int32_t size = TypeTraits<TYPE_VARCHAR>::size;
+struct ScalarTypeInfoImpl<TYPE_VARCHAR> : ScalarTypeInfoImpl<TYPE_CHAR> {
+    static constexpr LogicalType type = TYPE_VARCHAR;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_VARCHAR>;
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
@@ -860,33 +860,33 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_HLL> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
-    static const LogicalType type = TYPE_HLL;
-    static const int32_t size = TypeTraits<TYPE_HLL>::size;
+struct ScalarTypeInfoImpl<TYPE_HLL> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static constexpr LogicalType type = TYPE_HLL;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_HLL>;
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_OBJECT> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
-    static const LogicalType type = TYPE_OBJECT;
-    static const int32_t size = TypeTraits<TYPE_OBJECT>::size;
+struct ScalarTypeInfoImpl<TYPE_OBJECT> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static constexpr LogicalType type = TYPE_OBJECT;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_OBJECT>;
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_PERCENTILE> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
-    static const LogicalType type = TYPE_PERCENTILE;
-    static const int32_t size = TypeTraits<TYPE_PERCENTILE>::size;
+struct ScalarTypeInfoImpl<TYPE_PERCENTILE> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static constexpr LogicalType type = TYPE_PERCENTILE;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_PERCENTILE>;
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_JSON> : public ScalarTypeInfoImpl<TYPE_OBJECT> {
-    static const LogicalType type = TYPE_JSON;
-    static const int32_t size = TypeTraits<TYPE_JSON>::size;
+struct ScalarTypeInfoImpl<TYPE_JSON> : ScalarTypeInfoImpl<TYPE_OBJECT> {
+    static constexpr LogicalType type = TYPE_JSON;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_JSON>;
 };
 
 template <>
-struct ScalarTypeInfoImpl<TYPE_VARBINARY> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
-    static const LogicalType type = TYPE_VARBINARY;
-    static const int32_t size = TypeTraits<TYPE_VARBINARY>::size;
+struct ScalarTypeInfoImpl<TYPE_VARBINARY> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static constexpr LogicalType type = TYPE_VARBINARY;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_VARBINARY>;
 };
 
 void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;

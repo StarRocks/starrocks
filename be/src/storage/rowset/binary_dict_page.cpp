@@ -248,7 +248,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    using cast_type = StorageCppType<TYPE_INT>;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
 
     static_assert(sizeof(Slice) == sizeof(int128_t));
@@ -354,7 +354,7 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         return Status::OK();
     }
 
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    using cast_type = StorageCppType<TYPE_INT>;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
 
     // Step 3: Update selection based on dictionary selection and collect matching slices
@@ -407,7 +407,7 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         *count = 0;
         return Status::OK();
     }
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    using cast_type = StorageCppType<TYPE_INT>;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
     Slice* slices = reinterpret_cast<Slice*>(slices_data.get());

@@ -32,7 +32,7 @@ namespace starrocks {
 
 template <LogicalType field_type, typename ItemSet>
 class ColumnInPredicate final : public ColumnPredicate {
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
 
 public:
@@ -599,62 +599,62 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     auto scale = type_info->scale();
     switch (type) {
     case TYPE_BOOLEAN: {
-        using SetType = Set<CppTypeTraits<TYPE_BOOLEAN>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_BOOLEAN>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_BOOLEAN>(strs);
         return new ColumnInPredicate<TYPE_BOOLEAN, SetType>(type_info, id, std::move(values));
     }
     case TYPE_TINYINT: {
-        using SetType = Set<CppTypeTraits<TYPE_TINYINT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_TINYINT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_TINYINT>(strs);
         return new ColumnInPredicate<TYPE_TINYINT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_SMALLINT: {
-        using SetType = Set<CppTypeTraits<TYPE_SMALLINT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_SMALLINT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_SMALLINT>(strs);
         return new ColumnInPredicate<TYPE_SMALLINT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_INT: {
-        using SetType = Set<CppTypeTraits<TYPE_INT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_INT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_INT>(strs);
         return new ColumnInPredicate<TYPE_INT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_BIGINT: {
-        using SetType = Set<CppTypeTraits<TYPE_BIGINT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_BIGINT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_BIGINT>(strs);
         return new ColumnInPredicate<TYPE_BIGINT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_LARGEINT: {
-        using SetType = Set<CppTypeTraits<TYPE_LARGEINT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_LARGEINT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_LARGEINT>(strs);
         return new ColumnInPredicate<TYPE_LARGEINT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMAL>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMAL>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DECIMAL>(strs);
         return new ColumnInPredicate<TYPE_DECIMAL, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMALV2: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMALV2>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMALV2>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DECIMALV2>(strs);
         return new ColumnInPredicate<TYPE_DECIMALV2, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL32: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMAL32>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMAL32>, (Args)...>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL32>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL32, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL64: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMAL64>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMAL64>, (Args)...>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL64>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL64, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL128: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMAL128>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMAL128>, (Args)...>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL256: {
-        using SetType = Set<CppTypeTraits<TYPE_DECIMAL256>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DECIMAL256>, (Args)...>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
         return new ColumnInPredicate<TYPE_DECIMAL256, SetType>(type_info, id, std::move(values));
     }
@@ -663,32 +663,32 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     case TYPE_VARCHAR:
         return new BinaryColumnInPredicate<TYPE_VARCHAR>(type_info, id, strs);
     case TYPE_DATE_V1: {
-        using SetType = Set<CppTypeTraits<TYPE_DATE_V1>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DATE_V1>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DATE_V1>(strs);
         return new ColumnInPredicate<TYPE_DATE_V1, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DATE: {
-        using SetType = Set<CppTypeTraits<TYPE_DATE>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DATE>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DATE>(strs);
         return new ColumnInPredicate<TYPE_DATE, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DATETIME_V1: {
-        using SetType = Set<CppTypeTraits<TYPE_DATETIME_V1>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DATETIME_V1>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DATETIME_V1>(strs);
         return new ColumnInPredicate<TYPE_DATETIME_V1, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DATETIME: {
-        using SetType = Set<CppTypeTraits<TYPE_DATETIME>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DATETIME>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DATETIME>(strs);
         return new ColumnInPredicate<TYPE_DATETIME, SetType>(type_info, id, std::move(values));
     }
     case TYPE_FLOAT: {
-        using SetType = Set<CppTypeTraits<TYPE_FLOAT>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_FLOAT>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_FLOAT>(strs);
         return new ColumnInPredicate<TYPE_FLOAT, SetType>(type_info, id, std::move(values));
     }
     case TYPE_DOUBLE: {
-        using SetType = Set<CppTypeTraits<TYPE_DOUBLE>::CppType, (Args)...>;
+        using SetType = Set<StorageCppType<TYPE_DOUBLE>, (Args)...>;
         SetType values = predicate_internal::strings_to_set<TYPE_DOUBLE>(strs);
         return new ColumnInPredicate<TYPE_DOUBLE, SetType>(type_info, id, std::move(values));
     }
@@ -755,7 +755,7 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
                     }
                     return new BinaryColumnInPredicate<LT>(type_info, id, std::move(strings));
                 } else {
-                    using SetType = Set<typename CppTypeTraits<LT>::CppType, (Args)...>;
+                    using SetType = Set<StorageCppType<LT>, (Args)...>;
                     SetType value_set = predicate_internal::datums_to_set<LT>(operands);
                     return new ColumnInPredicate<LT, SetType>(type_info, id, std::move(value_set));
                 }

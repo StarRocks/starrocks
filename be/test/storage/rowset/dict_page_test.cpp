@@ -33,8 +33,8 @@ namespace starrocks {
 class DictPageTest : public testing::Test {
 public:
     template <LogicalType Type>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* data, size_t base_size, size_t all_size) {
-        using CppType = typename TypeTraits<Type>::CppType;
+    void test_encode_decode_page_template(StorageCppType<Type>* data, size_t base_size, size_t all_size) {
+        using CppType = StorageCppType<Type>;
         // encode
         PageBuilderOptions options;
         // 64K
@@ -311,7 +311,7 @@ TEST_F(DictPageTest, TestLargeDataSize) {
     for (int i = 0; i < size; i++) {
         ints.get()[i] = i;
     }
-    using CppType = typename TypeTraits<TYPE_BIGINT>::CppType;
+    using CppType = StorageCppType<TYPE_BIGINT>;
     // encode
     PageBuilderOptions options;
     options.data_page_size = 1024 * 1024;

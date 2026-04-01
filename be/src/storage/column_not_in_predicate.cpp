@@ -28,7 +28,7 @@ namespace starrocks {
 
 template <LogicalType field_type>
 class ColumnNotInPredicate final : public ColumnPredicate {
-    using ValueType = typename CppTypeTraits<field_type>::CppType;
+    using ValueType = StorageCppType<field_type>;
 
 public:
     ColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<std::string>& strs)
@@ -354,25 +354,25 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         return new ColumnNotInPredicate<TYPE_DECIMALV2>(type_info, id, strs);
     case TYPE_DECIMAL32: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL32>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL32>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL32>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL32>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL64: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL64>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL64>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL64>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL64>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL128: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL128>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL128>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
     case TYPE_DECIMAL256: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        using SetType = ItemHashSet<StorageCppType<TYPE_DECIMAL256>>;
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
     }
@@ -433,7 +433,7 @@ ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_
                     }
                     return new BinaryColumnNotInPredicate<LT>(type_info, id, std::move(strings));
                 } else {
-                    using SetType = ItemHashSet<typename CppTypeTraits<LT>::CppType>;
+                    using SetType = ItemHashSet<StorageCppType<LT>>;
                     SetType value_set = predicate_internal::datums_to_set<LT>(operands);
                     return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
                 }

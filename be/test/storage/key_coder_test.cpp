@@ -55,7 +55,7 @@ private:
 
 template <LogicalType type>
 void test_integer_encode() {
-    using CppType = typename CppTypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
 
     auto key_coder = get_key_coder(type);
 

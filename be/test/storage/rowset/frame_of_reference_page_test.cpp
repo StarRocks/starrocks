@@ -56,7 +56,7 @@ namespace starrocks {
 class FrameOfReferencePageTest : public testing::Test {
 public:
     template <LogicalType type, class PageDecoderType>
-    void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
+    void copy_one(PageDecoderType* decoder, StorageCppType<type>* ret) {
         LogicalType ltype = scalar_field_type_to_logical_type(type);
         TypeDescriptor index_type(ltype);
         // TODO(alvinz): To reuse this colum
@@ -64,13 +64,13 @@ public:
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
+        *ret = *reinterpret_cast<const StorageCppType<type>*>(column->raw_data());
     }
 
     template <LogicalType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
               class PageDecoderType = FrameOfReferencePageDecoder<Type>>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_encode_decode_page_template(StorageCppType<Type>* src, size_t size) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions builder_options;
         builder_options.data_page_size = 256 * 1024;
         PageBuilderType for_page_builder(builder_options);
@@ -111,8 +111,8 @@ public:
 
     template <LogicalType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
               class PageDecoderType = FrameOfReferencePageDecoder<Type>>
-    void test_encode_decode_page_vectorize(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_encode_decode_page_vectorize(StorageCppType<Type>* src, size_t size) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions builder_options;
         builder_options.data_page_size = 256 * 1024;
         PageBuilderType for_page_builder(builder_options);

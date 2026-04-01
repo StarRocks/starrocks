@@ -139,7 +139,7 @@ struct TypeEncodingTraits<type, DICT_ENCODING, CppType> {
 };
 
 template <>
-struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<TYPE_DATE_V1>::CppType> {
+struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, StorageCppType<TYPE_DATE_V1>> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new FrameOfReferencePageBuilder<TYPE_DATE_V1>(opts);
         return Status::OK();
@@ -176,7 +176,7 @@ struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
 };
 
 template <LogicalType field_type, EncodingTypePB encoding_type>
-struct EncodingTraits : TypeEncodingTraits<field_type, encoding_type, typename CppTypeTraits<field_type>::CppType> {
+struct EncodingTraits : TypeEncodingTraits<field_type, encoding_type, StorageCppType<field_type>> {
     static const LogicalType type = field_type;
     static const EncodingTypePB encoding = encoding_type;
 };

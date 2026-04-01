@@ -97,14 +97,12 @@ template <LogicalType field_type, typename Enable = void>
 class KeyCoderTraits {};
 
 template <LogicalType field_type>
-class KeyCoderTraits<field_type,
-                     typename std::enable_if_t<std::is_integral_v<typename CppTypeTraits<field_type>::CppType> &&
-                                               field_type != TYPE_INT256>> {
+class KeyCoderTraits<field_type, typename std::enable_if_t<std::is_integral_v<StorageCppType<field_type>> &&
+                                                           field_type != TYPE_INT256>> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
-    using UnsignedCppType = typename CppTypeTraits<field_type>::UnsignedCppType;
+    using CppType = StorageCppType<field_type>;
+    using UnsignedCppType = StorageUnsignedCppType<field_type>;
 
-public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
         memcpy(&unsigned_val, value, sizeof(unsigned_val));
@@ -153,9 +151,8 @@ public:
 template <>
 class KeyCoderTraits<TYPE_BOOLEAN> {
 public:
-    using CppType = typename CppTypeTraits<TYPE_BOOLEAN>::CppType;
+    using CppType = StorageCppType<TYPE_BOOLEAN>;
 
-public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         bool v = *reinterpret_cast<const bool*>(value);
         static_assert(!std::is_signed_v<bool>);
@@ -193,10 +190,9 @@ public:
 template <>
 class KeyCoderTraits<TYPE_DATE_V1> {
 public:
-    using CppType = typename CppTypeTraits<TYPE_DATE_V1>::CppType;
-    using UnsignedCppType = typename CppTypeTraits<TYPE_DATE_V1>::UnsignedCppType;
+    using CppType = StorageCppType<TYPE_DATE_V1>;
+    using UnsignedCppType = StorageUnsignedCppType<TYPE_DATE_V1>;
 
-public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         UnsignedCppType unsigned_val;
         memcpy(&unsigned_val, value, sizeof(unsigned_val));

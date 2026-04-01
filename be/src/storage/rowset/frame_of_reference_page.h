@@ -102,7 +102,7 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
     PageBuilderOptions _options;
     uint32_t _count{0};
     bool _finished{false};
@@ -211,7 +211,7 @@ public:
     EncodingTypePB encoding_type() const override { return FOR_ENCODING; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
     bool _parsed{false};
     Slice _data;

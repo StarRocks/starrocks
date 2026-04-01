@@ -37,7 +37,7 @@ namespace starrocks {
 template <LogicalType field_type>
 class BuiltinInvertedWriterImpl : public BuiltinInvertedWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
     explicit BuiltinInvertedWriterImpl(std::unique_ptr<BitmapIndexWriter>& writer, const TabletIndex* inverted_index)
             : _builtin_writer(std::move(writer)) {

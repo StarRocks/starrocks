@@ -54,7 +54,7 @@ namespace starrocks {
 
 template <LogicalType ftype>
 struct PredicateCmpTypeForField {
-    using ValueType = typename CppTypeTraits<ftype>::CppType;
+    using ValueType = StorageCppType<ftype>;
 };
 
 template <>

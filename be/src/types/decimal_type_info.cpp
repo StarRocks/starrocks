@@ -29,7 +29,7 @@ class DecimalTypeInfo final : public TypeInfo {
 public:
     ~DecimalTypeInfo() override = default;
 
-    using CppType = typename CppTypeTraits<TYPE>::CppType;
+    using CppType = StorageCppType<TYPE>;
     DecimalTypeInfo(int precision, int scale)
             : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {}
 

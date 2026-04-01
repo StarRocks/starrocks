@@ -108,7 +108,6 @@ protected:
                             const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
 
-        using Type = typename TypeTraits<type>::CppType;
         TypeInfoPtr type_info = get_type_info(type);
         int num_rows = src.size();
         ColumnMetaPB meta;
@@ -254,7 +253,7 @@ protected:
 
     template <LogicalType type>
     void test_read_default_value(string value, void* result) {
-        using Type = typename TypeTraits<type>::CppType;
+        using Type = StorageCppType<type>;
         TypeInfoPtr type_info = get_type_info(type);
         // read and check
         {
@@ -444,7 +443,7 @@ protected:
 
     template <LogicalType type>
     MutableColumnPtr numeric_data(int null_ratio) {
-        using CppType = typename CppTypeTraits<type>::CppType;
+        using CppType = StorageCppType<type>;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
         size_t count = 2 * 1024 / sizeof(CppType);
