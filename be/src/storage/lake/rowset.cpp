@@ -16,6 +16,18 @@
 
 #include <future>
 
+<<<<<<< HEAD
+=======
+#include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "column/datum_convert.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "fs/fs_factory.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+>>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -434,8 +446,50 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
+<<<<<<< HEAD
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
     auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id) -> Status {
+=======
+    // Determine segment range based on mode
+    int32_t seg_start = 0;
+    int32_t seg_end = metadata().segments_size();
+    if (is_segment_range_mode()) {
+        seg_start = _segment_range_start;
+        seg_end = _segment_range_end;
+    }
+
+    // When parallel loading is enabled, we need to preserve the index mapping between
+    // segments vector and metadata. We use a vector of (index, future) pairs to track
+    // which index each loaded segment should be placed at.
+    struct SegmentLoadFuture {
+        int target_idx;
+        uint32_t segment_id;
+        std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
+    };
+    std::vector<SegmentLoadFuture> segment_futures;
+    // The parallel tasks capture |this| pointer. Must wait for all tasks
+    // to complete before returning, to prevent use-after-free if the
+    // Rowset is destroyed while tasks are still running.
+    DeferOp wait_futures([&segment_futures]() {
+        for (auto& f : segment_futures) {
+            if (f.future.valid()) {
+                f.future.wait();
+            }
+        }
+    });
+
+    // Pre-allocate segments vector to maintain correct index mapping.
+    // This is necessary because when parallel loading is enabled with skip_segment_idxs,
+    // we need to ensure segments[i] corresponds to metadata segment i.
+    bool use_index_mapping = _parallel_load && skip_segment_idxs != nullptr && !skip_segment_idxs->empty();
+    int base_idx = segments->size();
+    if (use_index_mapping) {
+        segments->resize(base_idx + metadata().segments_size());
+    }
+
+    auto check_status_at_index = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id,
+                                     int target_idx) -> Status {
+>>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
@@ -476,7 +530,18 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
 
         if (_parallel_load) {
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+<<<<<<< HEAD
                 auto result = _tablet_mgr->load_segment(segment_info, seg_id, lake_io_opts,
+=======
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
+                if (!injected_st.ok()) {
+                    return std::make_pair(StatusOr<SegmentPtr>(injected_st), seg_name);
+                }
+#endif
+                auto result = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
+>>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);
             });
