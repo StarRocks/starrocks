@@ -980,6 +980,7 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -1024,7 +1025,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        StatusOr<std::vector<ChunkIteratorPtr>> res;
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
+            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        }
         if (!res.ok()) {
             return res.status();
         }
