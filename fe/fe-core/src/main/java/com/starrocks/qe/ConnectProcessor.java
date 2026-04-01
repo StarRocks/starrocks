@@ -222,6 +222,30 @@ public class ConnectProcessor {
         auditAfterExec(origStmt, parsedStmt, statistics, null);
     }
 
+    public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+        if (!ctx.getSessionVariable().isAuditStmtBeforeExecute()) {
+            return;
+        }
+
+        ctx.getAuditEventBuilder().setEventType(EventType.BEFORE_QUERY)
+                .setState(ctx.getState().toString())
+                .setErrorCode(ctx.getNormalizedErrorCode())
+                .setReturnRows(ctx.getReturnRows())
+                .setStmtId(ctx.getStmtId())
+                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
+                .setSessionId(ctx.getSessionId().toString())
+                .setCNGroup(ctx.getCurrentComputeResourceName())
+                .setQuerySource(ctx.getQuerySource().toString())
+                .setCommand(ctx.getCommandStr())
+                .setPreparedStmtId(null);
+
+        ctx.getAuditEventBuilder().setIsQuery(ctx.getState().isQuery());
+        ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
+        ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(
+                ctx.getAuditEventBuilder().buildSnapshot());
+    }
+
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
                                String digestFromLeader) {
         // slow query
@@ -672,6 +696,7 @@ public class ConnectProcessor {
                 allStatementsAreSet = false;
             }
             parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
+            auditBeforeExec(getAuditSql(parsedStmt, originStmt), parsedStmt);
             if (shouldTerminateBeforeStmtExecution(parsedStmt)) {
                 auditCurrentStmt(getAuditSql(parsedStmt, originStmt), parsedStmt);
                 return new QueryAttemptResult(allStatementsAreSet, true);
