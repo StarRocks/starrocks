@@ -67,6 +67,7 @@ private:
 template <LogicalType field_type>
 void common_test(StorageCppType<field_type> src_val) {
     TypeInfoPtr type = get_type_info(field_type);
+    using CppType = StorageCppType<field_type>;
 
     ASSERT_EQ(field_type, type->type());
     ASSERT_EQ(sizeof(src_val), type->size());
