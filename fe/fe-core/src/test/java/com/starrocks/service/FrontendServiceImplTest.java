@@ -31,6 +31,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
@@ -44,8 +45,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
@@ -1970,6 +1974,55 @@ public class FrontendServiceImplTest {
             TGetProfileResponse response = impl.getQueryProfile(request);
 
             Assertions.assertEquals(Lists.newArrayList(""), response.getQuery_result());
+        }
+    }
+
+    @Test
+    public void testGetQueryProfileRequestAllFrontend() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        String queryId = "3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90";
+
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList(queryId));
+        request.setIs_request_all_frontend(true);
+
+        Frontend self = new Frontend(FrontendNodeType.FOLLOWER, "self", "127.0.0.1", 9010);
+        self.setRpcPort(9020);
+        Frontend remote = new Frontend(FrontendNodeType.FOLLOWER, "remote", "127.0.0.2", 9010);
+        remote.setRpcPort(9021);
+
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
+        summaryProfile.addInfoString(ProfileManager.START_TIME, "2024-01-09 11:00:00");
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, "50ms");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, "Finished");
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, "SELECT 1");
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+
+        TGetProfileResponse remoteResponse = new TGetProfileResponse();
+        remoteResponse.setQuery_result(Lists.newArrayList(summaryProfile.toString()));
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class);
+                MockedStatic<GlobalStateMgr> globalStateMgrMock = mockStatic(GlobalStateMgr.class);
+                MockedStatic<ThriftRPCRequestExecutor> thriftMock = mockStatic(ThriftRPCRequestExecutor.class)) {
+
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile(queryId)).thenReturn(null);
+
+            GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+            NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+            globalStateMgrMock.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+            Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
+            Mockito.when(nodeMgr.getMySelf()).thenReturn(self);
+            Mockito.when(nodeMgr.getFrontends(null)).thenReturn(Lists.newArrayList(self, remote));
+
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(remoteResponse);
+
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(summaryProfile.toString()), response.getQuery_result());
         }
     }
 
