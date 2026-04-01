@@ -24,8 +24,13 @@
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/simd/simd.h"
+#include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/variant_column.h"
+#include "column/variant_converter.h"
 #include "column/variant_path_parser.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
@@ -35,6 +40,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
@@ -52,6 +58,200 @@
 namespace starrocks::parquet {
 
 namespace {
+
+// Deduplicate exact-duplicate IO ranges collected from multiple column readers.
+//
+// VariantColumnReader::collect_column_io_range walks both the top-level field readers
+// (_top_level.value_reader, _top_level.metadata_reader, etc.) and the shredded-field
+// subtree.  A shredded field's value_reader may point to the same underlying parquet
+// column chunk as the top-level value_reader, causing the same (offset, size) pair to
+// be registered more than once.  When that happens the two entries are collapsed into
+// one, with is_active set to the logical OR so that a range used by either an active
+// or a lazy reader is treated as active.
+//
+// Note: this only handles *exact* duplicates (identical offset and size).  True byte-range
+// overlaps are not expected because the parquet format guarantees that column chunks for
+// different columns occupy non-overlapping byte ranges within the file.
+void deduplicate_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges) {
+    if (ranges == nullptr || ranges->size() <= 1) {
+        return;
+    }
+
+    std::sort(ranges->begin(), ranges->end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.offset != rhs.offset) {
+            return lhs.offset < rhs.offset;
+        }
+        if (lhs.size != rhs.size) {
+            return lhs.size < rhs.size;
+        }
+        return lhs.is_active < rhs.is_active;
+    });
+
+    size_t write_idx = 0;
+    for (size_t read_idx = 1; read_idx < ranges->size(); ++read_idx) {
+        auto& current = (*ranges)[write_idx];
+        const auto& next = (*ranges)[read_idx];
+        if (current.offset == next.offset && current.size == next.size) {
+            current.is_active = current.is_active || next.is_active;
+            continue;
+        }
+        ++write_idx;
+        if (write_idx != read_idx) {
+            (*ranges)[write_idx] = next;
+        }
+    }
+    ranges->erase(ranges->begin() + static_cast<std::ptrdiff_t>(write_idx + 1), ranges->end());
+}
+
+StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* variant_column,
+                                                         const ColumnPtr& variant_src, const VariantPath& path,
+                                                         const TypeDescriptor& target_type) {
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+    if (!reader.is_typed_exact()) {
+        return Status::NotFound("variant path is not an exact typed leaf");
+    }
+    if (reader.typed_type_desc() != target_type) {
+        return Status::NotFound("variant typed leaf type does not match target slot type");
+    }
+
+    const size_t num_rows = variant_src->size();
+    const Column* typed_col = reader.typed_column();
+
+    // Early exit: const variant whose single row is null → broadcast null to all rows.
+    if (variant_src->is_constant() && variant_src->is_null(0)) {
+        auto all_null = ColumnHelper::create_column(target_type, true);
+        all_null->append_nulls(num_rows);
+        return all_null;
+    }
+
+    // Normalise: expand a const variant source so both typed_col and variant_src have
+    // num_rows rows, letting the null-merge and data-clone logic below work uniformly.
+    ColumnPtr expanded_typed;
+    if (variant_src->is_constant()) {
+        // typed_col has 1 row (the single VariantColumn row); replicate it to num_rows.
+        expanded_typed = typed_col->clone();
+        expanded_typed->as_mutable_ptr()->assign(num_rows, 0);
+    }
+    const Column* eff_typed = variant_src->is_constant() ? expanded_typed.get() : typed_col;
+    DCHECK_EQ(eff_typed->size(), num_rows);
+
+    // Merge null masks: result is null when either the outer variant or the typed leaf
+    // is null.  Outer nulls only exist for non-const variant_src (const-null was handled
+    // above; const-non-null has no outer null mask to propagate).
+    const bool has_outer_nulls = !variant_src->is_constant() && variant_src->is_nullable() &&
+                                 down_cast<const NullableColumn*>(variant_src.get())->has_null();
+    const bool has_typed_nulls = eff_typed->is_nullable() && down_cast<const NullableColumn*>(eff_typed)->has_null();
+
+    auto result_null = NullColumn::create(num_rows, 0);
+    NullData& result_null_data = result_null->get_data();
+
+    if (has_outer_nulls && has_typed_nulls) {
+        const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
+        const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
+        for (size_t i = 0; i < num_rows; ++i) {
+            result_null_data[i] = outer[i] | typed[i];
+        }
+    } else if (has_outer_nulls) {
+        const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
+        std::copy(outer.begin(), outer.end(), result_null_data.begin());
+    } else if (has_typed_nulls) {
+        const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
+        std::copy(typed.begin(), typed.end(), result_null_data.begin());
+    }
+    // else: no nulls anywhere — result_null stays all-zero.
+
+    auto result_data = ColumnHelper::get_data_column(eff_typed)->clone();
+    auto result = NullableColumn::create(std::move(result_data), std::move(result_null));
+    result->update_has_null();
+    return result;
+}
+
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant_column, const ColumnPtr& variant_src,
+                                                    const VariantPath& path, const cctz::time_zone& zone) {
+    const size_t num_rows = variant_src->size();
+
+    ColumnBuilder<ResultType> builder(num_rows);
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (variant_src->is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        size_t variant_row = variant_src->is_constant() ? 0 : row;
+        VariantReadResult read = reader.read_row(variant_row);
+        if (read.state != VariantReadState::kValue) {
+            builder.append_null();
+            continue;
+        }
+        auto cast_status = VariantRowConverter::cast_to<ResultType, false>(read.value.as_ref(), zone, builder);
+        RETURN_IF_ERROR(cast_status);
+    }
+
+    return builder.build(false);
+}
+
+StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, const VariantPath& path,
+                                                const TypeDescriptor& target_type, const cctz::time_zone& zone) {
+    auto* variant_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(variant_src.get()));
+    if (variant_column == nullptr) {
+        return Status::InternalError("variant source column is invalid");
+    }
+
+    auto exact_typed_result = build_exact_typed_variant_projection(variant_column, variant_src, path, target_type);
+    if (exact_typed_result.ok()) {
+        return exact_typed_result;
+    }
+
+    switch (target_type.type) {
+    case TYPE_BOOLEAN:
+        return build_variant_projection_column<TYPE_BOOLEAN>(variant_column, variant_src, path, zone);
+    case TYPE_TINYINT:
+        return build_variant_projection_column<TYPE_TINYINT>(variant_column, variant_src, path, zone);
+    case TYPE_SMALLINT:
+        return build_variant_projection_column<TYPE_SMALLINT>(variant_column, variant_src, path, zone);
+    case TYPE_INT:
+        return build_variant_projection_column<TYPE_INT>(variant_column, variant_src, path, zone);
+    case TYPE_BIGINT:
+        return build_variant_projection_column<TYPE_BIGINT>(variant_column, variant_src, path, zone);
+    case TYPE_LARGEINT:
+        return build_variant_projection_column<TYPE_LARGEINT>(variant_column, variant_src, path, zone);
+    case TYPE_FLOAT:
+        return build_variant_projection_column<TYPE_FLOAT>(variant_column, variant_src, path, zone);
+    case TYPE_DOUBLE:
+        return build_variant_projection_column<TYPE_DOUBLE>(variant_column, variant_src, path, zone);
+    case TYPE_VARCHAR:
+        return build_variant_projection_column<TYPE_VARCHAR>(variant_column, variant_src, path, zone);
+    case TYPE_DATE:
+        return build_variant_projection_column<TYPE_DATE>(variant_column, variant_src, path, zone);
+    case TYPE_DATETIME:
+        return build_variant_projection_column<TYPE_DATETIME>(variant_column, variant_src, path, zone);
+    case TYPE_TIME:
+        return build_variant_projection_column<TYPE_TIME>(variant_column, variant_src, path, zone);
+    case TYPE_VARIANT:
+        return build_variant_projection_column<TYPE_VARIANT>(variant_column, variant_src, path, zone);
+    default:
+        return Status::NotSupported("unsupported variant virtual column target type");
+    }
+}
+
+StatusOr<ColumnPtr> get_variant_projection_source_column(const ChunkPtr& output_chunk, const ChunkPtr& read_chunk,
+                                                         const ChunkPtr& hidden_read_chunk, SlotId slot_id) {
+    if (output_chunk->is_slot_exist(slot_id)) {
+        return output_chunk->get_column_by_slot_id(slot_id);
+    }
+    if (read_chunk->is_slot_exist(slot_id)) {
+        return read_chunk->get_column_by_slot_id(slot_id);
+    }
+    if (!hidden_read_chunk->is_slot_exist(slot_id)) {
+        return Status::InternalError(
+                strings::Substitute("variant virtual column source slot $0 not found in any chunk", slot_id));
+    }
+    return hidden_read_chunk->get_column_by_slot_id(slot_id);
+}
 
 bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<VariantSegment>* segments,
                                 std::vector<std::string>* shredded_paths) {
@@ -270,11 +470,59 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             active_chunk->merge(std::move(*lazy_chunk));
         }
 
-        *row_count = active_chunk->num_rows();
+        if (!_hidden_variant_sources.empty()) {
+            if (has_filter) {
+                Range<uint64_t> hidden_read_range = r.filter(&chunk_filter);
+                DCHECK(hidden_read_range.span_size() > 0);
+                Filter hidden_filter = {chunk_filter.begin() + hidden_read_range.begin() - r.begin(),
+                                        chunk_filter.begin() + hidden_read_range.end() - r.begin()};
+                for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+                    auto& hidden_column = _read_chunk->get_column_by_slot_id(hidden_source.slot_id);
+                    RETURN_IF_ERROR(hidden_source.reader->read_range(hidden_read_range, &hidden_filter, hidden_column));
+                    hidden_column->as_mutable_ptr()->filter_range(hidden_filter, 0, hidden_read_range.span_size());
+                }
+            } else {
+                for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+                    auto& hidden_column = _read_chunk->get_column_by_slot_id(hidden_source.slot_id);
+                    RETURN_IF_ERROR(hidden_source.reader->read_range(r, nullptr, hidden_column));
+                }
+            }
+        }
 
         SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
         // convert from _read_chunk to chunk.
         RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
+        // Prefer active_chunk row count because it reflects rows read from parquet readers.
+        // In some schema-evolution paths, active_chunk can be 0 while dst chunk later carries
+        // rows via backfilled slots; in that case, scan dst chunk read slots for a non-zero size.
+        auto filled_num_rows = [&]() -> size_t {
+            size_t active_rows = active_chunk->num_rows();
+            if (active_rows > 0) {
+                return active_rows;
+            }
+            for (const auto& col : _param.read_cols) {
+                SlotId sid = col.slot_id();
+                if ((*chunk)->is_slot_exist(sid)) {
+                    size_t size = (*chunk)->get_column_by_slot_id(sid)->size();
+                    if (size > 0) {
+                        return size;
+                    }
+                }
+            }
+            return 0;
+        };
+        if (!_deferred_variant_virtual_conjunct_ctxs.empty()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            RETURN_IF_ERROR(
+                    ChunkPredicateEvaluator::eval_conjuncts(_deferred_variant_virtual_conjunct_ctxs, chunk->get()));
+            if (filled_num_rows() == 0) {
+                (*chunk)->reset();
+                _read_chunk->reset();
+                _param.stats->late_materialize_skip_rows += count;
+                continue;
+            }
+        }
+        *row_count = filled_num_rows();
         break;
     }
 
@@ -454,6 +702,21 @@ VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(const std::str
     hints.shredded_paths.erase(std::remove_if(hints.shredded_paths.begin(), hints.shredded_paths.end(),
                                               [](const std::string& path) { return path.empty(); }),
                                hints.shredded_paths.end());
+
+    // Remove paths that are strict prefixes of another hint path.
+    // e.g. if both "a.b" and "a.b.c" are collected, "a.b" is redundant.
+    // A shredded path p is a prefix of q if q starts with p followed by '.' or '['.
+    auto is_prefix_of_another = [&](const std::string& p) {
+        for (const auto& q : hints.shredded_paths) {
+            if (q.size() <= p.size()) continue;
+            if (q[p.size()] != '.' && q[p.size()] != '[') continue;
+            if (q.compare(0, p.size(), p) == 0) return true;
+        }
+        return false;
+    };
+    hints.shredded_paths.erase(
+            std::remove_if(hints.shredded_paths.begin(), hints.shredded_paths.end(), is_prefix_of_another),
+            hints.shredded_paths.end());
     return hints;
 }
 
@@ -473,7 +736,51 @@ Status GroupReader::_create_column_readers() {
     opts.modification_time = _param.modification_time;
     opts.file_size = _param.file_size;
     opts.datacache_options = _param.datacache_options;
+
+    std::unordered_map<std::string, SlotId> physical_variant_slots_by_name;
     for (const auto& column : _param.read_cols) {
+        if (!column.is_extended_variant_virtual && column.slot_type().type == LogicalType::TYPE_VARIANT) {
+            physical_variant_slots_by_name.emplace(column.slot_desc->col_name(), column.slot_id());
+        }
+    }
+
+    for (const auto& column : _param.read_cols) {
+        if (column.is_extended_variant_virtual) {
+            ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(
+                                                       std::string_view(column.variant_virtual_leaf_path)));
+            VariantVirtualProjection projection{
+                    .parsed_path = std::move(parsed_path), .target_type = column.slot_type(), .source_slot_id = 0};
+            auto physical_it = physical_variant_slots_by_name.find(column.source_variant_column_name);
+            if (physical_it != physical_variant_slots_by_name.end()) {
+                projection.source_slot_id = physical_it->second;
+            } else if (_hidden_variant_sources.find(column.source_variant_column_name) ==
+                       _hidden_variant_sources.end()) {
+                const auto* source_schema_node =
+                        _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
+                if (source_schema_node == nullptr) {
+                    return Status::InternalError(strings::Substitute(
+                            "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
+                            column.idx_in_parquet, column.slot_id()));
+                }
+                if (source_schema_node->type != ColumnType::STRUCT) {
+                    return Status::InternalError(strings::Substitute(
+                            "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
+                            column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
+                }
+                VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
+                ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
+                                                             _column_reader_opts, source_schema_node, hints));
+                _hidden_variant_sources.emplace(
+                        column.source_variant_column_name,
+                        HiddenVariantSource{.slot_id = _next_hidden_slot_id--, .reader = std::move(hidden_reader)});
+            }
+            if (physical_it == physical_variant_slots_by_name.end()) {
+                projection.source_slot_id =
+                        _hidden_variant_sources.find(column.source_variant_column_name)->second.slot_id;
+            }
+            _variant_virtual_projections.emplace(column.slot_id(), std::move(projection));
+            continue;
+        }
         ASSIGN_OR_RETURN(ColumnReaderPtr column_reader, _create_column_reader(column));
         _column_readers[column.slot_id()] = std::move(column_reader);
     }
@@ -511,8 +818,8 @@ Status GroupReader::_create_column_readers() {
                 std::optional<int64_t> first_row_id =
                         _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
                                 ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
+                        : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
+                                                   : std::nullopt;
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
@@ -596,6 +903,15 @@ Status GroupReader::_prepare_column_readers() const {
             column_reader->set_need_parse_levels(true);
         }
     }
+    for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+        RETURN_IF_ERROR(hidden_source.reader->prepare());
+        if (hidden_source.reader->get_column_parquet_field() != nullptr &&
+            hidden_source.reader->get_column_parquet_field()->is_complex_type()) {
+            // Hidden VARIANT sources share the same complex reader path and also rely on
+            // def/rep levels for correct nullability reconstruction.
+            hidden_source.reader->set_need_parse_levels(true);
+        }
+    }
     return Status::OK();
 }
 
@@ -604,6 +920,16 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     int read_col_idx = 0;
 
     for (auto& column : _param.read_cols) {
+        if (column.is_extended_variant_virtual) {
+            SlotId slot_id = column.slot_id();
+            if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+                for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
+                    _deferred_variant_virtual_conjunct_ctxs.emplace_back(ctx);
+                }
+            }
+            ++read_col_idx;
+            continue;
+        }
         SlotId slot_id = column.slot_id();
         if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
             for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
@@ -724,6 +1050,10 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
         SlotId slot_id = column.slot_id();
         _column_readers[slot_id]->collect_column_io_range(ranges, &end, types, false);
     }
+    for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+        hidden_source.reader->collect_column_io_range(ranges, &end, types, true);
+    }
+    deduplicate_io_ranges(ranges);
     *end_offset = end;
 }
 
@@ -740,6 +1070,10 @@ Status GroupReader::_init_read_chunk() {
     }
     size_t chunk_size = _param.chunk_size;
     ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+        auto hidden_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
+        _read_chunk->append_column(std::move(hidden_column), hidden_source.slot_id);
+    }
     return Status::OK();
 }
 
@@ -783,10 +1117,29 @@ StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filt
     return true;
 }
 
+const cctz::time_zone& GroupReader::_get_variant_projection_timezone() {
+    if (_timezone_resolved) {
+        return _timezone_obj;
+    }
+
+    _timezone_resolved = true;
+    if (_param.timezone.empty()) {
+        return _timezone_obj;
+    }
+    if (!TimezoneUtils::find_cctz_time_zone(_param.timezone, _timezone_obj)) {
+        LOG(WARNING) << "GroupReader: fallback to UTC for invalid timezone: " << _param.timezone;
+        _timezone_obj = cctz::utc_time_zone();
+    }
+    return _timezone_obj;
+}
+
 Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
     read_chunk->check_or_die();
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
+        if (_variant_virtual_projections.find(slot_id) != _variant_virtual_projections.end()) {
+            continue;
+        }
         RETURN_IF_ERROR(_column_readers[slot_id]->fill_dst_column((*chunk)->get_column_by_slot_id(slot_id),
                                                                   read_chunk->get_column_by_slot_id(slot_id)));
     }
@@ -797,6 +1150,23 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk) {
                                                                       read_chunk->get_column_by_slot_id(slot_id)));
         }
     }
+
+    for (const auto& column : _param.read_cols) {
+        SlotId slot_id = column.slot_id();
+        auto projection_it = _variant_virtual_projections.find(slot_id);
+        if (projection_it == _variant_virtual_projections.end()) {
+            continue;
+        }
+
+        const auto& projection = projection_it->second;
+        ASSIGN_OR_RETURN(ColumnPtr source_column, get_variant_projection_source_column(*chunk, read_chunk, _read_chunk,
+                                                                                       projection.source_slot_id));
+        ASSIGN_OR_RETURN(auto result_column,
+                         project_variant_leaf_column(source_column, projection.parsed_path, projection.target_type,
+                                                     _get_variant_projection_timezone()));
+        (*chunk)->get_column_by_slot_id(slot_id) = std::move(result_column);
+    }
+
     read_chunk->check_or_die();
     return Status::OK();
 }
