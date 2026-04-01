@@ -13,6 +13,8 @@
 // limitations under the License.
 #pragma once
 
+#include <unordered_map>
+
 #include "common/statusor.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
@@ -35,11 +37,19 @@ public:
     Status load_from_meta(const TabletMetadataPtr& metadata, const DelvecPagePB& delvec_page, DelVectorPtr* pdelvec);
     Status load_from_file(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
+    // Batch-preload all delvecs for a tablet at the given version by reading
+    // entire delvec files at once. This amortizes remote IO: instead of one
+    // file-open + read per segment, we do one read per unique delvec file.
+    Status preload_delvecs(int64_t tablet_id, int64_t version);
+
 private:
     TabletManager* _tablet_manager;
     const MetaFileBuilder* _pk_builder = nullptr;
     bool _fill_cache = false;
     LakeIOOptions _lake_io_opts;
+
+    // Delvecs preloaded by preload_delvecs(), keyed by segment_id.
+    std::unordered_map<uint32_t, DelVectorPtr> _preloaded_delvecs;
 };
 
 } // namespace starrocks::lake

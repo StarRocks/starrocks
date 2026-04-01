@@ -78,6 +78,10 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
 
     auto delvec_loader =
             std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
+    // Batch-preload all delvecs for the base version to amortize remote IO.
+    // Instead of one file-read per segment during conflict resolution, this
+    // reads each delvec file once and extracts all pages from the in-memory buffer.
+    RETURN_IF_ERROR(delvec_loader->preload_delvecs(_rowset->tablet_id(), _base_version));
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
@@ -104,6 +108,8 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
 
     auto delvec_loader =
             std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, lake_io_opts);
+    // Batch-preload all delvecs for the base version to amortize remote IO.
+    RETURN_IF_ERROR(delvec_loader->preload_delvecs(_rowset->tablet_id(), _base_version));
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
