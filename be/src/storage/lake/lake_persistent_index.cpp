@@ -63,6 +63,50 @@ LakePersistentIndex::~LakePersistentIndex() {
     _sstable_filesets.clear();
 }
 
+StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
+        const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
+        const TabletMetadataPtr& metadata) {
+    const int num_sstables = sstable_meta.sstables_size();
+    std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
+    std::vector<Status> statuses(num_sstables);
+
+    auto open_one = [&](int idx) {
+        auto& pb = sstable_meta.sstables(idx);
+        auto res = PersistentIndexSstable::new_sstable(pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
+                                                       true /* need filter */, nullptr, metadata, tablet_mgr);
+        if (res.ok()) {
+            sstables[idx] = std::move(res.value());
+        } else {
+            statuses[idx] = res.status();
+        }
+    };
+
+    if (num_sstables > 1) {
+        std::vector<std::future<void>> futures;
+        futures.reserve(num_sstables - 1);
+        for (int i = 0; i < num_sstables - 1; i++) {
+            auto task = std::make_shared<std::packaged_task<void()>>([&open_one, i]() { open_one(i); });
+            auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
+            if (!st.ok()) {
+                open_one(i);
+            } else {
+                futures.push_back(task->get_future());
+            }
+        }
+        open_one(num_sstables - 1);
+        for (auto& f : futures) {
+            f.get();
+        }
+    } else if (num_sstables == 1) {
+        open_one(0);
+    }
+
+    for (int i = 0; i < num_sstables; i++) {
+        RETURN_IF_ERROR(statuses[i]);
+    }
+    return std::move(sstables);
+}
+
 Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -73,55 +117,16 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     const int num_sstables = sstable_meta.sstables_size();
     TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
 
-    // Phase 1: Open all SSTables in parallel.
-    // Each new_sstable() involves IO (reading file footer, index block, filter block)
-    // and benefits from concurrency when there are many SSTable files.
-    std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
-    std::vector<Status> open_statuses(num_sstables);
-
-    auto open_sstable = [&](int idx) {
-        auto& sstable_pb = sstable_meta.sstables(idx);
-        auto res = PersistentIndexSstable::new_sstable(
-                sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()), block_cache->cache(),
-                true /* need filter */, nullptr, metadata, _tablet_mgr);
-        if (res.ok()) {
-            sstables[idx] = std::move(res.value());
-        } else {
-            open_statuses[idx] = res.status();
-        }
-    };
-
     int64_t sst_open_us = 0;
+    std::vector<PersistentIndexSstableUniquePtr> sstables;
     {
         int64_t t_open = GetCurrentTimeMicros();
-        if (num_sstables > 1) {
-            std::vector<std::future<void>> futures;
-            futures.reserve(num_sstables - 1);
-            for (int i = 0; i < num_sstables - 1; i++) {
-                auto task = std::make_shared<std::packaged_task<void()>>([&open_sstable, i]() { open_sstable(i); });
-                auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
-                if (!st.ok()) {
-                    open_sstable(i);
-                } else {
-                    futures.push_back(task->get_future());
-                }
-            }
-            // Run the last SSTable in current thread
-            open_sstable(num_sstables - 1);
-            for (auto& f : futures) {
-                f.get();
-            }
-        } else if (num_sstables == 1) {
-            open_sstable(0);
-        }
+        ASSIGN_OR_RETURN(sstables,
+                         _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(), metadata));
         sst_open_us = GetCurrentTimeMicros() - t_open;
     }
 
-    for (int i = 0; i < num_sstables; i++) {
-        RETURN_IF_ERROR(open_statuses[i]);
-    }
-
-    // Phase 2: Group SSTables into filesets (sequential, preserves order).
+    // Group SSTables into filesets (sequential, preserves order).
     int64_t total_sst_filesize = 0;
     uint64_t max_rss_rowid = 0;
     std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
