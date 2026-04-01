@@ -325,6 +325,39 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     EXPECT_EQ(66, result_values->get(1).get_array()[2].get_int32());
 }
 
+PARALLEL_TEST(MapFunctionsTest, map_size_result_should_not_share_null_column_with_input) {
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
+
+    DatumMap map0;
+    map0[(int32_t)1] = (int32_t)11;
+    map0[(int32_t)2] = (int32_t)22;
+    column->append_datum(map0);
+
+    column->append_default();
+
+    DatumMap map2;
+    map2[(int32_t)3] = (int32_t)33;
+    column->append_datum(map2);
+
+    column->append_default();
+
+    auto result = MapFunctions::map_size(nullptr, {column}).value();
+    auto input_nullable = NullableColumn::dynamic_pointer_cast(column);
+    auto result_nullable = NullableColumn::dynamic_pointer_cast(result);
+
+    ASSERT_TRUE(input_nullable != nullptr);
+    ASSERT_TRUE(result_nullable != nullptr);
+    ASSERT_EQ(4, result_nullable->data_column()->size());
+    ASSERT_EQ(4, result_nullable->null_column()->size());
+
+    Filter filter = {1, 0, 1, 0};
+    column->filter(filter);
+
+    EXPECT_EQ(4, result_nullable->data_column()->size());
+    EXPECT_EQ(4, result_nullable->null_column()->size());
+}
+
 PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 

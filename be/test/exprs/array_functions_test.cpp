@@ -262,6 +262,31 @@ TEST_F(ArrayFunctionsTest, array_length) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_length_result_should_not_share_null_column_with_input) {
+    MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    input->append_datum(Datum(DatumArray{}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1)}));
+    input->append_datum(Datum());
+    input->append_datum(Datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)}));
+
+    auto result = ArrayFunctions::array_length(nullptr, {input}).value();
+    auto input_nullable = NullableColumn::dynamic_pointer_cast(input);
+    auto result_nullable = NullableColumn::dynamic_pointer_cast(result);
+
+    ASSERT_TRUE(input_nullable != nullptr);
+    ASSERT_TRUE(result_nullable != nullptr);
+    ASSERT_EQ(5, result_nullable->data_column()->size());
+    ASSERT_EQ(5, result_nullable->null_column()->size());
+
+    Filter filter = {1, 0, 1, 0, 1};
+    input->filter(filter);
+
+    EXPECT_EQ(5, result_nullable->data_column()->size());
+    EXPECT_EQ(5, result_nullable->null_column()->size());
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_cum_sum) {
     // []
     // NULL
