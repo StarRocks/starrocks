@@ -167,7 +167,7 @@ FROM KAFKA
 
 ## 一時パーティション内のデータのクエリ
 
-指定された一時パーティション内のデータをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) ステートメントを使用できます。
+指定された一時パーティション内のデータをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) ステートメントを使用できます。
 
 ```SQL
 SELECT * FROM
