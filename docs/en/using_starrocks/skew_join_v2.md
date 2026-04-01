@@ -243,4 +243,4 @@ Check the following fields in the plan:
 - [Query Planning](../best_practices/query_tuning/query_planning.md)
 - [Query Profile Tuning](../best_practices/query_tuning/query_profile_tuning_recipes.md)
 - [System Variables](../sql-reference/System_variable.md)
-- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#join)
+- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md#join)

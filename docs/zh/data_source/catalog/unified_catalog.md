@@ -840,7 +840,7 @@ DROP CATALOG unified_catalog_glue;
 
 2. [切换到 Hive Catalog 和其中的数据库](#switch-to-a-unified-catalog-and-a-database-in-it)。
 
-3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

@@ -872,7 +872,7 @@ DROP Catalog hive_catalog_glue;
 
 2. [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
