@@ -58,8 +58,13 @@ subprojects {
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
+<<<<<<< HEAD
         set("iceberg.version", "1.9.0")
         set("io.netty.version", "4.1.128.Final")
+=======
+        set("iceberg.version", "1.10.0")
+        set("io.netty.version", "4.1.132.Final")
+>>>>>>> 7afdd7a6e3 ([BugFix][CVE-2026-33870][CVE-2026-33871] replace aws bundle and bump netty to 4.1.132.Final (#71017))
         set("jackson.version", "2.21.1")
         set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.57.v20241219")
@@ -83,6 +88,12 @@ subprojects {
         implementation(platform("com.azure:azure-sdk-bom:${project.ext["azure.version"]}"))
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
+<<<<<<< HEAD
+=======
+        implementation(platform("io.netty:netty-bom:${project.ext["io.netty.version"]}"))
+        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
+        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
+>>>>>>> 7afdd7a6e3 ([BugFix][CVE-2026-33870][CVE-2026-33871] replace aws bundle and bump netty to 4.1.132.Final (#71017))
 
         constraints {
             // dependency sync start
@@ -231,7 +242,10 @@ subprojects {
             implementation("org.scala-lang:scala-library:2.12.10")
             implementation("org.slf4j:slf4j-api:1.7.30")
             implementation("org.xerial.snappy:snappy-java:1.1.10.5")
-            implementation("software.amazon.awssdk:bundle:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:glue:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:s3:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:sts:${project.ext["aws-v2-sdk.version"]}")
+            implementation("software.amazon.awssdk:url-connection-client:${project.ext["aws-v2-sdk.version"]}")
             implementation("tools.profiler:async-profiler:${project.ext["async-profiler.version"]}")
             // dependency sync end
         }
