@@ -17,8 +17,8 @@
 #include <optional>
 #include <unordered_set>
 
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
