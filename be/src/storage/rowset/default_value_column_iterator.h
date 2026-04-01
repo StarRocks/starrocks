@@ -34,11 +34,11 @@
 
 #pragma once
 
-#include "types/datum.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/types.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
