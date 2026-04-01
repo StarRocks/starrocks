@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -499,8 +500,9 @@ public class LoadTest {
 
         Expr generatedExpr = localExprsByName.get("c3");
         Assertions.assertNotNull(generatedExpr);
-        Assertions.assertInstanceOf(SlotRef.class, generatedExpr);
-        Assertions.assertEquals("c2", ((SlotRef) generatedExpr).getColumnName());
+        Assertions.assertInstanceOf(CastExpr.class, generatedExpr);
+        Assertions.assertInstanceOf(SlotRef.class, generatedExpr.getChild(0));
+        Assertions.assertEquals("c2", ((SlotRef) generatedExpr.getChild(0)).getColumnName());
     }
 
     @Test
@@ -570,9 +572,9 @@ public class LoadTest {
     @Test
     public void testGeneratedColumnMissingDependencyUsesVaryDefault() throws StarRocksException {
         Column c1 = new Column("c1", IntegerType.INT, true, null, true, null, "");
-        Column c2 = new Column("c2", DateType.DATETIME, true, null, false,
-                new ColumnDef.DefaultValueDef(true, new FunctionCallExpr("now", Lists.newArrayList())), "");
-        Column c3 = new Column("c3", DateType.DATETIME, true, null, true, null, "");
+        Column c2 = new Column("c2", VarcharType.VARCHAR, true, null, false,
+                new ColumnDef.DefaultValueDef(true, new FunctionCallExpr("uuid", Lists.newArrayList())), "");
+        Column c3 = new Column("c3", VarcharType.VARCHAR, true, null, true, null, "");
         List<Column> fullSchema = Lists.newArrayList(c1, c2, c3);
         c3.setGeneratedColumnExpr(ColumnIdExpr.create(fullSchema, new SlotRef(null, "c2")));
         Table localTable = new Table(1L, "table0", Table.TableType.OLAP, fullSchema);
@@ -589,7 +591,7 @@ public class LoadTest {
 
         Expr generatedExpr = localExprsByName.get("c3");
         Assertions.assertNotNull(generatedExpr);
-        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("now"));
+        Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("uuid"));
     }
 
     @Test
@@ -614,6 +616,6 @@ public class LoadTest {
                 "missing dependency column for generated column c3",
                 () -> Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable,
                         localSrcTupleDesc, localSlotDescByName, new TBrokerScanRangeParams(), true, true,
-                        Lists.newArrayList()));
+                        Lists.newArrayList(), false, true));
     }
 }
