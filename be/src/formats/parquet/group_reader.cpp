@@ -397,11 +397,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         *row_count = 0;
         return Status::EndOfFile("");
     }
-    _read_chunk->reset();
 
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices, false);
-    // to complicity with _do_get_next will break and return even active_row is all filtered.
-    // but a better choice is don't return until really have some results.
+    // Loop until we find a range with surviving rows, skipping ranges filtered entirely
+    // by deletion bitmap, predicate pushdown, or deferred variant virtual conjuncts.
     while (true) {
         if (!_range_iter.has_more()) {
             *row_count = 0;
@@ -412,25 +411,24 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         auto count = r.span_size();
         _param.stats->raw_rows_read += count;
 
+        // Reset per-iteration scratch buffers.
         active_chunk->reset();
+        _read_chunk->reset();
 
         bool has_filter = false;
         Filter chunk_filter(count, 1);
 
-        // row id filter
+        // ── Phase 1: row-id (deletion bitmap) filter ──────────────────────────
         if (nullptr != _skip_rows_ctx && _skip_rows_ctx->has_skip_rows()) {
-            {
-                SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
-                ASSIGN_OR_RETURN(has_filter,
-                                 _skip_rows_ctx->deletion_bitmap->fill_filter(r.begin(), r.end(), chunk_filter));
-
-                if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
-                    continue;
-                }
+            SCOPED_RAW_TIMER(&_param.stats->build_rowid_filter_ns);
+            ASSIGN_OR_RETURN(has_filter,
+                             _skip_rows_ctx->deletion_bitmap->fill_filter(r.begin(), r.end(), chunk_filter));
+            if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
+                continue;
             }
         }
 
-        // we really have predicate to run round by round
+        // ── Phase 2: active columns (with optional predicate pushdown) ─────────
         if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
             has_filter = true;
             ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
@@ -446,83 +444,126 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
         }
 
-        // deal with lazy columns
+        // ── Phase 3: secondary post-filter reads ──────────────────────────────
+        // Both lazy columns and hidden variant sources are read after the active-column
+        // filter so we only decode rows that survived predicate pushdown.
+        //
+        // Lazy columns   → merged into active_chunk (physical slots, used directly by
+        //                  _fill_dst_chunk via the read_chunk argument).
+        // Hidden variant → written into _read_chunk under synthetic negative slot ids.
+        //                  They are VARIANT columns needed only as sources for virtual
+        //                  projection; they are not in the user's SELECT list and are
+        //                  therefore not part of active_chunk or *chunk.
+        //
+        // Both share the same post-filter range / filter vector, computed once here.
+        Range<uint64_t> post_filter_range;
+        Filter post_filter;
+        if (has_filter) {
+            post_filter_range = r.filter(&chunk_filter);
+            // Active-column filtering already exited early if hit_count==0, so there
+            // must be surviving rows at this point.
+            DCHECK(post_filter_range.span_size() > 0);
+            post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
+                           chunk_filter.begin() + post_filter_range.end() - r.begin()};
+        }
+
         if (!_lazy_column_indices.empty()) {
             _lazy_column_needed = true;
             ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices, true);
-
             if (has_filter) {
-                Range<uint64_t> lazy_read_range = r.filter(&chunk_filter);
-                // if all data is filtered, we have skipped early.
-                DCHECK(lazy_read_range.span_size() > 0);
-                Filter lazy_filter = {chunk_filter.begin() + lazy_read_range.begin() - r.begin(),
-                                      chunk_filter.begin() + lazy_read_range.end() - r.begin()};
-                RETURN_IF_ERROR(_read_range(_lazy_column_indices, lazy_read_range, &lazy_filter, &lazy_chunk, true));
-                lazy_chunk->filter_range(lazy_filter, 0, lazy_read_range.span_size());
+                RETURN_IF_ERROR(
+                        _read_range(_lazy_column_indices, post_filter_range, &post_filter, &lazy_chunk, true));
+                lazy_chunk->filter_range(post_filter, 0, post_filter_range.span_size());
             } else {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk, true));
             }
-
             if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
-                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
-                                                                 active_chunk->num_rows(), lazy_chunk->num_rows()));
+                return Status::InternalError(
+                        strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                            active_chunk->num_rows(), lazy_chunk->num_rows()));
             }
             active_chunk->merge(std::move(*lazy_chunk));
         }
 
         if (!_hidden_variant_sources.empty()) {
-            if (has_filter) {
-                Range<uint64_t> hidden_read_range = r.filter(&chunk_filter);
-                DCHECK(hidden_read_range.span_size() > 0);
-                Filter hidden_filter = {chunk_filter.begin() + hidden_read_range.begin() - r.begin(),
-                                        chunk_filter.begin() + hidden_read_range.end() - r.begin()};
-                for (const auto& [name, hidden_source] : _hidden_variant_sources) {
-                    auto& hidden_column = _read_chunk->get_column_by_slot_id(hidden_source.slot_id);
-                    RETURN_IF_ERROR(hidden_source.reader->read_range(hidden_read_range, &hidden_filter, hidden_column));
-                    hidden_column->as_mutable_ptr()->filter_range(hidden_filter, 0, hidden_read_range.span_size());
-                }
-            } else {
-                for (const auto& [name, hidden_source] : _hidden_variant_sources) {
-                    auto& hidden_column = _read_chunk->get_column_by_slot_id(hidden_source.slot_id);
+            for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+                auto& hidden_column = _read_chunk->get_column_by_slot_id(hidden_source.slot_id);
+                if (has_filter) {
+                    RETURN_IF_ERROR(
+                            hidden_source.reader->read_range(post_filter_range, &post_filter, hidden_column));
+                    hidden_column->as_mutable_ptr()->filter_range(post_filter, 0, post_filter_range.span_size());
+                } else {
                     RETURN_IF_ERROR(hidden_source.reader->read_range(r, nullptr, hidden_column));
                 }
             }
         }
 
-        SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
-        // convert from _read_chunk to chunk.
-        RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
-        // Prefer active_chunk row count because it reflects rows read from parquet readers.
-        // In some schema-evolution paths, active_chunk can be 0 while dst chunk later carries
-        // rows via backfilled slots; in that case, scan dst chunk read slots for a non-zero size.
-        auto filled_num_rows = [&]() -> size_t {
-            size_t active_rows = active_chunk->num_rows();
-            if (active_rows > 0) {
-                return active_rows;
-            }
-            for (const auto& col : _param.read_cols) {
-                SlotId sid = col.slot_id();
-                if ((*chunk)->is_slot_exist(sid)) {
-                    size_t size = (*chunk)->get_column_by_slot_id(sid)->size();
-                    if (size > 0) {
-                        return size;
-                    }
-                }
-            }
-            return 0;
-        };
+        // ── Phase 4: deferred variant virtual conjunct pre-evaluation ─────────
+        // Virtual-projection conjuncts (e.g. v:a.b > 0) must be evaluated BEFORE
+        // _fill_dst_chunk so that active_chunk is filtered down first and remains the
+        // single source of truth for row counts.
+        //
+        // We project each virtual column from active_chunk / _read_chunk into a
+        // temporary eval_chunk, evaluate the conjuncts there to obtain a row filter,
+        // and then apply that filter to active_chunk and the hidden VARIANT sources in
+        // _read_chunk.  _fill_dst_chunk in phase 5 then works on the already-filtered
+        // data and can simply re-derive the virtual column values.
         if (!_deferred_variant_virtual_conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-            RETURN_IF_ERROR(
-                    ChunkPredicateEvaluator::eval_conjuncts(_deferred_variant_virtual_conjunct_ctxs, chunk->get()));
-            if (filled_num_rows() == 0) {
-                (*chunk)->reset();
-                _read_chunk->reset();
+
+            // Build eval_chunk: one projected column per virtual slot.
+            // Physical variant source → found in active_chunk.
+            // Hidden variant source   → found in _read_chunk (negative slot ids).
+            ChunkPtr eval_chunk = std::make_shared<Chunk>();
+            for (const auto& column : _param.read_cols) {
+                if (!column.is_extended_variant_virtual) continue;
+                SlotId slot_id = column.slot_id();
+                auto proj_it = _variant_virtual_projections.find(slot_id);
+                if (proj_it == _variant_virtual_projections.end()) continue;
+
+                const auto& projection = proj_it->second;
+                ASSIGN_OR_RETURN(ColumnPtr source_col,
+                                 get_variant_projection_source_column(active_chunk, active_chunk, _read_chunk,
+                                                                      projection.source_slot_id));
+                ASSIGN_OR_RETURN(auto result_col,
+                                 project_variant_leaf_column(source_col, projection.parsed_path,
+                                                             projection.target_type,
+                                                             _get_variant_projection_timezone()));
+                eval_chunk->append_column(std::move(result_col), slot_id);
+            }
+
+            Filter filter(active_chunk->num_rows(), 1);
+            ASSIGN_OR_RETURN(size_t hit_count,
+                             ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                     _deferred_variant_virtual_conjunct_ctxs, eval_chunk.get(), &filter));
+            if (hit_count == 0) {
                 _param.stats->late_materialize_skip_rows += count;
                 continue;
             }
+
+            // Filter active_chunk (shared columns with _read_chunk physical slots) and
+            // the hidden VARIANT source columns that are only in _read_chunk.
+            active_chunk->filter(filter);
+            for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+                _read_chunk->get_column_by_slot_id(hidden_source.slot_id)
+                        ->as_mutable_ptr()
+                        ->filter(filter);
+            }
         }
-        *row_count = filled_num_rows();
+
+        // ── Phase 5: decode + virtual projection → dst chunk ──────────────────
+        // active_chunk (and _read_chunk hidden sources) are already filtered.
+        // _fill_dst_chunk copies physical columns and re-derives virtual projections
+        // from the filtered source data into *chunk.
+        // active_chunk carries all rows that survived every filter stage; use it as
+        // the row-count source.  Fall back to *chunk only in schema-evolution paths
+        // where active_chunk has no physical columns but _fill_dst_chunk backfills
+        // default values for missing slots.
+        *row_count = active_chunk->num_rows();
+        {
+            SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
+            RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
+        }                
         break;
     }
 
