@@ -17,8 +17,6 @@
 #include <future>
 #include <unordered_set>
 
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
@@ -42,7 +40,9 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
+#include "testutil/sync_point.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {

@@ -17,8 +17,6 @@
 #include <optional>
 #include <unordered_set>
 
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -41,6 +39,8 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
