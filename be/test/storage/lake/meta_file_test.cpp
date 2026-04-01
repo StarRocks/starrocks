@@ -600,8 +600,6 @@ TEST_F(MetaFileTest, test_error_state) {
     EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(MetaFileTest, test_segment_id_helper_fallback_and_override) {
     RowsetMetadataPB rowset;
     rowset.set_id(1000);
@@ -1411,5 +1409,4 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
 }
 
->>>>>>> 9da08b0ee2 ([BugFix] Fix delvec orphan entries caused by write-before-compaction in same publish batch (backport #71001) (#71049))
 } // namespace starrocks::lake
