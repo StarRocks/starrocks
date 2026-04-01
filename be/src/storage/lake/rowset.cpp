@@ -16,8 +16,8 @@
 
 #include <future>
 
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
