@@ -127,8 +127,8 @@ private:
     PageBuilderOptions _options;
     uint32_t _count;
     uint32_t _max_count;
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     faststring _first_value;
     faststring _last_value;
     uint8_t _reserved_head_size{0};
@@ -137,7 +137,7 @@ private:
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
-    using ValueType = typename CppTypeTraits<Type>::CppType;
+    using ValueType = StorageCppType<Type>;
 
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
@@ -271,8 +271,8 @@ private:
     bool _parsed{false};
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 };
 
 } // namespace starrocks

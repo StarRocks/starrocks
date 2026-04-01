@@ -29,9 +29,11 @@
 #include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -47,9 +49,7 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
-          _strict_mode(false),
-          _error_counter(0),
-          _file_scan_type(TFileScanType::LOAD),
+
           _file_format_str("UNKNOWN"),
           _schema_only(schema_only) {
     if (_params.__isset.file_scan_type) {
@@ -211,7 +211,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
             column_pointers.emplace(col_pointer);
         }
 
-        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), std::move(col));
+        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
 
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
@@ -304,7 +304,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
@@ -341,7 +341,7 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;

@@ -36,12 +36,17 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <vector>
 
 #include "common/compiler_util.h"
-#include "common/config.h"
 #include "gutil/port.h"
+
+namespace starrocks::config {
+// Keep this declaration in sync with common/config.h.
+extern int32_t priority_queue_remaining_tasks_increased_frequency;
+} // namespace starrocks::config
 
 namespace starrocks {
 

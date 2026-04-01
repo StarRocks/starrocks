@@ -257,10 +257,10 @@ void JVMFunctionHelper::_init() {
     // init list meta
     auto list_clazz = JNI_FIND_CLASS("java/util/List");
     DCHECK(list_clazz);
-    _list_meta.list_class = new JVMClass(std::move(list_clazz));
+    _list_meta.list_class = new JVMClass(list_clazz);
     auto array_list_clazz = JNI_FIND_CLASS("java/util/ArrayList");
     DCHECK(array_list_clazz);
-    _list_meta.array_list_class = new JVMClass(std::move(array_list_clazz));
+    _list_meta.array_list_class = new JVMClass(array_list_clazz);
 
     SET_METHOD_ID(_list_meta.list_get, list_clazz, "get", "(I)Ljava/lang/Object;");
     SET_METHOD_ID(_list_meta.list_size, list_clazz, "size", "()I");
@@ -269,7 +269,7 @@ void JVMFunctionHelper::_init() {
     // init immutable map meta
     auto immutable_map_clazz = JNI_FIND_CLASS("com/starrocks/udf/ImmutableMap");
     DCHECK(immutable_map_clazz != nullptr);
-    _map_meta.immutable_map_class = new JVMClass(std::move(immutable_map_clazz));
+    _map_meta.immutable_map_class = new JVMClass(immutable_map_clazz);
     auto map_clazz = JNI_FIND_CLASS("java/util/Map");
     DCHECK(map_clazz);
     _map_meta.map_class = new JVMClass(map_clazz);
@@ -278,7 +278,7 @@ void JVMFunctionHelper::_init() {
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
-    _function_states_clazz = new JVMClass(std::move(loaded_clazz));
+    _function_states_clazz = new JVMClass(loaded_clazz);
 }
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {
@@ -705,7 +705,7 @@ Status ClassLoader::init() {
     _get_class = env->GetMethodID((jclass)_clazz.handle(), "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
     _get_call_stub =
             env->GetMethodID((jclass)_clazz.handle(), "generateCallStubV",
-                             "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;I)Ljava/lang/Class;");
+                             "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;II)Ljava/lang/Class;");
 
     // init method
     if (_get_class == nullptr || _get_call_stub == nullptr) {
@@ -738,7 +738,8 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     return res;
 }
 
-StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type) {
+StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
+                                            int numActualVarArgs) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
 
@@ -746,8 +747,9 @@ StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jc
     jstring jstr_name = helper.to_jstring(jni_class_name);
     LOCAL_REF_GUARD(jstr_name);
 
-    // generate call stub
-    auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_call_stub, jstr_name, clazz, method, type);
+    // generate call stub; pass numActualVarArgs for varargs methods
+    auto loaded_clazz =
+            env->CallObjectMethod(_handle.handle(), _get_call_stub, jstr_name, clazz, method, type, numActualVarArgs);
     LOCAL_REF_GUARD(loaded_clazz);
     RETURN_ERROR_IF_EXCEPTION(env, "exception happened when gen call stub: {}");
 
@@ -790,6 +792,22 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
     return Status::OK();
 }
 
+void ClassAnalyzer::strip_jni_generic_types(std::string* sign) {
+    std::string cleaned;
+    cleaned.reserve(sign->size());
+    int depth = 0;
+    for (char c : *sign) {
+        if (c == '<') {
+            depth++;
+        } else if (c == '>') {
+            depth--;
+        } else if (depth == 0) {
+            cleaned += c;
+        }
+    }
+    *sign = std::move(cleaned);
+}
+
 Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std::string* sign) {
     DCHECK(clazz != nullptr);
     DCHECK(sign != nullptr);
@@ -820,6 +838,14 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
     *sign = helper.to_string(result_sign);
+    // Strip generic type parameters from signature to produce standard JNI method descriptor.
+    // Java's getGenericParameterTypes() may produce signatures with generic info that:
+    // 1. JNI GetMethodID cannot match against the erased method descriptor, returning NULL.
+    // 2. get_udaf_method_desc() uses exact string matching (e.g. type == "java/util/List")
+    //    to populate method_desc. Generic signatures like "java/util/List<java/lang/String>"
+    //    would fail to match, causing missing MethodTypeDescriptor entries and subsequent
+    //    out-of-bounds access in process()/update()/merge() when indexing method_desc[j+1].
+    strip_jni_generic_types(sign);
     return Status::OK();
 }
 
@@ -876,16 +902,98 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         if (sign[i] == '(' || sign[i] == ')') {
             continue;
         }
+        // Handle array types
         if (sign[i] == '[') {
-            while (sign[i] != ';') {
-                i++;
+            // Consume all leading '[' (for multi-dimensional arrays)
+            while (i < sign.size() && sign[i] == '[') {
+                ++i;
             }
-            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
+
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid array descriptor '{}': missing element type", sign));
+            }
+
+            // Handle element type: object array 'L...;' or primitive type (single char)
+            // For varargs parameters (e.g. String..., Integer...), the method signature contains
+            // the array type ([Ljava/lang/String; etc.). Map the element type to the corresponding
+            // LogicalType so that get_method_desc() validation passes.
+            LogicalType elem_type = TYPE_UNKNOWN;
+            bool elem_is_box = true;
+            if (sign[i] == 'L') {
+                // Object array: [L<classname>;
+                ++i; // Skip 'L'
+                int elem_st = i;
+                while (i < sign.size() && sign[i] != ';') {
+                    ++i;
+                }
+                if (i >= sign.size()) {
+                    return Status::InternalError(
+                            fmt::format("Invalid object array descriptor '{}': missing ';'", sign));
+                }
+                std::string elem_class = sign.substr(elem_st, i - elem_st);
+                if (elem_class == "java/lang/String") {
+                    elem_type = TYPE_VARCHAR;
+                } else if (elem_class == "java/lang/Boolean") {
+                    elem_type = TYPE_BOOLEAN;
+                } else if (elem_class == "java/lang/Byte") {
+                    elem_type = TYPE_TINYINT;
+                } else if (elem_class == "java/lang/Short") {
+                    elem_type = TYPE_SMALLINT;
+                } else if (elem_class == "java/lang/Integer") {
+                    elem_type = TYPE_INT;
+                } else if (elem_class == "java/lang/Long") {
+                    elem_type = TYPE_BIGINT;
+                } else if (elem_class == "java/lang/Float") {
+                    elem_type = TYPE_FLOAT;
+                } else if (elem_class == "java/lang/Double") {
+                    elem_type = TYPE_DOUBLE;
+                } else if (elem_class == "java/util/List") {
+                    elem_type = TYPE_ARRAY;
+                } else if (elem_class == "java/util/Map") {
+                    elem_type = TYPE_MAP;
+                }
+                // i now points to ';', loop will increment it
+            } else {
+                // Primitive array: [Z [B [S [I [J [F [D
+                elem_is_box = false;
+                switch (sign[i]) {
+                case 'Z':
+                    elem_type = TYPE_BOOLEAN;
+                    break;
+                case 'B':
+                    elem_type = TYPE_TINYINT;
+                    break;
+                case 'S':
+                    elem_type = TYPE_SMALLINT;
+                    break;
+                case 'I':
+                    elem_type = TYPE_INT;
+                    break;
+                case 'J':
+                    elem_type = TYPE_BIGINT;
+                    break;
+                case 'F':
+                    elem_type = TYPE_FLOAT;
+                    break;
+                case 'D':
+                    elem_type = TYPE_DOUBLE;
+                    break;
+                default:
+                    break;
+                }
+                elem_type = TYPE_UNKNOWN;
+            }
+
+            desc->emplace_back(MethodTypeDescriptor{elem_type, elem_is_box, true});
+            continue;
         }
         if (sign[i] == 'L') {
             int st = i + 1;
-            while (sign[i] != ';') {
+            while (i < sign.size() && sign[i] != ';') {
                 i++;
+            }
+            if (i >= sign.size()) {
+                return Status::InternalError(fmt::format("Invalid object type descriptor '{}': missing ';'", sign));
             }
             std::string type = sign.substr(st, i - st);
             if (false) {

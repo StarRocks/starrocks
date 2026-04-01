@@ -53,6 +53,7 @@
 #include "base/uid_util.h"
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/util/debug_util.h"

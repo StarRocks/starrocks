@@ -29,10 +29,12 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -40,6 +42,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
@@ -48,6 +51,8 @@ import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -146,6 +151,10 @@ public class AstToStringBuilder {
         sb.append("`").append(table.getName()).append("` (\n");
         int idx = 0;
         for (Column column : table.getBaseSchema()) {
+            // Skip expression partition generated columns to show user-created DDL
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
             if (idx++ != 0) {
                 sb.append(",\n");
             }
@@ -196,7 +205,14 @@ public class AstToStringBuilder {
                 partitionId = Lists.newArrayList();
             }
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+                // Use expression (not generated column name) for user-created DDL display
+                if (partitionInfo instanceof ListPartitionInfo) {
+                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                    sb.append("\n").append(listPartitionInfo.toSql(olapTable,
+                            listPartitionInfo.isAutomaticPartition(), false));
+                } else {
+                    sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+                }
             }
 
             // distribution
@@ -407,10 +423,23 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
-                collect(Collectors.toList());
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL)
+                .collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
+
+        // Primary key
+        if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> primaryKeys = paimonTable.getPrimaryKeyColumnNames();
+            if (!primaryKeys.isEmpty()) {
+                createTableSql.append("\nPRIMARY KEY (");
+                createTableSql.append(primaryKeys.stream()
+                        .map(key -> "`" + key + "`")
+                        .collect(Collectors.joining(", ")));
+                createTableSql.append(")");
+            }
+        }
 
         // Partition column names
         List<String> partitionNames;
@@ -424,7 +453,6 @@ public class AstToStringBuilder {
                 createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
         }
-
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
@@ -473,6 +501,12 @@ public class AstToStringBuilder {
         } catch (NotImplementedException e) {
         }
 
+        // Iceberg format-version is not stored in properties, need to add it explicitly
+        if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            properties.put("format-version", String.valueOf(icebergTable.getFormatVersion()));
+        }
+
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
             createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
@@ -513,7 +547,18 @@ public class AstToStringBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        sb.append(" DEFAULT NULL");
+        if (!column.isAllowNull()) {
+            sb.append(" NOT NULL");
+        } else {
+            String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
+            if (defaultValue == null) {
+                sb.append(" DEFAULT NULL");
+            } else {
+                sb.append(" DEFAULT \"")
+                        .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                        .append("\"");
+            }
+        }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
             sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");

@@ -660,6 +660,226 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
+TEST_F(LikeTest, backslashEscapeConstSubstring) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: %\\%  => LIKE substring match for literal backslash
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%\\\\%", 1);
+
+    str->append("abc\\def");
+    str->append("abcdef");
+    str->append("star\\");
+    str->append("\\start");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);  // abc\def matches %\\%
+    ASSERT_FALSE(v->get_data()[1]); // abcdef does not match
+    ASSERT_TRUE(v->get_data()[2]);  // star\ matches
+    ASSERT_TRUE(v->get_data()[3]);  // \start matches
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstEndsWith) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: %\\asdf  => LIKE ends-with match for literal "\asdf"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%\\\\asdf", 1);
+
+    str->append("test\\asdf");
+    str->append("\\asdf");
+    str->append("testasdf");
+    str->append("test\\asdx");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstStartsWith) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\\%  => LIKE starts-with match for literal "star\"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\\\%", 1);
+
+    str->append("star\\test");
+    str->append("star\\");
+    str->append("startest");
+    str->append("xstar\\");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstEquals) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\\  => LIKE equals match for literal "star\"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\\\", 1);
+
+    str->append("star\\");
+    str->append("star\\\\");
+    str->append("star");
+    str->append("star\\x");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+    ASSERT_FALSE(v->get_data()[3]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeConstEqualsEscapedPercent) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    // pattern: star\%  => LIKE equals match for literal "star%"
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("star\\%", 1);
+
+    str->append("star%");
+    str->append("starrocks");
+    str->append("star\\%");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_FALSE(v->get_data()[1]);
+    ASSERT_FALSE(v->get_data()[2]);
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, backslashEscapeRowPattern) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pat = BinaryColumn::create();
+
+    // row 0: "abc\def" LIKE "%\\%" -> true (substring backslash)
+    str->append("abc\\def");
+    pat->append("%\\\\%");
+
+    // row 1: "star\" LIKE "star\\" -> true (equals backslash)
+    str->append("star\\");
+    pat->append("star\\\\");
+
+    // row 2: "star%" LIKE "star\%" -> true (equals literal %)
+    str->append("star%");
+    pat->append("star\\%");
+
+    // row 3: "test\asdf" LIKE "%\\asdf" -> true (ends-with)
+    str->append("test\\asdf");
+    pat->append("%\\\\asdf");
+
+    // row 4: "starrocks" LIKE "star%" -> true (starts-with)
+    str->append("starrocks");
+    pat->append("star%");
+
+    // row 5: "abcdef" LIKE "%\\%" -> false (no backslash)
+    str->append("abcdef");
+    pat->append("%\\\\%");
+
+    // row 6: "ab" LIKE "a\b" -> true (non-wildcard escape: \b unescapes to b)
+    str->append("ab");
+    pat->append("a\\b");
+
+    // row 7: "a\\b" LIKE "a\b" -> false (\b means literal b, not backslash+b)
+    str->append("a\\b");
+    pat->append("a\\b");
+
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pat));
+
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like_fn(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+
+    ASSERT_TRUE(v->get_data()[0]);
+    ASSERT_TRUE(v->get_data()[1]);
+    ASSERT_TRUE(v->get_data()[2]);
+    ASSERT_TRUE(v->get_data()[3]);
+    ASSERT_TRUE(v->get_data()[4]);
+    ASSERT_FALSE(v->get_data()[5]);
+    ASSERT_TRUE(v->get_data()[6]);  // "ab" matches "a\b"
+    ASSERT_FALSE(v->get_data()[7]); // "a\b" does not match "a\b" pattern
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
 TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
     // pattern contains special characters
     std::string pattern = "abc%_abccc\\%e\\\\\\\\";

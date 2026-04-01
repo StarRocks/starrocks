@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
 

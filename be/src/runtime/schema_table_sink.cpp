@@ -29,6 +29,7 @@
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "util/brpc_stub_cache.h"
@@ -151,7 +152,7 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status SchemaTableSink::close(RuntimeState* state, Status exec_status) {
+Status SchemaTableSink::close(RuntimeState* state, const Status& exec_status) {
     ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }

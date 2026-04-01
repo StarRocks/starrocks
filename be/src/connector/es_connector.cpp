@@ -14,6 +14,7 @@
 
 #include "connector/es_connector.h"
 
+#include "common/config_scan_io_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -22,6 +23,7 @@
 #include "exec/es/es_scroll_query.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {

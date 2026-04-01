@@ -15,8 +15,10 @@
 #include "exec/dictionary_cache_writer.h"
 
 #include "common/brpc_helper.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
@@ -178,7 +180,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
         auto& closure = closures[i];
         closure->ref();
         closure->cntl.set_timeout_ms(config::dictionary_cache_refresh_timeout_ms);
-        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        set_ignore_overcrowded_for_load(closure->cntl);
 
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
         if (!res.ok()) {

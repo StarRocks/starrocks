@@ -573,11 +573,35 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Instantaneous value of resource group memory quota.
 
-### starrocks_be_resource_group_mem_allocated_bytes
+### starrocks_be_resource_group_mem_inuse_bytes
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Instantaneous value of resource group memory usage.
+
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Memory limit for each memory pool, measured in bytes.
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Currently used total memory by each memory pool, measured in bytes.
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- Unit: -
+- Type: Instantaneous
+- Description: Ratio of the memory usage of the memory pool to the memory limit of the memory pool.
+
+### starrocks_be_mem_pool_workgroup_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of resource groups assigned to each memory pool.
 
 ### starrocks_be_pipe_prepare_pool_queue_len
 
@@ -1560,6 +1584,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by bitmap indexes.
 
+### builtin_inverted_index_mem_bytes
+
+- Unit: Bytes
+- Description: Memory used by builtin inverted indexes.
+
 ### update_rowset_commit_apply_duration_us
 
 - Unit: us
@@ -1850,6 +1879,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 ### Transaction Latency Metrics
 
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of `publish-version-daemon` loop runs on this FE node.
+
 The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
 
 Each metric includes the following outputs:
@@ -1877,7 +1912,7 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Summary
-- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, and `ack` sub-phases.
+- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, `can_finish`, and `ack` sub-phases.
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
@@ -1891,11 +1926,17 @@ All transaction metrics share the following labels:
 - Type: Summary
 - Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible.
 
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The latency from `publish` task completion to the moment `canTxnFinish()` first returns true, measured from `publish version finish` time to `ready-to-finish` time.
+
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - Unit: ms
 - Type: Summary
-- Description: The final acknowledgment latency, from when the `publish` task finishes to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes any final steps or acknowledgments required.
+- Description: The final acknowledgment latency, from `ready-to-finish` time to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes final acknowledgment steps after the transaction is ready to finish.
 
 ### Merge Commit BE Metrics
 
@@ -1989,6 +2030,22 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
 
+### Iceberg query FE metrics
+
+#### iceberg_time_travel_query_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `time_travel_type` (`branch`, `tag`, `snapshot`, or `timestamp`) for the categorized series.
+- Description: Total number of Iceberg time travel queries. The unlabeled series counts each time travel query once. The labeled series count each distinct time travel type used by the query. `snapshot` means `FOR VERSION AS OF <snapshot_id>`, `branch` and `tag` mean `FOR VERSION AS OF <reference_name>`, and `timestamp` means `FOR TIMESTAMP AS OF ...`.
+
+#### iceberg_metadata_table_query_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `metadata_table` (`refs`, `history`, `metadata_log_entries`, `snapshots`, `manifests`, `files`, `partitions`, or `properties`)
+- Description: Total number of SQL queries that access Iceberg metadata tables. Each query is counted under the `metadata_table` label that identifies the metadata table being accessed.
+
 ### Iceberg delete FE metrics
 
 #### iceberg_delete_total
@@ -2022,35 +2079,35 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `delete_type` (`position` or `metadata`)
 - Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
 
-### iceberg_compaction_total
+#### iceberg_compaction_total
 
 - Unit: Count
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
 
-### iceberg_compaction_duration_ms_total
+#### iceberg_compaction_duration_ms_total
 
 - Unit: Millisecond
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total time spent running Iceberg compaction tasks.
 
-### iceberg_compaction_input_files_total
+#### iceberg_compaction_input_files_total
 
 - Unit: Count
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of data files read by Iceberg compaction tasks.
 
-### iceberg_compaction_output_files_total
+#### iceberg_compaction_output_files_total
 
 - Unit: Count
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of data files produced by Iceberg compaction tasks.
 
-### iceberg_compaction_removed_delete_files_total
+#### iceberg_compaction_removed_delete_files_total
 
 - Unit: Count
 - Type: Cumulative
@@ -2096,3 +2153,91 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Cumulative
 - Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
 - Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+### Hive write FE metrics
+
+#### hive_write_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert` or `overwrite`)
+- Description: Total number of `INSERT` or `INSERT OVERWRITE` tasks that target Hive tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `write_type` distinguishes between the operation types.
+
+#### hive_write_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total execution time of Hive write tasks (`INSERT`, `INSERT OVERWRITE`) in milliseconds. The duration of each task is added after it ends. `write_type` distinguishes between the operation types.
+
+#### hive_write_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total written bytes from Hive write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the total size of data files written to the Hive table. `write_type` distinguishes between the operation types.
+
+#### hive_write_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total written rows from Hive write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the number of rows written to the Hive table. `write_type` distinguishes between the operation types.
+
+#### hive_write_files
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `write_type` (`insert` or `overwrite`)
+- Description: Total number of data files written to Hive from write tasks (`INSERT`, `INSERT OVERWRITE`). This represents the count of data files written to the Hive table. `write_type` distinguishes between the operation types.
+
+### DataCache metrics
+
+DataCache metrics provide visibility into cache capacity, usage, and hit rate for data caching.
+
+The following metrics are exposed on the BE Prometheus endpoint (`/metrics`):
+
+#### datacache_mem_quota_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The configured memory quota for datacache.
+
+#### datacache_mem_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The current memory usage of datacache.
+
+#### datacache_disk_quota_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The configured disk quota for datacache.
+
+#### datacache_disk_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The current disk usage of datacache.
+
+#### datacache_meta_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The memory usage for datacache metadata.
+
+#### block_cache_hit_bytes
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache hits. For now, only the cache hit bytes for external table is being counted.
+
+#### block_cache_miss_bytes
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.

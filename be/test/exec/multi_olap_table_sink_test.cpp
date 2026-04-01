@@ -35,7 +35,7 @@ public:
     MOCK_METHOD(Status, prepare, (RuntimeState * state), (override));
     MOCK_METHOD(Status, open, (RuntimeState * state), (override));
     MOCK_METHOD(Status, send_chunk_nonblocking, (RuntimeState * state, Chunk* chunk), (override));
-    MOCK_METHOD(Status, close, (RuntimeState * state, Status close_status), (override));
+    MOCK_METHOD(Status, close, (RuntimeState * state, const Status& close_status), (override));
     // Add other methods as needed for your tests
 };
 

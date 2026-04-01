@@ -40,7 +40,7 @@
 #include <iostream>
 #include <mutex>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"

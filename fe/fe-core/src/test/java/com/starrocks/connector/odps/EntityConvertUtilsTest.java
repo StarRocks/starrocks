@@ -31,6 +31,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -190,7 +191,9 @@ public class EntityConvertUtilsTest {
         Type result = EntityConvertUtils.convertType(structTypeInfo);
         Type expectedType1 = TypeFactory.createDefaultCatalogString();
         Type expectedType2 = IntegerType.INT;
-        Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
+        StructField field1 = new StructField("fieldTypeInfo1", expectedType1);
+        StructField field2 = new StructField("fieldTypeInfo2", expectedType2);
+        Type expectedType = new StructType(ImmutableList.of(field1, field2), true);
         assertEquals(expectedType, result);
     }
 

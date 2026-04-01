@@ -10,8 +10,6 @@ displayed_sidebar: docs
 
 ADMIN CANCEL REPAIR 仅适用于存算一体集群中的内表。
 
-详细操作指南请参阅[管理副本](../../../../administration/management/resource_management/Replica.md)。
-
 :::tip
 
 该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../../account-management/GRANT.md) 为用户赋权。

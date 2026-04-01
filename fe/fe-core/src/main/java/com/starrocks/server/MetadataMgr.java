@@ -633,6 +633,11 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return getBasicTable(context, catalogName, dbName, tblName, false);
+    }
+
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                    boolean fetchExternalMetadata) {
         if (catalogName == null) {
             return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
@@ -641,7 +646,11 @@ public class MetadataMgr {
             return getTable(context, catalogName, dbName, tblName);
         }
 
-        // for external catalog, do not reach external metadata service
+        // for external catalog, optionally reach external metadata service
+        if (fetchExternalMetadata) {
+            return getTable(context, catalogName, dbName, tblName);
+        }
+
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(
                         metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
@@ -794,20 +803,6 @@ public class MetadataMgr {
                                          ScalarOperator predicate) {
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1,
                 TvrTableSnapshot.empty());
-    }
-
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
-            } catch (Exception e) {
-                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
-                        table.getCatalogName(), table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
     }
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {

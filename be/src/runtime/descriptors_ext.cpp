@@ -173,6 +173,7 @@ std::vector<int32_t> IcebergTableDescriptor::partition_source_index_in_schema() 
 
 const std::vector<std::string> IcebergTableDescriptor::full_column_names() {
     std::vector<std::string> full_column_names;
+    full_column_names.reserve(_columns.size());
     for (const auto& column : _columns) {
         full_column_names.emplace_back(column.column_name);
     }
@@ -313,6 +314,19 @@ int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) con
         ++idx;
     }
     return -1;
+}
+
+std::optional<std::string> HiveTableDescriptor::get_column_default_value(const SlotDescriptor* slot) const {
+    for (const auto& column : _columns) {
+        if (column.column_name != slot->col_name()) {
+            continue;
+        }
+        if (column.__isset.default_value) {
+            return column.default_value;
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 IcebergMetadataTableDescriptor::IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -529,7 +543,8 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_SNAPSHOTS_TABLE:
         case TTableType::ICEBERG_MANIFESTS_TABLE:
         case TTableType::ICEBERG_FILES_TABLE:
-        case TTableType::ICEBERG_PARTITIONS_TABLE: {
+        case TTableType::ICEBERG_PARTITIONS_TABLE:
+        case TTableType::ICEBERG_PROPERTIES_TABLE: {
             desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
             break;
         }

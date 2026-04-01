@@ -23,6 +23,7 @@
 #include "column/column_access_path.h"
 #include "column/type_traits.h"
 #include "common/compiler_util.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
@@ -552,7 +553,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     RETURN_IF_ERROR(cm.parse_conjuncts());
@@ -901,7 +902,7 @@ void OlapScanNode::_close_pending_scanners() {
     }
 }
 
-pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
     size_t dop = morsel_queue_factory->size();

@@ -46,6 +46,7 @@
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"
@@ -364,8 +365,7 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts),
-                                                                           index_opt);
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
         }
     }
     return Status::OK();

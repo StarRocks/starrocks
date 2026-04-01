@@ -51,6 +51,7 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.EnumSet;
@@ -62,6 +63,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
+import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
@@ -89,6 +91,7 @@ public abstract class MVPCTRefreshPartitioner {
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPartitioner.class);
     private final Logger logger;
 
     protected final MvTaskRunContext mvContext;
@@ -270,40 +273,59 @@ public abstract class MVPCTRefreshPartitioner {
     }
 
     /**
-     * Compute the partitioned to be refreshed in this task, according to [start, end), ttl, and other context info
-     * If it's tentative, only return the result rather than modify any state
-     * IF it's not, it would modify the context state, like `NEXT_PARTITION_START`
+     * Detect all MV partitions that need refresh, including partition change detection and
+     * potential partition calculation, but without any batch filtering (no partition_refresh_number,
+     * no adaptive truncation, no refreshPartitionLimit).
+     *
+     * <p>This is used by IVM to record complete PCT metadata that reflects all actually refreshed partitions.
      */
-    public PCellSortedSet getMVToRefreshedPartitions(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
+    public PCellSortedSet detectMVPartitionsToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
             throws AnalysisException, LockTimeoutException {
         PCellSortedSet mvToRefreshedPartitions = null;
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            logger.warn("failed to lock database: {} in checkMvToRefreshedPartitions", db.getFullName());
-            throw new LockTimeoutException("Failed to lock database: " + db.getFullName());
+            logger.warn("failed to lock database: {} in detectMVPartitionsToRefresh", db.getFullName());
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire read lock on database %s within %d ms " +
+                    "when detecting partitions to refresh",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms));
         }
-
         try {
             mvToRefreshedPartitions = getMVPartitionsToRefresh(snapshotBaseTables);
             if (mvToRefreshedPartitions == null || mvToRefreshedPartitions.isEmpty()) {
                 logger.info("no partitions to refresh for materialized view");
                 return mvToRefreshedPartitions;
             }
-            // calculate the associated potential partitions to refresh
             calcPotentialMVRefreshPartitions(mvToRefreshedPartitions);
-
-            // filter partitions to avoid refreshing too many partitions
-            filterMVToRefreshPartitions(mvToRefreshedPartitions);
-
-            int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
-            logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
-                            "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
-                    partitionRefreshNumber, mvToRefreshedPartitions, mvToRefreshPotentialPartitions,
-                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
+        return mvToRefreshedPartitions;
+    }
+
+    /**
+     * Compute the partitions to be refreshed in this task, according to [start, end), ttl, and other context info.
+     * This applies batch filtering (partition_refresh_number, adaptive, refreshPartitionLimit) on top of
+     * {@link #detectMVPartitionsToRefresh} results.
+     * If it's tentative, only return the result rather than modify any state.
+     * If it's not, it would modify the context state, like `NEXT_PARTITION_START`.
+     */
+    public PCellSortedSet getMVToRefreshedPartitions(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables)
+            throws AnalysisException, LockTimeoutException {
+        PCellSortedSet mvToRefreshedPartitions = detectMVPartitionsToRefresh(snapshotBaseTables);
+        if (mvToRefreshedPartitions == null || mvToRefreshedPartitions.isEmpty()) {
+            return mvToRefreshedPartitions;
+        }
+
+        // filter partitions to avoid refreshing too many partitions
+        filterMVToRefreshPartitions(mvToRefreshedPartitions);
+
+        int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
+        logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
+                        "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
+                partitionRefreshNumber, mvToRefreshedPartitions, mvToRefreshPotentialPartitions,
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         return mvToRefreshedPartitions;
     }
 
@@ -565,6 +587,7 @@ public abstract class MVPCTRefreshPartitioner {
      * Whether non-partitioned materialized view needs to be refreshed or not, it needs refresh when:
      * - its base table is not supported refresh by partition.
      * - its base table has updated.
+     * - its base table has deleted partitions.
      */
     public static boolean isNonPartitionedMVNeedToRefresh(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                                           MaterializedView mv,
@@ -575,6 +598,10 @@ public abstract class MVPCTRefreshPartitioner {
                 return true;
             }
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
+                return true;
+            }
+            // Check if any partitions have been deleted from external tables
+            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
                 return true;
             }
         }

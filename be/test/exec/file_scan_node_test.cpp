@@ -18,6 +18,8 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"

@@ -17,6 +17,8 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.Objects;
+
 public class InformationFunction extends Expr {
     private final String funcType;
     private long intValue;
@@ -76,6 +78,22 @@ public class InformationFunction extends Expr {
         return strValue;
     }
 
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), funcType, intValue, strValue);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
+            return false;
+        }
+        InformationFunction that = (InformationFunction) o;
+        return intValue == that.intValue
+                && Objects.equals(funcType, that.funcType)
+                && Objects.equals(strValue, that.strValue);
+    }
 
     /**
      * Below function is added by new analyzer

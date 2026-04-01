@@ -472,7 +472,9 @@ public:
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
     // get batch call stub
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+    // numActualVarArgs: actual number of varargs input columns; only meaningful when the method uses varargs
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
+                                   int numActualVarArgs = 0);
 
     Status init();
 
@@ -487,7 +489,7 @@ private:
 struct MethodTypeDescriptor {
     LogicalType type;
     bool is_box;
-    bool is_array;
+    bool is_array = false;
 };
 
 struct JavaMethodDescriptor {
@@ -504,6 +506,11 @@ class ClassAnalyzer {
 public:
     ClassAnalyzer() = default;
     ~ClassAnalyzer() = default;
+
+    // Strip generic type parameters from a JNI method signature.
+    // e.g. "(Ljava/util/List<java/lang/String>;)V" -> "(Ljava/util/List;)V"
+    static void strip_jni_generic_types(std::string* sign);
+
     Status has_method(jclass clazz, const std::string& method, bool* has);
     Status get_signature(jclass clazz, const std::string& method, std::string* sign);
     Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);

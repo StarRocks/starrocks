@@ -47,6 +47,8 @@
 #include "base/time/ratelimit.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
@@ -1003,7 +1005,7 @@ void Tablet::calc_missed_versions(int64_t spec_version, std::vector<Version>* mi
     std::shared_lock rdlock(_meta_lock);
     if (_updates != nullptr) {
         for (int64_t v = _updates->max_version() + 1; v <= spec_version; v++) {
-            missed_versions->emplace_back(Version(v, v));
+            missed_versions->emplace_back(v, v);
         }
     } else {
         calc_missed_versions_unlocked(spec_version, missed_versions);
@@ -1032,7 +1034,7 @@ void Tablet::calc_missed_versions_unlocked(int64_t spec_version, std::vector<Ver
     for (const Version& version : existing_versions) {
         if (version.first > last_version + 1) {
             for (int64_t i = last_version + 1; i < version.first; ++i) {
-                missed_versions->emplace_back(Version(i, i));
+                missed_versions->emplace_back(i, i);
             }
         }
         last_version = version.second;
@@ -1041,7 +1043,7 @@ void Tablet::calc_missed_versions_unlocked(int64_t spec_version, std::vector<Ver
         }
     }
     for (int64_t i = last_version + 1; i <= spec_version; ++i) {
-        missed_versions->emplace_back(Version(i, i));
+        missed_versions->emplace_back(i, i);
     }
 }
 

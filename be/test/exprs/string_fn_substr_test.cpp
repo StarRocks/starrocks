@@ -18,6 +18,7 @@
 #include <random>
 
 #include "butil/time.h"
+#include "common/config_exec_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 
@@ -63,7 +64,7 @@ TEST_F(StringFunctionSubstrTest, substringNormalTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ(std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ(std::to_string(k), v->get_slice(k).to_string());
     }
 }
 
@@ -91,7 +92,7 @@ TEST_F(StringFunctionSubstrTest, substringChineseTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ(Slice("中文"), v->get_data()[k]);
+        ASSERT_EQ(Slice("中文"), v->get_slice(k));
     }
 }
 
@@ -119,7 +120,7 @@ TEST_F(StringFunctionSubstrTest, substringleftTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 10; ++k) {
-        ASSERT_EQ(Slice(std::string("串") + std::to_string(k)), v->get_data()[k]);
+        ASSERT_EQ(Slice(std::string("串") + std::to_string(k)), v->get_slice(k));
     }
 }
 
@@ -307,7 +308,7 @@ TEST_F(StringFunctionSubstrTest, substringOverleftTest) {
 
     auto v = ColumnHelper::as_column<const BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("", v->get_data()[k].to_string());
+        ASSERT_EQ("", v->get_slice(k).to_string());
     }
 }
 
@@ -336,7 +337,7 @@ TEST_F(StringFunctionSubstrTest, substringConstTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ(std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ(std::to_string(k), v->get_slice(k).to_string());
     }
 }
 
@@ -371,7 +372,7 @@ TEST_F(StringFunctionSubstrTest, substringNullTest) {
         if (k % 2 == 0) {
             ASSERT_TRUE(nv->is_null(k));
         } else {
-            ASSERT_EQ(std::to_string(k), v->get_data()[k].to_string());
+            ASSERT_EQ(std::to_string(k), v->get_slice(k).to_string());
         }
     }
 }
@@ -398,9 +399,9 @@ TEST_F(StringFunctionSubstrTest, leftTest) {
     for (int k = 0; k < 20; ++k) {
         std::string s = std::to_string(k) + "TEST";
         if (k < s.size()) {
-            ASSERT_EQ(0, strncmp(s.c_str(), v->get_data()[k].to_string().c_str(), k));
+            ASSERT_EQ(0, strncmp(s.c_str(), v->get_slice(k).to_string().c_str(), k));
         } else {
-            ASSERT_EQ(s, v->get_data()[k].to_string());
+            ASSERT_EQ(s, v->get_slice(k).to_string());
         }
     }
 }
@@ -427,9 +428,9 @@ TEST_F(StringFunctionSubstrTest, rightTest) {
     for (int k = 0; k < 20; ++k) {
         std::string s = std::to_string(k) + "TEST";
         if (k < s.size()) {
-            ASSERT_EQ(0, strncmp(s.c_str() + s.size() - k, v->get_data()[k].to_string().c_str(), k));
+            ASSERT_EQ(0, strncmp(s.c_str() + s.size() - k, v->get_slice(k).to_string().c_str(), k));
         } else {
-            ASSERT_EQ(s, v->get_data()[k].to_string());
+            ASSERT_EQ(s, v->get_slice(k).to_string());
         }
     }
 }

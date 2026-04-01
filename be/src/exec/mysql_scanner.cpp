@@ -42,8 +42,7 @@
 
 namespace starrocks {
 
-MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
-        : _my_param(param), _my_conn(nullptr), _my_result(nullptr), _opened(false), _field_num(0) {}
+MysqlScanner::MysqlScanner(const MysqlScannerParam& param) : _my_param(param), _my_conn(nullptr), _my_result(nullptr) {}
 
 MysqlScanner::~MysqlScanner() {
     if (_my_result) {

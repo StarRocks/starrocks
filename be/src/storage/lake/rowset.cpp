@@ -18,9 +18,14 @@
 #include <unordered_set>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -267,7 +272,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.fs = options.lake_io_opts.fs;
     } else {
         auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-        ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+        ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     }
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
@@ -288,14 +293,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    seg_options.tablet_id = tablet_id();
+    seg_options.rowset_id = metadata().id();
+    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
                 _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
         seg_options.version = options.version;
-        seg_options.tablet_id = tablet_id();
-        seg_options.rowset_id = metadata().id();
     }
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
@@ -445,7 +451,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     seg_iterators.reserve(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
@@ -480,7 +486,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
@@ -601,6 +607,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
     };
     std::vector<SegmentLoadFuture> segment_futures;
+    // The parallel tasks capture |this| pointer. Must wait for all tasks
+    // to complete before returning, to prevent use-after-free if the
+    // Rowset is destroyed while tasks are still running.
+    DeferOp wait_futures([&segment_futures]() {
+        for (auto& f : segment_futures) {
+            if (f.future.valid()) {
+                f.future.wait();
+            }
+        }
+    });
 
     // Pre-allocate segments vector to maintain correct index mapping.
     // This is necessary because when parallel loading is enabled with skip_segment_idxs,
@@ -673,6 +689,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         if (_parallel_load) {
             int captured_idx = current_idx;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
+                if (!injected_st.ok()) {
+                    return std::make_pair(StatusOr<SegmentPtr>(injected_st), seg_name);
+                }
+#endif
                 auto result = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);

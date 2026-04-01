@@ -17,11 +17,13 @@
 #include <storage/chunk_helper.h>
 
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

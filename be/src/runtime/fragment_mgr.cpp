@@ -46,6 +46,9 @@
 #include "base/network/network_util.h"
 #include "base/uid_util.h"
 #include "base/url_coding.h"
+#include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
@@ -348,8 +351,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     }
 }
 
-FragmentMgr::FragmentMgr(ExecEnv* exec_env)
-        : _exec_env(exec_env), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
+FragmentMgr::FragmentMgr(ExecEnv* exec_env) : _exec_env(exec_env), _cancel_thread([this] { cancel_worker(); }) {
     Thread::set_thread_name(_cancel_thread, "frag_mgr_cancel");
     REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
@@ -438,8 +440,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             return Status::OK();
         }
     }
-    exec_state.reset(new FragmentExecState(params.params.query_id, fragment_instance_id, params.backend_num, _exec_env,
-                                           params.coord));
+    exec_state = std::make_shared<FragmentExecState>(params.params.query_id, fragment_instance_id, params.backend_num,
+                                                     _exec_env, params.coord);
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
     {

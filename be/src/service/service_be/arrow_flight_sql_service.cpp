@@ -25,6 +25,7 @@
 #include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
 #include "exprs/base64.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 

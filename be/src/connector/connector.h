@@ -24,7 +24,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_filter/runtime_filter_probe.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -200,6 +200,7 @@ enum ConnectorType {
     BINLOG = 6,
     ICEBERG = 7,
     BENCHMARK = 8,
+    CACHE_STATS = 9,
 };
 
 class Connector {
@@ -214,6 +215,7 @@ public:
     static const std::string BINLOG;
     static const std::string ICEBERG;
     static const std::string BENCHMARK;
+    static const std::string CACHE_STATS;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

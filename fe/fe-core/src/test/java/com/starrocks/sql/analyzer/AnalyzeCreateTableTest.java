@@ -19,6 +19,9 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +68,31 @@ public class AnalyzeCreateTableTest {
         Assertions.assertEquals("table1", stmt.getTableName());
         Assertions.assertNull(stmt.getPartitionDesc());
         Assertions.assertNull(stmt.getProperties());
+    }
+
+    @Test
+    public void testVarbinaryWithoutLengthMaterializesDefaultLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_varbinary_default (col1 int, col2 varbinary) engine=olap " +
+                        "duplicate key(col1) distributed by hash(col1) buckets 10");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+        Assertions.assertEquals("varbinary(" + TypeFactory.getOlapMaxVarcharLength() + ")",
+                type.toSql());
+    }
+
+    @Test
+    public void testExternalFileTableVarbinaryKeepsUnspecifiedLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create external table test.file_varbinary (col1 int, col2 varbinary) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(-1, type.getLength());
+        Assertions.assertEquals("varbinary", type.toSql());
     }
 
     @Test

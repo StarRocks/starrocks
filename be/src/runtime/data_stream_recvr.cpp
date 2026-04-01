@@ -127,6 +127,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
 std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_path_chunk_providers() {
     DCHECK(_is_merging);
     std::vector<merge_path::MergePathChunkProvider> chunk_providers;
+    chunk_providers.reserve(_sender_queues.size());
     for (SenderQueue* q : _sender_queues) {
         chunk_providers.emplace_back([q](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
             if (!q->has_chunk()) {

@@ -40,6 +40,7 @@
 #include <map>
 #include <set>
 
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
@@ -47,6 +48,7 @@
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif
@@ -748,7 +750,8 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
         version->set_creation_time(time(nullptr));
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             auto rsid = rowset_meta_pb.rowset_seg_id();
-            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + std::max(1L, rowset_meta_pb.num_segments()));
+            next_segment_id =
+                    std::max<uint32_t>(next_segment_id, rsid + std::max<int64_t>(1, rowset_meta_pb.num_segments()));
             version->add_rowsets(rsid);
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);

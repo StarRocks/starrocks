@@ -173,10 +173,10 @@ private:
     std::unordered_map<UniqueId, std::pair<time_t, std::string>> _aborted_load_channels;
 
     // check the total load mem consumption of this Backend
-    MemTracker* _mem_tracker;
+    MemTracker* _mem_tracker{nullptr};
 
     // thread to clean timeout load channels
-    bthread_t _load_channels_clean_thread;
+    bthread_t _load_channels_clean_thread{INVALID_BTHREAD};
 
     // Thread pool used to handle rpc request asynchronously
     std::unique_ptr<ThreadPool> _async_rpc_pool;

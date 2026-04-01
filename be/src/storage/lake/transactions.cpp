@@ -15,6 +15,9 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
@@ -90,8 +93,8 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true,
-                                                   txns[index_version - base_version - 1].gtid());
+        auto gtid = txns.size() == 1 ? txns[0].gtid() : txns[index_version - base_version - 1].gtid();
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version, true, gtid);
         if (res.ok()) {
             version = index_version;
         } else {
@@ -513,7 +516,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             // TODO: use rename() API if supported by the underlying filesystem.
             auto st = fs::copy_file(txn_log_path, txn_vlog_path).status();
             if (st.is_not_found()) {
-                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
                 if (check_st.ok()) {
                     continue;

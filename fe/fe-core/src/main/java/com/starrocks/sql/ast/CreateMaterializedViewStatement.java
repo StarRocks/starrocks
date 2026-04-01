@@ -34,7 +34,7 @@ import java.util.Map;
  * Materialized view is performed to materialize the results of query.
  * This clause is used to create a new materialized view for specified tables
  * through a specified query stmt.
- * The differences with CreateMaterializedViewStmt:
+ * The differences with CreateSyncMVStmt:
  * 1. Supports querying materialized view directly and try best to keep the result consistent with querying base tables
  * 2. Supports creating mvs on multi tables
  * 3. partition and distribution desc can be specified for each mv independently.

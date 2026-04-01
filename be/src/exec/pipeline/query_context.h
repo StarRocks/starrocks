@@ -34,12 +34,13 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/debug/query_trace.h"
 
 namespace starrocks {
 
 class StreamEpochManager;
+class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
 
@@ -49,7 +50,6 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
-class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -284,9 +284,16 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
+    // Snapshot statistic without requiring final sink (best-effort, used for failure/cancel reporting).
+    std::shared_ptr<QueryStatistics> snapshot_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
     bool is_final_sink() const { return _is_final_sink; }
     void set_final_sink() { _is_final_sink = true; }
+
+    bool mark_audit_statistics_reported() {
+        bool expected = false;
+        return _audit_statistics_reported.compare_exchange_strong(expected, true);
+    }
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
@@ -316,7 +323,7 @@ private:
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
-    size_t _total_fragments;
+    size_t _total_fragments{0};
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
     int64_t _delivery_deadline = 0;
@@ -354,6 +361,7 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic_bool _audit_statistics_reported = false;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;

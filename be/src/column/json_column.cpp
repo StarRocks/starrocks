@@ -187,7 +187,7 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
             // change column ptr to wrapper ptr
             _flat_columns.reserve(flat_columns.size());
             for (auto& col : flat_columns) {
-                _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+                _flat_columns.emplace_back(std::move(col));
             }
         }
     } else {
@@ -196,7 +196,7 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
         // change column ptr to wrapper ptr
         _flat_columns.reserve(flat_columns.size());
         for (auto& col : flat_columns) {
-            _flat_columns.emplace_back(Column::WrappedPtr(std::move(col)));
+            _flat_columns.emplace_back(std::move(col));
         }
 
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {

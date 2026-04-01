@@ -21,6 +21,7 @@
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
+#include "common/config_starlet_fwd.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/query_context.h"

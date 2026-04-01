@@ -36,6 +36,7 @@ set(UTIL_FILES
 # perf-counters.cpp
   static_asserts.cpp
   stack_util.cpp
+  time_guard.cpp
   system_metrics.cpp
 # coding_util.cpp
   thrift_rpc_helper.cpp
@@ -45,7 +46,6 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
-  variant_encoder.cpp
   hdfs_util.cpp
   jvm_metrics.cpp
   llm_cache.cpp

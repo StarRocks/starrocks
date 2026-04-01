@@ -50,12 +50,8 @@
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/logging.h"
-#include "common/object_pool.h"
-#include "common/runtime_profile.h"
-#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -66,11 +62,13 @@ class Status;
 class ExecEnv;
 class Expr;
 class DateTimeValue;
+class MemPool;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
+class RuntimeProfile;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;
@@ -93,6 +91,7 @@ class RuntimeState {
 public:
     // for ut only
     RuntimeState();
+    RuntimeState(const RuntimeState&) = delete;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -315,13 +314,7 @@ public:
 
     bool enable_agg_spill() const { return spillable_operator_mask() & (1LL << TSpillableOperatorType::AGG); }
     bool enable_spill_partitionwise_agg() const { return enable_agg_spill() && spill_partitionwise_agg(); }
-    int spill_partitionwise_agg_partition_num() const {
-        if (_spill_options->spill_partitionwise_agg_partition_num <= 0) {
-            return config::spill_init_partition;
-        } else {
-            return std::max(std::min(_spill_options->spill_partitionwise_agg_partition_num, 256), 4);
-        }
-    }
+    int spill_partitionwise_agg_partition_num() const;
     bool enable_spill_partitionwise_agg_skew_elimination() const {
         return enable_agg_spill() && spill_partitionwise_agg_skew_elimination();
     }
@@ -396,6 +389,10 @@ public:
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
     }
 
+    bool error_for_division_by_zero() const {
+        return _query_options.__isset.error_for_division_by_zero && _query_options.error_for_division_by_zero;
+    }
+
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
@@ -445,7 +442,7 @@ public:
 
     void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
-        _tablet_fail_infos.emplace_back(std::move(fail_info));
+        _tablet_fail_infos.emplace_back(fail_info);
     }
 
     std::vector<TSinkCommitInfo>& sink_commit_infos() {
@@ -455,7 +452,7 @@ public:
 
     void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
         std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
-        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
+        _sink_commit_infos.emplace_back(sink_commit_info);
     }
 
     // get mem limit for load channel
@@ -664,9 +661,6 @@ private:
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
-
-    // prohibit copies
-    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 

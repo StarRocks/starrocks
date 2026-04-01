@@ -48,7 +48,7 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
     size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, chunk));
-        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, std::move(columns[i]));
+        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, columns[i]);
     }
 
     // get call stub
@@ -75,6 +75,7 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
     FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
+    args_types.reserve(_children.size());
     for (Expr* child : _children) {
         args_types.push_back(child->type());
     }
@@ -100,7 +101,8 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto function_cache = UserFunctionCache::instance();
-        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type);
+        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type,
+                                                  _fn.cloud_configuration);
         if (_fn.hdfs_location != "inline") {
             RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path));
         } else {

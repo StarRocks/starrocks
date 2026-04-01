@@ -26,6 +26,7 @@
 #include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"

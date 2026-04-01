@@ -21,10 +21,11 @@
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/descriptors.h"
+#include "gen_cpp/Partitions_types.h"
 
 namespace starrocks {
 
+class ExprContext;
 class PriorityThreadPool;
 
 namespace pipeline {

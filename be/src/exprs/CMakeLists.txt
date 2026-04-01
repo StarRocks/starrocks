@@ -29,6 +29,9 @@ set(EXPR_CORE_FILES
   binary_predicate.cpp
   bitmap_functions.cpp
   cast_nested.cpp
+  cast_expr.cpp
+  cast_expr_array.cpp
+  cast_expr_struct.cpp
   case_expr.cpp
   cast_expr_json.cpp
   cast_expr_map.cpp
@@ -38,6 +41,7 @@ set(EXPR_CORE_FILES
   condition_expr.cpp
   encryption_functions.cpp
   es_functions.cpp
+  expr_factory.cpp
   expr_executor.cpp
   function_helper.cpp
   gin_functions.cpp
@@ -63,7 +67,8 @@ set(EXPR_CORE_FILES
   subfield_expr.cpp
   table_function/json_each.cpp
   time_functions.cpp
-  variant_path_parser.cpp
+  variant_path_reader.cpp
+  variant_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
@@ -92,21 +97,17 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
   binary_functions.cpp
-  expr_factory.cpp
+  expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
   array_functions.cpp
   arrow_function_call.cpp
-  cast_expr.cpp
-  cast_expr_array.cpp
-  cast_expr_struct.cpp
   dictmapping_expr.cpp
   find_in_set.cpp
   function_call_expr.cpp
   geo_functions.cpp
   inet_aton.cpp
   json_functions.cpp
-  variant_functions.cpp
   locate.cpp
   percentile_functions.cpp
   split.cpp

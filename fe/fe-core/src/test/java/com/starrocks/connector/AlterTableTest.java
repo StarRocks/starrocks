@@ -24,6 +24,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -282,6 +285,35 @@ public class AlterTableTest extends TableTestBase {
     }
 
     @Test
+    public void testReplacePartitionColumn() throws Exception {
+        String sql = "alter table iceberg_catalog.db.srTableName replace partition column day(dt) with month(dt)";
+        AlterTableStmt stmt =
+                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(1, stmt.getAlterClauseList().size());
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof ReplacePartitionColumnClause);
+        ReplacePartitionColumnClause clause = (ReplacePartitionColumnClause) stmt.getAlterClauseList().get(0);
+        Assertions.assertTrue(clause.getOldPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertTrue(clause.getNewPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertEquals("day", ((FunctionCallExpr) clause.getOldPartitionExpr()).getFunctionName());
+        Assertions.assertEquals("month", ((FunctionCallExpr) clause.getNewPartitionExpr()).getFunctionName());
+    }
+
+    @Test
+    public void testReplacePartitionColumnByFieldName() throws Exception {
+        String sql = "alter table iceberg_catalog.db.srTableName replace partition column dt_day with month(dt)";
+        AlterTableStmt stmt =
+                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
+        Assertions.assertEquals(1, stmt.getAlterClauseList().size());
+        Assertions.assertTrue(stmt.getAlterClauseList().get(0) instanceof ReplacePartitionColumnClause);
+        ReplacePartitionColumnClause clause = (ReplacePartitionColumnClause) stmt.getAlterClauseList().get(0);
+        // field name "dt_day" is parsed as a SlotRef
+        Assertions.assertTrue(clause.getOldPartitionExpr() instanceof SlotRef);
+        Assertions.assertEquals("dt_day", ((SlotRef) clause.getOldPartitionExpr()).getColumnName());
+        Assertions.assertTrue(clause.getNewPartitionExpr() instanceof FunctionCallExpr);
+        Assertions.assertEquals("month", ((FunctionCallExpr) clause.getNewPartitionExpr()).getFunctionName());
+    }
+
+    @Test
     public void testAlterView() throws Exception {
         new MockUp<IcebergHiveCatalog>() {
             @Mock
@@ -312,5 +344,92 @@ public class AlterTableTest extends TableTestBase {
                 "Unknown database 'db'",
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
 
+    }
+
+    @Test
+    public void testReplacePartitionColumnAnalyzerFullPath() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(1, "db");
+            }
+
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tblName) {
+                return mockedNativeTableFV2;
+            }
+
+            @Mock
+            boolean tableExists(ConnectContext context, String dbName, String tblName) {
+                return true;
+            }
+        };
+
+        // Use a unique table name to avoid metadata cache conflicts with other tests
+        String tbl = "iceberg_catalog.db.partTestTable";
+
+        // --- Error cases (no mutation, test these first) ---
+
+        // Same old and new should be rejected
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " replace partition column day(dt) with day(dt)",
+                        starRocksAssert.getCtx()));
+
+        // Non-existent old partition column (table has day(dt) not month(dt))
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " replace partition column month(dt) with year(dt)",
+                        starRocksAssert.getCtx()));
+
+        // Non-existent field name should be rejected
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " replace partition column no_such_field with month(dt)",
+                        starRocksAssert.getCtx()));
+
+        // Column "nonexistent" doesn't exist in table schema
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " replace partition column day(dt) with day(nonexistent)",
+                        starRocksAssert.getCtx()));
+
+        // Drop non-existent partition column should fail (table has day(dt), not month(dt))
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " drop partition column month(dt)",
+                        starRocksAssert.getCtx()));
+
+        // Add partition column that already exists should fail (table already has day(dt))
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " add partition column day(dt)",
+                        starRocksAssert.getCtx()));
+
+        // --- Success cases (mutate table) ---
+
+        // 1. Successful replace day(dt) with month(dt) through full analyzer + executor path
+        String sql = "alter table " + tbl + " replace partition column day(dt) with month(dt)";
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
+        mockedNativeTableFV2.refresh();
+
+        // 2. Now table has month(dt). Replace by field name "dt_month" with year(dt)
+        sql = "alter table " + tbl + " replace partition column dt_month with year(dt)";
+        stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
+        mockedNativeTableFV2.refresh();
+
+        // 3. Now add month(dt) back so table has both year(dt) and month(dt)
+        sql = "alter table " + tbl + " add partition column month(dt)";
+        stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
+        mockedNativeTableFV2.refresh();
+
+        // 4. Replace year(dt) with month(dt) should fail because month(dt) already exists
+        Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(
+                        "alter table " + tbl + " replace partition column year(dt) with month(dt)",
+                        starRocksAssert.getCtx()));
     }
 }

@@ -29,7 +29,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/stack_util.h"
-#include "gutil//macros.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
@@ -57,7 +57,10 @@ class StackTraceMutex {
 public:
     StackTraceMutex() : _mutex() {}
 
-    DISALLOW_COPY_AND_MOVE(StackTraceMutex);
+    StackTraceMutex(const StackTraceMutex&) = delete;
+    StackTraceMutex& operator=(const StackTraceMutex&) = delete;
+    StackTraceMutex(StackTraceMutex&&) = delete;
+    StackTraceMutex& operator=(StackTraceMutex&&) = delete;
 
     void lock() {
         while (!try_lock_for(std::chrono::minutes(5))) {
@@ -93,6 +96,11 @@ template <>
 class StackTraceMutex<bthread::Mutex> {
 public:
     StackTraceMutex() : _mutex() {}
+
+    StackTraceMutex(const StackTraceMutex&) = delete;
+    StackTraceMutex& operator=(const StackTraceMutex&) = delete;
+    StackTraceMutex(StackTraceMutex&&) = delete;
+    StackTraceMutex& operator=(StackTraceMutex&&) = delete;
 
     void lock() {
         while (!try_lock_for(std::chrono::minutes(5))) {

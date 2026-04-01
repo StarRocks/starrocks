@@ -38,10 +38,10 @@ static const RE2 STARTS_WITH_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*
 // A regex to match any regex pattern which is equivalent to a constant string match.
 static const RE2 EQUALS_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)\$)", re2::RE2::Quiet);
 
-static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
-static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
-static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
-static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|(\\\\)|([^%_\\]))+)(?:%+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|(\\\\)|([^%_\\]))+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|(\\\\)|([^%_\\]))+)(?:%+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|(\\\\)|([^%_\\]))+))", re2::RE2::Quiet);
 static const char* PROMPT_INFO = " so we switch to use re2.";
 
 bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
@@ -458,26 +458,38 @@ enum class FastPathType {
 };
 
 FastPathType extract_fast_path(const Slice& pattern) {
-    if (pattern.empty() || pattern.size < 2) {
+    if (pattern.empty()) {
         return FastPathType::REGEX;
     }
 
-    if (pattern.data[0] == '_' || pattern.data[pattern.size - 1] == '_') {
-        return FastPathType::REGEX;
-    }
+    bool is_end_with = (pattern.data[0] == '%');
+    bool is_start_with = false;
+    size_t start = is_end_with ? 1 : 0;
 
-    bool is_end_with = pattern.data[0] == '%';
-    bool is_start_with = pattern.data[pattern.size - 1] == '%';
-
-    for (size_t i = 1; i < pattern.size - 1;) {
-        if (pattern.data[i] == '\\') {
+    for (size_t i = start; i < pattern.size;) {
+        if (pattern.data[i] == '\\' && i + 1 < pattern.size) {
             i += 2;
-        } else {
-            if (pattern.data[i] == '%' || pattern.data[i] == '_') {
+        } else if (pattern.data[i] == '%') {
+            if (i == pattern.size - 1) {
+                is_start_with = true;
+            } else {
                 return FastPathType::REGEX;
             }
             i++;
+        } else if (pattern.data[i] == '_') {
+            return FastPathType::REGEX;
+        } else {
+            i++;
         }
+    }
+
+    size_t content_start = is_end_with ? 1 : 0;
+    size_t content_end = is_start_with ? pattern.size - 1 : pattern.size;
+    if (content_start >= content_end) {
+        if (is_end_with && is_start_with) {
+            return FastPathType::SUBSTRING;
+        }
+        return FastPathType::REGEX;
     }
 
     if (is_end_with && is_start_with) {
@@ -673,8 +685,7 @@ void LikePredicate::remove_escape_character(std::string* search_string) {
     tmp_search_string.swap(*search_string);
     int len = tmp_search_string.length();
     for (int i = 0; i < len;) {
-        if (tmp_search_string[i] == '\\' && i + 1 < len &&
-            (tmp_search_string[i + 1] == '%' || tmp_search_string[i + 1] == '_')) {
+        if (tmp_search_string[i] == '\\' && i + 1 < len) {
             search_string->append(1, tmp_search_string[i + 1]);
             i += 2;
         } else {

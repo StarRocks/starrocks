@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "serde/column_array_serde.h"

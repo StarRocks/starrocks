@@ -15,8 +15,12 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/exec_env.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -58,18 +62,25 @@ LakePersistentIndex::~LakePersistentIndex() {
 }
 
 Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", sstable_meta.sstables_size());
+    int64_t total_sst_filesize = 0;
+    int64_t sst_open_us = 0;
     uint64_t max_rss_rowid = 0;
     std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
     for (auto& sstable_pb : sstable_meta.sstables()) {
+        int64_t t_open = GetCurrentTimeMicros();
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
                                  block_cache->cache(), true /* need filter */, nullptr, metadata, _tablet_mgr));
+        sst_open_us += GetCurrentTimeMicros() - t_open;
+        total_sst_filesize += sstable_pb.filesize();
         if (cur_fileset.empty() ||
             (cur_fileset.back()->sstable_pb().has_fileset_id() &&
              UniqueId(cur_fileset.back()->sstable_pb().fileset_id()) == UniqueId(sstable_pb.fileset_id()))) {
@@ -90,6 +101,9 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
         _sstable_filesets.emplace_back(std::move(fileset));
         cur_fileset.clear();
     }
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_open_us", sst_open_us);
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_total_bytes", total_sst_filesize);
+    TRACE_COUNTER_INCREMENT("pindex_init_fileset_cnt", _sstable_filesets.size());
     // create memtable with previous rebuild `max_rss_rowid`,
     // to make sure we can generate sst order by `max_rss_rowid`.
     _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
@@ -116,10 +130,20 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 bool LakePersistentIndex::too_many_rebuild_files() const {
-    return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
+    return config::cloud_native_pk_index_rebuild_files_threshold > 0 &&
+           _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
+}
+
+bool LakePersistentIndex::too_many_rebuild_rows() const {
+    return config::cloud_native_pk_index_rebuild_rows_threshold > 0 &&
+           _need_rebuild_row_cnt >= config::cloud_native_pk_index_rebuild_rows_threshold;
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    // Track SST flush stats for publish phase monitoring
+    _publish_sst_flush_count++;
+    _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
+
     bool need_create_new_fileset = false;
     if (_sstable_filesets.empty()) {
         // first fileset
@@ -210,8 +234,9 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
     }
-    // Reset rebuild file count, avoid useless flush.
+    // Reset rebuild file/row count, avoid useless flush.
     _need_rebuild_file_cnt = 0;
+    _need_rebuild_row_cnt = 0;
     return Status::OK();
 }
 
@@ -274,8 +299,9 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
-        // Reset rebuild file count, avoid useless flush.
+        // Reset rebuild file/row count, avoid useless flush.
         _need_rebuild_file_cnt = 0;
+        _need_rebuild_row_cnt = 0;
     }
     return Status::OK();
 }
@@ -725,19 +751,24 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));
     }
 
-    std::unordered_set<std::string> standalone_sstable_filename;
+    // Collect all input sstable filenames unconditionally, so that standalone filesets
+    // (which match by filename) can always be found — even when the input sstable has a
+    // fileset_id. This handles the case where an sstable was written with fileset_id but
+    // the in-memory fileset is classified as standalone (no range field), which would
+    // previously cause "no matching sstable fileset found" errors.
+    std::unordered_set<std::string> input_sstable_filenames;
     std::unordered_set<UniqueId> fileset_ids;
     for (const auto& input_sstable : op_compaction.input_sstables()) {
+        input_sstable_filenames.insert(input_sstable.filename());
         if (input_sstable.has_fileset_id()) {
             fileset_ids.insert(input_sstable.fileset_id());
-        } else {
-            standalone_sstable_filename.insert(input_sstable.filename());
         }
     }
     // Whether contains this fileset.
+    // Standalone filesets (no range) are matched by filename; non-standalone by fileset_id.
     auto fileset_contains_func = [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
         if (fileset->is_standalone_sstable()) {
-            return standalone_sstable_filename.contains(fileset->standalone_sstable_filename());
+            return input_sstable_filenames.contains(fileset->standalone_sstable_filename());
         }
         return fileset_ids.contains(fileset->fileset_id());
     };
@@ -772,8 +803,8 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
-    if (too_many_rebuild_files() && !_memtable->empty()) {
-        // If we have too many files need to be rebuilt,
+    if ((too_many_rebuild_files() || too_many_rebuild_rows()) && !_memtable->empty()) {
+        // If we have too many files or rows need to be rebuilt,
         // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable(true));
     }
@@ -795,7 +826,9 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         }
     }
     builder->finalize_sstable_meta(sstable_meta);
-    _need_rebuild_file_cnt = need_rebuild_file_cnt(*builder->tablet_meta(), sstable_meta);
+    auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
+    _need_rebuild_file_cnt = file_cnt;
+    _need_rebuild_row_cnt = row_cnt;
     return Status::OK();
 }
 
@@ -873,14 +906,34 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     return Status::OK();
 }
 
-static size_t rebuild_segment_cnt(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
-    size_t cnt = 0;
+// Return {segment_file_cnt, segment_row_cnt} for segments that need to rebuild in a single pass.
+// Uses exact per-segment num_rows when segment_metas is fully populated (size matches segments and
+// every entry has num_rows set). Falls back to a proportional estimate based on the rowset's total
+// num_rows if segment_metas is absent or any entry is missing num_rows (e.g. synthesized by
+// MetaFileBuilder::add_rowset which sets only segment_idx without num_rows).
+static std::pair<size_t, int64_t> rebuild_segment_counts(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
+    size_t file_cnt = 0;
+    int64_t row_cnt = 0;
+    bool exact = (rowset.segment_metas_size() == rowset.segments_size());
     for (int i = 0; i < rowset.segments_size(); ++i) {
         if (get_rssid(rowset, i) >= rebuild_rss_id) {
-            ++cnt;
+            ++file_cnt;
+            if (exact) {
+                if (rowset.segment_metas(i).has_num_rows()) {
+                    row_cnt += rowset.segment_metas(i).num_rows();
+                } else {
+                    // This entry was synthesized without num_rows; give up on exact counting.
+                    exact = false;
+                    row_cnt = 0;
+                }
+            }
         }
     }
-    return cnt;
+    if (!exact && file_cnt > 0 && rowset.segments_size() > 0) {
+        // Proportional estimate when per-segment metadata is unavailable or incomplete.
+        row_cnt = rowset.num_rows() * static_cast<int64_t>(file_cnt) / rowset.segments_size();
+    }
+    return {file_cnt, row_cnt};
 }
 
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
@@ -906,24 +959,28 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
-// Return the files cnt that need to rebuild.
-size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metadata,
-                                                  const PersistentIndexSstableMetaPB& sstable_meta) {
-    size_t cnt = 0;
+// Return {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
+std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const TabletMetadataPB& metadata,
+                                                                    const PersistentIndexSstableMetaPB& sstable_meta) {
+    size_t file_cnt = 0;
+    int64_t row_cnt = 0;
     const auto& sstables = sstable_meta.sstables();
     const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
     for (const auto& rowset : metadata.rowsets()) {
         if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
             continue; // skip rowset
         }
-        cnt += rowset.del_files_size();
-        cnt += rebuild_segment_cnt(rowset, rebuild_rss_id);
+        file_cnt += rowset.del_files_size();
+        auto [seg_file_cnt, seg_row_cnt] = rebuild_segment_counts(rowset, rebuild_rss_id);
+        file_cnt += seg_file_cnt;
+        row_cnt += seg_row_cnt;
     }
-    return cnt;
+    return {file_cnt, row_cnt};
 }
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -932,7 +989,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
+    auto [file_cnt, row_cnt] = need_rebuild_counts(*metadata, metadata->sstable_meta());
+    _need_rebuild_file_cnt = file_cnt;
+    _need_rebuild_row_cnt = row_cnt;
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
     // Init PersistentIndex
@@ -966,7 +1025,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        StatusOr<std::vector<ChunkIteratorPtr>> res;
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
+            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+        }
         if (!res.ok()) {
             return res.status();
         }
@@ -1050,6 +1113,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);
+    TRACE_COUNTER_INCREMENT("segment_io_count_remote", stats.io_count_remote);
     return Status::OK();
 }
 

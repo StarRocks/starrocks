@@ -1,3 +1,4 @@
+// NOLINTBEGIN
 /*
 pdqsort.h - Pattern-defeating quicksort.
 
@@ -27,8 +28,6 @@ applications, and to alter it and redistribute it freely, subject to the followi
 #include <functional>
 #include <iterator>
 #include <utility>
-
-#include "common/compiler_util.h"
 
 #if __cplusplus >= 201103L
 #include <cstdint>
@@ -596,3 +595,4 @@ inline void pdqsort_branchless(Iter begin, Iter end) {
 }
 
 #undef PDQSORT_PREFER_MOVE
+// NOLINTEND

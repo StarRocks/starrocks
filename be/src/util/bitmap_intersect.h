@@ -99,7 +99,7 @@ public:
 
     explicit BitmapIntersect(const char* src) { deserialize(src); }
 
-    void add_key(const T key) {
+    void add_key(const T& key) {
         BitmapValue empty_bitmap;
         _bitmaps[key] = empty_bitmap;
     }

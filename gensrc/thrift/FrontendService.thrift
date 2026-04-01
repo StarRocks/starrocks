@@ -532,8 +532,10 @@ struct TTaskRunInfo {
     13: optional string properties
 
     14: optional string catalog
-    15: optional string job_id
-    16: optional i64 process_time
+    15: optional string warehouse
+
+    16: optional string job_id
+    17: optional i64 process_time
 }
 
 struct TGetTaskRunInfoResult {
@@ -850,6 +852,8 @@ struct TMasterOpRequest {
     38: optional bool isInternalStmt;
 
     39: optional bool is_arrow_flight_sql;
+
+    40: optional list<string> user_groups;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
@@ -1450,6 +1454,8 @@ struct TCreatePartitionRequest {
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
     5: optional bool is_temp
+    // timeout in seconds for partition creation request
+    6: optional i32 timeout_s
 }
 
 struct TCreatePartitionResult {

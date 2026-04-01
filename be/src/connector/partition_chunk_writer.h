@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
@@ -21,9 +23,18 @@
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
-#include "fs/fs.h"
-#include "runtime/exec_env.h"
+#include "fs/fs_fwd.h"
 #include "storage/load_chunk_spiller.h"
+
+namespace starrocks {
+
+class TupleDescriptor;
+
+namespace pipeline {
+class FragmentContext;
+} // namespace pipeline
+
+} // namespace starrocks
 
 namespace starrocks::connector {
 
@@ -237,7 +248,7 @@ public:
 
 class BufferPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~BufferPartitionChunkWriterFactory() override = default;
 
@@ -255,7 +266,7 @@ private:
 
 class SpillPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~SpillPartitionChunkWriterFactory() override = default;
 

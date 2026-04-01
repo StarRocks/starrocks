@@ -20,7 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AggregateType;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.FloatType;
@@ -141,8 +141,8 @@ public class CreateMVStmtTest {
     public void testCreateMVWithFirstVarchar() throws Exception {
         String columnName1 = "c_1_10";
         String sql = "create materialized view star_view as select c_1_10 from t1;";
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
         Assertions.assertEquals(1, mvColumns.size());
@@ -167,8 +167,8 @@ public class CreateMVStmtTest {
     @Test
     public void testCreateMVColumns() throws Exception {
         String sql = "create materialized view star_view as select k1, sum(v1), min(v2) from agg_tbl group by k1;";
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
         Assertions.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
@@ -194,8 +194,8 @@ public class CreateMVStmtTest {
     @Test
     public void testDuplicateMV() throws Exception {
         String sql = "create materialized view star_view as select k1, sum(v1) from agg_tbl group by k1;";
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
         Assertions.assertEquals(KeysType.AGG_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvSchema = stmt.getMVColumnItemList();
@@ -207,21 +207,21 @@ public class CreateMVStmtTest {
     public void testMVAggregate() throws Exception {
         {
             String sql = "create materialized view star_view as select k1, sum(v1) from agg_tbl group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             Assertions.assertEquals(IntegerType.BIGINT, stmt.getMVColumnItemList().get(1).getType());
         }
 
         {
             String sql = "create materialized view star_view as select k1, min(v2) from agg_tbl group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             Assertions.assertTrue(stmt.getMVColumnItemList().get(1).getType().isVarchar());
         }
         {
             String sql = "create materialized view star_view as select k1, sum(v3) from agg_tbl group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
             Assertions.assertEquals(FloatType.DOUBLE, stmt.getMVColumnItemList().get(1).getType());
         }
     }
@@ -263,8 +263,8 @@ public class CreateMVStmtTest {
         String columnName4 = "c_1_4";
         String sql = "create materialized view star_view as select c_1_1, c_1_2, c_1_3, c_1_4 from t1;";
 
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
         Assertions.assertEquals(4, mvColumns.size());
@@ -298,8 +298,8 @@ public class CreateMVStmtTest {
     public void testMVColumnsWithoutOrderbyWithoutAggregationWithFloat() throws Exception {
         String columnName4 = "c_1_4";
         String sql = "create materialized view star_view as select c_1_1, c_1_2, c_1_3, c_1_4 from t1;";
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
         Assertions.assertEquals(4, mvColumns.size());
@@ -315,8 +315,8 @@ public class CreateMVStmtTest {
     public void testMVColumnsWithoutOrderbyWithoutAggregationWithVarchar() throws Exception {
         String columnName3 = "c_1_10";
         String sql = "create materialized view star_view as select c_1_1, c_1_2, c_1_10, c_1_11  from t1;";
-        CreateMaterializedViewStmt stmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        CreateSyncMVStmt stmt =
+                (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assertions.assertEquals(KeysType.DUP_KEYS, stmt.getMVKeysType());
         List<MVColumnItem> mvColumns = stmt.getMVColumnItemList();
         Assertions.assertEquals(4, mvColumns.size());
@@ -337,7 +337,7 @@ public class CreateMVStmtTest {
                 "SELECT t1.c_1_1, t1.c_1_2, t1.c_1_13 " +
                 "FROM t1";
         try {
-            CreateMaterializedViewStmt stmt = (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             boolean jsonKey = stmt.getMVColumnItemList().stream().anyMatch(col -> col.isKey() && col.getType().isJsonType());
             Assertions.assertFalse(jsonKey);
         } catch (Exception ex) {

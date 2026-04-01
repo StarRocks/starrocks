@@ -221,10 +221,22 @@ run_shell() {
 check_protobuf_version_mismatch() {
     log_info "Checking for protobuf version compatibility..."
 
-    # Check if generated protobuf files exist
+    # BE protobuf/thrift outputs are now CMake-managed in the active BE build tree.
+    # If those outputs exist, let CMake's own stamp/tool-version logic decide whether
+    # regeneration is needed instead of forcing the legacy gensrc cleanup path.
+    local be_codegen_dir
+    be_codegen_dir=$(find be -path 'be/build*/gensrc/gen_cpp' -type d \
+        -exec sh -c 'find "$1" -maxdepth 1 -name "*.pb.cc" | grep -q .' _ {} \; -print -quit 2>/dev/null || true)
+    if [[ -n "$be_codegen_dir" ]]; then
+        log_info "Found CMake-managed BE protobuf outputs in $be_codegen_dir - skipping legacy cleanup check"
+        return 1  # No need to clean
+    fi
+
+    # Fall back to the legacy gensrc path for workflows that still materialize
+    # protobuf C++ outputs there.
     if [[ ! -d "gensrc/build/gen_cpp" ]] || [[ -z "$(find gensrc/build/gen_cpp -name "*.pb.cc" 2>/dev/null)" ]]; then
-        log_info "No generated protobuf files found - clean generation needed"
-        return 0  # Need to clean/generate
+        log_info "No reusable protobuf outputs found - skipping cleanup"
+        return 1  # No need to clean
     fi
 
     # Get protobuf version from Docker container

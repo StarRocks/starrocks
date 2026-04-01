@@ -127,6 +127,43 @@ public class CreateTableAnalyzerTest {
         Config.max_column_number_per_table = 10000;
     }
 
+    @Test
+    public void testPrimaryKeyTablePartitionSourceColumnsMustBePrimaryKeys() {
+        String nonKeyGeneratedPartitionColumnSql = "CREATE TABLE test_create_table_db.t_pk_partition_non_key (\n" +
+                "  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+                "  `transaction_time` datetime NOT NULL,\n" +
+                "  `transaction_date` date NULL AS date(transaction_time)\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY (`transaction_date`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(nonKeyGeneratedPartitionColumnSql,
+                "The partition expr should base on key column");
+
+        String nonKeyPartitionExprSourceSql = "CREATE TABLE test_create_table_db.t_pk_partition_expr_non_key_source (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `transaction_time` bigint NOT NULL,\n" +
+                "  `v1` int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY from_unixtime(transaction_time)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(nonKeyPartitionExprSourceSql,
+                "The partition expr should base on key column");
+
+        String keyPartitionExprSourceSql = "CREATE TABLE test_create_table_db.t_pk_partition_on_key_expr (\n" +
+                "  `id` bigint NOT NULL,\n" +
+                "  `v1` int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "PARTITION BY from_unixtime(id)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeSuccess(keyPartitionExprSourceSql);
+    }
+
     private void testValidComplexDefault(String columnDef) {
         String sql = "CREATE TABLE test_create_table_db.test_complex_default (\n" +
                 "    id INT,\n" +
@@ -461,8 +498,9 @@ public class CreateTableAnalyzerTest {
 
         testInvalidComplexDefault(
                 "c4 STRUCT<id INT, name STRING> DEFAULT row('not_int', 123, 456)",
-                "Invalid default value for 'c4': Default value type struct<col1 varchar, col2 tinyint(4), col3 smallint(6)> " +
-                        "cannot be cast to column type struct<id int(11), name varchar(65533)>");
+                "Invalid default value for 'c4': Default value type struct<`col1` varchar, `col2` tinyint(4), " +
+                        "`col3` smallint(6)> cannot be cast to column type struct<`id` int(11), `name` " +
+                        "varchar(65533)>");
 
         testInvalidComplexDefault("c1 ARRAY<STRUCT<id INT>> DEFAULT [row(1, 'extra_field')]", "");
 

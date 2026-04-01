@@ -15,7 +15,6 @@
 #pragma once
 
 #include "exec/data_sink.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class BlackHoleTableSink final : public DataSink {

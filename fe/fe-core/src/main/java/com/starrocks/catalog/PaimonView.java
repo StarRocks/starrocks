@@ -29,12 +29,21 @@ public class PaimonView extends ConnectorView {
     @Override
     protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
-            if (com.google.common.base.Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {
-                tableRelation.getName().setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            TableName name = tableRelation.getName();
+
+            // do not fill catalog and database name to cte relation
+            if (Strings.isNullOrEmpty(name.getCatalog()) &&
+                    Strings.isNullOrEmpty(name.getDb()) &&
+                    cteRelationNames.contains(name.getTbl())) {
+                return;
             }
 
-            if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
-                tableRelation.getName().setDb(super.dbName);
+            if (Strings.isNullOrEmpty(name.getCatalog())) {
+                name.setCatalog(catalogName);
+            }
+
+            if (Strings.isNullOrEmpty(name.getDb())) {
+                name.setDb(dbName);
             }
         }
     }

@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -148,9 +148,9 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return false;
             }
             Expr rangePartitionExpr = rangePartitionExprOpt.get();
-            PCellSortedSet snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
+            PCellSortedSet snapshotPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
                     baseTable, partitionColumn, rangePartitionExpr);
-            PCellSortedSet currentPartitionMap = PartitionUtil.getPartitionKeyRange(
+            PCellSortedSet currentPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
                     table, partitionColumn, rangePartitionExpr);
             return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
         } else {
@@ -201,12 +201,10 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             return;
         }
         for (int index = 0; index < refreshedPartitionNames.size(); ++index) {
-            long modifiedTime = partitions.get(index).getModifiedTime();
             String partitionName = refreshedPartitionNames.get(index);
             Preconditions.checkArgument(partitionName != null, "name should not be null");
-
-            MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
-                    -1, modifiedTime, modifiedTime);
+            MaterializedView.BasePartitionInfo basePartitionInfo = MaterializedView.BasePartitionInfo.fromExternalTable(
+                    partitions.get(index));
             if (Config.enable_mv_automatic_repairing_for_broken_base_tables) {
                 MVPCTMetaRepairer.collectTableRepairInfo(table, partitionName, basePartitionInfo);
             }

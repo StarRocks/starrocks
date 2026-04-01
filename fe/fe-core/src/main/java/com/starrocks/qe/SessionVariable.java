@@ -191,8 +191,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
-    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
-    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin";
+    public static final String AUTHENTICATION_POLICY = "authentication_policy";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -446,6 +446,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
     public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
+    public static final String CBO_VARIANT_PATH_REWRITE = "cbo_variant_path_rewrite";
 
     public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
 
@@ -708,6 +709,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
+            "enable_iceberg_compaction_with_row_lineage";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
     public static final String EXCHANGE_HASH_FUNCTION_VERSION = "exchange_hash_function_version";
 
@@ -1071,10 +1075,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
+    public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED =
+            "enable_global_late_materialization_cost_based";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
     public static final String ENABLE_DESENSITIZE_EXPLAIN = "enable_desensitize_explain";
+
+    /**
+     * When true, EXPLAIN output may include extended sections (e.g. query queue info at COSTS/VERBOSE level).
+     * Extensible for future explain-related features. Default false to preserve original explain output.
+     */
+    public static final String ENABLE_EXTENDED_EXPLAIN = "enable_extended_explain";
 
     public static final String ENABLE_FULL_SORT_USE_GERMAN_STRING = "enable_full_sort_use_german_string";
 
@@ -1171,8 +1183,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * used for test
-     * Determines whether to enable gather fragment locality optimization. When enabled, 
-     * gather fragments will be assigned to the same node as other fragments if all 
+     * Determines whether to enable gather fragment locality optimization. When enabled,
+     * gather fragments will be assigned to the same node as other fragments if all
      * other fragments' instances are on the same node.
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
@@ -1251,6 +1263,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
     private boolean colorExplainOutput = true;
 
+    // When true, EXPLAIN may include extended sections (e.g. query queue info). Extensible for other features.
+    @VariableMgr.VarAttr(name = ENABLE_EXTENDED_EXPLAIN)
+    private boolean enableExtendedExplain = false;
+
     @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
     private boolean enableMetadataProfile = false;
 
@@ -1311,9 +1327,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
-    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    private String defaultAuthenticationPlugin = "mysql_native_password";
     @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
-    private String authenticationPolicy = "*,,"; 
+    private String authenticationPolicy = "*,,";
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
@@ -1453,6 +1469,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
+
+    @VarAttr(name = CBO_VARIANT_PATH_REWRITE)
+    private boolean cboVariantPathRewrite = false;
 
     @VarAttr(name = ENABLE_SPLIT_TOPN_AGG)
     private boolean enableSplitTopNAgg = true;
@@ -2037,7 +2056,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // DEFAULT/ETL
     @VarAttr(name = EXEC_MODE)
-    private String execMode = SessionVariableConstants.DEFAULT;
+    private String execMode = SessionVariableConstants.ExecMode.DEFAULT.name();
 
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
@@ -2201,12 +2220,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
-    private boolean enableGlobalLateMaterialization = false;
+    private boolean enableGlobalLateMaterialization = true;
 
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
     private int globalLateMaterializeMaxFetchOps = 4;
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
     private int globalLateMaterializeMaxLimit = 4096;
+    // When enabled, GLM is only applied to a scan if the estimated byte-cost of the
+    // columns that would be deferred exceeds the byte-cost of the row-id locator columns
+    // that GLM adds to the scan output.  This prevents GLM from being applied when the
+    // deferred columns are small (e.g. a single INT) and the row-id overhead would cost
+    // more than simply reading those columns eagerly.
+    @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED)
+    private boolean enableGlobalLateMaterializationCostBased = true;
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
@@ -2255,6 +2281,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return splitTopNAggLimit;
     }
 
+    public void setEnableSplitTopNAgg(boolean enableSplitTopNAgg) {
+        this.enableSplitTopNAgg = enableSplitTopNAgg;
+    }
+
     public void setEnableDistinctAggOverWindow(boolean value) {
         this.enableDistinctAggOverWindow = value;
     }
@@ -2284,7 +2314,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
-    
+
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
     private boolean enablePredicateColLateMaterialize = true;
 
@@ -2483,20 +2513,45 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return windowPartitionMode;
     }
 
+    public SessionVariableConstants.ExecMode getExecMode() {
+        return SessionVariableConstants.ExecMode.parse(execMode);
+    }
+
+    public boolean isETLExecMode() {
+        return SessionVariableConstants.ETL.equalsIgnoreCase(execMode);
+    }
+
     public void setExecMode(String execMode) {
-        final SessionVariable sv = DEFAULT_SESSION_VARIABLE;
-        if (execMode.equalsIgnoreCase(SessionVariableConstants.ETL)) {
-            setEnableWaitDependentEvent(true);
-            setEnablePhasedScheduler(true);
-            setEnableSpill(true);
-            setEnableQueryQueue(Config.enable_query_queue_v2);
-        } else {
-            setEnableWaitDependentEvent(sv.enableWaitDependentEvent);
-            setEnablePhasedScheduler(sv.enablePhasedScheduler);
-            setEnableSpill(sv.enableSpill);
-            setEnableQueryQueue(sv.enableQueryQueue);
+        SessionVariableConstants.ExecMode result =
+                Enums.getIfPresent(SessionVariableConstants.ExecMode.class, StringUtils.upperCase(execMode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ExecMode.values());
+            throw new IllegalArgumentException("Legal values of exec_mode are " + legalValues);
         }
-        this.execMode = execMode;
+        switch (result) {
+            case ETL: {
+                setEnableWaitDependentEvent(true);
+                setEnablePhasedScheduler(true);
+                setEnableSpill(true);
+                setEnableQueryQueue(Config.enable_query_queue_v2);
+                break;
+            }
+            case DEFAULT: {
+                // Reset ETL-tuned session flags to their default values when switching back from ETL mode
+                setEnableWaitDependentEvent(DEFAULT_SESSION_VARIABLE.enableWaitDependentEvent);
+                setEnablePhasedScheduler(DEFAULT_SESSION_VARIABLE.enablePhasedScheduler);
+                setEnableSpill(DEFAULT_SESSION_VARIABLE.enableSpill);
+                setEnableQueryQueue(DEFAULT_SESSION_VARIABLE.enableQueryQueue);
+                setSpillPartitionWiseAgg(DEFAULT_SESSION_VARIABLE.spillPartitionWiseAgg);
+                break;
+            }
+            default: {
+                // do nothing
+                break;
+            }
+        }
+        this.execMode = execMode.toUpperCase();
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
@@ -3229,6 +3284,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
+    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergCompactionWithRowLineage = true;
+
     @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
     private boolean enablePlanSerializeConcurrently = true;
 
@@ -3697,6 +3755,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getColorExplainOutput() {
         return colorExplainOutput;
+    }
+
+    public boolean isEnableExtendedExplain() {
+        return enableExtendedExplain;
+    }
+
+    public void setEnableExtendedExplain(boolean enableExtendedExplain) {
+        this.enableExtendedExplain = enableExtendedExplain;
     }
 
     public boolean isEnableLoadProfile() {
@@ -5516,6 +5582,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
+    public boolean getEnableIcebergCompactionWithRowLineage() {
+        return enableIcebergCompactionWithRowLineage;
+    }
+
+    public void setEnableIcebergCompactionWithRowLineage(boolean enableIcebergCompactionWithRowLineage) {
+        this.enableIcebergCompactionWithRowLineage = enableIcebergCompactionWithRowLineage;
+    }
+
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
     }
@@ -5911,6 +5985,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableGlobalLateMaterialization;
     }
 
+    public boolean isEnableGlobalLateMaterializationCostBased() {
+        return enableGlobalLateMaterializationCostBased;
+    }
+
+    public void setEnableGlobalLateMaterializationCostBased(boolean enableGlobalLateMaterializationCostBased) {
+        this.enableGlobalLateMaterializationCostBased = enableGlobalLateMaterializationCostBased;
+    }
+
     public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
@@ -5935,6 +6017,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
+    public boolean isEnableVariantPathRewrite() {
+        return cboVariantPathRewrite;
+    }
+
+    public void setEnableVariantPathRewrite(boolean enableVariantPathRewrite) {
+        this.cboVariantPathRewrite = enableVariantPathRewrite;
     }
 
     public boolean isEnableDropTableCheckMvDependency() {
@@ -5968,7 +6058,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
-    
+
     public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
         this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
     }
@@ -6033,6 +6123,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
+        }
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            tResult.setError_for_division_by_zero(true);
         }
 
         tResult.setEnable_spill(enableSpill);

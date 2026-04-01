@@ -20,6 +20,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"

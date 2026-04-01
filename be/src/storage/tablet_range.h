@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "common/statusor.h"
 #include "storage/variant_tuple.h"
 
@@ -23,10 +25,10 @@ class TabletRange {
 public:
     TabletRange() = default;
 
-    TabletRange(const VariantTuple& lower_bound, const VariantTuple& upper_bound, bool lower_bound_included,
+    TabletRange(VariantTuple lower_bound, VariantTuple upper_bound, bool lower_bound_included,
                 bool upper_bound_included)
-            : _lower_bound(lower_bound),
-              _upper_bound(upper_bound),
+            : _lower_bound(std::move(lower_bound)),
+              _upper_bound(std::move(upper_bound)),
               _lower_bound_included(lower_bound_included),
               _upper_bound_included(upper_bound_included) {}
 
@@ -58,6 +60,9 @@ public:
 
     // Return the intersection between this range and rhs.
     StatusOr<TabletRange> intersect(const TabletRange& rhs) const;
+
+    // Return the union between this range and rhs.
+    TabletRange union_with(const TabletRange& rhs) const;
 
     // Empty range such as [x, x) or any range where lower bound is larger than upper bound.
     bool is_empty() const;
@@ -174,6 +179,46 @@ inline StatusOr<TabletRange> TabletRange::intersect(const TabletRange& rhs) cons
             result._upper_bound = result._lower_bound;
             result._lower_bound_included = true;
             result._upper_bound_included = false;
+        }
+    }
+
+    return result;
+}
+
+inline TabletRange TabletRange::union_with(const TabletRange& rhs) const {
+    TabletRange result;
+
+    // Lower bound: take the wider (smaller) bound; unbounded is widest.
+    if (is_minimum() || rhs.is_minimum()) {
+        // result lower stays default (unbounded)
+    } else {
+        const int cmp = _lower_bound.compare(rhs._lower_bound);
+        if (cmp < 0) {
+            result._lower_bound = _lower_bound;
+            result._lower_bound_included = _lower_bound_included;
+        } else if (cmp > 0) {
+            result._lower_bound = rhs._lower_bound;
+            result._lower_bound_included = rhs._lower_bound_included;
+        } else {
+            result._lower_bound = _lower_bound;
+            result._lower_bound_included = _lower_bound_included || rhs._lower_bound_included;
+        }
+    }
+
+    // Upper bound: take the wider (larger) bound; unbounded is widest.
+    if (is_maximum() || rhs.is_maximum()) {
+        // result upper stays default (unbounded)
+    } else {
+        const int cmp = _upper_bound.compare(rhs._upper_bound);
+        if (cmp > 0) {
+            result._upper_bound = _upper_bound;
+            result._upper_bound_included = _upper_bound_included;
+        } else if (cmp < 0) {
+            result._upper_bound = rhs._upper_bound;
+            result._upper_bound_included = rhs._upper_bound_included;
+        } else {
+            result._upper_bound = _upper_bound;
+            result._upper_bound_included = _upper_bound_included || rhs._upper_bound_included;
         }
     }
 

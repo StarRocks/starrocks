@@ -28,6 +28,7 @@ set(EXEC_FILES
     empty_set_node.cpp
     exec_factory.cpp
     exec_node.cpp
+    pipeline_node.cpp
     exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
@@ -46,6 +47,7 @@ set(EXEC_FILES
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
     benchmark_scanner.cpp
+    cache_stats_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -323,6 +325,7 @@ set(EXEC_FILES
     pipeline/fetch_processor.cpp
     pipeline/fetch_sink_operator.cpp
     pipeline/fetch_source_operator.cpp
+    pipeline/lookup/tablet_adaptor.cpp
     pipeline/lookup_request.cpp
     pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp
@@ -371,12 +374,14 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
-target_precompile_headers(join_hash_map_inst_objs
-    PRIVATE
-    join/join_hash_map.h
-    join/join_hash_map.hpp
-    join/join_hash_map_method.hpp
-)
+if (WITH_PCH)
+    target_precompile_headers(join_hash_map_inst_objs
+        PRIVATE
+        join/join_hash_map.h
+        join/join_hash_map.hpp
+        join/join_hash_map_method.hpp
+    )
+endif()
 
 ADD_BE_LIB(Exec
     ${EXEC_FILES}

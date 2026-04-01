@@ -143,7 +143,7 @@ private:
     void _check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms);
 
     LoadChannelMgr* _load_mgr;
-    LakeTabletManager* _lake_tablet_mgr;
+    [[maybe_unused]] LakeTabletManager* _lake_tablet_mgr;
     UniqueId _load_id;
     int64_t _txn_id;
     int64_t _timeout_s;

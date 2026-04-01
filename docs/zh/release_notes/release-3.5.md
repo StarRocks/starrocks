@@ -26,6 +26,117 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.15
+
+发布日期：2026 年 3 月 26 日
+
+### 行为变更
+
+- 优化了 `sql_mode` 的处理逻辑：当设置了 `DIVISION_BY_ZERO` 或 `FAIL_PARSE_DATE` 模式时，`str_to_date`/`str2date` 中的除零操作和日期解析失败现在将返回错误，而不是被静默忽略。[#70004](https://github.com/StarRocks/starrocks/pull/70004)
+- 当 `sql_mode` 为 `FORBID_INVALID_DATE` 时，`INSERT VALUES` 语句中的无效日期现在将被正确拒绝，而不是被绕过。[#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- 表达式分区生成列现在在 `DESC` 和 `SHOW CREATE TABLE` 的输出中被隐藏。[#69793](https://github.com/StarRocks/starrocks/pull/69793)
+- 审计日志中不再包含 Client ID 信息。[#69383](https://github.com/StarRocks/starrocks/pull/69383)
+- `REFRESH EXTERNAL TABLE` 的 `FORCE` 选项已回滚，不再支持。[#70428](https://github.com/StarRocks/starrocks/pull/70428)
+
+### 功能优化
+
+- 支持通过将 `desc_hint_split_range` 设置为 `0` 或更小的值来禁用降序 TopN 的分割和反向扫描范围。[#70307](https://github.com/StarRocks/starrocks/pull/70307)
+- `information_schema` 现在可以显示外部 Catalog 表的注释信息。[#70197](https://github.com/StarRocks/starrocks/pull/70197)
+- 在 Trino 方言中为 `INSERT` 语句添加了 `EXPLAIN` 和 `EXPLAIN ANALYZE` 支持。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
+- 为 `CatalogRecycleBin` 添加了可配置参数以控制回收站行为。[#69838](https://github.com/StarRocks/starrocks/pull/69838)
+- 改进了 `ADMIN REPAIR TABLE` 和 `SHOW TABLET STATUS`，提供更好的修复和状态信息。[#69656](https://github.com/StarRocks/starrocks/pull/69656)
+- 黑名单中的查询现在从错误指标中排除。[#69621](https://github.com/StarRocks/starrocks/pull/69621)
+- 在存算分离模式下新增对云原生 Tablet 的 `SHOW TABLET STATUS` 支持。[#69616](https://github.com/StarRocks/starrocks/pull/69616)
+- 降低了存算分离模式下主键表 Tablet 统计信息收集的开销。[#69548](https://github.com/StarRocks/starrocks/pull/69548)
+- 支持动态配置执行状态汇报线程池大小。[#69142](https://github.com/StarRocks/starrocks/pull/69142)
+
+### 问题修复
+
+修复了以下问题：
+
+- 恢复 Tablet 时数据版本未设置。[#70373](https://github.com/StarRocks/starrocks/pull/70373)
+- 创建 Hive 表时表注释未设置。[#70318](https://github.com/StarRocks/starrocks/pull/70318)
+- 双精度常量折叠产生 `INF` 而非返回错误。[#70309](https://github.com/StarRocks/starrocks/pull/70309)
+- Iceberg 物化视图刷新在快照时间戳非单调递增时失败。[#70382](https://github.com/StarRocks/starrocks/pull/70382)
+- `toIcebergTable` 函数属性映射中 `common` 应为 `comment`。[#70267](https://github.com/StarRocks/starrocks/pull/70267)
+- Root 用户在某些场景下未正确绕过 Ranger 权限检查。[#70254](https://github.com/StarRocks/starrocks/pull/70254)
+- `AuditEventProcessor` 线程在发生 `OutOfMemoryException` 时意外退出。[#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- Schema Change 发布过程中 `cal_new_base_version` 存在越界访问。[#70132](https://github.com/StarRocks/starrocks/pull/70132)
+- 由于边界比较中的类型不匹配，分区谓词被意外裁剪。[#70097](https://github.com/StarRocks/starrocks/pull/70097)
+- BE 运行时 `str_to_date` 丢失微秒精度。[#70068](https://github.com/StarRocks/starrocks/pull/70068)
+- 调用 `set_callback_function` 时 Join Spill 进程崩溃。[#70030](https://github.com/StarRocks/starrocks/pull/70030)
+- 从 bthread 上下文调用 `DeltaWriter::close()` 时出现 DCHECK 失败。[#69960](https://github.com/StarRocks/starrocks/pull/69960)
+- `AsyncDeltaWriter` 关闭/完成生命周期中存在 use-after-free 竞态条件。[#69940](https://github.com/StarRocks/starrocks/pull/69940)
+- Follower FE 的 `changeCatalogDb` 中未等待 Journal 回放完成导致一致性问题。[#69834](https://github.com/StarRocks/starrocks/pull/69834)
+- 竞态条件导致写入事务完成的 editlog 丢失。[#69899](https://github.com/StarRocks/starrocks/pull/69899)
+- 修复了若干已知 CVE 漏洞。[#69863](https://github.com/StarRocks/starrocks/pull/69863)
+- 包含反斜杠转义序列的 LIKE 模式匹配不正确。[#69775](https://github.com/StarRocks/starrocks/pull/69775)
+- 重命名分区列后表达式分析失败。[#69771](https://github.com/StarRocks/starrocks/pull/69771)
+- `AsyncDeltaWriter::close` 中存在 use-after-free 崩溃。[#69770](https://github.com/StarRocks/starrocks/pull/69770)
+- `Partition.hasStorageData` 结果不正确导致 `PartitionColumnMinMaxRewriteRule` 中存在潜在 Bug。[#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- 文件 Sink 输出文件名中出现重复的 CSV 压缩后缀。[#69749](https://github.com/StarRocks/starrocks/pull/69749)
+- Lake `capture_tablet_and_rowsets` 操作在未启用实验性配置的情况下可访问。[#69748](https://github.com/StarRocks/starrocks/pull/69748)
+- 主键表 SST 缓存损坏。[#69693](https://github.com/StarRocks/starrocks/pull/69693)
+- `AsyncFlushOutputStream` 中存在 use-after-free。[#69688](https://github.com/StarRocks/starrocks/pull/69688)
+- `disableRecoverPartitionWithSameName` 中保留时钟重置不正确且扫描不完整。[#69677](https://github.com/StarRocks/starrocks/pull/69677)
+- `SchemaBeTabletsScanner` 中未根据运行模式正确获取 Tablet 信息。[#69645](https://github.com/StarRocks/starrocks/pull/69645)
+- Shadow Partition 存在时分区最小值裁剪不正确。[#69641](https://github.com/StarRocks/starrocks/pull/69641)
+- 优雅退出后不同事务发布了相同版本。[#69639](https://github.com/StarRocks/starrocks/pull/69639)
+- `get_column_values` 中当 `rssid` 未找到时存在迭代器未定义行为。[#69617](https://github.com/StarRocks/starrocks/pull/69617)
+- `KILL ANALYZE` 语句有时无法停止正在运行的 `ANALYZE TABLE` 操作。[#69592](https://github.com/StarRocks/starrocks/pull/69592)
+- 分区表物化视图强制刷新的若干 Bug。[#69488](https://github.com/StarRocks/starrocks/pull/69488)
+
+## 3.5.14
+
+发布日期：2026 年 3 月 5 日
+
+### 功能优化
+
+- 为 Lake 表中的 Primary Key 索引新增 SST 读写失败指标。[#69513](https://github.com/StarRocks/starrocks/pull/69513)
+- 新增 “segment file not found” 错误计数指标。[#69543](https://github.com/StarRocks/starrocks/pull/69543)
+- 从包含 `convert_tz` 的标量子查询中提取范围谓词。[#69055](https://github.com/StarRocks/starrocks/pull/69055)
+- Paimon 表支持复杂类型。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
+- 延迟远程 Load 的 Spill Directory 删除。[#68803](https://github.com/StarRocks/starrocks/pull/68803)
+- 支持修复云原生表。[#67108](https://github.com/StarRocks/starrocks/pull/67108)
+- 支持向 CSV 格式的 Hive 表插入 ARRAY 类型数据。[#67355](https://github.com/StarRocks/starrocks/pull/67355)
+
+### 问题修复
+
+已修复以下问题：
+
+- `RowGroupWriter` 异常导致的异常行为问题。[#69568](https://github.com/StarRocks/starrocks/pull/69568)
+- 聚合表/更新表在执行 Schema Change 后，排序键未包含新添加的 Key 列。[#69529](https://github.com/StarRocks/starrocks/pull/69529)
+- 指标值 `g_publish_version_failed_tasks` 在 `resource_busy` 状态下无法反映真实情况。[#69526](https://github.com/StarRocks/starrocks/pull/69526)
+- 在将主键表 Tablet 移动到回收站时，Rowset 文件被误删除。[#69438](https://github.com/StarRocks/starrocks/pull/69438)
+- 并发执行 SWAP 后，基于名称查找表导致 `addPartitions` 出现锁泄漏。[#69284](https://github.com/StarRocks/starrocks/pull/69284)
+- `isInternalCancelError` 使用了 `equals` 而非 `startsWith`。[#69523](https://github.com/StarRocks/starrocks/pull/69523)
+- 当 `_writer->Close()` 抛出除 `ParquetStatusException` 以外的异常时，Pipeline 可能阻塞或崩溃。[#69492](https://github.com/StarRocks/starrocks/pull/69492)
+- Hadoop-client 库缺陷。[#69503](https://github.com/StarRocks/starrocks/pull/69503)
+- 写入操作失败时错误地返回成功。[#69473](https://github.com/StarRocks/starrocks/pull/69473)
+- CVE-2025-67721 漏洞。[#69138](https://github.com/StarRocks/starrocks/pull/69138)
+- 存算分离集群中低基数优化下 RuntimeFilter 问题。[#64669](https://github.com/StarRocks/starrocks/pull/64669)
+- 物化视图 Tablet 元数据在 FE Leader 与 Follower 之间不一致。[#69428](https://github.com/StarRocks/starrocks/pull/69428)
+- Rollup 处理器在 `computeMinActiveTxnId` 中未考虑活跃事务 ID。[#69285](https://github.com/StarRocks/starrocks/pull/69285)
+- 多 FE 场景下的 Arrow Flight Proxy 问题。[#68300](https://github.com/StarRocks/starrocks/pull/68300)
+- 函数字段的并发问题。[#69315](https://github.com/StarRocks/starrocks/pull/69315)
+- `DROP FUNCTION IF EXISTS` 忽略了 `ifExists` 标志。[#69216](https://github.com/StarRocks/starrocks/pull/69216)
+- LDAP 认证中缺少对用户名的大小写不敏感标准化处理。[#67966](https://github.com/StarRocks/starrocks/pull/67966)
+- 某些类型的分区无法写入。[#68221](https://github.com/StarRocks/starrocks/pull/68221)
+- 由于共享可变状态导致物化视图重写时 Projection 丢失。[#69063](https://github.com/StarRocks/starrocks/pull/69063)
+- 查询表副本时分区大小写不敏感查找问题。[#69173](https://github.com/StarRocks/starrocks/pull/69173)
+- 同步物化视图在全 NULL 值处理上的问题。[#69136](https://github.com/StarRocks/starrocks/pull/69136)
+- 访问外部 Catalog 时 `mv onReload` 相关问题。[#68926](https://github.com/StarRocks/starrocks/pull/68926)
+- 重复常量场景下 DISTINCT ORDER BY 别名问题。[#69014](https://github.com/StarRocks/starrocks/pull/69014)
+- 存算分离集群中修改 CHAR 列长度后查询结果错误。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
+- Azure ABFS/WASB FileSystem 缓存键问题。[#68901](https://github.com/StarRocks/starrocks/pull/68901)
+- 常量侧列引用的 OUTER JOIN 谓词重写错误。[#67072](https://github.com/StarRocks/starrocks/pull/67072)
+- `IllegalArgumentException` 比较器传递性违规问题。[#68743](https://github.com/StarRocks/starrocks/pull/68743)
+- 在 `report_fragment` 中，查询生命周期短于 Fragment 导致的问题。[#67219](https://github.com/StarRocks/starrocks/pull/67219)
+- 共享 `DecodeInfo` 导致的低基数重写空指针异常（NPE）。[#68799](https://github.com/StarRocks/starrocks/pull/68799)
+- 缺少 `pcu_upt_cnt` 指标。[#68845](https://github.com/StarRocks/starrocks/pull/68845)
+- JSON flatten 在相同路径下数组与对象冲突问题。[#68804](https://github.com/StarRocks/starrocks/pull/68804)
+- `ClonExpr` 的 nullable 相关缺陷。[#68800](https://github.com/StarRocks/starrocks/pull/68800)
+
 ## 3.5.13
 
 发布日期：2026 年 2 月 13 日
@@ -92,6 +203,7 @@ displayed_sidebar: docs
 - 空 Parquet 或 ORC 文件场景下，`files()` schema 检测存在的问题。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
 - 在 Hive 表上执行 UNION ALL 时，Profile 中的指标值不准确的问题。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
 - FE 查询场景下，缺乏通过 Arrow Flight 代理获取数据的支持。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- 由于 `OlapTableSink::is_full()` 中的竞争条件导致在自动创建分区时 SIGSEGV 崩溃。[#67566](https://github.com/StarRocks/starrocks/pull/67566)
 
 ## 3.5.11
 

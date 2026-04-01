@@ -86,6 +86,15 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    public void reset() {
+        remoteFileInfoSource = null;
+        iterator = null;
+        buffer = null;
+        hasMoreOutput = true;
+        backendSplitFile = true;
+        backendSplitCount = 0;
+    }
+
     public void setup() {
         Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
         if (selectedPartitionIds.isEmpty()) {

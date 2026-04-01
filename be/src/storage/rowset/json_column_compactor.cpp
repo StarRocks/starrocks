@@ -23,8 +23,6 @@
 #include "column/column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
@@ -33,7 +31,7 @@
 
 namespace starrocks {
 Status FlatJsonColumnCompactor::append(const Column& column) {
-    // compaction will reuse column, must copy in there.
+    // compaction will reuse the column, must copy in there.
     _json_datas.emplace_back(column.clone());
 
     _estimate_size += column.byte_size();

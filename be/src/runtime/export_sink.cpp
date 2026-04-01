@@ -45,6 +45,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -52,13 +53,7 @@
 namespace starrocks {
 
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
-        : _state(nullptr),
-          _pool(pool),
-          _t_output_expr(t_exprs),
-          _profile(nullptr),
-          _bytes_written_counter(nullptr),
-          _rows_written_counter(nullptr),
-          _write_timer(nullptr) {}
+        : _pool(pool), _t_output_expr(t_exprs) {}
 
 Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::init(t_sink, state));
@@ -101,7 +96,7 @@ Status ExportSink::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExportSink::close(RuntimeState* state, Status exec_status) {
+Status ExportSink::close(RuntimeState* state, const Status& exec_status) {
     if (_closed) {
         return Status::OK();
     }
@@ -131,7 +126,7 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {

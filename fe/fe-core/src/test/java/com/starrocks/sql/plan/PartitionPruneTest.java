@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
@@ -633,10 +634,44 @@ public class PartitionPruneTest extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
         starRocksAssert.getCtx().executeSql("insert into t4_range_minmax values('2025-04-29', 1, 'bar')");
+        try {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().setDataVersion(1);
+            starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        } finally {
+            FeConstants.runningUnitTest = true;
+        }
+    }
+
+    @Test
+    public void testMinMaxRangePartitionPruneWithDateTruncPartition() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t4_expr_range_minmax` (\n" +
+                "    `dt` date NULL COMMENT \"\",\n" +
+                "    `id` int(11) NULL COMMENT \"\",\n" +
+                "    `name` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `id`, `name`)\n" +
+                "PARTITION BY date_trunc('day', `dt`)(\n" +
+                " START (\"2025-04-28\") END (\"2025-04-30\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`id`, `name`)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.getCtx().executeSql("insert into t4_expr_range_minmax values('2025-04-29', 1, 'bar')");
         FeConstants.runningUnitTest = false;
-        starRocksAssert.getTable("test", "t4_range_minmax")
-                .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
-        starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        starRocksAssert.getTable("test", "t4_expr_range_minmax")
+                .getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME)
+                .getDefaultPhysicalPartition()
+                // after `alter table t4_expr_range_minmax modify column `id` varchar(11)`,
+                // visible version of shadow partition will increase
+                .updateVisibleVersion(2);
+        // min(dt) should not be affected by shadow partition
+        starRocksAssert.query("select min(dt) from t4_expr_range_minmax").explainContains("partitions=1/2");
         FeConstants.runningUnitTest = true;
 
     }

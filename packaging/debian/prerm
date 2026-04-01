@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure|failed-upgrade)
+        if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
+            case "$DPKG_MAINTSCRIPT_PACKAGE" in
+                starrocks-*)
+                    COMP=${DPKG_MAINTSCRIPT_PACKAGE#starrocks-}
+                    ;;
+                *)
+                    COMP=""
+                    ;;
+            esac
+
+            if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+                if systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
+                    echo "Stopping StarRocks $COMP service (reason: $1)..."
+                    systemctl stop "starrocks-$COMP" || true
+                fi
+            fi
+        fi
+    ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

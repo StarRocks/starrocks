@@ -15,6 +15,8 @@
 #pragma once
 
 #include <memory>
+#include <sstream>
+#include <type_traits>
 
 #include "base/string/slice.h"
 #include "column/bytes.h"
@@ -29,6 +31,32 @@
 namespace starrocks {
 
 template <typename T>
+class BinaryColumnBase;
+
+class BinaryImmContainer {
+public:
+    BinaryImmContainer() = default;
+
+    template <typename T>
+    explicit BinaryImmContainer(const BinaryColumnBase<T>& column) {
+        init(column);
+    }
+
+    Slice operator[](size_t index) const;
+
+    size_t size() const;
+
+    size_t immutable_bytes_size() const;
+
+private:
+    template <typename T>
+    void init(const BinaryColumnBase<T>& column);
+
+    const Column* _column = nullptr;
+    bool _is_large = false;
+};
+
+template <typename T>
 class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
     friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
@@ -38,23 +66,11 @@ public:
     using Offset = T;
     using Offsets = Buffer<T>;
     using Byte = uint8_t;
-    using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
-
-    struct BinaryDataProxyContainer {
-        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
-
-        Slice operator[](size_t index) const { return _column.get_slice(index); }
-
-        size_t size() const { return _column.size(); }
-
-    private:
-        const BinaryColumnBase& _column;
-    };
+    using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     using Container = Buffer<Slice>;
+    using ImmContainer = BinaryImmContainer;
     using GermanStringContainer = Buffer<GermanString>;
-    using ProxyContainer = BinaryDataProxyContainer;
-    using ImmContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
@@ -67,24 +83,13 @@ public:
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
-        if (_offsets.empty()) {
-            _offsets.emplace_back(0);
-        }
-        if (!config::enable_zero_copy_from_page_cache) {
-            _ensure_materialized();
-        }
-    }
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)),
-              _offsets(std::move(rhs._offsets)),
-              _resource(std::move(rhs._resource)),
-              _immuable_container(*this) {}
+            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), _resource(std::move(rhs._resource)) {}
 
     BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
@@ -317,19 +322,6 @@ public:
         }
     }
 
-    Container& get_data() {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-    const Container& get_data() const {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-
     GermanStringContainer& get_german_strings() {
         if (!_german_strings_cache) {
             _build_german_strings();
@@ -344,7 +336,7 @@ public:
         return _german_strings;
     }
 
-    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Bytes& get_bytes() {
         _ensure_materialized();
@@ -418,7 +410,12 @@ public:
 
     Status capacity_limit_reached() const override;
 
+    void build_slices(Container& slices) const;
+
 private:
+    template <typename SrcOffset>
+    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+
     void _build_slices() const;
     void _build_german_strings() const;
     void _ensure_materialized();
@@ -435,11 +432,37 @@ private:
     mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
-
-    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
 using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
+
+inline Slice BinaryImmContainer::operator[](size_t index) const {
+    DCHECK(_column != nullptr);
+    if (_is_large) {
+        return down_cast<const LargeBinaryColumn*>(_column)->get_slice(index);
+    }
+    return down_cast<const BinaryColumn*>(_column)->get_slice(index);
+}
+
+inline size_t BinaryImmContainer::size() const {
+    return _column == nullptr ? 0 : _column->size();
+}
+
+inline size_t BinaryImmContainer::immutable_bytes_size() const {
+    if (_column == nullptr) {
+        return 0;
+    }
+    if (_is_large) {
+        return down_cast<const LargeBinaryColumn*>(_column)->get_immutable_bytes().size();
+    }
+    return down_cast<const BinaryColumn*>(_column)->get_immutable_bytes().size();
+}
+
+template <typename T>
+inline void BinaryImmContainer::init(const BinaryColumnBase<T>& column) {
+    _column = &column;
+    _is_large = std::is_same_v<T, uint64_t>;
+}
 
 } // namespace starrocks

@@ -18,7 +18,6 @@ set(COLUMN_TEST_FILES
     mysql_row_buffer_test.cpp
     german_string_test.cpp
     object_column_core_test.cpp
-    variant_column_test.cpp
     column_visitor_test.cpp
     column_filter_range_test.cpp
     column_viewer_core_test.cpp
@@ -32,11 +31,18 @@ set(COLUMN_TEST_FILES
     const_nullable_core_test.cpp
     nullable_column_core_test.cpp
     decimalv3_json_core_test.cpp
+    datum_convert_core_test.cpp
     json_converter_core_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
-    variant_converter_core_test.cpp
+    variant_converter_test.cpp
+    variant_path_parser_test.cpp
+    variant_column_test.cpp
+    variant_merger_test.cpp
+    variant_builder_test.cpp
+    variant_encoder_test.cpp
+    buffer_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
@@ -48,7 +54,7 @@ set(COLUMN_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest
@@ -78,7 +84,7 @@ set(CHUNK_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

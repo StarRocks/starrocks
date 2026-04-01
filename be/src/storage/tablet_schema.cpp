@@ -402,7 +402,13 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         index.to_schema_pb(index_pb);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
-    return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
+    auto partial_schema = std::make_shared<TabletSchema>(partial_tablet_schema_pb);
+    // _init_from_pb may fallback sort_key_idxes to key columns when the PB's sort_key_idxes is empty,
+    // making it inconsistent with num_short_key_columns copied from the source schema. Fix up here.
+    if (partial_schema->num_short_key_columns() > partial_schema->sort_key_idxes().size()) {
+        partial_schema->set_num_short_key_columns(partial_schema->sort_key_idxes().size());
+    }
+    return partial_schema;
 }
 
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchemaCSPtr& tablet_schema,
@@ -432,6 +438,16 @@ TabletSchema::TabletSchema(const TabletSchema& tablet_schema) {
 
 TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
     return std::make_shared<TabletSchema>(tablet_schema);
+}
+
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TabletColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
+    dst_schema->_clear_columns();
+    for (const auto& col : cols) {
+        dst_schema->append_column(TabletColumn(col));
+    }
+    dst_schema->_generate_sort_key_idxes();
+    return dst_schema;
 }
 
 TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols) {

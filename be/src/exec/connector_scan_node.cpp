@@ -17,7 +17,8 @@
 #include <atomic>
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -120,7 +121,7 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
     return capacity;
 }
 
-pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 

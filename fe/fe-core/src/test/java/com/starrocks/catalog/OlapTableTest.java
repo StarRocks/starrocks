@@ -641,6 +641,36 @@ public class OlapTableTest {
         };
         Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2,
                 primaryKeyCloudRangeTable.getPrimaryKeyEncodingType());
+
+        // Test persisted primaryKeyEncodingType overrides computed value
+        OlapTable cloudHashTableWithPersistedV2 = new OlapTable() {
+            @Override
+            public KeysType getKeysType() {
+                return KeysType.PRIMARY_KEYS;
+            }
+
+            @Override
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Override
+            public boolean isRangeDistribution() {
+                return false;
+            }
+        };
+        // Without persisted value, cloud hash table returns V1 (legacy fallback)
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1,
+                cloudHashTableWithPersistedV2.getPrimaryKeyEncodingType());
+        // After setting persisted value to V2, it should return V2
+        cloudHashTableWithPersistedV2.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2,
+                cloudHashTableWithPersistedV2.getPrimaryKeyEncodingType());
+
+        // Non-PK table should always return NONE regardless of persisted value
+        nonPrimaryKeyTable.setPrimaryKeyEncodingType(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2);
+        Assertions.assertEquals(TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE,
+                nonPrimaryKeyTable.getPrimaryKeyEncodingType());
     }
 
 }

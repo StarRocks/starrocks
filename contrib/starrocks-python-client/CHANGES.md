@@ -1,8 +1,9 @@
 Version history
 ===============
 
-**1.3.4**
+**Unreleased**
 
+- Fix parsing of reflected nested `STRUCT` / `ARRAY` / `MAP` column types when inline field comments are present (#69817)
 - Deserialize complex types to matching Python list, dict types (#70480 by @chris-celerdata)
 
 **1.3.3**

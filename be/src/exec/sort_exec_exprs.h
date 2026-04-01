@@ -35,9 +35,12 @@
 #pragma once
 
 #include "exprs/expr.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
+
+class RowDescriptor;
+class TSortInfo;
 
 // Helper class to Prepare() , Open() and Close() the ordering expressions used to perform
 // comparisons in a sort. Used by TopNNode, SortNode.  When two

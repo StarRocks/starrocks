@@ -25,6 +25,7 @@ set(STORAGE_FILES
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
+    flat_json_config.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -77,6 +78,7 @@ set(STORAGE_FILES
     rowset/json_column_compactor.cpp
     rowset/json_column_iterator.cpp
     rowset/json_column_writer.cpp
+    rowset/object_column_writer.cpp
     rowset/cast_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
@@ -109,6 +111,7 @@ set(STORAGE_FILES
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
@@ -176,6 +179,7 @@ set(STORAGE_FILES
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     virtual_column_utils.cpp
+    extends_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -184,6 +188,7 @@ set(STORAGE_FILES
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
+    lake/async_file_deleter.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
@@ -197,6 +202,9 @@ set(STORAGE_FILES
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard_helper.cpp
+    lake/tablet_splitter.cpp
+    lake/tablet_merger.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp

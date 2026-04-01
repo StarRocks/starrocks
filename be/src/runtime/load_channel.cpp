@@ -38,11 +38,14 @@
 
 #include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
 #include "fmt/format.h"
 #include "runtime/closure_guard.h"
+#include "runtime/descriptors.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
@@ -135,7 +138,7 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         std::shared_ptr<TabletsChannel> channel;
         std::lock_guard l(_lock);
         if (_schema == nullptr) {
-            _schema.reset(new OlapTableSchemaParam());
+            _schema = std::make_shared<OlapTableSchemaParam>();
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {

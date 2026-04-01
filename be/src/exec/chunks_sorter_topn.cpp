@@ -66,7 +66,7 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _max_buffered_rows(max_buffered_rows),
           _max_buffered_bytes(max_buffered_bytes),
           _max_buffered_chunks(max_buffered_chunks),
-          _init_merged_segment(false),
+
           _limit(limit),
           _offset(offset),
           _topn_type(topn_type) {

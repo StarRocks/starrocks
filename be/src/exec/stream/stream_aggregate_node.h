@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/chunk.h"
+#include "common/statusor.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 
@@ -29,8 +30,7 @@ public:
             : ExecNode(pool, tnode, descs), _tnode(tnode) {}
     ~StreamAggregateNode() override = default;
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    std::vector<std::shared_ptr<pipeline::OperatorFactory> > decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     const TPlanNode& _tnode;

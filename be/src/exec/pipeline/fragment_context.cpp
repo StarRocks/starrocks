@@ -23,6 +23,7 @@
 
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
 #include "exec/data_sink.h"
@@ -45,6 +46,24 @@
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
+
+// RAII guard for pass-through chunk buffer lifecycle.
+class PassThroughChunkBufferGuard {
+public:
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id)
+            : _stream_mgr(stream_mgr), _query_id(query_id) {
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+    }
+
+    ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
+
+    PassThroughChunkBufferGuard(const PassThroughChunkBufferGuard&) = delete;
+    PassThroughChunkBufferGuard& operator=(const PassThroughChunkBufferGuard&) = delete;
+
+private:
+    DataStreamMgr* _stream_mgr;
+    TUniqueId _query_id;
+};
 
 FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
@@ -220,6 +239,18 @@ void FragmentContext::set_final_status(const Status& status) {
             hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
         }
 
+        const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        if (!_s_status.ok() && !finished_cancel) {
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
+            auto* query_ctx = _runtime_state->query_ctx();
+            if (query_ctx != nullptr) {
+                executor->report_audit_statistics_on_failure(query_ctx, this);
+            }
+        }
+
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
@@ -273,7 +304,7 @@ Status FragmentContext::prepare_all_pipelines() {
 }
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = std::move(contexts);
+    _stream_load_contexts = contexts;
 }
 
 // Note: this function should be thread safe
@@ -369,12 +400,11 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    _pass_through_chunk_buffer_guard =
+            std::make_unique<PassThroughChunkBufferGuard>(_runtime_state->exec_env()->stream_mgr(), _query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
-    if (_runtime_state) {
-        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
-    }
+    _pass_through_chunk_buffer_guard.reset();
 }
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {

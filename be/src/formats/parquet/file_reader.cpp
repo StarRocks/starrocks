@@ -25,7 +25,7 @@
 #include "cache/datacache.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -268,10 +268,12 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
     _group_reader_param.global_dictmaps = fd_scanner_ctx.global_dictmaps;
+    _group_reader_param.column_access_paths = fd_scanner_ctx.column_access_paths;
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
     _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
+    _group_reader_param.scan_range = fd_scanner_ctx.scan_range;
 
     int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;

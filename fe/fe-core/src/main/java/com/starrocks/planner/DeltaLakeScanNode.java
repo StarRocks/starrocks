@@ -53,10 +53,19 @@ public class DeltaLakeScanNode extends ScanNode {
     private DeltaConnectorScanRangeSource scanRangeSource = null;
     private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
+    private final ScalarOperator predicate;
+    private final List<String> fieldNames;
+    private final PartitionIdGenerator partitionIdGenerator;
+    private boolean enableIncrementalScanRanges = false;
 
-    public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
+                             ScalarOperator predicate, List<String> fieldNames,
+                             PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         deltaLakeTable = (DeltaLakeTable) desc.getTable();
+        this.predicate = predicate;
+        this.fieldNames = fieldNames;
+        this.partitionIdGenerator = partitionIdGenerator;
         setupCloudCredential();
     }
 
@@ -119,10 +128,8 @@ public class DeltaLakeScanNode extends ScanNode {
         scanRangeSource = null;
     }
 
-    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
-                                     PartitionIdGenerator partitionIdGenerator,
-                                     boolean enableIncrementalScanRanges)
-            throws StarRocksException {
+    public void setupScanRangeSource(boolean enableIncrementalScanRanges) throws StarRocksException {
+        this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -228,6 +235,17 @@ public class DeltaLakeScanNode extends ScanNode {
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+    }
+
+    @Override
+    public void prepareRetry() {
+        clear();
+        reachLimit = false;
+        try {
+            setupScanRangeSource(enableIncrementalScanRanges);
+        } catch (StarRocksException e) {
+            throw new RuntimeException("Failed to reset DeltaLakeScanNode for retry", e);
+        }
     }
 
     @Override

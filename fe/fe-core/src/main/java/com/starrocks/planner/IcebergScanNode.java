@@ -74,6 +74,8 @@ public class IcebergScanNode extends ScanNode {
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
+    private boolean enableGlobalLateMaterialization = false;
+    private boolean enableIncrementalScanRanges = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -165,6 +167,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+        this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         Preconditions.checkNotNull(tvrVersionRange, "tvrVersionRange id is null");
         if (tvrVersionRange.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -288,6 +291,10 @@ public class IcebergScanNode extends ScanNode {
         return res;
     }
 
+    public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
+        this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -332,9 +339,10 @@ public class IcebergScanNode extends ScanNode {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
             // for global dict
             output.append(explainColumnDict(prefix));
+            output.append(explainColumnAccessPath(prefix));
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
+                if (type.isComplexType() || type.isVariantType()) {
                     output.append(prefix)
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
@@ -392,6 +400,10 @@ public class IcebergScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        if (enableGlobalLateMaterialization) {
+            msg.hdfs_scan_node.setEnable_global_late_materialization(true);
+        }
+
         String sqlPredicates = getExplainString(conjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
         if (scanRangeSource != null) {
@@ -402,7 +414,21 @@ public class IcebergScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
+            tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
+        }
         bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
+    }
+
+    @Override
+    public void prepareRetry() {
+        clear();
+        reachLimit = false;
+        try {
+            setupScanRangeLocations(enableIncrementalScanRanges);
+        } catch (StarRocksException e) {
+            throw new RuntimeException("Failed to reset IcebergScanNode for retry", e);
+        }
     }
 
     @Override

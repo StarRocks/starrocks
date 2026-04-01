@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/encoding_bss.h"
 #include "formats/parquet/encoding_delta.h"
 #include "formats/parquet/encoding_dict.h"
@@ -28,6 +29,58 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::parquet {
+
+CacheAwareDictDecoder::CacheAwareDictDecoder() {
+    _dict_size_threshold = CpuInfo::get_l2_cache_size();
+}
+
+Status CacheAwareDictDecoder::next_batch(size_t count, ColumnContentType content_type, Column* dst,
+                                         const FilterData* filter) {
+    switch (content_type) {
+    case DICT_CODE: {
+        FixedLengthColumn<int32_t>* data_column;
+        if (dst->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column_raw_ptr());
+        } else {
+            data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
+        }
+        size_t cur_size = data_column->size();
+        data_column->resize_uninitialized(cur_size + count);
+        int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+        auto decoded_num = _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
+        if (decoded_num < count) {
+            return Status::InternalError("didn't get enough data from dict-decoder");
+        }
+        break;
+    }
+    case VALUE: {
+#ifdef BE_TEST
+        return _next_batch_value(count, dst, filter);
+#else
+        if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
+            return _next_batch_value(count, dst, filter);
+        } else {
+            return _next_batch_value(count, dst, nullptr);
+        }
+#endif // BE_TEST
+    }
+    default:
+        return Status::NotSupported("read type not supported");
+    }
+    return Status::OK();
+}
+
+Status CacheAwareDictDecoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos,
+                                                    ColumnContentType content_type, Column* dst,
+                                                    const FilterData* filter) {
+    if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
+        return _do_next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+    } else {
+        return _do_next_batch_with_nulls(count, null_infos, content_type, dst, nullptr);
+    }
+}
 
 Status Decoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                       Column* dst, const FilterData* filter) {

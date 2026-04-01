@@ -1721,12 +1721,12 @@ public class EditLog {
     }
 
     // for TransactionState
-    public void logInsertTransactionState(TransactionState transactionState) {
-        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
+    public void logInsertTransactionState(TransactionState transactionState, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState, walApplier);
     }
 
-    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
-        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch, walApplier);
     }
 
     public void logBackupJob(BackupJob job, WALApplier walApplier) {

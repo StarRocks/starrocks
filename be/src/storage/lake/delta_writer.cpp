@@ -24,9 +24,12 @@
 #include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
@@ -196,6 +199,14 @@ public:
         return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
     }
 
+    // Thread-safe accessor: returns a shared_ptr copy so the caller keeps the
+    // FlushToken alive while reading its stats, preventing use-after-free when
+    // close() concurrently resets _flush_token.
+    std::shared_ptr<FlushToken> get_flush_token() const {
+        std::shared_lock l(_cancel_lock);
+        return _flush_token;
+    }
+
     bool has_spill_block() const;
 
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
@@ -243,7 +254,7 @@ private:
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
-    std::unique_ptr<FlushToken> _flush_token;
+    std::shared_ptr<FlushToken> _flush_token;
 
     // The full list of columns defined
     std::shared_ptr<const TabletSchema> _tablet_schema;
@@ -913,10 +924,16 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
 
     if (config::enable_tablet_write_log) {
         int64_t finish_time = UnixMillis();
+        int32_t sst_output_files = static_cast<int32_t>(_tablet_writer->ssts().size());
+        int64_t sst_output_bytes = 0;
+        for (const auto& sst : _tablet_writer->ssts()) {
+            sst_output_bytes += sst.size.value_or(0);
+        }
         TabletWriteLogManager::instance()->add_load_log(
                 get_backend_id().value_or(0), _txn_id, _tablet_id, _table_id, _partition_id, _stats.row_count,
                 _stats.input_bytes, _tablet_writer->num_rows(), _tablet_writer->data_size(),
-                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time);
+                op_write->rowset().segments_size(), UniqueId(_load_id).to_string(), _begin_time_ms, finish_time,
+                sst_output_files, sst_output_bytes);
     }
 
     return txn_log;
@@ -926,6 +943,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_write_schema->num_key_columns());
     for (size_t i = 0; i < _write_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -1008,9 +1026,14 @@ void DeltaWriterImpl::close() {
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
+    if (_load_spill_block_mgr != nullptr) {
+        // ignore the return status of clear_parent_path,
+        // because the spill blocks will be cleared by GC later.
+        (void)_load_spill_block_mgr->clear_parent_path();
+    }
     {
-        // Take exclusive lock before resetting _flush_token to prevent race with cancel(),
-        // which may be accessing _flush_token concurrently.
+        // Take exclusive lock before resetting _flush_token to prevent race with cancel()
+        // and get_flush_token(), which may be accessing _flush_token concurrently.
         std::unique_lock l(_cancel_lock);
         _flush_token.reset();
     }
@@ -1068,11 +1091,8 @@ int64_t DeltaWriterImpl::num_rows() const {
 }
 
 int64_t DeltaWriterImpl::queueing_memtable_num() const {
-    if (_flush_token != nullptr) {
-        return _flush_token->get_stats().queueing_memtable_num;
-    } else {
-        return 0;
-    }
+    auto token = get_flush_token();
+    return token ? token->get_stats().queueing_memtable_num.load() : 0;
 }
 
 //// DeltaWriter
@@ -1182,6 +1202,10 @@ const DeltaWriterStat& DeltaWriter::get_writer_stat() const {
 
 const FlushStatistic* DeltaWriter::get_flush_stats() const {
     return _impl->get_flush_stats();
+}
+
+std::shared_ptr<FlushToken> DeltaWriter::get_flush_token() const {
+    return _impl->get_flush_token();
 }
 
 bool DeltaWriter::has_spill_block() const {

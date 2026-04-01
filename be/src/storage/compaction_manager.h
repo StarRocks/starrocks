@@ -21,7 +21,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "common/config.h"
 #include "common/thread/threadpool.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_task.h"
@@ -37,6 +36,10 @@ class StorageEngine;
 class CompactionManager {
 public:
     CompactionManager();
+    CompactionManager(const CompactionManager& compaction_manager) = delete;
+    CompactionManager(CompactionManager&& compaction_manager) = delete;
+    CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
+    CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
 
     ~CompactionManager() = default;
 
@@ -82,23 +85,7 @@ public:
         return res;
     }
 
-    bool check_if_exceed_max_task_num() {
-        bool exceed = false;
-        if (config::max_compaction_concurrency == 0) {
-            LOG_ONCE(WARNING) << "register compaction task failed for compaction is disabled";
-            exceed = true;
-        }
-        std::lock_guard lg(_tasks_mutex);
-        size_t running_tasks_num = 0;
-        for (const auto& it : _running_tasks) {
-            running_tasks_num += it.second.size();
-        }
-        if (running_tasks_num >= _max_task_num) {
-            VLOG(2) << "register compaction task failed for running tasks reach max limit:" << _max_task_num;
-            exceed = true;
-        }
-        return exceed;
-    }
+    bool check_if_exceed_max_task_num();
 
     int32_t max_task_num() const {
         std::lock_guard lg(_tasks_mutex);
@@ -148,11 +135,6 @@ public:
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
 private:
-    CompactionManager(const CompactionManager& compaction_manager) = delete;
-    CompactionManager(CompactionManager&& compaction_manager) = delete;
-    CompactionManager& operator=(const CompactionManager& compaction_manager) = delete;
-    CompactionManager& operator=(CompactionManager&& compaction_manager) = delete;
-
     void _dispatch_worker();
     bool _check_precondition(const CompactionCandidate& candidate);
     bool _check_compaction_disabled(const CompactionCandidate& candidate);

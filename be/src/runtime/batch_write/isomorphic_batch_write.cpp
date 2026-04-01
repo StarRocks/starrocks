@@ -23,6 +23,7 @@
 
 #include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
+#include "common/config_merge_commit_fwd.h"
 #include "common/util/bthreads/executor.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"

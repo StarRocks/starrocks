@@ -18,6 +18,12 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
@@ -2400,7 +2406,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     std::string rowset_path = last_rowset->rowset_path();
     std::string segment_path =
             strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(segment_path));
 
     ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());

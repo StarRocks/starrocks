@@ -600,7 +600,7 @@ public class ColumnTypeConverter {
             String fieldName = field.name();
             org.apache.paimon.types.DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
+            Column column = new Column(fieldName, fieldType, type.isNullable(), field.description());
             columns.add(column);
         }
         return columns;

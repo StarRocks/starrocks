@@ -15,7 +15,6 @@
 #pragma once
 
 #include "async_flush_stream_poller.h"
-#include "common/config.h"
 #include "connector/connector_chunk_sink.h"
 #include "formats/file_writer.h"
 #include "runtime/mem_tracker.h"

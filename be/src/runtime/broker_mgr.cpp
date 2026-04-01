@@ -36,7 +36,7 @@
 
 #include <sstream>
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
@@ -50,7 +50,7 @@
 
 namespace starrocks {
 
-BrokerMgr::BrokerMgr() : _thread_stop(false), _ping_thread(&BrokerMgr::ping_worker, this) {
+BrokerMgr::BrokerMgr() : _ping_thread(&BrokerMgr::ping_worker, this) {
     Thread::set_thread_name(_ping_thread, "broker_hrtbeat"); // broker heart beat
     REGISTER_GAUGE_STARROCKS_METRIC(broker_count, [this]() {
         std::lock_guard<std::mutex> l(_mutex);

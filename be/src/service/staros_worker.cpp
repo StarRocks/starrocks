@@ -23,13 +23,14 @@
 #include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_staros_worker_fwd.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/debug_util.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "fs/fs_factory.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
@@ -290,7 +291,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
 StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
-    auto localconf = build_conf_from_shard_info(info);
+    // Pass the external configuration to build_conf_from_shard_info as initial configuration.
+    // The shard info configuration will be merged on top of it in fslib_conf_from_this().
+    auto localconf = build_conf_from_shard_info(info, conf.empty() ? nullptr : &conf);
     if (!localconf.ok()) {
         return localconf.status();
     }
@@ -335,9 +338,10 @@ absl::StatusOr<std::string> StarOSWorker::build_scheme_from_shard_info(const Sha
     return scheme;
 }
 
-absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info) {
+absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(const ShardInfo& info,
+                                                                              const Configuration* initial_conf) {
     // use the remote fsroot as the default cache identifier
-    return info.fslib_conf_from_this(need_enable_cache(info), "");
+    return info.fslib_conf_from_this(need_enable_cache(info), "", initial_conf);
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>

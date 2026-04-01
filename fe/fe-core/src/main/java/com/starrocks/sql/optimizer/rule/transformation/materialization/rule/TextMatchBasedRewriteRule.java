@@ -258,6 +258,11 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
                 final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                         mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                if (mvContext == null) {
+                    logMVRewrite(context, this,
+                            "Skip text-based rewrite for {} because its metadata copy is unavailable", mv.getName());
+                    continue;
+                }
                 final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 

@@ -116,8 +116,8 @@ private:
 };
 
 template <LogicalType field_type>
-inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(const std::vector<std::string>& strings) {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+inline Converter<StorageCppType<field_type>> strings_to_set(const std::vector<std::string>& strings) {
+    using CppType = StorageCppType<field_type>;
 
     TypeInfoPtr type_info = get_type_info(field_type);
     Converter<CppType> result;
@@ -131,9 +131,9 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
 }
 
 template <LogicalType field_type>
-inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal_set(
-        int scale, const std::vector<std::string>& strings) {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+inline Converter<StorageCppType<field_type>> strings_to_decimal_set(int scale,
+                                                                    const std::vector<std::string>& strings) {
+    using CppType = StorageCppType<field_type>;
     Converter<CppType> result;
     for (const auto& s : strings) {
         CppType v;
@@ -145,12 +145,12 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal
 }
 
 template <LogicalType field_type>
-inline Converter<typename CppTypeTraits<field_type>::CppType> datums_to_set(const std::vector<Datum>& values) {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+inline Converter<StorageCppType<field_type>> datums_to_set(const std::vector<Datum>& values) {
+    using CppType = StorageCppType<field_type>;
     // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
     constexpr auto MappingLogicalType =
             field_type == TYPE_TINYINT || field_type == TYPE_BOOLEAN ? TYPE_INT : field_type;
-    using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+    using MappingCppType = StorageCppType<MappingLogicalType>;
 
     Converter<CppType> result;
     for (const auto& v : values) {
@@ -161,9 +161,8 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> datums_to_set(cons
 }
 
 template <LogicalType field_type>
-inline ItemHashSet<typename CppTypeTraits<field_type>::CppType> strings_to_hashset(
-        const std::vector<std::string>& strings) {
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+inline ItemHashSet<StorageCppType<field_type>> strings_to_hashset(const std::vector<std::string>& strings) {
+    using CppType = StorageCppType<field_type>;
 
     static TypeInfoPtr type_info = get_type_info(field_type);
     ItemHashSet<CppType> result;

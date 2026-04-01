@@ -43,6 +43,7 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/pretty_printer.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"

@@ -147,7 +147,6 @@ import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
 import com.starrocks.sql.ast.CreateOrReplaceTagClause;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
@@ -156,6 +155,7 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -297,6 +297,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
@@ -1171,6 +1172,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String columnName = colIdentifier.getValue();
         Pair<Type, AggStateDesc> typeWithAggStateDesc = getAggStateDesc(context.aggDesc());
 
+        // get column's agg state desc
+        AggStateDesc aggStateDesc = typeWithAggStateDesc == null ? null : typeWithAggStateDesc.second;
+
         // get column's type
         Type columnType = null;
         if (context.type() == null) {
@@ -1185,8 +1189,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             columnType = TypeParser.getType(context.type());
         }
 
-        // get column's agg state desc
-        AggStateDesc aggStateDesc = typeWithAggStateDesc == null ? null : typeWithAggStateDesc.second;
         NodePosition pos = context.type() == null ? NodePosition.ZERO : createPos(context.type());
         TypeDef typeDef = new TypeDef(columnType, pos);
         String charsetName = context.charsetName() != null ?
@@ -1251,8 +1253,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
-        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
-                isAutoIncrement, expr, comment, createPos(context));
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, aggStateDesc,
+                isAllowNull, defaultValueDef, isAutoIncrement, expr, comment, createPos(context));
+        columnDef.setExplicitSqlType(true);
+        return columnDef;
     }
 
     @Override
@@ -2332,7 +2336,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
-            return new CreateMaterializedViewStmt(tableRef, queryStatement, properties);
+            return new CreateSyncMVStmt(tableRef, queryStatement, properties);
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
@@ -2388,9 +2392,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitDropMaterializedViewStatement(
             com.starrocks.sql.parser.StarRocksParser.DropMaterializedViewStatementContext context) {
+        boolean force = context.FORCE() != null;
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableRef tableRef = new TableRef(normalizeName(mvQualifiedName), null, createPos(context.qualifiedName()));
-        return new DropMaterializedViewStmt(context.IF() != null, tableRef, createPos(context));
+        return new DropMaterializedViewStmt(context.IF() != null, force, tableRef, createPos(context));
     }
 
     @Override
@@ -5292,6 +5297,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitReplacePartitionColumnClause(
+            com.starrocks.sql.parser.StarRocksParser.ReplacePartitionColumnClauseContext context) {
+        Expr oldPartitionExpr = (Expr) visit(context.oldPartitionExpr);
+        Expr newPartitionExpr = (Expr) visit(context.newPartitionExpr);
+        return new ReplacePartitionColumnClause(oldPartitionExpr, newPartitionExpr, createPos(context));
+    }
+
+    @Override
     public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
         Map<String, String> properties = getCaseSensitiveProperties(context.properties());
@@ -5998,7 +6011,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitCommonTableExpression(com.starrocks.sql.parser.StarRocksParser.CommonTableExpressionContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
-        // Regenerate cteID when generating plan
+
+        CTERelation.CTEMaterializationHint hint = CTERelation.CTEMaterializationHint.NONE;
+        if (context.bracketHint() != null) {
+            List<Identifier> hintIdentifiers = visit(context.bracketHint().identifier(), Identifier.class);
+            if (hintIdentifiers.size() != 1) {
+                throw new ParsingException(
+                        "CTE hint must be a single [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
+            }
+            String hintText = hintIdentifiers.get(0).getValue().toLowerCase();
+            if (hintText.equals("materialized")) {
+                hint = CTERelation.CTEMaterializationHint.MATERIALIZED;
+            } else if (hintText.equals("not_materialized")) {
+                hint = CTERelation.CTEMaterializationHint.NOT_MATERIALIZED;
+            } else {
+                throw new ParsingException(
+                        "Unknown CTE hint [" + hintText + "]. Use [materialized] or [not_materialized]",
+                        createPos(context.bracketHint()));
+            }
+        }
+
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
                 normalizeName(((Identifier) visit(context.name)).getValue()),
@@ -6006,7 +6039,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 new QueryStatement(queryRelation),
                 false,
                 true,
-                queryRelation.getPos());
+                queryRelation.getPos(),
+                hint);
     }
 
     @Override
@@ -6611,17 +6645,34 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return valuesRelation;
     }
 
-    @Override
-    public ParseNode visitNamedArguments(com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext context) {
-        String name = ((Identifier) visit(context.identifier())).getValue();
+    private NamedArgument buildNamedArgument(ParserRuleContext identifierCtx,
+                                              ParserRuleContext expressionCtx,
+                                              ParserRuleContext fullCtx) {
+        String name = ((Identifier) visit(identifierCtx)).getValue();
         if (name == null || name.isEmpty() || name.equals(" ")) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
         }
-        Expr node = (Expr) visit(context.expression());
-        if (node == null) {
+        ParseNode parseNode = visit(expressionCtx);
+        if (parseNode == null) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
         }
-        return new NamedArgument(name, node);
+        if (!(parseNode instanceof Expr)) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(
+                    " Named argument value must be an expression, got " + parseNode.getClass().getSimpleName()),
+                    createPos(expressionCtx));
+        }
+        return new NamedArgument(name, (Expr) parseNode, createPos(fullCtx));
+    }
+
+    @Override
+    public ParseNode visitNamedArguments(com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext context) {
+        return buildNamedArgument(context.identifier(), context.expression(), context);
+    }
+
+    @Override
+    public ParseNode visitFunctionNamedArgument(
+            com.starrocks.sql.parser.StarRocksParser.FunctionNamedArgumentContext context) {
+        return buildNamedArgument(context.identifier(), context.expression(), context);
     }
 
     @Override
@@ -8168,6 +8219,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
+        return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    @Override
+    public ParseNode visitNamedArgsFunctionCall(
+            com.starrocks.sql.parser.StarRocksParser.NamedArgsFunctionCallContext context) {
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
+        NodePosition pos = createPos(context);
+
+        // Extract all named arguments - they will be processed by ExpressionAnalyzer
+        List<Expr> args = visit(context.functionNamedArgumentList().functionNamedArgument(), Expr.class);
+
+        // Create FunctionCallExpr with named arguments preserved
+        // ExpressionAnalyzer.reorderNamedArgAndAppendDefaults() will handle reordering
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName,
+                new FunctionParams(false, args), pos);
         return SyntaxSugars.parse(functionCallExpr);
     }
 

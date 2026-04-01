@@ -44,6 +44,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -191,7 +192,7 @@ public class LoadLoadingTask extends LoadTask {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isFinished ? "Finished" : "Running");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
@@ -227,7 +228,8 @@ public class LoadLoadingTask extends LoadTask {
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
 
-            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            summaryProfile.addInfoString(ProfileKeyDictionary.NON_DEFAULT_SESSION_VARIABLES,
+                    variables.getNonDefaultVariablesJson());
         }
 
         profile.addChild(summaryProfile);

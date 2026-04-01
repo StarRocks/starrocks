@@ -25,6 +25,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_util.h"
@@ -411,7 +413,9 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     exec_group = ExecutionGroupBuilder::create_normal_exec_group();
 
-    OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
+    auto op_factories_result = file_scan_node->decompose_to_pipeline(_context);
+    ASSERT_TRUE(op_factories_result.ok()) << op_factories_result.status().message();
+    OpFactories op_factories = std::move(op_factories_result).value();
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));

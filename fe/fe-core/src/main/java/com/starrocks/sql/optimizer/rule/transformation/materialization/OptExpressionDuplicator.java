@@ -524,6 +524,10 @@ public class OptExpressionDuplicator {
             }
             opBuilder.setWindowCall(newWindowCalls);
 
+            if (windowOperator.getSkewColumn() != null) {
+                opBuilder.setSkewColumn(getNewScalarOp(windowOperator.getSkewColumn()));
+            }
+
             processCommon(opBuilder);
 
             return OptExpression.create(opBuilder.build(), inputs);
@@ -688,12 +692,22 @@ public class OptExpressionDuplicator {
             LogicalCTEConsumeOperator cteConsumeOperator = (LogicalCTEConsumeOperator) optExpression.getOp();
             LogicalCTEConsumeOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             opBuilder.withOperator(cteConsumeOperator);
-            opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+
+            // If the CTE anchor/produce for this consumer was also duplicated, remap the CTE ID
+            // and both sides of the output column map. Otherwise, keep the original CTE ID and
+            // only remap the consumer-side columns, preserving the producer-side
+            // column refs so the consumer still references the original producer.
+            boolean hasMatchingProducer = cteIdMapping.containsKey(cteConsumeOperator.getCteId());
+            if (hasMatchingProducer) {
+                opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+            }
 
             // cteOutputColumnRefMap
             Map<ColumnRefOperator, ColumnRefOperator> newCteOutputColumnRefMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : cteConsumeOperator.getCteOutputColumnRefMap().entrySet()) {
-                newCteOutputColumnRefMap.put(getOrCreateColRef(e.getKey()), getOrCreateColRef(e.getValue()));
+                ColumnRefOperator newKey = getOrCreateColRef(e.getKey());
+                ColumnRefOperator newValue = hasMatchingProducer ? getOrCreateColRef(e.getValue()) : e.getValue();
+                newCteOutputColumnRefMap.put(newKey, newValue);
             }
             opBuilder.setCteOutputColumnRefMap(newCteOutputColumnRefMap);
 

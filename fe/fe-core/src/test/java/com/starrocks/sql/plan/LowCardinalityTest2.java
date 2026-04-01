@@ -1849,11 +1849,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "else 'a' end from supplier; ";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' " +
-                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
-                "WHEN coalesce(DictDecode(10: S_ADDRESS, [<place-holder>]), 'c') = 'c' THEN 'c' " +
-                "ELSE 'a' END\n" +
-                "  |");
+                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' WHEN 5: " +
+                "S_PHONE = 'b' THEN 'b' WHEN DictDecode(10: S_ADDRESS, [coalesce(<place-holder>, 'c') = 'c']) THEN" +
+                " 'c' ELSE 'a' END");
 
         sql = "select case when s_address = 'test' then 'a' " +
                 "when s_phone = 'b' then 'b' " +
@@ -1876,8 +1874,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: supplier\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: ((5: S_PHONE = 'a') OR (coalesce(DictDecode(12: S_ADDRESS, [<place-holder>]), 'c') = 'c')) " +
-                "OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (DictDecode(12: S_ADDRESS, [coalesce(<place-holder>, 'c') = " +
+                "'c']))) OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
 
         sql = "select count(*) from supplier where s_phone = 'a' or upper(s_address) = 'c' " +
                 "or s_address = 'address'";
@@ -2802,6 +2800,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |    |  36 <-> NULL", plan);
     }
 
+    @Test
+    public void testUnionWithAllConstants() throws Exception {
+        String sql = """
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    NULL, 'zzz', NULL
+                  FROM
+                      supplier
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
+                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+  
     @Test
     public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
         String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";

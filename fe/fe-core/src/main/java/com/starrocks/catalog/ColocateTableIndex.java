@@ -45,6 +45,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -177,6 +178,15 @@ public class ColocateTableIndex implements Writable {
             return false;
         }
 
+        // For range distribution: parse colocate property and validate colocate columns
+        if (olapTable.getDefaultDistributionInfo() instanceof RangeDistributionInfo) {
+            ColocatePropertyInfo propertyInfo = ColocatePropertyInfo.of(colocateGroup);
+            MetaUtils.getRangeColocateColumns(olapTable, propertyInfo.getColocateColumnNames());
+            // TODO: create range colocate group after colocate_init is merged
+            olapTable.setColocateGroup(colocateGroup);
+            return true;
+        }
+
         String fullGroupName = db.getId() + "_" + colocateGroup;
         ColocateGroupSchema groupSchema = this.getGroupSchema(fullGroupName);
         ColocateTableIndex.GroupId colocateGrpIdInOtherDb = null; /* to use GroupId.grpId */
@@ -210,7 +220,6 @@ public class ColocateTableIndex implements Writable {
                 "colocate not supported");
         writeLock();
         try {
-            boolean groupAlreadyExist = true;
             GroupId groupId;
             String fullGroupName = dbId + "_" + groupName;
 
@@ -223,7 +232,6 @@ public class ColocateTableIndex implements Writable {
                 } else {
                     // generate a new one
                     groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
-                    groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
                 if (!(tbl instanceof ExternalOlapTable)) {
@@ -236,7 +244,8 @@ public class ColocateTableIndex implements Writable {
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         MetaUtils.getColumnsByColumnIds(tbl, distributionInfo.getDistributionColumns()),
                         distributionInfo.getBucketNum(),
-                        tbl.getDefaultReplicationNum());
+                        tbl.getDefaultReplicationNum(),
+                        distributionInfo.getType());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
             }
@@ -244,6 +253,8 @@ public class ColocateTableIndex implements Writable {
             if (tbl.isCloudNativeTableOrMaterializedView()) {
                 if (!isReplay) { // leader create or update meta group
                     List<Long> shardGroupIds = tbl.getShardGroupIds();
+                    // check the group existence in lakeGroups
+                    boolean groupAlreadyExist = lakeGroups.stream().anyMatch(gid -> Objects.equals(gid.grpId, groupId.grpId));
                     if (!groupAlreadyExist) {
                         GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {

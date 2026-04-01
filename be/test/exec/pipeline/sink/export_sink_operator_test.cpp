@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

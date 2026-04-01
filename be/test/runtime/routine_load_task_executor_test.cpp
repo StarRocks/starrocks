@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"

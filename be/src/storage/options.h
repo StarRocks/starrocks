@@ -34,25 +34,20 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "base/uid_util.h"
 #include "fs/fs.h"
 #include "storage/lake/location_provider.h"
-#include "storage/olap_define.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 
 class MemTracker;
-
-struct StorePath {
-    StorePath() = default;
-    explicit StorePath(std::string path_) : path(std::move(path_)) {}
-    std::string path;
-    TStorageMedium::type storage_medium{TStorageMedium::HDD};
-};
 
 // parse a single root path of storage_root_path
 Status parse_root_path(const std::string& root_path, StorePath* path);
@@ -85,6 +80,10 @@ struct LakeIOOptions {
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
     bool cache_file_only = false; // only used for CACHE SELECT
+    // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
+    // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.
+    std::function<Status()> sst_warmup_fn;
+    std::shared_ptr<std::atomic<bool>> sst_warmup_done;
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };

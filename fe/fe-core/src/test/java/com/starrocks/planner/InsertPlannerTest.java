@@ -161,9 +161,9 @@ public class InsertPlannerTest {
 
         // Use reflection to call the private method
         Method method = InsertPlanner.class.getDeclaredMethod(
-                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class);
+                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class, List.class);
         method.setAccessible(true);
-        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session);
+        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session, null);
 
         // FILE mode should not create SortProperty
         // PhysicalPropertySet should be empty (no distribution, no sort)
@@ -196,9 +196,9 @@ public class InsertPlannerTest {
 
         // Use reflection to call the private method
         Method method = InsertPlanner.class.getDeclaredMethod(
-                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class);
+                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class, List.class);
         method.setAccessible(true);
-        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session);
+        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session, null);
 
         // HOST mode with no sort order should not create SortProperty
         assert result != null;
@@ -254,9 +254,9 @@ public class InsertPlannerTest {
 
         // Use reflection to call the private method
         Method method = InsertPlanner.class.getDeclaredMethod(
-                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class);
+                "createPhysicalPropertySet", InsertStmt.class, List.class, SessionVariable.class, List.class);
         method.setAccessible(true);
-        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session);
+        PhysicalPropertySet result = (PhysicalPropertySet) method.invoke(new InsertPlanner(), insertStmt, outputColumns, session, null);
 
         // Verify the result - HOST mode with sort order should create SortProperty
         assert result != null;

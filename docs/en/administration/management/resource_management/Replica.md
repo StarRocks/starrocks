@@ -511,6 +511,47 @@ It operates through the following mechanisms:
 
   No additional replicas or expensive object storage API calls are needed.
 
+### Check Tablet Status
+
+Before executing a repair, you can use the [ADMIN SHOW TABLET STATUS](../../../sql-reference/sql-statements/cluster-management/tablet_replica/ADMIN_SHOW_TABLET_STATUS.md) statement to check the file integrity of each Tablet in a cloud-native table or cloud-native materialized view, and identify whether metadata or data files are missing.
+
+**Only cloud-native tables and cloud-native materialized views in shared-data clusters support this statement.**
+
+#### Syntax
+
+```SQL
+ADMIN SHOW TABLET STATUS FROM [<db_name>.]<table_name>
+[PARTITION (<partition_name> [, <partition_name>, ...])]
+[WHERE STATUS [=|!=] {'NORMAL'|'MISSING_META'|'MISSING_DATA'}]
+[PROPERTIES ("max_missing_data_files_to_show" = "<num>")]
+```
+
+**Tablet status values:**
+
+| Status       | Description                                   |
+| ------------ | --------------------------------------------- |
+| NORMAL       | Metadata and data files are all intact.        |
+| MISSING_META | Metadata file is missing.                      |
+| MISSING_DATA | Data file(s) are missing.                      |
+
+**Return columns:**
+
+| Column               | Description                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| TabletId             | Tablet ID.                                                                                                                     |
+| PartitionId          | Physical partition ID of the partition the Tablet belongs to.                                                                  |
+| Version              | Current visible version of the Tablet.                                                                                         |
+| Status               | Tablet status. See status values above.                                                                                        |
+| MissingDataFileCount | Number of missing data files. Populated when `Status` is `MISSING_DATA`.                                                      |
+| MissingDataFiles     | List of missing data file paths. Limited by `max_missing_data_files_to_show` (default: 5). Populated when `Status` is `MISSING_DATA`. |
+
+#### Example: Check abnormal tablets in a partition
+
+```SQL
+ADMIN SHOW TABLET STATUS FROM my_cloud_table PARTITION (p20250101)
+WHERE STATUS != "NORMAL";
+```
+
 ### Usage
 
 #### Syntax
@@ -532,6 +573,7 @@ PROPERTIES (
 | --------------------------- | ------- | ------- | ------------------------------------------------------------------------------------- |
 | enforce_consistent_version  | Boolean | True    | Whether to enforce all tablets in a partition to roll back to a consistent version. If this item is set to `true`, the system will search for a consistent version in the history that is valid for all tablets to perform the rollback, ensuring data version alignment across the partition. If it is set to `false`, each tablet in the partition is allowed to rollback to its latest available valid version. The versions of different tablets may be inconsistent, but this maximizes data preservation. |
 | allow_empty_tablet_recovery | Boolean | False   | Whether to allow recovery by creating empty tablets. This item takes effect only when `enforce_consistent_version` is `false`. If this item is set to `true`, when metadata is missing for all versions of some tablets but valid metadata exists for at least one tablet, the system attempts to create empty tablets to fill the missing versions. If metadata for all versions of all tablets is lost, recovery is impossible. |
+| dry_run                     | Boolean | False   | Whether to return the repair plan without actually executing the repair. If set to `true`, the system evaluates the recoverability of each partition and returns the repair plan without performing any actual metadata rollback. Useful for previewing the repair effect before execution. See [Preview the Repair Plan (Dry Run)](#preview-the-repair-plan-dry-run). |
 
 ### Examples
 
@@ -566,9 +608,54 @@ PROPERTIES (
 );
 ```
 
+### Preview the Repair Plan (Dry Run)
+
+Before executing the repair, you can use `dry_run` mode to preview the repair plan. This lets you check the recoverability of each partition and the version each tablet would roll back to, without actually modifying any metadata.
+
+**`dry_run` mode is only supported for cloud-native tables in shared-data clusters.**
+
+#### Syntax
+
+```SQL
+ADMIN REPAIR TABLE <table_name>
+[PARTITION (<partition_name>, ...)]
+PROPERTIES (
+    'dry_run' = 'true'
+);
+```
+
+#### Return Columns
+
+| Column            | Description                                                                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| PartitionId       | Partition ID.                                                                                                                                                                  |
+| VisibleVersion    | Current visible version.                                                                                                                                                       |
+| RepairStatus      | Repair status: `NORMAL` (all tablets healthy, no repair needed), `RECOVERABLE` (missing files but recoverable), `UNRECOVERABLE` (missing files and unrecoverable), `UNKNOWN` (exception during probing). |
+| TabletRecoverInfo | JSON array listing the version each tablet will roll back to. Only populated when `RepairStatus` is `RECOVERABLE`.                                                             |
+| ErrorMsg          | Error message. Only populated when `RepairStatus` is `UNRECOVERABLE` or `UNKNOWN`.                                                                                            |
+
+#### Example: Preview the repair plan for partition p1
+
+```SQL
+ADMIN REPAIR TABLE my_cloud_table PARTITION (p1) PROPERTIES ("dry_run" = "true");
+```
+
+Example output:
+
+```Plain
++-------------+----------------+--------------+-----------------------------------------------------------------------+---------+
+| PartitionId | VisibleVersion | RepairStatus | TabletRecoverInfo                                                     | ErrorMsg|
++-------------+----------------+--------------+-----------------------------------------------------------------------+---------+
+| 10001       | 100            | RECOVERABLE  | [{"tabletId":20001,"version":98},{"tabletId":20002,"version":98}]     |         |
+| 10002       | 100            | NORMAL       | []                                                                    |         |
++-------------+----------------+--------------+-----------------------------------------------------------------------+---------+
+```
+
+After confirming the repair plan, remove `dry_run` (or set it to `false`) to execute the actual repair.
+
 ### Limitations and Recommendations
 
-- Repairing replicas is supported for shared-data clusters from v4.1 onwards.
+- Repairing replicas is supported for shared-data clusters from v3.5 onwards.
 - Currently, setting `PROPERTIES` is applicable only to shared-data tables.
 - Take the following points into consideration when performing materialized view recovery:
   - Asynchronous materialized views require a manual refresh after recovery.

@@ -20,6 +20,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
@@ -156,6 +157,7 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
         multi_get->add(keys, key_index, key_index);
     }
     vector<TabletMultiGet*> multi_gets;
+    multi_gets.reserve(multi_gets_by_tablet.size());
     for (auto& iter : multi_gets_by_tablet) {
         multi_gets.push_back(iter.second.get());
     }
@@ -269,7 +271,6 @@ Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }
-    closure->ref();
     stub->local_tablet_reader_multi_get(&closure->cntl, &request, &closure->result, closure);
     closure->join();
     if (closure->cntl.Failed()) {

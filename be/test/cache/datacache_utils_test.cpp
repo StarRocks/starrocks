@@ -14,6 +14,7 @@
 
 #include "cache/datacache_utils.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>

@@ -71,7 +71,8 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.metric.IcebergMetricsMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -556,8 +557,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Convert ScalarOperator to Iceberg Expression
         Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
         if (deleteExpr == null) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail("Failed to convert predicate to Iceberg expression", deleteType);
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    "Failed to convert predicate to Iceberg expression", deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
             throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
         }
 
@@ -580,19 +583,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.DELETED_RECORDS_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.REMOVED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
             throw new StarRocksConnectorException("Failed to execute metadata delete on %s.%s: %s",
                     dbName, tableName, e.getMessage());
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         // Invalidate cache after commit
@@ -662,7 +666,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             Database db = getDb(context, dbName);
             IcebergTable table =
                     IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
-            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, icebergTable);
             updateTableProperty(db, table);
             return table;
@@ -777,6 +780,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
         for (Snapshot snapshot : snapshots) {
+            // Skip REPLACE (compaction) snapshots - they rewrite files without changing logical data,
+            // consistent with Iceberg's IncrementalAppendScan and IncrementalChangelogScan behavior.
+            if (DataOperations.REPLACE.equals(snapshot.operation())) {
+                lastSnapshotId = snapshot.snapshotId();
+                continue;
+            }
             long currentSnapshotId = snapshot.snapshotId();
             TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot);
@@ -886,6 +895,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
                                                     MetadataTableType metadataTableType) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || !connectContext.isMetadataContext()) {
+            MetricRepo.COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL
+                    .getMetric(metadataTableType.typeString)
+                    .increase(1L);
+        }
+
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -1284,52 +1300,178 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             private void ensureOpen() {
                 if (fileScanTaskIterator == null) {
-                    fileScanTaskIterable = TableScanUtil.splitFiles(tableScan.planFiles(), tableScan.targetSplitSize());
-                    fileScanTaskIterator = fileScanTaskIterable.iterator();
+                    openPlannedTaskIterator(tableScan);
                 }
-                if (!fileScanTaskIterator.hasNext()) {
-                    try {
-                        fileScanTaskIterable.close();
-                        fileScanTaskIterator.close();
-                    } catch (Exception e) {
-                        // ignore
-                    } finally {
-                        //record scan metrics profile
-                        if (tableScan instanceof StarRocksIcebergTableScan) {
-                            IcebergMetricsReporter metricsReporter =
-                                    ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
-                            if (metricsReporter.getScanReport() != null) {
-                                String name = "ICEBERG.ScanMetrics." +
-                                        ((StarRocksIcebergTableScan) tableScan).getIcebergTableName().toString();
-                                String value = metricsReporter.getScanReport().toString();
-                                Tracers.record(Tracers.Module.EXTERNAL, name, value);
-                            }
-                        }
-                    }
-                    hasMore = false;
+                if (fileScanTaskIterator.hasNext()) {
+                    return;
                 }
+                closePlannedTaskIterator();
+                recordScanMetrics(tableScan);
+                hasMore = false;
+            }
+
+            private void openPlannedTaskIterator(Scan tableScan) {
+                fileScanTaskIterable = normalizePlannedTaskIterable(tableScan.planFiles());
+                fileScanTaskIterator = buildSplitFileScanTaskIterator(
+                        fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize());
+            }
+
+            private void closePlannedTaskIterator() {
+                closeQuietly(fileScanTaskIterator);
+                closeQuietly(fileScanTaskIterable);
+                fileScanTaskIterator = null;
+                fileScanTaskIterable = null;
             }
 
             @Override
             public void close() {
-                try {
-                    if (fileScanTaskIterator != null) {
-                        fileScanTaskIterator.close();
-                    }
-                } catch (Exception ignore) {
-                }
-
-                try {
-                    if (fileScanTaskIterable != null) {
-                        fileScanTaskIterable.close();
-                    }
-                } catch (Exception ignore) {
-                } finally {
-                    fileScanTaskIterator = null;
-                    fileScanTaskIterable = null;
-                }
+                closePlannedTaskIterator();
             }
         };
+    }
+
+    private boolean hasPositionDeletes(FileScanTask task) {
+        for (DeleteFile deleteFile : task.deletes()) {
+            if (deleteFile.content() == FileContent.POSITION_DELETES) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CloseableIterable<FileScanTask> splitFileScanTask(FileScanTask task, long targetSplitSize) {
+        if (!hasPositionDeletes(task)) {
+            return TableScanUtil.splitFiles(CloseableIterable.withNoopClose(task), targetSplitSize);
+        }
+
+        List<FileScanTask> splitTasks = Lists.newArrayList(task.split(targetSplitSize));
+        if (splitTasks.size() <= 1) {
+            return CloseableIterable.withNoopClose(task);
+        }
+
+        return CloseableIterable.withNoopClose(coalesceSplitTasks(task, splitTasks, targetSplitSize));
+    }
+
+    private List<FileScanTask> coalesceSplitTasks(FileScanTask task, List<FileScanTask> splitTasks, long targetSplitSize) {
+        List<FileScanTask> coalescedTasks = new ArrayList<>();
+        long currentOffset = -1;
+        long currentLength = 0;
+        long currentEnd = -1;
+        for (FileScanTask splitTask : splitTasks) {
+            if (currentOffset < 0) {
+                currentOffset = splitTask.start();
+                currentLength = splitTask.length();
+                currentEnd = splitTask.start() + splitTask.length();
+                continue;
+            }
+
+            if (currentLength < targetSplitSize && currentEnd == splitTask.start()) {
+                currentLength += splitTask.length();
+                currentEnd += splitTask.length();
+                continue;
+            }
+
+            coalescedTasks.add(buildCoalescedSplitTask(task, currentOffset, currentLength));
+            currentOffset = splitTask.start();
+            currentLength = splitTask.length();
+            currentEnd = splitTask.start() + splitTask.length();
+        }
+        coalescedTasks.add(buildCoalescedSplitTask(task, currentOffset, currentLength));
+        return coalescedTasks;
+    }
+
+    private FileScanTask buildCoalescedSplitTask(FileScanTask task, long offset, long length) {
+        if (offset == task.start() && length == task.length()) {
+            return task;
+        }
+        return new IcebergSplitScanTask(offset, length, task);
+    }
+
+    private CloseableIterator<FileScanTask> buildSplitFileScanTaskIterator(
+            CloseableIterable<FileScanTask> plannedTaskIterable,
+            CloseableIterator<FileScanTask> plannedTaskIterator,
+            long targetSplitSize) {
+        return new CloseableIterator<>() {
+            private CloseableIterable<FileScanTask> currentTaskIterable = CloseableIterable.empty();
+            private CloseableIterator<FileScanTask> currentTaskIterator = CloseableIterator.empty();
+
+            @Override
+            public void close() throws IOException {
+                currentTaskIterator.close();
+                currentTaskIterable.close();
+                plannedTaskIterator.close();
+                plannedTaskIterable.close();
+            }
+
+            @Override
+            public boolean hasNext() {
+                while (!currentTaskIterator.hasNext() && plannedTaskIterator.hasNext()) {
+                    openNextTask();
+                }
+                return currentTaskIterator.hasNext();
+            }
+
+            @Override
+            public FileScanTask next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return currentTaskIterator.next();
+            }
+
+            private void openNextTask() {
+                closeCurrentTask();
+                FileScanTask task = plannedTaskIterator.next();
+                currentTaskIterable = splitFileScanTask(task, targetSplitSize);
+                currentTaskIterator = currentTaskIterable.iterator();
+            }
+
+            private void closeCurrentTask() {
+                closeUnchecked(currentTaskIterator);
+                closeUnchecked(currentTaskIterable);
+                currentTaskIterator = CloseableIterator.empty();
+                currentTaskIterable = CloseableIterable.empty();
+            }
+        };
+    }
+
+    private CloseableIterable<FileScanTask> normalizePlannedTaskIterable(CloseableIterable<FileScanTask> plannedTasks) {
+        return plannedTasks != null ? plannedTasks : CloseableIterable.empty();
+    }
+
+    private void recordScanMetrics(Scan tableScan) {
+        if (!(tableScan instanceof StarRocksIcebergTableScan)) {
+            return;
+        }
+
+        IcebergMetricsReporter metricsReporter = ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
+        if (metricsReporter.getScanReport() == null) {
+            return;
+        }
+
+        String name = "ICEBERG.ScanMetrics." + ((StarRocksIcebergTableScan) tableScan).getIcebergTableName();
+        String value = metricsReporter.getScanReport().toString();
+        Tracers.record(EXTERNAL, name, value);
+    }
+
+    private void closeUnchecked(AutoCloseable closeable) {
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignore) {
+        }
     }
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
@@ -1737,17 +1879,19 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
                 long deletedBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteRows(deletedRows, deleteType);
-                IcebergMetricsMgr.increaseIcebergDeleteBytes(deletedBytes, deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
             } else {
-                IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess(deleteType);
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergDeleteTotalFail(e, deleteType);
+            // Delete failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(System.currentTimeMillis() - startMs, deleteType);
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -1829,18 +1973,20 @@ public class IcebergMetadata implements ConnectorMetadata {
                         summary.getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
                 long writtenBytes = Long.parseLong(
                         summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
-                IcebergMetricsMgr.increaseIcebergWriteRows(writtenRows, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteBytes(writtenBytes, writeType);
-                IcebergMetricsMgr.increaseIcebergWriteFiles(dataFiles.size(), writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
+                ConnectorMetricsMgr.increaseWriteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenRows, writeType);
+                ConnectorMetricsMgr.increaseWriteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writtenBytes, writeType);
+                ConnectorMetricsMgr.increaseWriteFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG, dataFiles.size(), writeType);
             } else {
-                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
+                ConnectorMetricsMgr.increaseWriteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, writeType);
             }
         } catch (Exception e) {
-            IcebergMetricsMgr.increaseIcebergWriteTotalFail(e, writeType);
+            // Write failure metrics are recorded centrally in StmtExecutor.recordExternalSinkFailure(),
+            // which covers both commit-time failures and BE-level write failures.
             throw e;
         } finally {
-            IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(System.currentTimeMillis() - startMs, writeType);
+            ConnectorMetricsMgr.increaseWriteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, writeType);
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);

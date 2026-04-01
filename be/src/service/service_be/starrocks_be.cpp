@@ -24,7 +24,11 @@
 #include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
@@ -369,4 +373,5 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     LOG(INFO) << process_name << " exited successfully";
 }
+
 } // namespace starrocks

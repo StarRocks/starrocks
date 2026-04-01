@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "storage/olap_common.h"
 #include "storage/range.h"
 

@@ -67,7 +67,7 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
@@ -593,7 +593,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         String sql = "create materialized view mv1\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+        Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
     }
 
     @Test
@@ -1514,7 +1514,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+            Assertions.assertTrue(statementBase instanceof CreateSyncMVStmt);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -2016,7 +2016,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
@@ -2064,7 +2064,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         Assertions.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
         });
 
         currentState.getColocateTableIndex().clear();
@@ -2115,10 +2115,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select k1, k2 from colocateTable3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
             waitingRollupJobV2Finish();
 
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
@@ -2736,9 +2736,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1, partitionExpr.size());
         Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
-        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals("k1", slotRef.getColumnName());
+        Assertions.assertFalse(slotRef.getType().isInvalid());
     }
 
     @Test
@@ -2978,8 +2977,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     .useDatabase("test_mv_different_db");
             String sql = "create materialized view test.test_mv_use_different_tbl " +
                     "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-            CreateMaterializedViewStmt stmt =
-                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            CreateSyncMVStmt stmt =
+                    (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
             Assertions.assertEquals(stmt.getDBName(), "test");
             Assertions.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
             currentState.getLocalMetastore().createMaterializedView(stmt);
@@ -3009,8 +3008,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Assertions.assertThrows(AnalysisException.class, () -> {
                 String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
                         "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
-                CreateMaterializedViewStmt stmt =
-                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                CreateSyncMVStmt stmt =
+                        (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                                 newStarRocksAssert.getCtx());
 
             });
@@ -6049,19 +6048,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Column column = new Column("c1", com.starrocks.type.IntegerType.INT);
         ColumnRefOperator colRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c1", true);
 
-        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
         org.apache.iceberg.Schema schema =
                 new org.apache.iceberg.Schema(org.apache.iceberg.types.Types.NestedField.required(
                         1, "c1", org.apache.iceberg.types.Types.IntegerType.get()));
         org.apache.iceberg.PartitionSpec spec =
                 org.apache.iceberg.PartitionSpec.builderFor(schema).identity("c1").build();
-        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableMetadata meta = org.apache.iceberg.TableMetadata.newTableMetadata(
+                schema, spec, "/tmp/iceberg-test", java.util.Collections.emptyMap());
         org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
-        Mockito.when(nativeTable.schema()).thenReturn(schema);
-        Mockito.when(nativeTable.spec()).thenReturn(spec);
-        Mockito.when(nativeTable.operations()).thenReturn(ops);
         Mockito.when(ops.current()).thenReturn(meta);
-        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+        org.apache.iceberg.BaseTable nativeTable = new org.apache.iceberg.BaseTable(ops, "t");
 
         IcebergTable icebergTable = IcebergTable.builder()
                 .setId(1)

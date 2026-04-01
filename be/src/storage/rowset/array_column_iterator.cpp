@@ -29,7 +29,7 @@ ArrayColumnIterator::ArrayColumnIterator(ColumnReader* reader, std::unique_ptr<C
           _null_iterator(std::move(null_iterator)),
           _array_size_iterator(std::move(array_size_iterator)),
           _element_iterator(std::move(element_iterator)),
-          _path(std::move(path)) {}
+          _path(path) {}
 
 Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iterator != nullptr) {

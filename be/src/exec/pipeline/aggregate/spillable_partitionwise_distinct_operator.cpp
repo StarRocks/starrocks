@@ -354,7 +354,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseDistinctSourceOperator::_pull_spilled_c
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_distinct->need_input() && !_pw_distinct->is_finished());
-                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_distinct->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_distinct->set_finishing(state));

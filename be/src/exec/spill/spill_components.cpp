@@ -24,7 +24,7 @@
 #include "base/bit/bit_util.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/aggregator.h"
 #include "exec/spill/common.h"

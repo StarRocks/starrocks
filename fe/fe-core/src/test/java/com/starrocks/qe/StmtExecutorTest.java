@@ -22,8 +22,12 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.QueryDetail.QueryMemState;
 import com.starrocks.qe.QueryState.MysqlStateType;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -38,6 +42,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -45,55 +50,95 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class StmtExecutorTest {
 
     @Test
-    public void testIsForwardToLeader(@Mocked GlobalStateMgr state) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = state;
+    public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        Thread testThread = Thread.currentThread();
+        AtomicInteger leaderCallCount = new AtomicInteger(0);
 
-                state.isInTransferringToLeader();
-                times = 1;
-                result = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
 
-                state.isLeader();
-                times = 2;
-                result = false;
-                result = true;
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                if (Thread.currentThread() != testThread) {
+                    return false;
+                }
+                return leaderCallCount.getAndIncrement() > 0;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return Thread.currentThread() == testThread;
             }
         };
 
-        Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
-                new ShowFrontendsStmt()).isForwardToLeader());
+        new Expectations(ctx) {
+            {
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+            }
+        };
+
+        Assertions.assertFalse(new StmtExecutor(ctx, new ShowFrontendsStmt()).isForwardToLeader());
     }
 
     @Test
-    public void testForwardExplicitTxnSelectOnFollower(@Mocked GlobalStateMgr state,
-                                                       @Mocked ConnectContext ctx) {
+    public void testForwardExplicitTxnSelectOnFollower(@Mocked ConnectContext ctx) {
         StatementBase stmt;
         MysqlSerializer serializer = MysqlSerializer.newInstance();
+        GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
+        SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public GlobalStateMgr getServingState() {
+                return state;
+            }
+
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+
+            @Mock
+            public SqlParser getSqlParser() {
+                return sqlParser;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+
+            @Mock
+            public boolean isInTransferringToLeader() {
+                return false;
+            }
+        };
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = state;
-
-                state.getSqlParser();
-                minTimes = 0;
-                result = new SqlParser(AstBuilder.getInstance());
-
-                state.isLeader();
-                minTimes = 0;
-                result = false;
-
-                state.isInTransferringToLeader();
-                minTimes = 0;
-                result = false;
-
                 ctx.getSerializer();
                 minTimes = 0;
                 result = serializer;
@@ -617,6 +662,58 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testAddRunningQueryDetailRestoresComputeResource() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public void applyWarehouseSessionVariable(String warehouse, SessionVariable sv) {
+                sv.setWarehouseName(warehouse);
+            }
+        };
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+
+        String originalWarehouse = ctx.getCurrentWarehouseName();
+        ComputeResource originalResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        ctx.setCurrentComputeResource(originalResource);
+
+        String hintedWarehouse = "query_detail_hint_warehouse";
+        String sql = "select /*+ SET_VAR(warehouse='" + hintedWarehouse + "') */ 1";
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        stmt.setOrigStmt(new com.starrocks.sql.ast.OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        // Enable query detail collection
+        boolean oldConfig = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            executor.addRunningQueryDetail(stmt);
+        } finally {
+            Config.enable_collect_query_detail_info = oldConfig;
+        }
+
+        QueryDetail queryDetail = ctx.getQueryDetail();
+        Assertions.assertNotNull(queryDetail);
+        Assertions.assertEquals(hintedWarehouse, queryDetail.getWarehouse());
+        Assertions.assertEquals(originalWarehouse, ctx.getCurrentWarehouseName());
+
+        ComputeResource afterResource = ctx.getCurrentComputeResourceNoAcquire();
+        Assertions.assertEquals(originalResource, afterResource,
+                "ComputeResource should be restored after addRunningQueryDetail");
+    }
+
+    @Test
     public void testRollbackWithTxnIdWhenTransactionDisabled() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -648,5 +745,288 @@ public class StmtExecutorTest {
         Assertions.assertFalse(ctx.getState().isError());
         // TxnId should be cleared after rollback
         Assertions.assertEquals(0, ctx.getTxnId());
+    }
+
+    @Test
+    public void testFailedQueryDetailUsesCoordinatorStatistics() {
+        boolean oldCollect = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            executor.addRunningQueryDetail(stmt);
+
+            // Force placeholder stats by calling the getter before coordinator stats are available.
+            executor.getQueryStatisticsForAuditLog();
+
+            PQueryStatistics coordinatorStats = new PQueryStatistics();
+            coordinatorStats.scanBytes = 123L;
+            coordinatorStats.scanRows = 456L;
+            coordinatorStats.cpuCostNs = 789L;
+            coordinatorStats.memCostBytes = 321L;
+
+            Coordinator coordinator = new Coordinator() {
+                @Override
+                public void startScheduling(ScheduleOption option) {
+                }
+
+                @Override
+                public String getSchedulerExplain() {
+                    return "";
+                }
+
+                @Override
+                public void updateFragmentExecStatus(com.starrocks.thrift.TReportExecStatusParams params) {
+                }
+
+                @Override
+                public void updateAuditStatistics(com.starrocks.thrift.TReportAuditStatisticsParams params) {
+                }
+
+                @Override
+                public void cancel(com.starrocks.proto.PPlanFragmentCancelReason reason, String message) {
+                }
+
+                @Override
+                public void onFinished() {
+                }
+
+                @Override
+                public com.starrocks.qe.scheduler.slot.LogicalSlot getSlot() {
+                    return null;
+                }
+
+                @Override
+                public RowBatch getNext() {
+                    return null;
+                }
+
+                @Override
+                public boolean join(int timeoutSecond) {
+                    return false;
+                }
+
+                @Override
+                public boolean checkBackendState() {
+                    return false;
+                }
+
+                @Override
+                public boolean isThriftServerHighLoad() {
+                    return false;
+                }
+
+                @Override
+                public void setLoadJobType(com.starrocks.thrift.TLoadJobType type) {
+                }
+
+                @Override
+                public com.starrocks.thrift.TLoadJobType getLoadJobType() {
+                    return null;
+                }
+
+                @Override
+                public long getLoadJobId() {
+                    return 0;
+                }
+
+                @Override
+                public void setLoadJobId(Long jobId) {
+                }
+
+                @Override
+                public java.util.Map<Integer, com.starrocks.thrift.TNetworkAddress> getChannelIdToBEHTTPMap() {
+                    return null;
+                }
+
+                @Override
+                public java.util.Map<Integer, com.starrocks.thrift.TNetworkAddress> getChannelIdToBEPortMap() {
+                    return null;
+                }
+
+                @Override
+                public boolean isEnableLoadProfile() {
+                    return false;
+                }
+
+                @Override
+                public void clearExportStatus() {
+                }
+
+                @Override
+                public void collectProfileSync() {
+                }
+
+                @Override
+                public boolean tryProcessProfileAsync(java.util.function.Consumer<Boolean> task) {
+                    return false;
+                }
+
+                @Override
+                public void setTopProfileSupplier(
+                        java.util.function.Supplier<com.starrocks.common.util.RuntimeProfile> topProfileSupplier) {
+                }
+
+                @Override
+                public void setExecPlan(com.starrocks.sql.plan.ExecPlan execPlan) {
+                }
+
+                @Override
+                public com.starrocks.common.util.RuntimeProfile buildQueryProfile(boolean needMerge) {
+                    return null;
+                }
+
+                @Override
+                public com.starrocks.common.util.RuntimeProfile getQueryProfile() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getDeltaUrls() {
+                    return null;
+                }
+
+                @Override
+                public java.util.Map<String, String> getLoadCounters() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TTabletFailInfo> getFailInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TTabletCommitInfo> getCommitInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<com.starrocks.thrift.TSinkCommitInfo> getSinkCommitInfos() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getExportFiles() {
+                    return null;
+                }
+
+                @Override
+                public String getTrackingUrl() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<String> getRejectedRecordPaths() {
+                    return null;
+                }
+
+                @Override
+                public java.util.List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
+                    return null;
+                }
+
+                @Override
+                public com.starrocks.datacache.DataCacheSelectMetrics getDataCacheSelectMetrics() {
+                    return null;
+                }
+
+                @Override
+                public PQueryStatistics getAuditStatistics() {
+                    return coordinatorStats;
+                }
+
+                @Override
+                public com.starrocks.common.Status getExecStatus() {
+                    return null;
+                }
+
+                @Override
+                public boolean isUsingBackend(Long backendID) {
+                    return false;
+                }
+
+                @Override
+                public boolean isDone() {
+                    return false;
+                }
+
+                @Override
+                public com.starrocks.thrift.TUniqueId getQueryId() {
+                    return null;
+                }
+
+                @Override
+                public void setQueryId(com.starrocks.thrift.TUniqueId queryId) {
+                }
+
+                @Override
+                public java.util.List<com.starrocks.planner.ScanNode> getScanNodes() {
+                    return null;
+                }
+
+                @Override
+                public long getStartTimeMs() {
+                    return 0;
+                }
+
+                @Override
+                public void setTimeoutSecond(int timeoutSecond) {
+                }
+
+                @Override
+                public boolean isProfileAlreadyReported() {
+                    return false;
+                }
+
+                @Override
+                public String getWarehouseName() {
+                    return "";
+                }
+
+                @Override
+                public long getCurrentWarehouseId() {
+                    return 0;
+                }
+
+                @Override
+                public String getResourceGroupName() {
+                    return "";
+                }
+
+                @Override
+                public boolean isShortCircuit() {
+                    return false;
+                }
+            };
+
+            Deencapsulation.setField(executor, "coord", coordinator);
+
+
+            ctx.setExecutionId(com.starrocks.common.util.UUIDUtil.toTUniqueId(queryId));
+            ctx.setCurrentThreadId(Thread.currentThread().getId());
+            ctx.setCurrentThreadAllocatedMemory(0L);
+            ctx.getState().setError("failed");
+            ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            ctx.getQueryDetail().setState(QueryMemState.FAILED);
+            executor.addFinishedQueryDetail();
+
+            QueryDetail detail = ctx.getQueryDetail();
+            Assertions.assertNotNull(detail);
+            Assertions.assertEquals(QueryMemState.FAILED, detail.getState());
+            Assertions.assertEquals(123L, detail.getScanBytes());
+            Assertions.assertEquals(456L, detail.getScanRows());
+            Assertions.assertEquals(789L, detail.getCpuCostNs());
+            Assertions.assertEquals(321L, detail.getMemCostBytes());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            Config.enable_collect_query_detail_info = oldCollect;
+        }
     }
 }

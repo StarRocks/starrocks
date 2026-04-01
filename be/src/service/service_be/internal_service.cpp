@@ -36,7 +36,6 @@
 
 #include "base/brpc/brpc.h"
 #include "base/uid_util.h"
-#include "common/config.h"
 #include "common/utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
@@ -44,6 +43,7 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/closure_guard.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"

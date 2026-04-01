@@ -23,6 +23,7 @@ set(RUNTIME_CORE_TEST_FILES
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp
     memory/counting_allocator_test.cpp
+    memory/memory_allocator_test.cpp
 )
 
 set(RUNTIME_CORE_TEST_LINK_LIBS
@@ -36,7 +37,7 @@ set(RUNTIME_CORE_TEST_LINK_LIBS
     StarRocksGen
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
     ${WL_START_GROUP}
     gmock
     gtest

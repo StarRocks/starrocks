@@ -20,6 +20,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -60,7 +61,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
     }
 
     auto location = tablet_mgr->location_provider()->metadata_root_location(tablet_id);
-    auto fs_or = FileSystem::CreateSharedFromString(location);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(location);
     if (!fs_or.ok()) {
         HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, fs_or.status().to_string());
         return;

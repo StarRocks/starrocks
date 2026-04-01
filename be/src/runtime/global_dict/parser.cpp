@@ -35,6 +35,7 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
@@ -206,7 +207,7 @@ private:
             auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
-            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return ConstColumn::create(ArrayColumn::create(string_col, std::move(offsets)), num_rows);
         } else if (array->is_nullable()) {
             const auto* nullable = down_cast<const NullableColumn*>(array.get());
@@ -217,7 +218,7 @@ private:
             auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
-            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return NullableColumn::create(ArrayColumn::create(string_col, std::move(offsets)), array_null);
         } else {
             array_col = down_cast<const ArrayColumn*>(array.get());
@@ -225,7 +226,7 @@ private:
             auto offsets = UInt32Column::static_pointer_cast(array_col->offsets_column()->clone());
 
             ASSIGN_OR_RETURN(ColumnPtr string_col, _translate_string(element, element->size()));
-            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), std::move(string_col));
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
             return ArrayColumn::create(string_col, std::move(offsets));
         }
     }

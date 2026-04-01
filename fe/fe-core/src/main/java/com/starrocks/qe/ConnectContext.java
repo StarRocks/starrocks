@@ -893,6 +893,16 @@ public class ConnectContext {
             return;
         }
         closed = true;
+        // Clean up explicit transaction state to prevent memory leak in explicitTxnStateMap
+        if (txnId != 0) {
+            try {
+                globalStateMgr.getGlobalTransactionMgr()
+                        .clearExplicitTxnState(txnId);
+            } catch (Exception e) {
+                // Ignore exceptions during cleanup to avoid masking the original close reason
+            }
+            txnId = 0;
+        }
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -1136,7 +1146,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();
@@ -1628,8 +1644,32 @@ public class ConnectContext {
         dbName = normalizeName(dbName);
 
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            // On a follower FE, the database may have been created on the leader but the
+            // corresponding journal entry has not been replayed locally yet. Wait for the
+            // local replayer to catch up to the latest committed journal before giving up.
+            // This avoids spurious "Unknown database" errors when DDL statements are issued
+            // immediately after CREATE DATABASE hits a different FE pod.
+            if (!globalStateMgr.isLeader()) {
+                try {
+                    // Fetch the leader's current max journal ID via a lightweight forward RPC.
+                    // Using the local journal.getMaxJournalId() is insufficient because BDBJE
+                    // replication itself may not have delivered the latest entries to the local
+                    // BDB database yet. The leader's value is authoritative and guaranteed to be
+                    // >= any journal ID written before this USE/COM_INIT_DB arrived.
+                    long leaderMaxJournalId = LeaderOpExecutor.fetchLeaderMaxJournalId(this);
+                    if (leaderMaxJournalId > 0) {
+                        int timeoutMs = (int) (getSessionVariable().getQueryTimeoutS() * 1000L);
+                        globalStateMgr.getJournalObservable().waitOn(leaderMaxJournalId, timeoutMs);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to wait for journal replay in changeCatalogDb, db={}: {}",
+                            dbName, e.getMessage());
+                }
+            }
+            if (metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
+                LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Here we check the request permission that sent by the mysql client or jdbc.

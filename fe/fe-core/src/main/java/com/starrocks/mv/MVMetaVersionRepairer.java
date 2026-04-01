@@ -193,7 +193,7 @@ public class MVMetaVersionRepairer {
                     MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
                     com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
                     MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
-                            entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
+                            entry.getValue().getId(), newPartitionInfo.getVersion(), newPartitionInfo.getModifiedTime());
                     newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
                     newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
                     newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);

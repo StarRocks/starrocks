@@ -17,10 +17,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "base/string/parse_util.h"
-#include "common/system/mem_info.h"
-#include "common/thread/threadpool.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"
@@ -168,12 +165,7 @@ public:
     bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
     void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-        int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
-        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-        _index_cache.set_capacity(byte_limits * update_mem_percent);
-        return Status::OK();
-    }
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent);
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
@@ -264,9 +256,7 @@ private:
         mutable std::shared_mutex lock;
     };
 
-    PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
-        return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
-    }
+    PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
     // decide whether use light publish compaction stategy or not
     bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,

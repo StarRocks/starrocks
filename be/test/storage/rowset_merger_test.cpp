@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"
@@ -57,9 +58,10 @@ public:
         return Status::NotSupported("");
     }
 
-    Status add_rowset(RowsetSharedPtr rowset) override { return Status::NotSupported(""); }
+    Status add_rowset(const RowsetSharedPtr& rowset) override { return Status::NotSupported(""); }
 
-    Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override {
+    Status add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
+                                               const SchemaMapping& schema_mapping) override {
         return Status::NotSupported("");
     }
 

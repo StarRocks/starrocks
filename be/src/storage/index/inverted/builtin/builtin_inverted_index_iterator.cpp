@@ -93,7 +93,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
                 auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
                 size_t read_num = 1;
                 RETURN_IF_ERROR(_bitmap_itr->next_batch_dictionary(&read_num, column.get()));
-                Slice s = down_cast<BinaryColumn*>(column.get())->get_data()[0];
+                Slice s = down_cast<BinaryColumn*>(column.get())->immutable_data()[0];
                 return std::make_pair(cur_ordinal, s.to_string());
             }
         };

@@ -24,7 +24,7 @@ class LakeService_RecoverableStub : public LakeService,
                                     public std::enable_shared_from_this<LakeService_RecoverableStub> {
 public:
     LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
-    ~LakeService_RecoverableStub();
+    ~LakeService_RecoverableStub() override;
 
     Status reset_channel(int64_t next_connection_group = 0);
 
@@ -39,10 +39,10 @@ public:
 
     void publish_version(::google::protobuf::RpcController* controller,
                          const ::starrocks::PublishVersionRequest* request,
-                         ::starrocks::PublishVersionResponse* response, ::google::protobuf::Closure* done);
+                         ::starrocks::PublishVersionResponse* response, ::google::protobuf::Closure* done) override;
 
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
-                 ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done);
+                 ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
     std::shared_ptr<starrocks::LakeService_Stub> _stub;

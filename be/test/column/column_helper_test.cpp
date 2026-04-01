@@ -16,6 +16,7 @@
 
 #include "column/column_builder.h"
 #include "gtest/gtest.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -96,6 +97,98 @@ TEST_F(ColumnHelperTest, get_null_column) {
     column = create_const_column();
     null_column = ColumnHelper::get_null_column(column.get());
     ASSERT_EQ(null_column->get_name(), "integral-1");
+}
+
+// GetContainer::get_data
+TEST_F(ColumnHelperTest, get_container_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
+    auto data = GetContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 1);
+    EXPECT_EQ(data[1], 2);
+    EXPECT_EQ(data[2], 3);
+}
+
+TEST_F(ColumnHelperTest, get_container_varchar) {
+    auto col = ColumnTestHelper::build_column<Slice>({"hello", "world"});
+    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "hello");
+    EXPECT_EQ(data[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, get_container_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("abc");
+    col->append_string("def");
+    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "abc");
+    EXPECT_EQ(data[1].to_string(), "def");
+}
+
+// GetContainer::get_data(column, row)
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_const_column) {
+    // ConstColumn: is_constant() == true, index is always 0
+    auto inner = ColumnTestHelper::build_column<int32_t>({42});
+    auto const_col = ConstColumn::create(std::move(inner), 5);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(const_col.get(), 0), 42);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(const_col.get(), 3), 42);
+}
+
+TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
+    // NullableColumn: get_data_column unwraps it, row index used as-is
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
+    auto data_column = BinaryColumn::create();
+    data_column->append(Slice("v1"));
+    auto null_column = NullColumn::create();
+    null_column->append(0);
+    ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    ColumnPtr const_nullable_column = ConstColumn::create(nullable_column, 4);
+
+    const Column* const_data = ColumnHelper::get_data_column(const_nullable_column.get());
+    ASSERT_FALSE(const_data->is_nullable());
+    ASSERT_FALSE(const_data->is_constant());
+    ASSERT_TRUE(const_data->is_binary());
+
+    const auto* typed_data = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(const_nullable_column.get());
+    ASSERT_TRUE(typed_data->is_binary());
+    ASSERT_EQ(typed_data->get_slice(0).to_string(), "v1");
+}
+
+// ColumnHelper::append_column_value
+TEST_F(ColumnHelperTest, append_column_value_int32) {
+    auto col = Int32Column::create();
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 42);
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 99);
+    EXPECT_EQ(col->debug_string(), "[42, 99]");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_varchar) {
+    auto col = BinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("hello"));
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("world"));
+    EXPECT_EQ(col->debug_string(), "['hello', 'world']");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
+    EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
 }
 
 } // namespace starrocks

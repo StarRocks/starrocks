@@ -21,8 +21,11 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/starrocks_metrics.h"
 #include "service/brpc_service_test_util.h"
@@ -167,7 +170,7 @@ public:
 
     void attach_segment_data(SegmentPB& segment_pb, brpc::Controller* controller) {
         std::shared_ptr<FileSystem> fs;
-        ASSIGN_OR_ABORT(fs, FileSystem::CreateSharedFromString(segment_pb.path()));
+        ASSIGN_OR_ABORT(fs, FileSystemFactory::CreateSharedFromString(segment_pb.path()));
         auto res = fs->new_random_access_file(segment_pb.path());
         ASSERT_TRUE(res.ok());
         auto rfile = std::move(res.value());
@@ -195,7 +198,7 @@ public:
     void check_single_segment_rowset_result(RowsetSharedPtr& rowset, int num_rows) {
         ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
         SegmentReadOptions seg_options;
-        ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
+        ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString("posix://"));
         OlapReaderStatistics stats;
         seg_options.stats = &stats;
         std::string segment_file = Rowset::segment_file_path(_tablet->schema_hash_path(), rowset->rowset_id(), 0);

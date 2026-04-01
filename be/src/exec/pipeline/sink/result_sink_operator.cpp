@@ -16,12 +16,14 @@
 
 #include <arrow/type.h>
 
+#include "common/config_exec_flow_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/arrow_result_writer.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/customized_result_writer.h"
+#include "runtime/exec_env.h"
 #include "runtime/http_result_writer.h"
 #include "runtime/metadata_result_writer.h"
 #include "runtime/mysql_result_writer.h"

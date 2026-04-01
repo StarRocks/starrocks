@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "base/hash/hash_std.hpp"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/fastmem.h"
@@ -38,7 +38,7 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
-          _offset(0),
+
           _size(size) {
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();

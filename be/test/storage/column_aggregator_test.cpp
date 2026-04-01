@@ -285,7 +285,7 @@ TEST(ColumnAggregator, testStringMin) {
     aggregator->aggregate_values(0, 2, loops.data(), false);
 
     ASSERT_EQ(1, agg1->size());
-    ASSERT_EQ("1000", agg1->get_data()[0].to_string());
+    ASSERT_EQ("1000", agg1->immutable_data()[0].to_string());
 
     aggregator->update_source(src2);
 
@@ -297,9 +297,7 @@ TEST(ColumnAggregator, testStringMin) {
     aggregator->aggregate_values(0, 3, loops.data(), false);
 
     EXPECT_EQ(3, agg1->size());
-    EXPECT_EQ("1000", agg1->get_data()[0].to_string());
-    EXPECT_EQ("1002", agg1->get_data()[1].to_string());
-    EXPECT_EQ("3003", agg1->get_data()[2].to_string());
+    ASSERT_EQ("['1000', '1002', '3003']", agg1->debug_string());
 
     aggregator->update_source(src3);
 
@@ -312,12 +310,7 @@ TEST(ColumnAggregator, testStringMin) {
     aggregator->finalize();
 
     EXPECT_EQ(6, agg1->size());
-    EXPECT_EQ("1000", agg1->get_data()[0].to_string());
-    EXPECT_EQ("1002", agg1->get_data()[1].to_string());
-    EXPECT_EQ("3003", agg1->get_data()[2].to_string());
-    EXPECT_EQ("3103", agg1->get_data()[3].to_string());
-    EXPECT_EQ("2000", agg1->get_data()[4].to_string());
-    EXPECT_EQ("2001", agg1->get_data()[5].to_string());
+    ASSERT_EQ("['1000', '1002', '3003', '3103', '2000', '2001']", agg1->debug_string());
 }
 
 TEST(ColumnAggregator, testNullBooleanMin) {

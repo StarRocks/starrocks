@@ -59,10 +59,10 @@ public:
 
 private:
     int _fd;
-    int _errno;
-    int64_t _offset;
-    bool _close_on_delete;
-    bool _is_closed;
+    int _errno{0};
+    int64_t _offset{0};
+    bool _close_on_delete{false};
+    bool _is_closed{false};
 };
 
 } // namespace starrocks::io

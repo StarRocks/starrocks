@@ -16,10 +16,15 @@
 
 #include <utility>
 
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
@@ -47,21 +52,19 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
 }
 
 DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(std::move(opt)),
+        : _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
-          _schema_initialized(false),
+
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
-          _segment_flush_token(nullptr),
-          _with_rollback_log(true) {}
+          _segment_flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
@@ -886,6 +889,7 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
 Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

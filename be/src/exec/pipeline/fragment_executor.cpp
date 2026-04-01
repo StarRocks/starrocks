@@ -21,7 +21,8 @@
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
@@ -29,6 +30,7 @@
 #include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
@@ -139,7 +141,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
+        _query_ctx->set_runtime_profile_report_interval(
+                std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
 
     bool enable_query_trace = false;
@@ -487,6 +490,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         down_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
+    std::vector<ExecNode*> lookup_nodes;
+    plan->collect_nodes(TPlanNodeType::LOOKUP_NODE, &lookup_nodes);
+    for (auto* lookup_node : lookup_nodes) {
+        int num_senders = FindWithDefault(params.per_look_up_num_fetchers, lookup_node->id(), 0);
+        down_cast<LookUpNode*>(lookup_node)->set_num_fetchers(num_senders);
+    }
+
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     plan->collect_scan_nodes(&scan_nodes);
@@ -576,7 +586,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
                                  _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
                                  tablet_internal_parallel_mode, enable_shared_scan));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -746,7 +756,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
-    auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
+    ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
@@ -1066,7 +1076,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
 
         if (morsel_queue_factory->reach_limit()) {
@@ -1098,7 +1108,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
-            morsel_queue_factory->set_has_more(has_more_morsel);
+            morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
             notify_ids.insert(node_id);
 
             if (morsel_queue_factory->reach_limit()) {

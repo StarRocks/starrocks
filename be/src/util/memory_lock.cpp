@@ -14,6 +14,7 @@
 
 #include "util/memory_lock.h"
 
+#if defined(__linux__)
 #include <link.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -25,7 +26,7 @@
 #include <cstring>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/logging.h"
 #include "runtime/starrocks_metrics.h"
 
@@ -97,3 +98,13 @@ void mlock_modules() {
 }
 
 } // namespace starrocks
+#else
+namespace starrocks {
+
+void mlock_modules() {
+    // Linux uses dl_iterate_phdr() from <link.h> to find executable segments.
+    // Other platforms do not build that implementation here, so keep this a no-op.
+}
+
+} // namespace starrocks
+#endif

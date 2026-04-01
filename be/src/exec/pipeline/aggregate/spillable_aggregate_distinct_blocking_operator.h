@@ -29,7 +29,7 @@ class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctB
 public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
-            : AggregateDistinctBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSinkOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                     "spillable_aggregate_distinct_blocking_sink") {}
     ~SpillableAggregateDistinctBlockingSinkOperator() override = default;
 
@@ -107,7 +107,7 @@ public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator,
                                                      SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
-            : AggregateDistinctBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateDistinctBlockingSourceOperator(std::move(aggregator), std::forward<Args>(args)...,
                                                       "spillable_aggregate_distinct_blocking_source"),
               _stream_aggregator(std::move(stream_aggregator)) {}
 

@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
@@ -21,7 +23,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
@@ -43,13 +44,13 @@ import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.ReplacePartitionColumnClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TagOptions;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
 import org.apache.iceberg.Snapshot;
@@ -60,7 +61,7 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdatePartitionSpec;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
-import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
@@ -70,6 +71,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergColumnType;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
@@ -117,10 +120,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             if (!columnDef.isAllowNull()) {
                 throw new StarRocksConnectorException("column in iceberg table must be nullable.");
             }
-            updateSchema.addColumn(
-                    columnDef.getName(),
-                    toIcebergColumnType(columnDef.getType()),
-                    columnDef.getComment());
+            org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+            Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+            if (defaultLiteral != null) {
+                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+            } else {
+                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+            }
 
             // AFTER column / FIRST
             if (pos != null) {
@@ -148,10 +154,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 if (!columnDef.isAllowNull()) {
                     throw new StarRocksConnectorException("column in iceberg table must be nullable.");
                 }
-                updateSchema.addColumn(
-                        columnDef.getName(),
-                        toIcebergColumnType(columnDef.getType()),
-                        columnDef.getComment());
+                org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+                if (defaultLiteral != null) {
+                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+                } else {
+                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+                }
             }
             updateSchema.commit();
         });
@@ -204,6 +213,11 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             } else {
                 throw new StarRocksConnectorException(
                         "column in iceberg table must be nullable.");
+            }
+
+            if (columnDef.getDefaultValueDef().isSet) {
+                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, colType);
+                updateSchema.updateColumnDefault(columnDef.getName(), defaultLiteral);
             }
 
             // AFTER column / FIRST
@@ -449,45 +463,12 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
-    private Term transformExprToIcebergTerm(Expr expr) {
-        if (expr instanceof SlotRef) {
-            SlotRef slotRef = (SlotRef) expr;
-            return Expressions.ref(slotRef.getColumnName());
-        } else if (expr instanceof FunctionCallExpr) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-            String fn = functionCallExpr.getFunctionName();
-            Expr child = functionCallExpr.getChild(0);
-            if (child instanceof SlotRef) {
-                String colName = ((SlotRef) child).getColumnName();
-                switch (fn.toLowerCase()) {
-                    case "year":
-                        return Expressions.year(colName);
-                    case "month":
-                        return Expressions.month(colName);
-                    case "day":
-                        return Expressions.day(colName);
-                    case "hour":
-                        return Expressions.hour(colName);
-                    case "identity":
-                        return Expressions.ref(colName);
-                    case "truncate":
-                        IntLiteral width = (IntLiteral) functionCallExpr.getChild(1);
-                        return Expressions.truncate(colName, (int) width.getValue());
-                    case "bucket":
-                        IntLiteral numBuckets = (IntLiteral) functionCallExpr.getChild(1);
-                        return Expressions.bucket(colName, (int) numBuckets.getValue());
-                    case "void":
-                        // not supported yet.
-                    default:
-                        throw new SemanticException(
-                                "Unsupported partition transform %s for column %s", fn, colName);
-                }
-            } else {
-                throw new SemanticException("Unsupported partition transform %s for arguments", fn);
-            }
-        } else {
-            throw new SemanticException("Does not support partition clause: " + expr);
+    private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {
+        if (!columnDef.getDefaultValueDef().isSet) {
+            return null;
         }
+        Column column = ColumnBuilder.buildColumn(columnDef);
+        return IcebergApiConverter.toIcebergDefaultLiteral(column, icebergType);
     }
 
     @Override
@@ -495,7 +476,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdatePartitionSpec spec = this.transaction.updateSpec();
             List<Term> terms = clause.getPartitionExprList().stream()
-                    .map(this::transformExprToIcebergTerm).toList();
+                    .map(IcebergPartitionUtils::convertPartitionExprToTerm).toList();
             try {
                 for (Term term : terms) {
                     spec.addField(term);
@@ -513,7 +494,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdatePartitionSpec spec = this.transaction.updateSpec();
             List<Term> terms = clause.getPartitionExprList().stream()
-                    .map(this::transformExprToIcebergTerm).toList();
+                    .map(IcebergPartitionUtils::convertPartitionExprToTerm).toList();
             try {
                 for (Term term : terms) {
                     spec.removeField(term);
@@ -524,5 +505,87 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             }
         });
         return null;
+    }
+
+    @Override
+    public Void visitReplacePartitionColumnClause(ReplacePartitionColumnClause clause, ConnectContext context) {
+        actions.add(() -> {
+            if (table instanceof BaseTable baseTable) {
+                int formatVersion = baseTable.operations().current().formatVersion();
+                if (formatVersion < 2) {
+                    throw new StarRocksConnectorException(
+                            "REPLACE PARTITION COLUMN is only supported for Iceberg v2 tables, " +
+                                    "but table is v%d format", formatVersion);
+                }
+            }
+
+            UpdatePartitionSpec spec = this.transaction.updateSpec();
+            Expr oldPartitionExpr = clause.getOldPartitionExpr();
+            Expr newPartitionExpr = clause.getNewPartitionExpr();
+
+            // Resolve old partition: by field name (e.g. "dt_day") or by transform expression (e.g. "day(dt)")
+            String oldFieldName = resolvePartitionFieldName(oldPartitionExpr);
+
+            String newExprStr = IcebergPartitionUtils.normalizePartitionExpr(newPartitionExpr);
+            Set<String> currentPartitionExprs = table.spec().fields().stream()
+                    .map(field -> IcebergApiConverter.toPartitionField(table.spec(), field, false)
+                            .toLowerCase(Locale.ROOT))
+                    .collect(Collectors.toSet());
+
+            if (oldFieldName == null) {
+                String oldExprStr = IcebergPartitionUtils.normalizePartitionExpr(oldPartitionExpr);
+                if (oldExprStr.equalsIgnoreCase(newExprStr)) {
+                    throw new StarRocksConnectorException(
+                            "Failed to replace partition column: old and new partition column are the same: "
+                                    + oldExprStr);
+                }
+                if (!currentPartitionExprs.contains(oldExprStr.toLowerCase(Locale.ROOT))) {
+                    throw new StarRocksConnectorException(
+                            "Failed to replace partition column: old partition column does not exist: " + oldExprStr);
+                }
+            }
+
+            if (currentPartitionExprs.contains(newExprStr.toLowerCase(Locale.ROOT))) {
+                throw new StarRocksConnectorException(
+                        "Failed to replace partition column: new partition column already exists: " + newExprStr);
+            }
+
+            Term newTerm = IcebergPartitionUtils.convertPartitionExprToTerm(newPartitionExpr);
+            try {
+                if (oldFieldName != null) {
+                    spec.removeField(oldFieldName);
+                } else {
+                    Term oldTerm = IcebergPartitionUtils.convertPartitionExprToTerm(oldPartitionExpr);
+                    spec.removeField(oldTerm);
+                }
+                spec.addField(newTerm);
+                spec.commit();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to replace partition column: " + e.getMessage(), e);
+            }
+        });
+        return null;
+    }
+
+    /**
+     * Check if the old partition expression is a partition field name reference (e.g., "dt_day")
+     * rather than a transform expression (e.g., "day(dt)").
+     * Returns the field name if resolved by name, null otherwise.
+     */
+    private String resolvePartitionFieldName(Expr expr) {
+        if (!(expr instanceof SlotRef slotRef)) {
+            return null;
+        }
+        String name = slotRef.getColumnName();
+        // If the name matches a schema column, treat as identity transform, not a field name
+        if (table.schema().findField(name) != null) {
+            return null;
+        }
+        // Check if it matches a partition field name
+        return table.spec().fields().stream()
+                .filter(f -> f.name().equalsIgnoreCase(name))
+                .map(f -> f.name())
+                .findFirst()
+                .orElse(null);
     }
 }

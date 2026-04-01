@@ -25,6 +25,7 @@
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/pipeline/lookup_request.h"
@@ -59,27 +60,25 @@ namespace starrocks::pipeline {
 // 3. `pull_chunk` waits until the front batch has finished fetching. `_build_output_chunk` merges
 //    fetched columns and null placeholders back into the original chunk order. The driver then
 //    drains the rebuilt chunks from the queue.
-class FetchProcessor {
+class FetchProcessor : public std::enable_shared_from_this<FetchProcessor> {
 public:
     friend class LocalLookUpRequestContext;
     friend class RemoteLookUpRequestContext;
     friend class FetchTask;
-    friend class IcebergFetchTask;
 
     FetchProcessor(int32_t target_node_id, const phmap::flat_hash_map<SlotId, RowPositionDescriptor*>& row_pos_descs,
                    const phmap::flat_hash_map<SlotId, SlotDescriptor*>& slot_id_to_desc,
-                   std::shared_ptr<StarRocksNodesInfo> nodes_info, std::shared_ptr<LookUpDispatcher> local_dispatcher)
+                   std::shared_ptr<StarRocksNodesInfo> nodes_info)
             : _target_node_id(target_node_id),
               _row_pos_descs(row_pos_descs),
               _slot_id_to_desc(slot_id_to_desc),
-              _nodes_info(std::move(nodes_info)),
-              _local_dispatcher(std::move(local_dispatcher)) {
+              _nodes_info(std::move(nodes_info)) {
         _current_unit = std::make_shared<BatchUnit>();
     }
 
     ~FetchProcessor() = default;
 
-    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, std::shared_ptr<RuntimeProfile>& runtime_profile);
 
     void close() {}
     bool need_input() const;
@@ -121,10 +120,9 @@ private:
     }
 
     const int32_t _target_node_id;
-    const phmap::flat_hash_map<TupleId, RowPositionDescriptor*>& _row_pos_descs;
-    const phmap::flat_hash_map<SlotId, SlotDescriptor*>& _slot_id_to_desc;
+    const phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
+    const phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     const std::shared_ptr<StarRocksNodesInfo> _nodes_info;
-    const std::shared_ptr<LookUpDispatcher> _local_dispatcher;
     int32_t _local_be_id = 0;
 
     BatchUnitPtr _current_unit;
@@ -140,6 +138,8 @@ private:
 
     std::atomic_bool _is_sink_complete = false;
     std::atomic_bool _is_source_finishing = false;
+
+    std::shared_ptr<RuntimeProfile> _runtime_profile;
 
     RuntimeProfile::Counter* _build_row_id_chunk_timer = nullptr;
     RuntimeProfile::Counter* _gen_fetch_tasks_timer = nullptr;
@@ -160,19 +160,19 @@ class FetchProcessorFactory {
 public:
     FetchProcessorFactory(int32_t target_node_id, phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs,
                           phmap::flat_hash_map<SlotId, SlotDescriptor*> slot_id_to_desc,
-                          std::shared_ptr<StarRocksNodesInfo> nodes_info,
-                          std::shared_ptr<LookUpDispatcher> local_dispatcher);
+                          std::shared_ptr<StarRocksNodesInfo> nodes_info);
 
     ~FetchProcessorFactory() = default;
 
     std::shared_ptr<FetchProcessor> get_or_create(int32_t driver_sequence);
+
+    void close_context(RuntimeState* state);
 
 private:
     int32_t _target_node_id;
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
     phmap::flat_hash_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     std::shared_ptr<StarRocksNodesInfo> _nodes_info;
-    std::shared_ptr<LookUpDispatcher> _local_dispatcher;
 
     typedef phmap::parallel_flat_hash_map<int32_t, FetchProcessorPtr, phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
                                           phmap::Allocator<int32_t>, 4, bthread::Mutex>

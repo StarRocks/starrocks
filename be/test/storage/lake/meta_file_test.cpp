@@ -860,7 +860,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSERT_TRUE(builder.update_num_del_stat(segid_to_add_dels).ok());
 
     // Seal pending rowset
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(110, final_rowset.id());
@@ -911,7 +911,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     op_write2.add_dels("d3.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(500, final_rowset.id());
@@ -966,7 +966,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     op_write2.add_dels("d2.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
-    builder.set_final_rowset();
+    ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     ASSERT_EQ(3, final_rowset.segments_size());
@@ -1092,4 +1092,413 @@ TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     auto final_version_iter = final_version_to_file_map.find(version1);
     EXPECT_TRUE(final_version_iter == final_version_to_file_map.end());
 }
+// Test that remove_compacted_sst skips SST files that appear in both input and output,
+// which happens when parallel compaction's "full contain" optimization reuses input SSTs.
+TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
+    const int64_t tablet_id = 10010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // Setup: 3 input SSTs, where "reused.sst" appears in both input and output
+    // (simulating the "full contain" optimization in parallel compaction)
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("old1.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("reused.sst");
+    input2->set_filesize(200);
+
+    auto* input3 = op_compaction.add_input_sstables();
+    input3->set_filename("old2.sst");
+    input3->set_filesize(150);
+
+    // Output contains "reused.sst" (full contain) and a new merged file
+    auto* output1 = op_compaction.add_output_sstables();
+    output1->set_filename("reused.sst");
+    output1->set_filesize(200);
+
+    auto* output2 = op_compaction.add_output_sstables();
+    output2->set_filename("merged_new.sst");
+    output2->set_filesize(250);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // Verify: only "old1.sst" and "old2.sst" should be in orphan_files.
+    // "reused.sst" must NOT be in orphan_files since it's also an output.
+    ASSERT_EQ(metadata->orphan_files_size(), 2);
+    std::set<std::string> orphan_names;
+    for (const auto& f : metadata->orphan_files()) {
+        orphan_names.insert(f.name());
+    }
+    EXPECT_TRUE(orphan_names.count("old1.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("old2.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
+}
+
+// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
+    const int64_t tablet_id = 10011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("reused_single.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("old.sst");
+    input2->set_filesize(200);
+
+    // Singular output_sstable reuses one of the input files
+    op_compaction.mutable_output_sstable()->set_filename("reused_single.sst");
+    op_compaction.mutable_output_sstable()->set_filesize(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "old.sst");
+}
+
+// Test that when no SSTs are reused, all inputs go to orphan_files (original behavior)
+TEST_F(MetaFileTest, test_remove_compacted_sst_no_reuse) {
+    const int64_t tablet_id = 10012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("a.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("b.sst");
+    input2->set_filesize(200);
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("c.sst");
+    output->set_filesize(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // All inputs should be orphaned since output is a new file
+    ASSERT_EQ(metadata->orphan_files_size(), 2);
+    std::set<std::string> orphan_names;
+    for (const auto& f : metadata->orphan_files()) {
+        orphan_names.insert(f.name());
+    }
+    EXPECT_TRUE(orphan_names.count("a.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("b.sst") > 0);
+}
+
+// Test that append_delvec followed by apply_opcompaction in the same builder
+// does NOT create orphan delvec entries. This reproduces the bug where a write
+// txn generates a delvec for a segment that is then compacted away in the same
+// publish batch. Without the fix, _finalize_delvec would re-insert the deleted
+// delvec entry, creating an orphan that prevents delvec file GC.
+TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
+    const int64_t tablet_id = 40001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Create initial metadata on disk
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Add two rowsets: rowset 100 (segment "a.dat") and rowset 101 (segment "b.dat")
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("a.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("b.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Now metadata has rowsets: id=100 (seg "a.dat"), id=101 (seg "b.dat")
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(100, metadata->rowsets(0).id());
+    ASSERT_EQ(101, metadata->rowsets(1).id());
+
+    // Simulate a publish batch where:
+    // 1) A write txn creates a delvec for segment 100 (belonging to rowset 100)
+    // 2) A compaction txn compacts rowset 100 away
+    // Both operations use the same MetaFileBuilder (batch publish).
+    {
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+
+        // Step 1: Write txn generates a delvec for segment 100
+        DelVector dv;
+        dv.set_empty();
+        std::shared_ptr<DelVector> ndv;
+        std::vector<uint32_t> dels = {1, 3, 5};
+        dv.add_dels_as_new_version(dels, 13, &ndv);
+        builder.append_delvec(ndv, 100); // segment_id = 100, belongs to rowset 100
+
+        // Step 2: Compaction removes rowset 100
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(100);
+        RowsetMetadataPB output_rs;
+        output_rs.add_segments("compacted.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
+
+        // Step 3: Finalize - this is where the bug would manifest
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // Verify: segment 100's delvec should NOT exist in metadata (it was compacted away)
+        const auto& delvecs_map = metadata->delvec_meta().delvecs();
+        EXPECT_TRUE(delvecs_map.find(100) == delvecs_map.end())
+                << "Orphan delvec entry found for compacted segment 100";
+
+        // Verify: rowset 100 should be gone, only rowset 101 and the new compaction output remain
+        EXPECT_EQ(2, metadata->rowsets_size());
+
+        // Verify: version_to_file should not hold unreferenced entries
+        for (const auto& vtf_entry : metadata->delvec_meta().version_to_file()) {
+            bool referenced = false;
+            for (const auto& dv_entry : delvecs_map) {
+                if (dv_entry.second.version() == vtf_entry.first) {
+                    referenced = true;
+                    break;
+                }
+            }
+            EXPECT_TRUE(referenced) << "version_to_file entry for version " << vtf_entry.first
+                                    << " is not referenced by any delvec";
+        }
+    }
+}
+
+// Test the orphan delvec scenario with multiple segments in the compacted rowset.
+// The write txn creates delvecs for two segments of the input rowset, both should
+// be cleaned up when the rowset is compacted.
+TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
+    const int64_t tablet_id = 40002;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(200);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Create initial metadata
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Add a rowset with 2 segments (rowset id=200, segments at rssid 200 and 201)
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("seg0.dat");
+        rs.add_segments("seg1.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Add a second rowset (rowset id=202)
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("other.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(200, metadata->rowsets(0).id());
+    ASSERT_EQ(202, metadata->rowsets(1).id());
+
+    // Simulate batch publish: write creates delvecs for both segments of rowset 200,
+    // then compaction removes rowset 200
+    {
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+
+        // Write creates delvecs for both segments
+        DelVector dv1;
+        dv1.set_empty();
+        std::shared_ptr<DelVector> ndv1;
+        std::vector<uint32_t> dels1 = {10, 20};
+        dv1.add_dels_as_new_version(dels1, 13, &ndv1);
+        builder.append_delvec(ndv1, 200);
+
+        DelVector dv2;
+        dv2.set_empty();
+        std::shared_ptr<DelVector> ndv2;
+        std::vector<uint32_t> dels2 = {30, 40};
+        dv2.add_dels_as_new_version(dels2, 13, &ndv2);
+        builder.append_delvec(ndv2, 201);
+
+        // Compaction removes rowset 200
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(200);
+        RowsetMetadataPB output_rs;
+        output_rs.add_segments("compacted.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 200, 0));
+
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // Both delvec entries for compacted segments should be gone
+        const auto& delvecs_map = metadata->delvec_meta().delvecs();
+        EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end()) << "Orphan delvec for segment 200";
+        EXPECT_TRUE(delvecs_map.find(201) == delvecs_map.end()) << "Orphan delvec for segment 201";
+    }
+}
+
+// Test that pre-existing orphan delvec entries in metadata are cleaned up
+// during compaction. This simulates the upgrade scenario where orphan entries
+// accumulated from the historical bug are present in the metadata.
+TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
+    const int64_t tablet_id = 40003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(300);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Create initial metadata
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Add two rowsets: id=300 ("a.dat") and id=301 ("b.dat")
+    {
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("a.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    {
+        metadata->set_version(12);
+        MetaFileBuilder builder(*tablet, metadata);
+        RowsetMetadataPB rs;
+        rs.add_segments("b.dat");
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->CopyFrom(rs);
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    ASSERT_EQ(2, metadata->rowsets_size());
+    ASSERT_EQ(300, metadata->rowsets(0).id());
+    ASSERT_EQ(301, metadata->rowsets(1).id());
+
+    // Manually inject orphan delvec entries into metadata to simulate
+    // pre-existing orphans from the historical bug.
+    // Segment IDs 100, 200, 999 do not belong to any current rowset.
+    DelvecPagePB orphan_page;
+    orphan_page.set_version(5);
+    orphan_page.set_offset(0);
+    orphan_page.set_size(10);
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[100] = orphan_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[200] = orphan_page;
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[999] = orphan_page;
+
+    // Also add a valid delvec for existing segment 301
+    DelvecPagePB valid_page;
+    valid_page.set_version(12);
+    valid_page.set_offset(0);
+    valid_page.set_size(10);
+    (*metadata->mutable_delvec_meta()->mutable_delvecs())[301] = valid_page;
+
+    // Add version_to_file entries referenced by orphans
+    FileMetaPB file_meta;
+    file_meta.set_name("old_orphan.delvec");
+    file_meta.set_size(100);
+    (*metadata->mutable_delvec_meta()->mutable_version_to_file())[5] = file_meta;
+
+    EXPECT_EQ(4, metadata->delvec_meta().delvecs().size()); // 3 orphans + 1 valid
+
+    // Enable orphan cleanup config for this test
+    config::lake_enable_orphan_delvec_cleanup_on_compaction = true;
+
+    // Compact rowset 300 — this triggers orphan cleanup in apply_opcompaction
+    {
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(300);
+        RowsetMetadataPB output_rs;
+        output_rs.add_segments("compacted.dat");
+        op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 300, 0));
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // All orphan entries should be removed by the compaction cleanup
+        const auto& delvecs_map = metadata->delvec_meta().delvecs();
+        EXPECT_TRUE(delvecs_map.find(100) == delvecs_map.end()) << "Orphan segment 100 should be cleaned";
+        EXPECT_TRUE(delvecs_map.find(200) == delvecs_map.end()) << "Orphan segment 200 should be cleaned";
+        EXPECT_TRUE(delvecs_map.find(999) == delvecs_map.end()) << "Orphan segment 999 should be cleaned";
+        // Segment 300's delvec was also removed (rowset 300 was compacted, had no delvec anyway)
+        EXPECT_TRUE(delvecs_map.find(300) == delvecs_map.end());
+
+        // Valid entry for segment 301 (non-compacted rowset) should remain
+        EXPECT_TRUE(delvecs_map.find(301) != delvecs_map.end()) << "Valid segment 301 should be kept";
+        EXPECT_EQ(1, delvecs_map.size());
+
+        // The orphan version_to_file entry (version=5) should now be unreferenced and removed
+        const auto& vtf = metadata->delvec_meta().version_to_file();
+        EXPECT_TRUE(vtf.find(5) == vtf.end()) << "version_to_file entry for orphan version 5 should be cleaned up";
+    }
+
+    config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
+}
+
 } // namespace starrocks::lake

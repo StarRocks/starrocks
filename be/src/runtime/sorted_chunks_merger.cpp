@@ -301,11 +301,12 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _row_number = 0;
 }
 
-CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : ChunkMerger(state), _sort_exprs(nullptr) {}
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state) : ChunkMerger(state) {}
 
 Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
                                 const std::vector<ExprContext*>* sort_exprs, const SortDescs& sort_desc) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    cursors.reserve(providers.size());
     for (const auto& provider : providers) {
         cursors.push_back(std::make_unique<SimpleChunkSortCursor>(provider, sort_exprs));
     }

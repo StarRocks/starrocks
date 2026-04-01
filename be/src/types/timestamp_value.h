@@ -18,6 +18,7 @@
 #include <cctz/time_zone.h>
 
 #include <chrono>
+#include <ostream>
 #include <string>
 
 #include "types/date_value.h"

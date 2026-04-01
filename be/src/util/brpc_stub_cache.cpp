@@ -14,7 +14,7 @@
 
 #include "util/brpc_stub_cache.h"
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
@@ -104,7 +104,7 @@ void BrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
     _stub_map.erase(endpoint);
 }
 
-BrpcStubCache::StubPool::StubPool() : _idx(-1) {
+BrpcStubCache::StubPool::StubPool() {
     _stubs.reserve(config::brpc_max_connections_per_server);
 }
 

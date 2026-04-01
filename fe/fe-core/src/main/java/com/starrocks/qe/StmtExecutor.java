@@ -76,12 +76,11 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -104,6 +103,7 @@ import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -141,6 +141,12 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
@@ -258,6 +264,7 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -274,6 +281,7 @@ import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -304,8 +312,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
@@ -339,12 +345,15 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
-    
+    // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
+    private ExecPlan lastExecPlan = null;
+
     // Store table query timeout info for error message
     private String tableQueryTimeoutTableName = null;
     private int tableQueryTimeoutValue = -1;
@@ -405,7 +414,7 @@ public class StmtExecutor {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
@@ -449,10 +458,11 @@ public class StmtExecutor {
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
 
-            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            summaryProfile.addInfoString(ProfileKeyDictionary.NON_DEFAULT_SESSION_VARIABLES,
+                    variables.getNonDefaultVariablesJson());
             String hitMvs = context.getAuditEventBuilder().getHitMvs();
             if (StringUtils.isNotEmpty(hitMvs)) {
-                summaryProfile.addInfoString("HitMaterializedViews", hitMvs);
+                summaryProfile.addInfoString(ProfileKeyDictionary.HIT_MATERIALIZED_VIEWS, hitMvs);
             }
         }
 
@@ -774,6 +784,7 @@ public class StmtExecutor {
             logOptimizerTraceOnGenerateExecPlanFailure(e);
             throw e;
         }
+        lastExecPlan = execPlan;
         return execPlan;
     }
 
@@ -811,8 +822,10 @@ public class StmtExecutor {
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
         // set true to change session variable
         boolean skipRestore = false;
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
@@ -974,6 +987,7 @@ public class StmtExecutor {
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
                             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+                            retryContext.prepareRetry();
                         }
 
                         handleQueryStmt(retryContext.getExecPlan());
@@ -985,6 +999,8 @@ public class StmtExecutor {
                             throw e;
                         }
                         ExecuteExceptionHandler.handle(e, retryContext);
+                        // sync lastExecPlan in case rebuildExecPlan produced a new plan
+                        lastExecPlan = retryContext.getExecPlan();
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
@@ -1148,6 +1164,7 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+            context.getState().setErrType(QueryState.ErrType.IO_ERR);
         } catch (LargeInPredicateException e) {
             // Re-throw LargeInPredicateException to trigger a full retry from parser stage
             // The query will be re-parsed and re-executed with enable_large_in_predicate=false
@@ -1172,19 +1189,27 @@ public class StmtExecutor {
             } else if (e instanceof NoAliveBackendException) {
                 context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             } else {
-                // TODO: some StarRocksException doesn't belong to analysis error
-                // we should set such error type to internal error
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                // If planning completed (lastExecPlan != null) the exception is from execution
+                // (e.g. BE CORRUPTION/CANCELLED), not from analysis — classify as INTERNAL_ERR.
+                // Only fall back to ANALYSIS_ERR when planning itself failed (no plan was produced).
+                if (lastExecPlan != null) {
+                    context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+                } else {
+                    context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                }
             }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql: {}, " + SqlCredentialRedactor.redact(sql), e);
+            LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
             context.getState().setError(e.getMessage());
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
-            if (context.getState().isError() && coord != null) {
-                coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+            if (context.getState().isError()) {
+                ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
+                if (coord != null) {
+                    coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+                }
             }
 
             if (coord != null) {
@@ -1209,6 +1234,15 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
+
+            // Restore compute resource only when a query-scope hint changed the warehouse.
+            // For normal statements (no hint), the compute resource may have been legitimately
+            // updated during execution (e.g., reset due to unavailability), and we must not
+            // overwrite those safety updates. Restore after onQueryFinished() so that audit
+            // CN group reflects the actual execution resource.
+            if (!skipRestore && restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
             context.setOnlyReadIcebergCache(originSkipIcebergCache);
             if (cteExecutor != null) {
                 cteExecutor.finalizeRecursiveCTE();
@@ -1245,18 +1279,28 @@ public class StmtExecutor {
         }
     }
 
-    public void processQueryScopeSetVarHint() throws DdlException {
-        if (!parsedStmt.isExistQueryScopeHint()) {
-            return;
+    private Map<String, String> collectQueryScopeSetVarHints(StatementBase stmt) {
+        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (stmt == null || !stmt.isExistQueryScopeHint()) {
+            return hintSvs;
         }
 
-        Map<String, String> hintSvs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+        for (HintNode hint : stmt.getAllQueryScopeHints()) {
             if (!(hint instanceof SetVarHint)) {
                 continue;
             }
             hintSvs.putAll(hint.getValue());
         }
+        return hintSvs;
+    }
+
+    private boolean shouldRestoreComputeResourceForQueryScopeHint(StatementBase stmt) {
+        String hintedWarehouse = collectQueryScopeSetVarHints(stmt).get(SessionVariable.WAREHOUSE_NAME);
+        return hintedWarehouse != null && !StringUtils.equalsIgnoreCase(hintedWarehouse, context.getCurrentWarehouseName());
+    }
+
+    public void processQueryScopeSetVarHint() throws DdlException {
+        Map<String, String> hintSvs = collectQueryScopeSetVarHints(parsedStmt);
 
         if (hintSvs.isEmpty()) {
             return;
@@ -1460,7 +1504,7 @@ public class StmtExecutor {
             RuntimeProfile summaryProfile = profile.getChild("Summary");
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
-            summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
+            summaryProfile.addInfoString(ProfileKeyDictionary.IS_PROFILE_ASYNC, String.valueOf(isAsync));
             profile.addChild(coord.buildQueryProfile(needMerge));
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
@@ -1796,6 +1840,11 @@ public class StmtExecutor {
             final RawScopedTimer rawScopedTimer = new RawScopedTimer();
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getInternalErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+                    throw new StarRocksException(batch.getInternalErrorCode(), batch.getStatus().getErrorMsg());
+                }
+
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
@@ -1855,6 +1904,7 @@ public class StmtExecutor {
     private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
+            statisticsForAuditLogFromPlaceholder = false;
             if (!isOutfileQuery) {
                 context.getState().setEof();
             } else {
@@ -2027,7 +2077,7 @@ public class StmtExecutor {
                             "you can set it off by using  set enable_short_circuit=false");
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
-                RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
+                profileElement.getRuntimeProfile(),
                 planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 
@@ -2257,25 +2307,7 @@ public class StmtExecutor {
     }
 
     private void handleAddSqlBlackListStmt() {
-        AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
-        Pattern sqlPattern = null;
-        String sql = addSqlBlackListStmt.getSql().trim().toLowerCase().replaceAll(" +", " ")
-                .replace("\r", " ")
-                .replace("\n", " ")
-                .replaceAll("\\s+", " ");
-        if (!sql.isEmpty()) {
-            try {
-                sqlPattern = Pattern.compile(sql);
-            } catch (PatternSyntaxException e) {
-                throw new SemanticException("Sql syntax error: %s", e.getMessage());
-            }
-        }
-
-        if (sqlPattern == null) {
-            throw new SemanticException("Sql pattern cannot be empty");
-        }
-
-        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
+        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddSqlBlackListStmt) parsedStmt);
     }
 
     private void handleDelSqlBlackListStmt() {
@@ -2300,14 +2332,22 @@ public class StmtExecutor {
     }
 
     private void handleAddBackendBlackListStmt() throws StarRocksException {
-        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddBackendBlackListStmt) parsedStmt, context);
+        AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
+        Authorizer.check(addBackendBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Long backendId : addBackendBlackListStmt.getBackendIds()) {
+            if (sis.getBackend(backendId) == null) {
+                throw new StarRocksException("Not found backend: " + backendId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(backendId);
+        }
     }
 
     private void handleDelBackendBlackListStmt() throws StarRocksException {
         DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
         Authorizer.check(delBackendBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getBackend(backendId) == null) {
                 throw new StarRocksException("Not found backend: " + backendId);
             }
@@ -2318,8 +2358,8 @@ public class StmtExecutor {
     private void handleAddComputeNodeBlackListStmt() throws StarRocksException {
         AddComputeNodeBlackListStmt addComputeNodeBlackListStmt = (AddComputeNodeBlackListStmt) parsedStmt;
         Authorizer.check(addComputeNodeBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long computeNodeId : addComputeNodeBlackListStmt.getComputeNodeIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getComputeNode(computeNodeId) == null) {
                 throw new StarRocksException("Not found compute node: " + computeNodeId);
             }
@@ -2330,8 +2370,8 @@ public class StmtExecutor {
     private void handleDelComputeNodeBlackListStmt() throws StarRocksException {
         DelComputeNodeBlackListStmt delComputeNodeBlackListStmt = (DelComputeNodeBlackListStmt) parsedStmt;
         Authorizer.check(delComputeNodeBlackListStmt, context);
+        SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (Long computeNodeId : delComputeNodeBlackListStmt.getComputeNodeIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getComputeNode(computeNodeId) == null) {
                 throw new StarRocksException("Not found compute node: " + computeNodeId);
             }
@@ -2603,12 +2643,117 @@ public class StmtExecutor {
             if (optimizedRecord != null) {
                 explainString += optimizedRecord.getExplainString();
             }
+            if (context.getSessionVariable().isEnableExtendedExplain() && execPlan != null
+                    && (explainLevel == StatementBase.ExplainLevel.COSTS
+                    || explainLevel == StatementBase.ExplainLevel.VERBOSE)) {
+                explainString += buildQueryQueueExplainString(execPlan, context, queryType);
+            }
             if (execPlan != null) {
                 explainString += execPlan.getExplainString(explainLevel);
             }
         }
 
         return explainString;
+    }
+
+    private static String buildQueryQueueExplainString(ExecPlan execPlan, ConnectContext context,
+                                                       ResourceGroupClassifier.QueryType queryType) {
+        if (execPlan == null || context == null) {
+            return "";
+        }
+
+        BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        if (slotManager == null) {
+            return "";
+        }
+
+        try {
+            TQueryType tQueryType = queryType == ResourceGroupClassifier.QueryType.INSERT
+                    ? TQueryType.LOAD
+                    : TQueryType.SELECT;
+            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, execPlan.getFragments(),
+                    execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), tQueryType, execPlan);
+
+            long warehouseId = context.getCurrentWarehouseId();
+            BaseSlotTracker slotTracker = slotManager.getSlotTracker(warehouseId);
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(warehouseId);
+
+            boolean enableQueue = jobSpec.isEnableQueue();
+            boolean needQueued = jobSpec.isNeedQueued();
+            boolean queryQueueEnabled = enableQueue && needQueued;
+
+            int estimatedSlots = SlotEstimatorFactory.estimateSlotsForExplain(opts, context, execPlan);
+            TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
+            long groupId = resourceGroup == null ? LogicalSlot.ABSENT_GROUP_ID : resourceGroup.getId();
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("QUERY QUEUE\n");
+            sb.append("  Enabled: ").append(queryQueueEnabled);
+            if (!enableQueue) {
+                sb.append(" (disabled by config/session)");
+            } else if (!needQueued) {
+                sb.append(" (query not subject to queue)");
+            }
+            sb.append("\n");
+            sb.append("  Version: ").append(opts.isEnableQueryQueueV2() ? "v2" : "v1").append("\n");
+            sb.append("  Estimated slots: ").append(queryQueueEnabled ? estimatedSlots : "N/A").append("\n");
+            sb.append("  Warehouse: ").append(warehouseId);
+            if (slotTracker != null) {
+                String warehouseName = slotTracker.getWarehouseName();
+                if (!warehouseName.isEmpty()) {
+                    sb.append(" (").append(warehouseName).append(")");
+                }
+            }
+            sb.append("\n");
+            if (opts.isEnableQueryQueueV2()) {
+                sb.append("  Capacity: total_slots=").append(opts.v2().getTotalSlots())
+                        .append(", total_small_slots=").append(opts.v2().getTotalSmallSlots())
+                        .append(", num_workers=").append(opts.v2().getNumWorkers()).append("\n");
+            } else {
+                int concurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
+                sb.append("  Capacity: concurrency_limit=")
+                        .append(concurrencyLimit < 0 ? "unlimited" : concurrencyLimit)
+                        .append("\n");
+            }
+            if (slotTracker != null) {
+                sb.append("  Load: running_queries=").append(slotTracker.getCurrentCurrency())
+                        .append(", running_slots=").append(slotTracker.getNumAllocatedSlots())
+                        .append(", pending_queries=").append(slotTracker.getQueuePendingLength());
+                if (opts.isEnableQueryQueueV2()) {
+                    slotTracker.getSumRequiredSlots().ifPresent(sum -> sb.append(", pending_slots=").append(sum));
+                    slotTracker.getMaxRequiredSlots().ifPresent(max -> sb.append(", max_pending_slots=").append(max));
+                }
+                sb.append("\n");
+                if (opts.isEnableQueryQueueV2()) {
+                    int remaining = Math.max(0, opts.v2().getTotalSlots() - slotTracker.getNumAllocatedSlots());
+                    sb.append("  Remaining slots: ").append(remaining).append("\n");
+                } else {
+                    int concurrencyLimit = slotManager.getQueryQueueConcurrencyLimit(warehouseId);
+                    if (concurrencyLimit >= 0) {
+                        int remaining = Math.max(0, concurrencyLimit - slotTracker.getCurrentCurrency());
+                        sb.append("  Remaining slots: ").append(remaining).append("\n");
+                    }
+                }
+            }
+            sb.append("  Limits: max_queued_queries=").append(slotManager.getQueryQueueMaxQueuedQueries(warehouseId))
+                    .append(", pending_timeout_s=").append(slotManager.getQueryQueuePendingTimeoutSecond(warehouseId))
+                    .append("\n");
+            sb.append("  Resource overloaded: global=")
+                    .append(slotManager.getResourceUsageMonitor().isGlobalResourceOverloaded());
+            if (groupId != LogicalSlot.ABSENT_GROUP_ID) {
+                sb.append(", group=").append(slotManager.getResourceUsageMonitor().isGroupResourceOverloaded(groupId));
+            }
+            sb.append("\n");
+            if (opts.isEnableQueryQueueV2()) {
+                sb.append("  Schedule policy: ").append(opts.getPolicy()).append("\n");
+            }
+            sb.append("\n");
+
+            return sb.toString();
+        } catch (Exception e) {
+            LOG.warn("Failed to build query queue explain info.", e);
+            return "";
+        }
     }
 
     private void handleDdlStmt() throws DdlException {
@@ -2779,14 +2924,25 @@ public class StmtExecutor {
 
     public void setQueryStatistics(PQueryStatistics statistics) {
         this.statisticsForAuditLog = statistics;
+        this.statisticsForAuditLogFromPlaceholder = false;
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null && coord != null) {
-            statisticsForAuditLog = coord.getAuditStatistics();
-        }
         if (statisticsForAuditLog == null) {
-            statisticsForAuditLog = new PQueryStatistics();
+            statisticsForAuditLog = coord != null ? coord.getAuditStatistics() : null;
+            if (statisticsForAuditLog == null) {
+                statisticsForAuditLog = new PQueryStatistics();
+                statisticsForAuditLogFromPlaceholder = true;
+            } else {
+                statisticsForAuditLogFromPlaceholder = false;
+            }
+        } else if (statisticsForAuditLogFromPlaceholder && coord != null) {
+            // Refresh placeholder stats with coordinator audit statistics when they arrive.
+            PQueryStatistics coordinatorStats = coord.getAuditStatistics();
+            if (coordinatorStats != null) {
+                statisticsForAuditLog = coordinatorStats;
+                statisticsForAuditLogFromPlaceholder = false;
+            }
         }
         if (statisticsForAuditLog.scanBytes == null) {
             statisticsForAuditLog.scanBytes = 0L;
@@ -3361,6 +3517,7 @@ public class StmtExecutor {
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                    recordExternalSinkFailure(targetTable, dmlType, t);
                 } else if (targetTable.isBlackHoleTable()) {
                     // black hole table does not need txn
                 } else {
@@ -3407,6 +3564,13 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else if (txnState != null) {
+                // Re-fetch txnState after commit because the COW pattern in DatabaseTransactionMgr
+                // replaces the in-memory state with a deep copy, making the original reference stale.
+                TransactionState freshTxnState = transactionMgr.getTransactionState(
+                        database.getId(), transactionId);
+                if (freshTxnState != null) {
+                    txnState = freshTxnState;
+                }
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
@@ -3447,6 +3611,25 @@ public class StmtExecutor {
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
     }
 
+    private void recordExternalSinkFailure(Table targetTable, DmlType dmlType, Throwable t) {
+        String connectorType = null;
+        if (targetTable.isIcebergTable()) {
+            connectorType = ConnectorMetricsMgr.CONNECTOR_ICEBERG;
+        } else if (targetTable.isHiveTable()) {
+            connectorType = ConnectorMetricsMgr.CONNECTOR_HIVE;
+        }
+        if (connectorType == null) {
+            return;
+        }
+
+        if (dmlType == DmlType.DELETE) {
+            ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
+        } else {
+            String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
+            ConnectorMetricsMgr.increaseWriteTotalFail(connectorType, t, writeType);
+        }
+    }
+
     private void handlePlanAdvisorStmt() throws IOException {
         ShowResultSet resultSet = PlanAdvisorExecutor.execute(parsedStmt, context);
         if (resultSet != null) {
@@ -3475,6 +3658,10 @@ public class StmtExecutor {
             RowBatch batch;
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getInternalErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, plan, false);
+                    throw new StarRocksException(batch.getInternalErrorCode(), batch.getStatus().getErrorMsg());
+                }
                 if (batch.getBatch() != null) {
                     sqlResult.add(batch.getBatch());
                 }
@@ -3535,6 +3722,11 @@ public class StmtExecutor {
             RowBatch batch;
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getInternalErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, plan, false);
+                    throw new StarRocksException(batch.getInternalErrorCode(), batch.getStatus().getErrorMsg());
+                }
+
                 if (batch.getBatch() != null) {
                     sqlResult.add(batch.getBatch());
                 }
@@ -3572,6 +3764,8 @@ public class StmtExecutor {
         }
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
+        ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
+        boolean restoreComputeResourceForWarehouseHint = shouldRestoreComputeResourceForQueryScopeHint(parsedStmt);
         try {
             processQueryScopeSetVarHint();
         } catch (DdlException e) {
@@ -3614,6 +3808,9 @@ public class StmtExecutor {
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
         } finally {
             context.setSessionVariable(sessionVariableBackup);
+            if (restoreComputeResourceForWarehouseHint) {
+                context.setCurrentComputeResource(computeResourceBackup);
+            }
         }
     }
 

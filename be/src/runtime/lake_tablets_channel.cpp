@@ -24,6 +24,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
 #include "common/compiler_util.h"
+#include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
@@ -778,27 +779,16 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     bool multi_stmt = _is_multi_statements_txn(params);
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
-        // Do NOT enable bundle write for a multi-statements transaction.
-        // Rationale:
-        //   A multi-statements txn may invoke multiple open/add_chunk cycles and flush segments in batches.
-        //   If some early segments are appended into a bundle file while later segments are flushed as
-        //   standalone segment files (because a subsequent writer/open does not attach to the previous
-        //   bundle context), the final Rowset metadata will contain a mixed set: a subset of segments with
-        //   bundle offsets recorded and the remaining without any offsets. Downstream rowset load logic
-        //   assumes a 1:1 correspondence between the 'segments' list and 'bundle_file_offsets' when the
-        //   latter is present. A partial list therefore triggers size mismatch errors when loading.
-        // Mitigation Strategy:
-        //   Disable bundling entirely for multi-statements txns so every segment is materialized as an
-        //   independent file, guaranteeing consistent metadata and eliminating offset mismatch risk.
-        // NOTE: If future optimization desires bundling + multi-stmt, it must introduce an atomic merge
-        //   mechanism ensuring offsets array completeness before publish.
-        if (!multi_stmt && _is_data_file_bundle_enabled(params)) {
+        // Enable bundle write for both single-statement and multi-statement transactions.
+        // Each statement in a multi-statement txn creates its own LoadChannel with an independent
+        // BundleWritableFileContext, so segments within each statement's TxnLog maintain the required
+        // 1:1 correspondence between 'segments' and 'bundle_file_offsets'. The NonPrimaryKeyTxnLogApplier
+        // merges bundle_file_offsets from multiple TxnLogs when creating the combined rowset during publish.
+        if (_is_data_file_bundle_enabled(params)) {
             if (_bundle_wfile_ctx_by_partition.count(tablet.partition_id()) == 0) {
                 _bundle_wfile_ctx_by_partition[tablet.partition_id()] = std::make_unique<BundleWritableFileContext>();
             }
             bundle_writable_file_context = _bundle_wfile_ctx_by_partition[tablet.partition_id()].get();
-        } else if (multi_stmt && _is_data_file_bundle_enabled(params)) {
-            VLOG(1) << "disable bundle write for multi statements txn partition=" << tablet.partition_id();
         }
         if (_delta_writers.count(tablet.tablet_id()) != 0) {
             // already created for the tablet, usually in incremental open case
@@ -997,7 +987,11 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
     ADD_AND_SET_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns.load());
     ADD_AND_SET_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns.load());
 
-    const FlushStatistic* flush_stat = writer->get_flush_stats();
+    // Use get_flush_token() to hold a shared_ptr, keeping the FlushToken alive
+    // while we read its stats. This prevents use-after-free when close()
+    // concurrently resets the token.
+    auto flush_token = writer->get_flush_token();
+    const FlushStatistic* flush_stat = flush_token ? &flush_token->get_stats() : nullptr;
     ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
