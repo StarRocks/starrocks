@@ -42,8 +42,16 @@ void LockFreeScanTaskQueue::force_put(ScanTask task) {
     _queue.enqueue(std::move(task), level);
 }
 
+bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
+    for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
+        if (_queue.try_dequeue(level, task, worker_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
-    // Scan from highest priority (level 20) down to lowest (level 0).
     for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
         if (_queue.try_dequeue(level, task)) {
             return true;

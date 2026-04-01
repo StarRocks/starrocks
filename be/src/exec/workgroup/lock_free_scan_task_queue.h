@@ -50,7 +50,9 @@ public:
     void force_put(ScanTask task);
 
     // Dequeue a task. Scans from level 20 (highest priority) down to level 0.
-    // Returns the first task found. Returns false if all levels are empty.
+    // Worker thread variant uses ConsumerToken for even load distribution.
+    bool try_take(ScanTask& task, int worker_id);
+    // Without worker_id (external or fallback).
     bool try_take(ScanTask& task);
 
     // Returns the approximate total number of enqueued tasks across all levels.

@@ -81,7 +81,7 @@ static void BM_LockFreeDriverQueue_SustainedMixed(benchmark::State& state) {
                 int64_t local_ops = 0;
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     DriverRawPtr driver = nullptr;
-                    if (queue.try_take(driver)) {
+                    if (queue.try_take(driver, t)) {
                         queue.put_back(driver, t);
                         local_ops++;
                     }

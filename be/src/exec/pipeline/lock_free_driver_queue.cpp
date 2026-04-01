@@ -54,7 +54,7 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
     _queue.enqueue(driver, level);
 }
 
-bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
+bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
     // Build a sorted order of levels by weighted accu_time.
     // With only 8 elements, this is cheaper than the CAS operations in try_dequeue.
     std::array<std::pair<double, int>, QUEUE_SIZE> scored;
@@ -69,10 +69,31 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
 
     if (non_empty_count == 0) return false;
 
-    // Sort only the non-empty entries (at most 8 — negligible overhead).
     std::sort(scored.begin(), scored.begin() + non_empty_count);
 
-    // Try levels in ascending weighted-time order.
+    for (int j = 0; j < non_empty_count; ++j) {
+        if (_queue.try_dequeue(scored[j].second, driver, worker_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
+    std::array<std::pair<double, int>, QUEUE_SIZE> scored;
+    int non_empty_count = 0;
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        if (_queue.empty(i)) continue;
+        double weighted_time =
+                static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
+                _level_stats[i].factor;
+        scored[non_empty_count++] = {weighted_time, i};
+    }
+
+    if (non_empty_count == 0) return false;
+
+    std::sort(scored.begin(), scored.begin() + non_empty_count);
+
     for (int j = 0; j < non_empty_count; ++j) {
         if (_queue.try_dequeue(scored[j].second, driver)) {
             return true;

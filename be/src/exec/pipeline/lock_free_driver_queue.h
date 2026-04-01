@@ -54,6 +54,9 @@ public:
 
     // Dequeue a driver. Selects the level with minimum accu_time_ns/factor
     // among non-empty levels. Returns true if a driver was dequeued.
+    // Worker thread variant uses ConsumerToken for even load distribution.
+    bool try_take(DriverRawPtr& driver, int worker_id);
+    // Without worker_id (external or fallback).
     bool try_take(DriverRawPtr& driver);
 
     // Update per-level accumulated time after a driver completes execution.

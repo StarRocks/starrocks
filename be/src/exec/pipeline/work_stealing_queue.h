@@ -23,33 +23,44 @@ namespace starrocks::pipeline {
 
 // WorkStealingQueue is a multi-level lock-free queue built on top of
 // moodycamel::ConcurrentQueue. Each level is an independent ConcurrentQueue.
-// Worker threads get pre-allocated ProducerTokens for reduced enqueue
-// contention; external threads use the implicit producer path.
+// Worker threads get pre-allocated ProducerTokens and ConsumerTokens for
+// reduced enqueue/dequeue contention; external threads use the implicit
+// producer path.
 //
-// This is the foundational building block for LockFreeDriverQueue and
-// LockFreeScanTaskQueue.
+// ConsumerToken is critical for scalability: without it, all consumers
+// converge on the same "fullest" producer sub-queue (thundering herd).
+// With ConsumerToken, each consumer round-robins across producers,
+// distributing dequeue load evenly.
 template <typename T, int NUM_LEVELS>
 class WorkStealingQueue {
 public:
     using QueueType = moodycamel::ConcurrentQueue<T>;
     using ProducerToken = typename QueueType::producer_token_t;
+    using ConsumerToken = typename QueueType::consumer_token_t;
 
     explicit WorkStealingQueue(int num_workers) : _num_workers(num_workers) {
         DCHECK(num_workers > 0) << "num_workers must be positive";
 
-        // Pre-allocate producer tokens for each (worker, level) pair.
-        // Stored flat: _producer_tokens[worker_id * NUM_LEVELS + level]
+        // Pre-allocate producer tokens: _producer_tokens[worker_id * NUM_LEVELS + level]
         _producer_tokens.reserve(num_workers * NUM_LEVELS);
         for (int w = 0; w < num_workers; ++w) {
             for (int l = 0; l < NUM_LEVELS; ++l) {
                 _producer_tokens.emplace_back(_levels[l].queue);
             }
         }
+
+        // Pre-allocate consumer tokens: _consumer_tokens[worker_id * NUM_LEVELS + level]
+        _consumer_tokens.reserve(num_workers * NUM_LEVELS);
+        for (int w = 0; w < num_workers; ++w) {
+            for (int l = 0; l < NUM_LEVELS; ++l) {
+                _consumer_tokens.emplace_back(_levels[l].queue);
+            }
+        }
     }
 
     ~WorkStealingQueue() = default;
 
-    // Non-copyable, non-movable (ProducerTokens hold references to queues).
+    // Non-copyable, non-movable (tokens hold references to internal queues).
     WorkStealingQueue(const WorkStealingQueue&) = delete;
     WorkStealingQueue& operator=(const WorkStealingQueue&) = delete;
     WorkStealingQueue(WorkStealingQueue&&) = delete;
@@ -57,44 +68,46 @@ public:
 
     // Enqueue with explicit ProducerToken (for worker threads).
     void enqueue(T item, int level, int worker_id) {
-        DCHECK(level >= 0 && level < NUM_LEVELS) << "level out of range: " << level;
-        DCHECK(worker_id >= 0 && worker_id < _num_workers) << "worker_id out of range: " << worker_id;
-
-        auto& token = _producer_tokens[worker_id * NUM_LEVELS + level];
-        _levels[level].queue.enqueue(token, std::move(item));
+        DCHECK(level >= 0 && level < NUM_LEVELS);
+        DCHECK(worker_id >= 0 && worker_id < _num_workers);
+        _levels[level].queue.enqueue(_producer_tokens[worker_id * NUM_LEVELS + level],
+                                     std::move(item));
     }
 
     // Enqueue with implicit producer (for external threads).
     void enqueue(T item, int level) {
-        DCHECK(level >= 0 && level < NUM_LEVELS) << "level out of range: " << level;
-
+        DCHECK(level >= 0 && level < NUM_LEVELS);
         _levels[level].queue.enqueue(std::move(item));
     }
 
-    // Dequeue from specified level. Returns true if an item was dequeued.
-    // Uses moodycamel's default heuristic (picks the fullest producer sub-queue).
-    bool try_dequeue(int level, T& item) {
-        DCHECK(level >= 0 && level < NUM_LEVELS) << "level out of range: " << level;
+    // Dequeue with ConsumerToken (for worker threads — avoids thundering herd).
+    // Each worker's ConsumerToken round-robins across producer sub-queues,
+    // distributing dequeue load evenly instead of all competing for the fullest.
+    bool try_dequeue(int level, T& item, int worker_id) {
+        DCHECK(level >= 0 && level < NUM_LEVELS);
+        DCHECK(worker_id >= 0 && worker_id < _num_workers);
+        return _levels[level].queue.try_dequeue(
+                _consumer_tokens[worker_id * NUM_LEVELS + level], item);
+    }
 
+    // Dequeue without token (for external threads or when worker_id unavailable).
+    // Uses heuristic: picks the fullest producer sub-queue.
+    // Under high concurrency this causes thundering herd — prefer the token version.
+    bool try_dequeue(int level, T& item) {
+        DCHECK(level >= 0 && level < NUM_LEVELS);
         return _levels[level].queue.try_dequeue(item);
     }
 
-    // Returns true if the specified level appears empty.
-    // Note: this is an approximation in a concurrent setting.
     bool empty(int level) const {
-        DCHECK(level >= 0 && level < NUM_LEVELS) << "level out of range: " << level;
-
+        DCHECK(level >= 0 && level < NUM_LEVELS);
         return _levels[level].queue.size_approx() == 0;
     }
 
-    // Returns the approximate size of the specified level.
     size_t size_approx(int level) const {
-        DCHECK(level >= 0 && level < NUM_LEVELS) << "level out of range: " << level;
-
+        DCHECK(level >= 0 && level < NUM_LEVELS);
         return _levels[level].queue.size_approx();
     }
 
-    // Returns the approximate total size across all levels.
     size_t size_approx() const {
         size_t total = 0;
         for (int l = 0; l < NUM_LEVELS; ++l) {
@@ -104,15 +117,14 @@ public:
     }
 
 private:
-    // Each LevelQueue is cache-line aligned to prevent false sharing
-    // between levels that may be accessed by different threads.
     struct alignas(64) LevelQueue {
         QueueType queue;
     };
 
     int _num_workers;
     LevelQueue _levels[NUM_LEVELS];
-    std::vector<ProducerToken> _producer_tokens;
+    std::vector<ProducerToken> _producer_tokens;  // flat: [worker_id * NUM_LEVELS + level]
+    std::vector<ConsumerToken> _consumer_tokens;  // flat: [worker_id * NUM_LEVELS + level]
 };
 
 } // namespace starrocks::pipeline

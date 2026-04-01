@@ -60,7 +60,7 @@ static void BM_LockFreeScanTaskQueue_SustainedMixed(benchmark::State& state) {
                 int64_t local_ops = 0;
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     ScanTask task;
-                    if (queue.try_take(task)) {
+                    if (queue.try_take(task, t)) {
                         queue.force_put(std::move(task), t);
                         local_ops++;
                     }
