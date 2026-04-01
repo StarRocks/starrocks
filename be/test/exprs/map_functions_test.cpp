@@ -43,7 +43,7 @@ void _assert_nullable_result_has_independent_null_column(const ColumnPtr& input,
     const size_t result_data_size = result_nullable->data_column()->size();
     const size_t result_null_size = result_nullable->null_column()->size();
 
-    input->filter(filter);
+    input->as_mutable_raw_ptr()->filter(filter);
 
     EXPECT_EQ(result_data_size, result_nullable->data_column()->size());
     EXPECT_EQ(result_null_size, result_nullable->null_column()->size());
