@@ -44,12 +44,12 @@ static constexpr int OPS_PER_THREAD = 5000;
 static void BM_LockFreeScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
 
-    // Pre-fill once outside the loop.
     LockFreeScanTaskQueue queue(num_threads);
     for (int i = 0; i < PREFILL; ++i) {
         queue.force_put(make_bench_task(i % 21), 0);
     }
 
+    int64_t cumulative_ops = 0;
     for (auto _ : state) {
         std::atomic<int64_t> total_ops{0};
         std::vector<std::thread> threads;
@@ -70,8 +70,9 @@ static void BM_LockFreeScanTaskQueue_SustainedMixed(benchmark::State& state) {
         }
 
         for (auto& th : threads) th.join();
-        state.SetItemsProcessed(total_ops.load());
+        cumulative_ops += total_ops.load();
     }
+    state.SetItemsProcessed(cumulative_ops);
 }
 
 BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs);
@@ -79,12 +80,12 @@ BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs);
 static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
 
-    // Pre-fill once outside the loop.
     PriorityScanTaskQueue queue(PREFILL * 2);
     for (int i = 0; i < PREFILL; ++i) {
         queue.force_put(make_bench_task(i % 21));
     }
 
+    int64_t cumulative_ops = 0;
     for (auto _ : state) {
         std::atomic<int64_t> total_ops{0};
         std::vector<std::thread> threads;
@@ -105,7 +106,7 @@ static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
         }
 
         for (auto& th : threads) th.join();
-        state.SetItemsProcessed(total_ops.load());
+        cumulative_ops += total_ops.load();
     }
 }
 

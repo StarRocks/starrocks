@@ -70,6 +70,7 @@ static void BM_LockFreeDriverQueue_SustainedMixed(benchmark::State& state) {
         queue.put_back(drivers[i].get(), 0);
     }
 
+    int64_t cumulative_ops = 0;
     for (auto _ : state) {
         std::atomic<int64_t> total_ops{0};
         std::vector<std::thread> threads;
@@ -90,8 +91,9 @@ static void BM_LockFreeDriverQueue_SustainedMixed(benchmark::State& state) {
         }
 
         for (auto& th : threads) th.join();
-        state.SetItemsProcessed(total_ops.load());
+        cumulative_ops += total_ops.load();
     }
+    state.SetItemsProcessed(cumulative_ops);
 }
 
 BENCHMARK(BM_LockFreeDriverQueue_SustainedMixed)->Apply(BM_ThreadArgs);
@@ -114,6 +116,7 @@ static void BM_QuerySharedDriverQueue_SustainedMixed(benchmark::State& state) {
         queue.put_back(drivers[i].get());
     }
 
+    int64_t cumulative_ops = 0;
     for (auto _ : state) {
         std::atomic<int64_t> total_ops{0};
         std::vector<std::thread> threads;
@@ -134,8 +137,9 @@ static void BM_QuerySharedDriverQueue_SustainedMixed(benchmark::State& state) {
         }
 
         for (auto& th : threads) th.join();
-        state.SetItemsProcessed(total_ops.load());
+        cumulative_ops += total_ops.load();
     }
+    state.SetItemsProcessed(cumulative_ops);
 }
 
 BENCHMARK(BM_QuerySharedDriverQueue_SustainedMixed)->Apply(BM_ThreadArgs);
