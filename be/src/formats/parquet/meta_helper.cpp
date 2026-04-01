@@ -220,8 +220,7 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             return true;
         }
 
-        // LakeMetaHelper is only instantiated when the parquet file has field ids
-        // (see _build_meta_helper), so we always match by field id here.
+        // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
         std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema;
         std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
         for (const auto& field : field_schema->children) {
@@ -259,8 +258,7 @@ void LakeMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::
                                           const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                           std::vector<GroupReaderParam::Column>& read_cols,
                                           std::unordered_set<std::string>& existed_column_names) const {
-    // LakeMetaHelper is only instantiated when the parquet file has field ids
-    // (see _build_meta_helper), so we always look up by field id below.
+    // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
     for (auto& materialized_column : materialized_columns) {
         auto extended_variant_binding =
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());

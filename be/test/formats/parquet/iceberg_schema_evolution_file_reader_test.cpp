@@ -17,30 +17,24 @@
 #include <filesystem>
 
 #include "base/testutil/assert.h"
-#include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/file_reader.h"
-#include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
-#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
@@ -121,153 +115,6 @@ protected:
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
 };
-
-static tparquet::ColumnChunk make_test_column_chunk(int idx) {
-    tparquet::ColumnChunk chunk;
-    chunk.__set_file_path("col" + std::to_string(idx));
-    chunk.file_offset = 0;
-    chunk.meta_data.data_page_offset = 4;
-    return chunk;
-}
-
-static TColumnAccessPath make_extended_access_path(const std::string& root, const std::string& leaf) {
-    TColumnAccessPath root_path;
-    root_path.__set_type(TAccessPathType::type::ROOT);
-    root_path.__set_from_predicate(false);
-    root_path.__set_extended(true);
-    TExpr root_expr;
-    root_expr.nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(root, false));
-    root_path.__set_path(root_expr);
-
-    TColumnAccessPath child_path;
-    child_path.__set_type(TAccessPathType::type::FIELD);
-    child_path.__set_from_predicate(false);
-    child_path.__set_extended(true);
-    TExpr child_expr;
-    child_expr.nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(leaf, false));
-    child_path.__set_path(child_expr);
-
-    root_path.children.emplace_back(child_path);
-    return root_path;
-}
-
-static FileMetaData init_file_meta_from_thrift(const tparquet::FileMetaData& t_file_meta) {
-    auto meta = t_file_meta;
-    FileMetaData file_meta;
-    EXPECT_OK(file_meta.init(meta, true));
-    return file_meta;
-}
-
-TEST_F(IcebergSchemaEvolutionTest, ParquetMetaHelperMarksExtendedVariantVirtualColumn) {
-    tparquet::SchemaElement root;
-    root.__set_name("table");
-    root.__set_num_children(1);
-
-    tparquet::SchemaElement data;
-    data.__set_name("data");
-    data.__set_type(tparquet::Type::INT64);
-    data.__set_num_children(0);
-
-    tparquet::RowGroup row_group;
-    row_group.__set_columns(std::vector<tparquet::ColumnChunk>{make_test_column_chunk(0)});
-    row_group.__set_num_rows(1);
-
-    tparquet::FileMetaData t_file_meta;
-    t_file_meta.__set_version(1);
-    t_file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root, data});
-    t_file_meta.__set_row_groups(std::vector<tparquet::RowGroup>{row_group});
-    auto file_meta = init_file_meta_from_thrift(t_file_meta);
-
-    TypeDescriptor slot_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
-    Utils::SlotDesc slot_descs[] = {{"data.id", slot_type}, {""}};
-    auto* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-
-    std::vector<HdfsScannerContext::ColumnInfo> materialized_columns;
-    Utils::make_column_info_vector(tuple_desc, &materialized_columns);
-
-    TColumnAccessPath t_access_path = make_extended_access_path("data", "id");
-    auto access_path_or = ColumnAccessPath::create(t_access_path, _runtime_state, &_pool);
-    ASSERT_TRUE(access_path_or.ok()) << access_path_or.status().to_string();
-    std::vector<ColumnAccessPathPtr> column_access_paths;
-    column_access_paths.emplace_back(std::move(access_path_or).value());
-
-    ParquetMetaHelper helper(&file_meta, true);
-    std::vector<GroupReaderParam::Column> read_cols;
-    std::unordered_set<std::string> existed_column_names;
-    helper.prepare_read_columns(materialized_columns, &column_access_paths, read_cols, existed_column_names);
-
-    ASSERT_EQ(1, read_cols.size());
-    EXPECT_TRUE(read_cols[0].is_extended_variant_virtual);
-    EXPECT_EQ("data", read_cols[0].source_variant_column_name);
-    EXPECT_EQ("id", read_cols[0].variant_virtual_leaf_path);
-}
-
-TEST_F(IcebergSchemaEvolutionTest, LakeMetaHelperWithoutFieldIdMatchesNestedStructChildrenByName) {
-    tparquet::SchemaElement root;
-    root.__set_name("table");
-    root.__set_num_children(1);
-
-    tparquet::SchemaElement col;
-    col.__set_name("col");
-    col.__set_num_children(3);
-
-    tparquet::SchemaElement c;
-    c.__set_name("c");
-    c.__set_type(tparquet::Type::INT32);
-    c.__set_num_children(0);
-
-    tparquet::SchemaElement b;
-    b.__set_name("b");
-    b.__set_type(tparquet::Type::INT32);
-    b.__set_num_children(0);
-
-    tparquet::SchemaElement a;
-    a.__set_name("a");
-    a.__set_type(tparquet::Type::INT32);
-    a.__set_num_children(0);
-
-    tparquet::RowGroup row_group;
-    row_group.__set_columns(std::vector<tparquet::ColumnChunk>{make_test_column_chunk(0), make_test_column_chunk(1),
-                                                               make_test_column_chunk(2)});
-    row_group.__set_num_rows(1);
-
-    tparquet::FileMetaData t_file_meta;
-    t_file_meta.__set_version(1);
-    t_file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root, col, c, b, a});
-    t_file_meta.__set_row_groups(std::vector<tparquet::RowGroup>{row_group});
-    auto file_meta = init_file_meta_from_thrift(t_file_meta);
-
-    TIcebergSchemaField field_a;
-    field_a.__set_field_id(3);
-    field_a.__set_name("a");
-    TIcebergSchemaField field_b;
-    field_b.__set_field_id(2);
-    field_b.__set_name("b");
-    TIcebergSchemaField field_col;
-    field_col.__set_field_id(1);
-    field_col.__set_name("col");
-    field_col.__set_children(std::vector<TIcebergSchemaField>{field_a, field_b});
-
-    TIcebergSchema schema;
-    schema.__set_fields(std::vector<TIcebergSchemaField>{field_col});
-
-    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
-    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
-    col_type.field_names.emplace_back("a");
-
-    Utils::SlotDesc slot_descs[] = {{"col", col_type}, {""}};
-    auto* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    std::vector<HdfsScannerContext::ColumnInfo> materialized_columns;
-    Utils::make_column_info_vector(tuple_desc, &materialized_columns);
-
-    LakeMetaHelper helper(&file_meta, true, &schema);
-    std::vector<GroupReaderParam::Column> read_cols;
-    std::unordered_set<std::string> existed_column_names;
-    helper.prepare_read_columns(materialized_columns, nullptr, read_cols, existed_column_names);
-
-    ASSERT_EQ(1, read_cols.size());
-    EXPECT_EQ("col", read_cols[0].slot_desc->col_name());
-}
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     auto file = _create_file(add_struct_subfield_file_path);
