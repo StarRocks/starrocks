@@ -17,12 +17,8 @@
 #include <future>
 #include <unordered_set>
 
-<<<<<<< HEAD
-=======
-#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
->>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"

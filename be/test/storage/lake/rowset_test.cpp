@@ -17,13 +17,8 @@
 #include <optional>
 #include <unordered_set>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
->>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
