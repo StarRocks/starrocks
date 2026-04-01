@@ -128,7 +128,7 @@ private:
     uint32_t _count;
     uint32_t _max_count;
     using CppType = StorageCppType<Type>;
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
+    enum { SIZE_OF_TYPE = sizeof(CppType) };
     faststring _first_value;
     faststring _last_value;
     uint8_t _reserved_head_size{0};
