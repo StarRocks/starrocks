@@ -121,8 +121,8 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     std::vector<PersistentIndexSstableUniquePtr> sstables;
     {
         int64_t t_open = GetCurrentTimeMicros();
-        ASSIGN_OR_RETURN(sstables,
-                         _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(), metadata));
+        ASSIGN_OR_RETURN(sstables, _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(),
+                                                           metadata));
         sst_open_us = GetCurrentTimeMicros() - t_open;
     }
 
