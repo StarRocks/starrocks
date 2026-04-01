@@ -100,7 +100,7 @@ public:
     bool all_dict_encoded() const override { return _encoding_type == DICT_ENCODING; }
 
 private:
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     bool _finished{false};
@@ -150,7 +150,7 @@ public:
     Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
 private:
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BitShufflePageDecoder<Type>* _dict_decoder = nullptr;

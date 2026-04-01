@@ -829,7 +829,7 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
 template <>
 struct ScalarTypeInfoImpl<TYPE_VARCHAR> : ScalarTypeInfoImpl<TYPE_CHAR> {
     static constexpr LogicalType type = TYPE_VARCHAR;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_VARCHAR>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_VARCHAR>;
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
@@ -862,31 +862,31 @@ struct ScalarTypeInfoImpl<TYPE_VARCHAR> : ScalarTypeInfoImpl<TYPE_CHAR> {
 template <>
 struct ScalarTypeInfoImpl<TYPE_HLL> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr LogicalType type = TYPE_HLL;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_HLL>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_HLL>;
 };
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_OBJECT> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr LogicalType type = TYPE_OBJECT;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_OBJECT>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_OBJECT>;
 };
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_PERCENTILE> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr LogicalType type = TYPE_PERCENTILE;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_PERCENTILE>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_PERCENTILE>;
 };
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_JSON> : ScalarTypeInfoImpl<TYPE_OBJECT> {
     static constexpr LogicalType type = TYPE_JSON;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_JSON>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_JSON>;
 };
 
 template <>
 struct ScalarTypeInfoImpl<TYPE_VARBINARY> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr LogicalType type = TYPE_VARBINARY;
-    static constexpr int32_t size = sizeof(StorageCppType<TYPE_VARBINARY>);
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_VARBINARY>;
 };
 
 void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;

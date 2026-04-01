@@ -221,4 +221,7 @@ using StorageCppType = typename StorageTypeTraits<Type>::CppType;
 template <LogicalType Type>
 using StorageUnsignedCppType = typename StorageTypeTraits<Type>::UnsignedCppType;
 
+template <LogicalType Type>
+constexpr int32_t StorageCppTypeSize = sizeof(StorageCppType<Type>);
+
 } // namespace starrocks

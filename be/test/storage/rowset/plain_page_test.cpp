@@ -221,7 +221,7 @@ public:
             }
             added += num;
             round++;
-            pos += num * sizeof(StorageCppType<TYPE_INT>);
+            pos += num * StorageCppTypeSize<TYPE_INT>;
             page_builder.reset();
         } while (num > 0);
         EXPECT_EQ(size, added);

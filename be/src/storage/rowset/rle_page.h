@@ -151,7 +151,7 @@ public:
 
 private:
     using CppType = StorageCppType<Type>;
-    enum { SIZE_OF_TYPE = sizeof(CppType) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     uint32_t _count{0};
@@ -254,7 +254,7 @@ public:
 
 private:
     using CppType = StorageCppType<Type>;
-    enum { SIZE_OF_TYPE = sizeof(CppType) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     bool _parsed{false};

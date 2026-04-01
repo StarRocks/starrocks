@@ -128,7 +128,7 @@ private:
     uint32_t _count;
     uint32_t _max_count;
     using CppType = StorageCppType<Type>;
-    enum { SIZE_OF_TYPE = sizeof(CppType) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     faststring _first_value;
     faststring _last_value;
     uint8_t _reserved_head_size{0};
@@ -272,7 +272,7 @@ private:
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};
     using CppType = StorageCppType<Type>;
-    enum { SIZE_OF_TYPE = sizeof(CppType) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 };
 
 } // namespace starrocks

@@ -227,7 +227,7 @@ private:
         return &_compressed_data;
     }
 
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     uint8_t _reserved_head_size{0};
     uint32_t _max_count;
     uint32_t _count{0};
@@ -376,7 +376,7 @@ private:
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     uint32_t _num_elements{0};
