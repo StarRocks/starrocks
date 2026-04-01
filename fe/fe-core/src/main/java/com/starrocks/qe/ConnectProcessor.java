@@ -430,6 +430,65 @@ public class ConnectProcessor {
         }
     }
 
+    private void auditStmtFailure(Throwable e, StatementBase parsedStmt, String auditSql) {
+        setStmtFailure(e, auditSql);
+        auditCurrentStmt(auditSql, parsedStmt);
+    }
+
+    private void auditStmtFailureForStmt(Throwable e, StatementBase parsedStmt, String originStmt) {
+        auditStmtFailure(e, parsedStmt, getAuditSql(parsedStmt, originStmt));
+    }
+
+    private List<StatementBase> parseStatements(String originStmt) throws AnalysisException {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
+            return SqlParser.parse(originStmt, ctx.getSessionVariable());
+        } catch (ParsingException parsingException) {
+            throw new AnalysisException(parsingException.getMessage());
+        }
+    }
+
+    private void resetStmtExecutionContext(boolean refreshQueryId) {
+        executor = null;
+        ctx.setExecutor(null);
+        ctx.getState().reset();
+        ctx.resetReturnRows();
+        ctx.setStartTime();
+        ctx.setCurrentThreadAllocatedMemory(getThreadAllocatedBytes(Thread.currentThread().getId()));
+        resetAuditEventBuilder();
+        if (refreshQueryId) {
+            ctx.setQueryId(UUIDUtil.genUUID());
+            // Keep executionId aligned with the current stmt before StmtExecutor.execute():
+            // 1. StmtExecutor skips resetting executionId for cache-select.
+            // 2. A stmt can fail before entering StmtExecutor.execute(), but we still need
+            //    the current stmt's identity for the failure path and audit.
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        }
+    }
+
+    private StatementBase prepareStmtForExecution(StatementBase parsedStmt, String originStmt,
+                                                  int stmtIdx, int stmtCount) throws AnalysisException {
+        // from jdbc no params like that. COM_STMT_PREPARE + select 1
+        if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
+            parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
+        }
+        // only for JDBC, COM_STMT_PREPARE bundled with jdbc
+        if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
+            ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
+            if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
+            }
+        }
+
+        parsedStmt.setOrigStmt(new OriginStatement(originStmt, stmtIdx));
+        Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
+        ctx.setIsLastStmt(stmtIdx == stmtCount - 1);
+        ctx.setSingleStmt(stmtCount == 1);
+        // auditAfterExec() reads ctx.getState().isQuery() even when the stmt fails before
+        // StmtExecutor.execute(), so we must classify the stmt here as well.
+        ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
+        return parsedStmt;
+    }
+
     private boolean shouldTerminateBeforeStmtExecution(StatementBase parsedStmt) {
         try {
             if (ctx.getTxnId() != 0) {
@@ -454,6 +513,7 @@ public class ConnectProcessor {
         }
     }
 
+    // execute this sql and audit current sql unless throw LargeInPredicateException
     private void executeStmtWithAudit(StatementBase parsedStmt, String auditSql) throws Exception {
         try {
             executor = new StmtExecutor(ctx, parsedStmt);
@@ -477,11 +537,55 @@ public class ConnectProcessor {
         } catch (LargeInPredicateException e) {
             throw e;
         } catch (Exception e) {
-            setStmtFailure(e, auditSql);
-            auditCurrentStmt(auditSql, parsedStmt);
+            auditStmtFailure(e, parsedStmt, auditSql);
             throw e;
         }
         auditCurrentStmt(auditSql, parsedStmt);
+    }
+
+    private StatementBase prepareRetriedStmt(StatementBase parsedStmt, String originStmt, int stmtCount)
+            throws AnalysisException {
+        StatementBase retriedStmt = parseStatements(originStmt).get(parsedStmt.getOrigStmt().idx);
+        resetStmtExecutionContext(true);
+        return prepareStmtForExecution(retriedStmt, originStmt, parsedStmt.getOrigStmt().idx, stmtCount);
+    }
+
+    private StatementBase prepareRetriedStmtWithAudit(StatementBase parsedStmt, String originStmt, int stmtCount)
+            throws Exception {
+        try {
+            return prepareRetriedStmt(parsedStmt, originStmt, stmtCount);
+        } catch (Exception e) {
+            auditStmtFailureForStmt(e, parsedStmt, originStmt);
+            throw e;
+        }
+    }
+
+    private void runWithStmtParserStageRetry(StatementBase parsedStmt, String originStmt, int stmtCount) throws Exception {
+        try {
+            executeStmtWithAudit(parsedStmt, getAuditSql(parsedStmt, originStmt));
+        } catch (LargeInPredicateException e) {
+            boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
+            if (!originalEnableLargeInPredicate) {
+                auditStmtFailureForStmt(e, parsedStmt, originStmt);
+                throw e;
+            }
+            try {
+                ctx.getSessionVariable().setEnableLargeInPredicate(false);
+                LOG.warn("Retrying statement with enable_large_in_predicate=false, stmt idx: {}",
+                        parsedStmt.getOrigStmt().idx);
+                Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
+                StatementBase retriedStmt = prepareRetriedStmtWithAudit(parsedStmt, originStmt, stmtCount);
+                try {
+                    executeStmtWithAudit(retriedStmt, getAuditSql(retriedStmt, originStmt));
+                } catch (LargeInPredicateException retryException) {
+                    auditStmtFailureForStmt(retryException, retriedStmt, originStmt);
+                    throw retryException;
+                }
+            }
+            finally {
+                ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
+            }
+        }
     }
 
     // process COM_QUERY statement,
@@ -505,16 +609,24 @@ public class ConnectProcessor {
 
         // execute this query.
         boolean allStatementsAreSet = true;
+        boolean parseSucceeded = false;
         try {
-            QueryAttemptResult attemptResult = runWithParserStageRetry(originStmt);
+            List<StatementBase> stmts = parseStatements(originStmt);
+            parseSucceeded = true;
+            QueryAttemptResult attemptResult = executeQueryAttempt(originStmt, stmts);
             allStatementsAreSet = attemptResult.allStatementsAreSet;
             if (attemptResult.shouldTerminate) {
                 return;
             }
         } catch (AnalysisException e) {
-            LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+            if (!parseSucceeded) {
+                LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+            }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (!parseSucceeded) {
+                auditAfterExec(originStmt, null, null, null);
+            }
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
@@ -522,43 +634,14 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (!parseSucceeded) {
+                auditAfterExec(originStmt, null, null, null);
+            }
         } finally {
             Tracers.close();
             if (!allStatementsAreSet) {
                 // custom_query_id session is temporary, should be cleared after query finished
                 ctx.getSessionVariable().setCustomQueryId("");
-            }
-        }
-    }
-
-    /**
-     * Execute query with parser-stage retry support.
-     *
-     * This method provides a retry mechanism starting from the parser stage, which is necessary for
-     * certain optimizations that require different AST structures based on session variables or configs.
-     * Some scenarios that need parser-stage retry include:
-     * - LargeInPredicate optimization: When enable_large_in_predicate=true, the parser uses raw constant
-     *   values instead of expressions. If this optimization fails, we must re-parse with the flag disabled
-     *   to get a traditional expression-based AST. Additionally, mid-pipeline rewrites of expressions or
-     *   operators (e.g., during analyzer/optimizer phases) may bypass critical processing steps; therefore
-     *   a full re-parse is required to ensure all semantic checks and transformations are executed.
-     * - Other future optimizations that modify parsing behavior based on session/config settings.
-     *
-     * This is different from execution-level retries because it requires re-parsing the SQL to get
-     * a different AST structure, not just re-executing the same plan.
-     */
-    private QueryAttemptResult runWithParserStageRetry(String originStmt) throws Throwable {
-        try {
-            return executeQueryAttempt(originStmt);
-        } catch (LargeInPredicateException e) {
-            boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
-            try {
-                ctx.getSessionVariable().setEnableLargeInPredicate(false);
-                LOG.warn("Retrying query with enable_large_in_predicate=false");
-                Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
-                return executeQueryAttempt(originStmt);
-            } finally {
-                ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
             }
         }
     }
@@ -573,68 +656,28 @@ public class ConnectProcessor {
         }
     }
 
-    private QueryAttemptResult executeQueryAttempt(String originStmt) throws Throwable {
+    private QueryAttemptResult executeQueryAttempt(String originStmt, List<StatementBase> stmts) throws Throwable {
         boolean allStatementsAreSet = true;
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        // Keep executionId aligned with the current stmt before StmtExecutor.execute():
-        // 1. StmtExecutor skips resetting executionId for cache-select.
-        // 2. A stmt can fail before entering StmtExecutor.execute(), but we still need
-        //    the current stmt's identity for the failure path and audit.
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: query, query id:{}, sql:{}", ctx.getQueryId(), originStmt);
         }
-        List<StatementBase> stmts;
-        try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
-            stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
-        } catch (ParsingException parsingException) {
-            throw new AnalysisException(parsingException.getMessage());
-        }
 
         for (int i = 0; i < stmts.size(); ++i) {
-            executor = null;
-            ctx.setExecutor(null);
-            ctx.getState().reset();
-            ctx.resetReturnRows();
-            ctx.setStartTime();
-            ctx.setCurrentThreadAllocatedMemory(getThreadAllocatedBytes(Thread.currentThread().getId()));
-            resetAuditEventBuilder();
-            if (i > 0) {
-                ctx.setQueryId(UUIDUtil.genUUID());
-                // See the comment above: later stmts also need a fresh executionId even if
-                // StmtExecutor.execute() is never reached or cache-select is enabled.
-                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-            }
+            resetStmtExecutionContext(i > 0);
             StatementBase parsedStmt = stmts.get(i);
-            // from jdbc no params like that. COM_STMT_PREPARE + select 1
-            if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
-                parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
-            }
-            // only for JDBC, COM_STMT_PREPARE bundled with jdbc
-            if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
-                ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
-                if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
-                }
-            }
             if (!(parsedStmt instanceof SetStmt)) {
                 allStatementsAreSet = false;
             }
-            parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
-            Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
-            ctx.setIsLastStmt(i == stmts.size() - 1);
-            ctx.setSingleStmt(stmts.size() == 1);
-            // auditAfterExec() reads ctx.getState().isQuery() even when the stmt fails before
-            // StmtExecutor.execute(), so we must classify the stmt here as well.
-            ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
-            String auditSql = getAuditSql(parsedStmt, originStmt);
+            parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
             if (shouldTerminateBeforeStmtExecution(parsedStmt)) {
-                auditCurrentStmt(auditSql, parsedStmt);
+                auditCurrentStmt(getAuditSql(parsedStmt, originStmt), parsedStmt);
                 return new QueryAttemptResult(allStatementsAreSet, true);
             }
 
-            executeStmtWithAudit(parsedStmt, auditSql);
+            runWithStmtParserStageRetry(parsedStmt, originStmt, stmts.size());
             if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 break;
             }

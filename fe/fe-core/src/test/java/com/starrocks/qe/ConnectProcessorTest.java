@@ -63,6 +63,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
@@ -447,6 +448,148 @@ public class ConnectProcessorTest extends DDLTestBase {
         };
 
         processor.processOnce();
+        Assertions.assertEquals(2, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("ERR:"));
+        Assertions.assertFalse(auditRecords.get(0).contains(";"));
+        Assertions.assertFalse(auditRecords.get(1).contains("; select 3"));
+    }
+
+    @Test
+    public void testParseFailureAuditsOriginalSql() throws Exception {
+        ByteBuffer packet = createQueryPacket("select from");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> auditRecords = new ArrayList<>();
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertEquals(1, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("ERR:"));
+        Assertions.assertEquals("ERR:select from", auditRecords.get(0));
+    }
+
+    @Test
+    public void testMultiStatementLargeInPredicateRetriesCurrentStmtOnly() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> auditRecords = new ArrayList<>();
+        int[] executeCounts = new int[3];
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                executeCounts[stmtIdx]++;
+                if (stmtIdx == 1 && executeCounts[stmtIdx] == 1) {
+                    throw new LargeInPredicateException("mock large in predicate retry");
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertArrayEquals(new int[] {1, 2, 1}, executeCounts);
+        Assertions.assertEquals(3, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(2).startsWith("OK:"));
+        Assertions.assertFalse(auditRecords.get(0).contains(";"));
+        Assertions.assertFalse(auditRecords.get(1).contains(";"));
+        Assertions.assertFalse(auditRecords.get(2).contains(";"));
+    }
+
+    @Test
+    public void testMultiStatementLargeInPredicateRetryStopsAfterRetriedStmtFailure() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        List<String> auditRecords = new ArrayList<>();
+        int[] executeCounts = new int[3];
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                executeCounts[stmtIdx]++;
+                if (stmtIdx == 1) {
+                    if (executeCounts[stmtIdx] == 1) {
+                        throw new LargeInPredicateException("mock large in predicate retry");
+                    }
+                    throw new IOException("mock stmt failure after retry");
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertArrayEquals(new int[] {1, 2, 0}, executeCounts);
+        Assertions.assertEquals(2, auditRecords.size());
+        Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
+        Assertions.assertTrue(auditRecords.get(1).startsWith("ERR:"));
+        Assertions.assertFalse(auditRecords.get(0).contains(";"));
+        Assertions.assertFalse(auditRecords.get(1).contains("; select 3"));
+    }
+
+    @Test
+    public void testMultiStatementLargeInPredicateWithoutRetryStillAuditsFailedStmt() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setEnableLargeInPredicate(false);
+        List<String> auditRecords = new ArrayList<>();
+        int[] executeCounts = new int[3];
+        ConnectProcessor processor = new ConnectProcessor(ctx) {
+            @Override
+            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                       String digestFromLeader) {
+                auditRecords.add(ctx.getState().toString() + ":" + origStmt);
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute(Invocation invocation) throws Exception {
+                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                executeCounts[stmtIdx]++;
+                if (stmtIdx == 1) {
+                    throw new LargeInPredicateException("mock large in predicate without retry");
+                }
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+
+        processor.processOnce();
+        Assertions.assertArrayEquals(new int[] {1, 1, 0}, executeCounts);
         Assertions.assertEquals(2, auditRecords.size());
         Assertions.assertTrue(auditRecords.get(0).startsWith("OK:"));
         Assertions.assertTrue(auditRecords.get(1).startsWith("ERR:"));
