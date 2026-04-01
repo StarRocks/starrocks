@@ -1198,7 +1198,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (const auto& file : writer->segments()) {
+        for (const auto& file : writer->files()) {
             segs->Add()->assign(file.path);
             segs_size->Add(file.size.value());
         }
@@ -1219,7 +1219,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (const auto& file : writer->segments()) {
+        for (const auto& file : writer->files()) {
             segs->Add()->assign(file.path);
             segs_size->Add(file.size.value());
         }
@@ -1229,12 +1229,14 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     _tablet_metadata->set_version(3);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    bool old_enable_load_segment_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = true;
 
     std::atomic<int> total_hits{0};
 
     SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp defer([] {
+    DeferOp defer([old_enable_load_segment_parallel] {
+        config::enable_load_segment_parallel = old_enable_load_segment_parallel;
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->ClearTrace();
         SyncPoint::GetInstance()->DisableProcessing();
