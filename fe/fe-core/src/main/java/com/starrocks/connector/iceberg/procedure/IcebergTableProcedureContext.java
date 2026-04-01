@@ -32,4 +32,14 @@ public record IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
                                            AlterTableStmt stmt,
                                            AlterTableOperationClause clause,
                                            ExecutorService executorService) {
+
+    public IcebergTableProcedureContext(IcebergCatalog icebergCatalog,
+                                        Table table,
+                                        ConnectContext context,
+                                        Transaction transaction,
+                                        HdfsEnvironment hdfsEnvironment,
+                                        AlterTableStmt stmt,
+                                        AlterTableOperationClause clause) {
+        this(icebergCatalog, table, context, transaction, hdfsEnvironment, stmt, clause, null);
+    }
 }

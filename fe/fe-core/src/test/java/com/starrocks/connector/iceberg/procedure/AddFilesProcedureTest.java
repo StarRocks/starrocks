@@ -483,7 +483,7 @@ public class AddFilesProcedureTest {
                                                                  @Mocked HadoopInputFile inputFile) throws Exception {
         AddFilesProcedure procedure = AddFilesProcedure.getInstance();
         IcebergTableProcedureContext context =
-                new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null, null);
+                new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null);
 
         Schema schema = new Schema(
                 Types.NestedField.optional(1, "id", Types.IntegerType.get()),
@@ -604,6 +604,6 @@ public class AddFilesProcedureTest {
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
         Transaction transaction = Mockito.mock(Transaction.class);
 
-        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause, null);
+        return new IcebergTableProcedureContext(catalog, table, ctx, transaction, HDFS_ENVIRONMENT, stmt, clause);
     }
 }

@@ -555,6 +555,6 @@ public class RemoveOrphanFilesProcedureTest {
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
         AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
         AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
-        return new IcebergTableProcedureContext(catalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause, null);
+        return new IcebergTableProcedureContext(catalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause);
     }
 }
