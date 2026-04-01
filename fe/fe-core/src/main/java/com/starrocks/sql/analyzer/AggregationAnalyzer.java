@@ -330,9 +330,7 @@ public class AggregationAnalyzer {
                     if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(),
                             SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                         if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
-                            throw new SemanticException(
-                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(ExprToSql.toSql(expr), ExprToSql.toSql(node)),
-                                    expr.getPos());
+                            analyzeState.getColumnNotInGroupBy().add(expr);
                         }
                     } else {
                         return false;

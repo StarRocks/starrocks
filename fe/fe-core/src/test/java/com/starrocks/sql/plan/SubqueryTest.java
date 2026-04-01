@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -1886,14 +1887,73 @@ public class SubqueryTest extends PlanTestBase {
     //    }
 
     @Test
-    public void testHavingSubqueryNoGroupMode() {
+    public void testHavingSubqueryNoGroupMode() throws Exception {
+        // When ONLY_FULL_GROUP_BY is disabled (sql_mode=0), correlated subqueries in HAVING
+        // referencing non-GROUP-BY outer columns should be allowed.
+        // The non-GROUP-BY column is implicitly wrapped with any_value().
         String sql = "select v3 from t0 group by v2 having 1 > (select v4 from t1 where t0.v1 = t1.v5)";
         long sqlMode = connectContext.getSessionVariable().getSqlMode();
         try {
             connectContext.getSessionVariable().setSqlMode(0);
-            Assertions.assertThrows(SemanticException.class,
-                    () -> getFragmentPlan(sql),
-                    "must be an aggregate expression or appear in GROUP BY clause");
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "any_value");
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
+    }
+
+    @Test
+    public void testCorrelatedSubqueryNonGroupByColumnNoFullGroupBy() throws Exception {
+        // Issue #70996: When ONLY_FULL_GROUP_BY is disabled, correlated subqueries in SELECT
+        // referencing non-GROUP-BY outer columns should be allowed.
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(0);
+
+            // Basic case: single non-GROUP-BY column in subquery correlation
+            {
+                String sql = "SELECT v1, MAX(v2), " +
+                        "(SELECT COUNT(*) FROM t1 WHERE t1.v4 = t0.v1 AND t1.v5 = t0.v3) AS cnt " +
+                        "FROM t0 GROUP BY v1";
+                String plan = getFragmentPlan(sql);
+                // v3 is not in GROUP BY, should be projected through aggregate via any_value
+                assertContains(plan, "any_value");
+            }
+
+            // Multiple non-GROUP-BY columns in subquery correlation
+            {
+                String sql = "SELECT v1, MAX(v2), " +
+                        "(SELECT COUNT(*) FROM t1 WHERE t1.v4 = t0.v2 AND t1.v5 = t0.v3) AS cnt " +
+                        "FROM t0 GROUP BY v1";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "any_value");
+            }
+
+            // GROUP-BY column + non-GROUP-BY column in same subquery correlation
+            {
+                String sql = "SELECT v1, SUM(v2), " +
+                        "(SELECT COUNT(*) FROM t1 WHERE t1.v4 = t0.v1 AND t1.v5 = t0.v3) AS cnt " +
+                        "FROM t0 GROUP BY v1";
+                String plan = getFragmentPlan(sql);
+                // v1 is in GROUP BY (no wrapping needed), v3 is not (needs any_value)
+                assertContains(plan, "any_value");
+            }
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
+    }
+
+    @Test
+    public void testCorrelatedSubqueryNonGroupByColumnFullGroupByRejects() {
+        // When ONLY_FULL_GROUP_BY is ON (default), correlated subqueries referencing
+        // non-GROUP-BY outer columns should still be rejected.
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_ONLY_FULL_GROUP_BY);
+            String sql = "SELECT v1, MAX(v2), " +
+                    "(SELECT COUNT(*) FROM t1 WHERE t1.v4 = t0.v1 AND t1.v5 = t0.v3) AS cnt " +
+                    "FROM t0 GROUP BY v1";
+            assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
         } finally {
             connectContext.getSessionVariable().setSqlMode(sqlMode);
         }

@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -496,6 +497,20 @@ public class QueryTransformer {
             // the output key -> value pair must use the original aggregate expr as key, because
             // the top node may ref the original aggregate expr
             groupingTranslations.put(aggregates.get(i), colRef);
+
+            // For any_value() wrapping a non-GROUP-BY column (generated when ONLY_FULL_GROUP_BY is off),
+            // also map the underlying column's field to the any_value output. This allows correlated
+            // subqueries to resolve outer non-GROUP-BY column references through the aggregate.
+            if (FunctionSet.ANY_VALUE.equals(aggOperator.getFnName())
+                    && aggregates.get(i).getChildren().size() == 1
+                    && aggregates.get(i).getChild(0) instanceof SlotRef) {
+                SlotRef childSlot = (SlotRef) aggregates.get(i).getChild(0);
+                ScalarOperator childOp = SqlToScalarOperatorTranslator.translate(
+                        childSlot, subOpt.getExpressionMapping(), columnRefFactory);
+                if (childOp instanceof ColumnRefOperator && !groupByColumnRefs.contains(childOp)) {
+                    groupingTranslations.put(childSlot, colRef);
+                }
+            }
         }
 
         //Add repeatOperator to support grouping sets
