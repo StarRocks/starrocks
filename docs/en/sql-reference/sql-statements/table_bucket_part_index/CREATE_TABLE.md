@@ -331,7 +331,7 @@ Value columns do not need to specify aggregation types when other key type is us
 
 ### Range-based Distribution
 
-From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns. 
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
 
 The range-based distribution semantic is different from the default semantic in the following aspects:
 - If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
