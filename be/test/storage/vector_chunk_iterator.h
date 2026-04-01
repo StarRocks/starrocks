@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#pragma once
 
 #include <array>
 #include <initializer_list>
@@ -37,7 +38,7 @@ struct DatumBuilder {
         Datums datums;
         datums.resize(data.size());
         for (size_t i = 0; i < data.size(); i++) {
-            datums[i].set(static_cast<typename TypeTraits<Type>::CppType>(data[i]));
+            datums[i].set(static_cast<StorageCppType<Type>>(data[i]));
         }
         return datums;
     }

@@ -64,30 +64,30 @@ private:
     std::vector<std::unique_ptr<uint8_t[]>> _buffers;
 };
 
-template <LogicalType field_type>
-void common_test(typename TypeTraits<field_type>::CppType src_val) {
+template <LogicalType field_type, class CppType = StorageCppType<field_type>>
+void common_test(CppType src_val) {
     TypeInfoPtr type = get_type_info(field_type);
 
     ASSERT_EQ(field_type, type->type());
     ASSERT_EQ(sizeof(src_val), type->size());
     {
-        typename TypeTraits<field_type>::CppType dst_val;
+        CppType dst_val;
         LocalTypeInfoAllocator local_allocator;
         auto allocator = local_allocator.make_allocator();
         type->deep_copy((char*)&dst_val, (char*)&src_val, &allocator);
     }
     {
-        typename TypeTraits<field_type>::CppType dst_val;
+        CppType dst_val;
         type->direct_copy((char*)&dst_val, (char*)&src_val);
     }
     // test min
     {
-        typename TypeTraits<field_type>::CppType dst_val;
+        CppType dst_val;
         type->set_to_min((char*)&dst_val);
     }
     // test max
     {
-        typename TypeTraits<field_type>::CppType dst_val;
+        CppType dst_val;
         type->set_to_max((char*)&dst_val);
         // NOTE: bool input is true, this will return 0
     }
@@ -120,7 +120,6 @@ void test_char(Slice src_val) {
     // test max
     {
         char buf[64];
-        Slice dst_val(buf, sizeof(buf));
         memset(buf, 0xFF, 64);
     }
 }

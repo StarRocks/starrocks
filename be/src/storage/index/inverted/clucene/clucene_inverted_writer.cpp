@@ -41,7 +41,7 @@ namespace starrocks {
 template <LogicalType field_type>
 class CLuceneInvertedWriterImpl : public CLuceneInvertedWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
     explicit CLuceneInvertedWriterImpl(const std::string& field_name, std::string directory,
                                        const TabletIndex* inverted_index)

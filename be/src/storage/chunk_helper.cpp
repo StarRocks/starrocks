@@ -44,7 +44,7 @@ namespace starrocks {
 // Infer ColumnType from LogicalType
 template <LogicalType ftype>
 struct CppColumnTraits {
-    using CppType = typename CppTypeTraits<ftype>::CppType;
+    using CppType = typename StorageTypeTraits<ftype>::CppType;
     using ColumnType = typename ColumnTraits<CppType>::ColumnType;
 };
 
