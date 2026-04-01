@@ -44,7 +44,7 @@ bool LockFreeWorkGroupDriverQueue::take(DriverRawPtr& driver, bool blocking) {
         // Collect all workgroup candidates sorted by vruntime, then try each.
         // This ensures we try ALL workgroups before blocking (fix for I3).
         auto candidates = _pick_sorted_wgs();
-        for (auto* [vruntime, wg_queue] : candidates) {
+        for (auto& [vruntime, wg_queue] : candidates) {
             if (wg_queue->try_take(driver)) {
                 _num_drivers.fetch_sub(1, std::memory_order_relaxed);
                 if (_cancel_set.erase(driver)) {

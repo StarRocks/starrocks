@@ -70,7 +70,7 @@ static void BM_LockFreeScanTaskQueue_Mixed(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &ops_done, t, items_per_thread]() {
+            threads.emplace_back([&queue, &ops_done, t]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     ScanTask task;
                     if (queue.try_take(task)) {
@@ -122,7 +122,7 @@ static void BM_PriorityScanTaskQueue_Mixed(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &ops_done, items_per_thread]() {
+            threads.emplace_back([&queue, &ops_done]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     auto result = queue.take();
                     if (result.ok()) {
@@ -173,7 +173,7 @@ static void BM_LockFreeScanTaskQueue_ProducerConsumer(benchmark::State& state) {
 
         // Producer threads.
         for (int p = 0; p < num_producers; ++p) {
-            threads.emplace_back([&queue, items_per_producer]() {
+            threads.emplace_back([&queue]() {
                 for (int i = 0; i < items_per_producer; ++i) {
                     queue.force_put(make_bench_task(i % LockFreeScanTaskQueue::NUM_PRIORITY_LEVELS));
                 }
@@ -236,7 +236,7 @@ static void BM_LockFreeScanTaskQueue_EnqueueOnly(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, t, items_per_thread]() {
+            threads.emplace_back([&queue, t]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     queue.force_put(make_bench_task(i % LockFreeScanTaskQueue::NUM_PRIORITY_LEVELS), t);
                 }
@@ -276,7 +276,7 @@ static void BM_PriorityScanTaskQueue_EnqueueOnly(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, items_per_thread]() {
+            threads.emplace_back([&queue]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     queue.force_put(make_bench_task(i % LockFreeScanTaskQueue::NUM_PRIORITY_LEVELS));
                 }

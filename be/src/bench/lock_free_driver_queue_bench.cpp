@@ -96,7 +96,7 @@ static void BM_LockFreeDriverQueue_Mixed(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &ops_done, t, items_per_thread]() {
+            threads.emplace_back([&queue, &ops_done, t]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     DriverRawPtr driver = nullptr;
                     if (queue.try_take(driver)) {
@@ -158,7 +158,7 @@ static void BM_QuerySharedDriverQueue_Mixed(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &ops_done, items_per_thread]() {
+            threads.emplace_back([&queue, &ops_done]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     auto result = queue.take(false);
                     if (result.ok() && result.value() != nullptr) {
@@ -218,7 +218,7 @@ static void BM_LockFreeDriverQueue_EnqueueOnly(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &all_drivers, t, items_per_thread]() {
+            threads.emplace_back([&queue, &all_drivers, t]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     queue.put_back(all_drivers[t][i].get(), t);
                 }
@@ -270,7 +270,7 @@ static void BM_QuerySharedDriverQueue_EnqueueOnly(benchmark::State& state) {
         threads.reserve(num_threads);
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &all_drivers, t, items_per_thread]() {
+            threads.emplace_back([&queue, &all_drivers, t]() {
                 for (int i = 0; i < items_per_thread; ++i) {
                     queue.put_back(all_drivers[t][i].get());
                 }

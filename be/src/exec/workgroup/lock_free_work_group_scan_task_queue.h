@@ -16,11 +16,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "base/concurrency/moodycamel/lightweightsemaphore.h"
 #include "exec/workgroup/lock_free_scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"

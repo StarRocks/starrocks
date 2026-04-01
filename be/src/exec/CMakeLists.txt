@@ -62,6 +62,8 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
+    pipeline/lock_free_driver_queue.cpp
+    pipeline/lock_free_work_group_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
     pipeline/pipeline_driver.cpp
     pipeline/audit_statistics_reporter.cpp
@@ -405,6 +407,8 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
+    workgroup/lock_free_scan_task_queue.cpp
+    workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
 add_library(pipeline_primitives_exec_objs OBJECT
