@@ -449,7 +449,7 @@ public class ConnectProcessor {
         auditAfterExec(auditSql, parsedStmt,
                 executor == null ? null : executor.getQueryStatisticsForAuditLog(),
                 getDigestFromLeader(executor));
-        if (executor != null) {
+        if (ctx.getIsLastStmt() && executor != null) {
             executor.addFinishedQueryDetail();
         }
     }
@@ -555,7 +555,9 @@ public class ConnectProcessor {
                 }
             }.visit(parsedStmt);
 
-            executor.addRunningQueryDetail(parsedStmt);
+            if (ctx.getIsLastStmt()) {
+                executor.addRunningQueryDetail(parsedStmt);
+            }
             executor.execute();
         } catch (LargeInPredicateException e) {
             throw e;
@@ -604,8 +606,7 @@ public class ConnectProcessor {
                     auditStmtFailureForStmt(retryException, retriedStmt, originStmt);
                     throw retryException;
                 }
-            }
-            finally {
+            } finally {
                 ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
             }
         }

@@ -3816,7 +3816,7 @@ public class StmtExecutor {
 
     private String getQueryDetailSql(StatementBase parsedStmt) {
         String originSql = parsedStmt.getOrigStmt().originStmt;
-        if (context.isSingleStmt()) {
+        if (context.isSingleStmt() || parsedStmt.getOrigStmt().idx == 0) {
             return originSql;
         }
         return AstToSQLBuilder.toSQLOrDefault(parsedStmt, originSql);
