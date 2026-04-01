@@ -74,8 +74,13 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     const char* stub_method_name = AggBatchCallStub::batch_update_method_name;
     jclass udaf_clazz = udaf_ctx->udaf_class.clazz();
     jobject update_method = udaf_ctx->update->method.handle();
-    ASSIGN_OR_RETURN(auto update_stub_clazz, udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method,
-                                                                          ClassLoader::BATCH_SINGLE_UPDATE));
+    // Pass the actual number of input columns so that the stub generator can produce the correct
+    // signature for varargs UDAFs (N separate column arrays instead of one 2-D array).
+    // The Java side uses method.isVarArgs() to decide whether numActualVarArgs is relevant.
+    int num_actual_var_args = context->get_num_args();
+    ASSIGN_OR_RETURN(auto update_stub_clazz,
+                     udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method,
+                                                  ClassLoader::BATCH_SINGLE_UPDATE, num_actual_var_args));
     ASSIGN_OR_RETURN(auto method, analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     udaf_ctx->update_batch_call_stub = std::make_unique<AggBatchCallStub>(
             context, udaf_ctx->handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(method));

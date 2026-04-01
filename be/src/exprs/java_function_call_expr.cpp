@@ -191,8 +191,17 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     auto udf_clazz = desc->udf_class.clazz();
     auto update_method = desc->evaluate->method.handle();
 
-    ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                                                ClassLoader::BATCH_EVALUATE));
+    // For varargs UDFs, pass the actual number of varargs input columns (excluding fixed params)
+    // so that the stub generator produces the correct signature.
+    // method_desc layout: [return, fixedParam1, ..., fixedParamF, varargs_elem] → size = F + 2
+    // so numFixedParams = method_desc.size() - 2.
+    int num_fixed_params = (_fn.has_var_args && desc->evaluate)
+                                   ? std::max(0, static_cast<int>(desc->evaluate->method_desc.size()) - 2)
+                                   : 0;
+    int num_actual_var_args = _fn.has_var_args ? std::max(0, static_cast<int>(_children.size()) - num_fixed_params) : 0;
+    ASSIGN_OR_RETURN(auto update_stub_clazz,
+                     desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                        ClassLoader::BATCH_EVALUATE, num_actual_var_args));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
                                                           JavaGlobalRef(method));
