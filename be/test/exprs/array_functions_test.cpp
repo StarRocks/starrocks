@@ -323,8 +323,8 @@ TEST_F(ArrayFunctionsTest, array_remove_result_should_not_share_null_column_with
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_flatten_result_should_not_share_null_column_with_input) {
     MutableColumnPtr input = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
-    input->append_datum(Datum(DatumArray{Datum(DatumArray{Datum((int32_t)1)}),
-                                         Datum(DatumArray{Datum((int32_t)2), Datum((int32_t)3)})}));
+    input->append_datum(Datum(
+            DatumArray{Datum(DatumArray{Datum((int32_t)1)}), Datum(DatumArray{Datum((int32_t)2), Datum((int32_t)3)})}));
     input->append_datum(Datum());
     input->append_datum(Datum(DatumArray{Datum(DatumArray{})}));
     input->append_datum(Datum(DatumArray{Datum(DatumArray{Datum((int32_t)4)}), Datum(DatumArray{})}));
