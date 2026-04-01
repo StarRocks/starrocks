@@ -66,7 +66,12 @@ public class TransactionGraphTest {
         graph.remove(3);
         graph.remove(4);
         assertEquals(graph.size(), 4);
-        expectNextBatch(graph, Lists.newArrayList(1L, 2L, 5L, 6L));
+        // After removing txn3 (mid node of txn1->txn3->txn5) and txn4 (mid node of txn2->txn4->txn6),
+        // txn5 is re-linked to depend on txn1, txn6 is re-linked to depend on txn2.
+        // So only txn1 and txn2 are roots.
+        expectNextBatch(graph, Lists.newArrayList(1L, 2L));
+        assertEquals(graph.size(), 2);
+        expectNextBatch(graph, Lists.newArrayList(5L, 6L));
         assertEquals(graph.size(), 0);
         assertEquals(graph.getTxnsWithoutDependency().size(), 0);
     }
@@ -106,6 +111,7 @@ public class TransactionGraphTest {
                     if (writeTableIds.contains(tableId)) {
                         continue;
                     }
+                    writeTableIds.add(tableId);
                     break;
                 }
             }
@@ -193,13 +199,76 @@ public class TransactionGraphTest {
         assertEquals(txnIds.size(), 1);
         batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 2);
         assertEquals(batchTxnIds.size(), 2);
-        graph.remove(2);
-        graph.remove(3);
+        graph2.remove(2);
+        graph2.remove(3);
 
         txnIds = graph2.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 1);
         batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 4);
         assertEquals(batchTxnIds.size(), 1);
+    }
+
+    @Test
+    public void testRemoveTailBreaksLastTableWriter() {
+        // Verify that removing the lastTableWriter (tail node) for a table
+        // causes subsequent adds to lose dependency on remaining nodes.
+        //
+        // Setup chain: txn1 -> txn2 -> txn3, all write table1
+        // lastTableWriter[table1] = txn3
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L));
+
+        // Only txn1 should be a root
+        List<Long> roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+        assertEquals(Lists.newArrayList(1L), roots);
+
+        // Remove txn3 (the tail / lastTableWriter for table1)
+        // txn1 and txn2 are still in the graph
+        graph.remove(3);
+        assertEquals(2, graph.size());
+
+        // Now add txn4 writing table1
+        // Expected: txn4 should depend on txn2 (the last remaining writer for table1)
+        // Actual (BUG): lastTableWriter[table1] was cleared when txn3 was removed,
+        //               so txn4 has NO dependency
+        graph.add(4, Lists.newArrayList(1L));
+
+        roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+
+        // If correct: roots should be {1} only (txn4 depends on txn2, which depends on txn1)
+        // If buggy:   roots will be {1, 4} because txn4 has no dependency
+        assertEquals(Lists.newArrayList(1L), roots,
+                "txn4 should depend on txn2 since both write table1, " +
+                        "but lastTableWriter was incorrectly cleared when txn3 was removed");
+    }
+
+    @Test
+    public void testRemoveMiddleNodeBreaksDependencyChain() {
+        // Verify that removing a middle node doesn't re-link predecessors to successors.
+        //
+        // Setup chain: txn1 -> txn2 -> txn3, all write table1
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L));
+
+        // Remove txn2 (middle node)
+        graph.remove(2);
+        assertEquals(2, graph.size());
+
+        List<Long> roots = graph.getTxnsWithoutDependency();
+        Collections.sort(roots);
+
+        // If correct: roots should be {1} only (txn3 should still depend on txn1
+        //             since they both write table1 and txn1 is not yet published)
+        // If buggy:   roots will be {1, 3} because the edge txn1->txn3 was never created
+        assertEquals(Lists.newArrayList(1L), roots,
+                "txn3 should still depend on txn1 after removing txn2, " +
+                        "since both write table1 and txn1 is still in the graph");
     }
 
     @Test

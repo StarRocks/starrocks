@@ -131,10 +131,26 @@ public class TransactionGraph {
         }
         nodes.remove(txnId);
         nodesWithoutIns.remove(node);
+        // When removing the tail node for a table, update lastTableWriter to the nearest
+        // predecessor that also writes that table, instead of clearing it entirely.
+        // This ensures subsequent transactions for the same table can still find their dependency.
         for (long tableId : node.writeTableIds) {
             Node holder = lastTableWriter.get(tableId);
             if (holder == node) {
-                lastTableWriter.remove(tableId);
+                Node prevWriter = null;
+                if (node.ins != null) {
+                    for (Node dep : node.ins) {
+                        if (dep.writeTableIds.contains(tableId)) {
+                            prevWriter = dep;
+                            break;
+                        }
+                    }
+                }
+                if (prevWriter != null) {
+                    lastTableWriter.put(tableId, prevWriter);
+                } else {
+                    lastTableWriter.remove(tableId);
+                }
             }
         }
         if (node.outs == null) {
@@ -142,6 +158,14 @@ public class TransactionGraph {
         }
         for (Node next : node.outs) {
             next.ins.remove(node);
+            // Re-link predecessors directly to successors so that ordering is preserved
+            // even when an intermediate node is removed out of order.
+            if (node.ins != null && !node.ins.isEmpty()) {
+                for (Node prev : node.ins) {
+                    next.addIns(prev);
+                    prev.addOuts(next);
+                }
+            }
             if (next.ins.isEmpty()) {
                 nodesWithoutIns.add(next);
             }
