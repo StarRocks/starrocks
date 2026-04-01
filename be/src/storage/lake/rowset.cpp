@@ -17,6 +17,12 @@
 #include <future>
 #include <unordered_set>
 
+<<<<<<< HEAD
+=======
+#include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+>>>>>>> fa6e882de7 ([BugFix] Fix use-after-free in parallel segment/rowset loading on error path (#71083))
 #include "column/datum_convert.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
@@ -601,6 +607,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         std::future<std::pair<StatusOr<SegmentPtr>, std::string>> future;
     };
     std::vector<SegmentLoadFuture> segment_futures;
+    // The parallel tasks capture |this| pointer. Must wait for all tasks
+    // to complete before returning, to prevent use-after-free if the
+    // Rowset is destroyed while tasks are still running.
+    DeferOp wait_futures([&segment_futures]() {
+        for (auto& f : segment_futures) {
+            if (f.future.valid()) {
+                f.future.wait();
+            }
+        }
+    });
 
     // Pre-allocate segments vector to maintain correct index mapping.
     // This is necessary because when parallel loading is enabled with skip_segment_idxs,
@@ -673,6 +689,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         if (_parallel_load) {
             int captured_idx = current_idx;
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
+                if (!injected_st.ok()) {
+                    return std::make_pair(StatusOr<SegmentPtr>(injected_st), seg_name);
+                }
+#endif
                 auto result = _tablet_mgr->load_segment(segment_info, segment_id, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);
