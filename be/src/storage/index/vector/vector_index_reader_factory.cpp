@@ -15,19 +15,38 @@
 #ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
 
+#include "fs/fs.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann_index_reader.h"
 #include "storage/index/vector/vector_index_reader.h"
 
 namespace starrocks {
-Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
-                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader) {
+
+static Status index_path_check_exists(const std::string& index_path, FileSystem* fs) {
+    if (fs != nullptr) {
+        auto st = fs->path_exists(index_path);
+        if (st.is_not_found()) {
+            return Status::NotFound(fmt::format("index path {} not found", index_path));
+        }
+        return st;
+    }
     if (!fs::path_exist(index_path)) {
         return Status::NotFound(fmt::format("index path {} not found", index_path));
     }
-    ASSIGN_OR_RETURN(auto index_file, fs::new_random_access_file(index_path))
-    ASSIGN_OR_RETURN(auto file_size, index_file->get_size())
+    return Status::OK();
+}
+
+static Status create_from_file_impl(const std::string& index_path,
+                                    const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
+                                    std::shared_ptr<VectorIndexReader>* vector_index_reader, FileSystem* fs) {
+    RETURN_IF_ERROR(index_path_check_exists(index_path, fs));
+    std::unique_ptr<RandomAccessFile> index_file;
+    if (fs != nullptr) {
+        ASSIGN_OR_RETURN(index_file, fs->new_random_access_file(index_path));
+    } else {
+        ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
+    }
+    ASSIGN_OR_RETURN(auto file_size, index_file->get_size());
 
     if (file_size == IndexDescriptor::mark_word_len) {
         auto buf = std::make_unique<unsigned char[]>(file_size);
@@ -40,6 +59,19 @@ Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
     }
     (*vector_index_reader) = std::make_shared<TenANNReader>();
     return Status::OK();
+}
+
+Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
+                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
+                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader) {
+    return create_from_file_impl(index_path, index_meta, vector_index_reader, nullptr);
+}
+
+Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
+                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
+                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader,
+                                                  FileSystem* fs) {
+    return create_from_file_impl(index_path, index_meta, vector_index_reader, fs);
 }
 
 } // namespace starrocks

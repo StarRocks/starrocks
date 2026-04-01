@@ -42,9 +42,23 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
-    // Step 1: base threshold by algorithm type
-    // TODO
-    // different index type has different default threshold
+    // Step 1: enforce minimum threshold by algorithm type
+    // IVFPQ requires training points >= nlist. If data is below this,
+    // faiss will throw an error, so we enforce a minimum threshold to skip the build.
+    auto index_type_it = _tablet_index->common_properties().find("index_type");
+    if (index_type_it != _tablet_index->common_properties().end()) {
+        std::string index_type = index_type_it->second;
+        std::transform(index_type.begin(), index_type.end(), index_type.begin(), ::tolower);
+        if (index_type == "ivfpq") {
+            // faiss requires training points >= nlist, read from user-specified index properties
+            auto nlist_it = _tablet_index->index_properties().find("nlist");
+            if (nlist_it != _tablet_index->index_properties().end()) {
+                auto nlist = static_cast<uint32_t>(std::atoi(nlist_it->second.c_str()));
+                _start_vector_index_build_threshold = std::max(_start_vector_index_build_threshold, nlist);
+            }
+        }
+    }
+
     // Step 2: user-specified property has final control over threshold
     auto find_result = _tablet_index->common_properties().find("index_build_threshold");
     if (find_result != _tablet_index->common_properties().end()) {

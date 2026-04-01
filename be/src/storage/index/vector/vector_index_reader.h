@@ -43,6 +43,8 @@
 
 namespace starrocks {
 
+class FileSystem;
+
 class VectorIndexReader {
 public:
     VectorIndexReader() = default;
@@ -50,6 +52,10 @@ public:
 
 #ifdef WITH_TENANN
     virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) = 0;
+
+    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs) {
+        return init_searcher(meta, index_path);
+    }
 
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                           tenann::IdFilter* id_filter = nullptr) = 0;

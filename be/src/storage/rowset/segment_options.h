@@ -112,6 +112,7 @@ public:
     bool has_preaggregation = true;
 
     bool use_vector_index = false;
+    bool belonged_to_cloud_native = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 

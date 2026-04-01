@@ -78,7 +78,8 @@ StatusOr<tenann::IndexMeta> get_vector_meta(const std::shared_ptr<TabletIndex>& 
     meta.SetIndexType(index_type);
 
     if (meta.index_type() == tenann::IndexType::kFaissIvfPq) {
-        meta.index_params()[starrocks::index::vector::NLIST] = int(4 * sqrt(starrocks::index::vector::nb_));
+        CRITICAL_CHECK_AND_GET(tablet_index, index_properties, nlist, param_value)
+        meta.index_params()[starrocks::index::vector::NLIST] = std::atoi(param_value.c_str());
 
         CRITICAL_CHECK_AND_GET(tablet_index, index_properties, nbits, param_value)
         meta.index_params()[starrocks::index::vector::NBITS] = std::atoi(param_value.c_str());
