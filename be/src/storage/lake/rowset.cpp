@@ -31,7 +31,9 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
+#include "testutil/sync_point.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -435,6 +437,16 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     int index = 0;
 
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
+    // The parallel tasks capture |this| pointer. Must wait for all tasks
+    // to complete before returning, to prevent use-after-free if the
+    // Rowset is destroyed while tasks are still running.
+    DeferOp wait_futures([&segment_futures]() {
+        for (auto& f : segment_futures) {
+            if (f.valid()) {
+                f.wait();
+            }
+        }
+    });
     auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id) -> Status {
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
@@ -476,6 +488,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
 
         if (_parallel_load) {
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("Rowset::load_segments::parallel_load", &injected_st);
+                if (!injected_st.ok()) {
+                    return std::make_pair(StatusOr<SegmentPtr>(injected_st), seg_name);
+                }
+#endif
                 auto result = _tablet_mgr->load_segment(segment_info, seg_id, lake_io_opts,
                                                         lake_io_opts.fill_metadata_cache, _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);
