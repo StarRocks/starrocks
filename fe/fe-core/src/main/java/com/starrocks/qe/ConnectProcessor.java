@@ -449,7 +449,7 @@ public class ConnectProcessor {
         auditAfterExec(auditSql, parsedStmt,
                 executor == null ? null : executor.getQueryStatisticsForAuditLog(),
                 getDigestFromLeader(executor));
-        if (ctx.getIsLastStmt() && executor != null) {
+        if (executor != null) {
             executor.addFinishedQueryDetail();
         }
     }
@@ -555,11 +555,7 @@ public class ConnectProcessor {
                 }
             }.visit(parsedStmt);
 
-            // Only add the last running stmt for multi statement,
-            // because query detail will be fixed in a later chunk.
-            if (ctx.getIsLastStmt()) {
-                executor.addRunningQueryDetail(parsedStmt);
-            }
+            executor.addRunningQueryDetail(parsedStmt);
             executor.execute();
         } catch (LargeInPredicateException e) {
             throw e;
@@ -796,6 +792,10 @@ public class ConnectProcessor {
         // null bitmap
         byte[] nullBitmap = new byte[(numParams + 7) / 8];
         packetBuf.get(nullBitmap);
+        boolean enableAudit = false;
+        String originStmt = null;
+        ExecuteStmt executeStmt = null;
+        boolean needAddFinishQueryDetail = false;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
@@ -818,10 +818,10 @@ public class ConnectProcessor {
                         prepareCtx.getStmt().getMysqlTypeCodes().get(i), packetBuf);
                 exprs.add(literal);
             }
-            ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
+            executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
-            boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = AstToSQLBuilder.toSQL(executeStmt);
+            enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
+            originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
             ctx.setIsLastStmt(true);
             ctx.setSingleStmt(true);
@@ -853,8 +853,10 @@ public class ConnectProcessor {
 
             if (enableAudit && isQuery) {
                 executor.addRunningQueryDetail(executeStmt);
+                needAddFinishQueryDetail = true;
                 executor.execute();
                 executor.addFinishedQueryDetail();
+                needAddFinishQueryDetail = false;
             } else {
                 // Clear query detail. Otherwise, after collecting the profile, it will be mistakenly added to ctx.queryDetail,
                 // which still belongs to the previous query.
@@ -863,21 +865,23 @@ public class ConnectProcessor {
             }
 
             if (enableAudit) {
-                String digestFromLeader = null;
-                if (executor.getIsForwardToLeaderOrInit(false) && executor.getLeaderOpExecutor() != null) {
-                    TMasterOpResult leaderResult = executor.getLeaderOpExecutor().getResult();
-                    if (leaderResult != null && leaderResult.isSetSql_digest()) {
-                        digestFromLeader = leaderResult.getSql_digest();
-                    }
-                }
                 auditAfterExec(originStmt, executor.getParsedStmt(),
-                              executor.getQueryStatisticsForAuditLog(), digestFromLeader);
+                              executor.getQueryStatisticsForAuditLog(), getDigestFromLeader(executor));
             }
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe palo bug.
             LOG.warn("Process one query failed because unknown reason: ", e);
-            ctx.getState().setError(e.getClass().getSimpleName() + ", msg: " + e.getMessage());
+            ctx.getState().setError(e.getMessage());
+            ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (enableAudit && executeStmt != null) {
+                if (needAddFinishQueryDetail && executor != null) {
+                    executor.addFinishedQueryDetail();
+                }
+                auditAfterExec(originStmt, executor == null ? executeStmt : executor.getParsedStmt(),
+                        executor == null ? null : executor.getQueryStatisticsForAuditLog(),
+                         getDigestFromLeader(executor));
+            }
         }
     }
 
@@ -1274,9 +1278,7 @@ public class ConnectProcessor {
             executor = new StmtExecutor(ctx, statement);
         }
         ctx.setExecutor(executor);
-        if (ctx.getIsLastStmt()) {
-            executor.addRunningQueryDetail(statement);
-        }
+        executor.addRunningQueryDetail(statement);
         executor.setProxy();
         executor.execute();
 
