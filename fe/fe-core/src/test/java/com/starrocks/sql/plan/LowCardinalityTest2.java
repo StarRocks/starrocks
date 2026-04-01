@@ -1849,11 +1849,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "else 'a' end from supplier; ";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' " +
-                "WHEN 5: S_PHONE = 'b' THEN 'b' " +
-                "WHEN coalesce(DictDecode(10: S_ADDRESS, [<place-holder>]), 'c') = 'c' THEN 'c' " +
-                "ELSE 'a' END\n" +
-                "  |");
+                "  |  <slot 9> : CASE WHEN DictDecode(10: S_ADDRESS, [<place-holder> = 'test']) THEN 'a' WHEN 5: " +
+                "S_PHONE = 'b' THEN 'b' WHEN DictDecode(10: S_ADDRESS, [coalesce(<place-holder>, 'c') = 'c']) THEN" +
+                " 'c' ELSE 'a' END");
 
         sql = "select case when s_address = 'test' then 'a' " +
                 "when s_phone = 'b' then 'b' " +
@@ -1876,8 +1874,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: supplier\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: ((5: S_PHONE = 'a') OR (coalesce(DictDecode(12: S_ADDRESS, [<place-holder>]), 'c') = 'c')) " +
-                "OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
+                "     PREDICATES: ((5: S_PHONE = 'a') OR (DictDecode(12: S_ADDRESS, [coalesce(<place-holder>, 'c') = " +
+                "'c']))) OR (DictDecode(12: S_ADDRESS, [<place-holder> = 'address']))");
 
         sql = "select count(*) from supplier where s_phone = 'a' or upper(s_address) = 'c' " +
                 "or s_address = 'address'";
