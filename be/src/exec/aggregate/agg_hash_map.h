@@ -574,10 +574,10 @@ struct AggHashMapWithOneStringKeyWithNullable
         const auto* column = down_cast<const BinaryColumn*>(key_column);
         if (this->hash_map.bucket_count() < prefetch_threhold) {
             this->template compute_agg_noprefetch<Func, HTBuildOp>(column, agg_states, pool,
-                                                                    std::forward<Func>(allocate_func), extra);
+                                                                   std::forward<Func>(allocate_func), extra);
         } else {
             this->template compute_agg_prefetch<Func, HTBuildOp>(column, agg_states, pool,
-                                                                  std::forward<Func>(allocate_func), extra);
+                                                                 std::forward<Func>(allocate_func), extra);
         }
     }
 
@@ -620,16 +620,16 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto key = column->get_slice(i);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    this->template _emplace_key_with_hash<Func>(
-                            key, hash_values[i], pool, std::forward<Func>(allocate_func), (*agg_states)[i],
-                            [&]() { hash_table_size++; });
+                    this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
+                                                                std::forward<Func>(allocate_func), (*agg_states)[i],
+                                                                [&]() { hash_table_size++; });
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                this->template _emplace_key_with_hash<Func>(
-                        key, hash_values[i], pool, std::forward<Func>(allocate_func), (*agg_states)[i],
-                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
+                                                            std::forward<Func>(allocate_func), (*agg_states)[i],
+                                                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
             } else if constexpr (HTBuildOp::fill_not_found) {
                 _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
             }
@@ -647,8 +647,8 @@ struct AggHashMapWithOneStringKeyWithNullable
             auto key = column->get_slice(i);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
-                                                      (*agg_states)[i], [&]() { hash_table_size++; });
+                    this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
+                                                      [&]() { hash_table_size++; });
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key);
                 }
@@ -798,8 +798,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                 mem_pool->clear();
                 buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 return compute_agg_states_by_rows<Func, HTBuildOp>(chunk_size, key_columns, pool,
-                                                                    std::move(allocate_func), agg_states, extra,
-                                                                    cur_max_one_row_size);
+                                                                   std::move(allocate_func), agg_states, extra,
+                                                                   cur_max_one_row_size);
             }
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
@@ -809,7 +809,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
         // process by cols
         return compute_agg_states_by_cols<Func, HTBuildOp>(chunk_size, key_columns, pool, std::move(allocate_func),
-                                                            agg_states, extra, cur_max_one_row_size);
+                                                           agg_states, extra, cur_max_one_row_size);
     }
 
     // There may be additional virtual function overhead, but the bottleneck point for this branch is serialization
