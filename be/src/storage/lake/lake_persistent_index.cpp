@@ -14,6 +14,8 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <future>
+
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_cache_fwd.h"
@@ -68,29 +70,75 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
         return Status::InternalError("Block cache is null.");
     }
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
-    TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", sstable_meta.sstables_size());
-    int64_t total_sst_filesize = 0;
+    const int num_sstables = sstable_meta.sstables_size();
+    TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
+
+    // Phase 1: Open all SSTables in parallel.
+    // Each new_sstable() involves IO (reading file footer, index block, filter block)
+    // and benefits from concurrency when there are many SSTable files.
+    std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
+    std::vector<Status> open_statuses(num_sstables);
+
+    auto open_sstable = [&](int idx) {
+        auto& sstable_pb = sstable_meta.sstables(idx);
+        auto res = PersistentIndexSstable::new_sstable(
+                sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()), block_cache->cache(),
+                true /* need filter */, nullptr, metadata, _tablet_mgr);
+        if (res.ok()) {
+            sstables[idx] = std::move(res.value());
+        } else {
+            open_statuses[idx] = res.status();
+        }
+    };
+
     int64_t sst_open_us = 0;
+    {
+        int64_t t_open = GetCurrentTimeMicros();
+        if (num_sstables > 1) {
+            std::vector<std::future<void>> futures;
+            futures.reserve(num_sstables - 1);
+            for (int i = 0; i < num_sstables - 1; i++) {
+                auto task =
+                        std::make_shared<std::packaged_task<void()>>([&open_sstable, i]() { open_sstable(i); });
+                auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
+                if (!st.ok()) {
+                    open_sstable(i);
+                } else {
+                    futures.push_back(task->get_future());
+                }
+            }
+            // Run the last SSTable in current thread
+            open_sstable(num_sstables - 1);
+            for (auto& f : futures) {
+                f.get();
+            }
+        } else if (num_sstables == 1) {
+            open_sstable(0);
+        }
+        sst_open_us = GetCurrentTimeMicros() - t_open;
+    }
+
+    for (int i = 0; i < num_sstables; i++) {
+        RETURN_IF_ERROR(open_statuses[i]);
+    }
+
+    // Phase 2: Group SSTables into filesets (sequential, preserves order).
+    int64_t total_sst_filesize = 0;
     uint64_t max_rss_rowid = 0;
     std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
-    for (auto& sstable_pb : sstable_meta.sstables()) {
-        int64_t t_open = GetCurrentTimeMicros();
-        ASSIGN_OR_RETURN(auto sstable,
-                         PersistentIndexSstable::new_sstable(
-                                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
-                                 block_cache->cache(), true /* need filter */, nullptr, metadata, _tablet_mgr));
-        sst_open_us += GetCurrentTimeMicros() - t_open;
+    for (int i = 0; i < num_sstables; i++) {
+        auto& sstable_pb = sstable_meta.sstables(i);
         total_sst_filesize += sstable_pb.filesize();
         if (cur_fileset.empty() ||
             (cur_fileset.back()->sstable_pb().has_fileset_id() &&
              UniqueId(cur_fileset.back()->sstable_pb().fileset_id()) == UniqueId(sstable_pb.fileset_id()))) {
-            cur_fileset.emplace_back(std::move(sstable));
+            cur_fileset.emplace_back(std::move(sstables[i]));
         } else {
             auto fileset = std::make_unique<PersistentIndexSstableFileset>();
             RETURN_IF_ERROR(fileset->init(cur_fileset));
             _sstable_filesets.emplace_back(std::move(fileset));
             cur_fileset.clear();
-            cur_fileset.emplace_back(std::move(sstable));
+            cur_fileset.emplace_back(std::move(sstables[i]));
         }
         max_rss_rowid = std::max(max_rss_rowid, sstable_pb.max_rss_rowid());
     }
