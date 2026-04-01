@@ -123,6 +123,17 @@ StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const Table
     return result;
 }
 
+StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
+    TabletRange lhs;
+    RETURN_IF_ERROR(lhs.from_proto(lhs_pb));
+    TabletRange rhs;
+    RETURN_IF_ERROR(rhs.from_proto(rhs_pb));
+    auto result = lhs.union_with(rhs);
+    TabletRangePB result_pb;
+    result.to_proto(&result_pb);
+    return result_pb;
+}
+
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range) {
     DCHECK(rowset != nullptr);
     if (!rowset->has_range()) {
