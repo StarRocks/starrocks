@@ -2736,9 +2736,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1, partitionExpr.size());
         Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
-        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals("k1", slotRef.getColumnName());
+        Assertions.assertFalse(slotRef.getType().isInvalid());
     }
 
     @Test
