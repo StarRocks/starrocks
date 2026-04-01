@@ -124,4 +124,7 @@ CONF_mBool(lake_enable_alter_struct, "true");
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
 
+// Maximum serialized size (bytes) of a delvec to store inline in tablet metadata.
+CONF_mInt32(lake_delvec_inline_max_size, "4096");
+
 } // namespace starrocks::config

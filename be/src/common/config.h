@@ -1338,6 +1338,10 @@ CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
+// Maximum serialized size (bytes) of a delvec to store inline in tablet metadata.
+// Delvecs at or below this size are embedded directly in the DelvecPagePB, eliminating
+// remote IO during compaction conflict resolution. Set to 0 to disable inlining.
+CONF_mInt32(lake_delvec_inline_max_size, "4096");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");

@@ -133,6 +133,8 @@ private:
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
+    // Raw serialized delvec data per segment, used by _finalize_delvec to decide inlining
+    std::unordered_map<uint32_t, std::string> _delvec_data;
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id

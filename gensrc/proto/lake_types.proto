@@ -36,6 +36,11 @@ message DelvecPagePB {
     optional uint32 crc32c = 4;
     // For upgrade compatibility.
     optional int64 crc32c_gen_version = 5;
+    // Small delvecs are stored inline in tablet metadata to avoid remote IO
+    // during compaction conflict resolution. When present, readers should use
+    // this data directly instead of reading from the delvec file.
+    // The file-based fields (offset/size) remain valid for backward compatibility.
+    optional bytes inline_data = 6;
 }
 
 message PersistentIndexSstableRangePB {

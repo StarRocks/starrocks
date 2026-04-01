@@ -98,14 +98,11 @@ MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMet
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
-        const uint64_t offset = _buf.size();
         std::string delvec_str;
         delvec->save_to(&delvec_str);
-        _buf.insert(_buf.end(), delvec_str.begin(), delvec_str.end());
-        const uint64_t size = _buf.size() - offset;
-        _delvecs[segment_id].set_offset(offset);
-        _delvecs[segment_id].set_size(size);
+        _delvecs[segment_id].set_size(delvec_str.size());
         _delvecs[segment_id].set_crc32c(crc32c::Mask(crc32c::Value(delvec_str.data(), delvec_str.size())));
+        _delvec_data[segment_id] = std::move(delvec_str);
         _segmentid_to_delvec[segment_id] = delvec;
     }
 }
@@ -605,6 +602,26 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
 Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     if (!is_primary_key(_tablet_meta.get())) return Status::OK();
 
+    const int32_t inline_max_size = config::lake_delvec_inline_max_size;
+
+    // Build _buf from _delvec_data and assign file offsets.
+    // All delvecs go to the file for backward compatibility; small ones are
+    // additionally inlined into DelvecPagePB.inline_data.
+    _buf.clear();
+    for (auto& [seg_id, page_pb] : _delvecs) {
+        auto data_it = _delvec_data.find(seg_id);
+        if (data_it == _delvec_data.end()) continue;
+        const auto& data = data_it->second;
+        const uint64_t offset = _buf.size();
+        _buf.insert(_buf.end(), data.begin(), data.end());
+        page_pb.set_offset(offset);
+        page_pb.set_size(data.size());
+        // Inline small delvecs into metadata
+        if (inline_max_size > 0 && static_cast<int32_t>(data.size()) <= inline_max_size) {
+            page_pb.set_inline_data(data);
+        }
+    }
+
     // 1. update delvec page in meta
     for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
         auto iter = _delvecs.find(each_delvec.first);
@@ -614,6 +631,9 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_size(iter->second.size());
             each_delvec.second.set_crc32c(iter->second.crc32c());
             each_delvec.second.set_crc32c_gen_version(version);
+            if (iter->second.has_inline_data()) {
+                each_delvec.second.set_inline_data(iter->second.inline_data());
+            }
             // record from cache key to segment id, so we can fill up cache later
             _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
@@ -721,13 +741,12 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
 }
 
 StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const {
-    auto iter = _delvecs.find(tsid.segment_id);
-    if (iter != _delvecs.end()) {
+    auto data_iter = _delvec_data.find(tsid.segment_id);
+    if (data_iter != _delvec_data.end()) {
+        auto page_iter = _delvecs.find(tsid.segment_id);
+        int64_t ver = (page_iter != _delvecs.end() && page_iter->second.has_version()) ? page_iter->second.version() : 0;
         (*pdelvec) = std::make_shared<DelVector>();
-        // read delvec from write buf
-        RETURN_IF_ERROR((*pdelvec)->load(iter->second.version(),
-                                         reinterpret_cast<const char*>(_buf.data()) + iter->second.offset(),
-                                         iter->second.size()));
+        RETURN_IF_ERROR((*pdelvec)->load(ver, data_iter->second.data(), data_iter->second.size()));
         return true;
     }
     return false;
@@ -751,6 +770,14 @@ void MetaFileBuilder::finalize_sstable_meta(const PersistentIndexSstableMetaPB& 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec) {
     VLOG(2) << fmt::format("get_del_vec {} tabletid {}", delvec_page.ShortDebugString(), metadata.id());
+
+    // Fast path: use inline data if available (no remote IO needed)
+    if (delvec_page.has_inline_data() && !delvec_page.inline_data().empty()) {
+        RETURN_IF_ERROR(delvec->load(delvec_page.version(), delvec_page.inline_data().data(),
+                                     delvec_page.inline_data().size()));
+        return Status::OK();
+    }
+
     std::string buf;
     raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
     // find in cache
