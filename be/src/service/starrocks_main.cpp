@@ -55,11 +55,8 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
-<<<<<<< HEAD
 #include "fs/s3/poco_http_client_factory.h"
-=======
 #include "runtime/current_thread.h"
->>>>>>> cb56d3a319 ([Tool] Expose CurrentThread thread local offset (#70780))
         #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
