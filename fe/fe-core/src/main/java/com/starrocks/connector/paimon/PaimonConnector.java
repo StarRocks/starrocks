@@ -49,6 +49,10 @@ public class PaimonConnector implements Connector {
     public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
+    private static final String JDBC_URI = "uri";
+    private static final String JDBC_USER = "jdbc.user";
+    private static final String JDBC_PASSWORD = "jdbc.password";
+    private static final String CATALOG_KEY = "catalog-key";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
     private final String catalogName;
@@ -81,6 +85,33 @@ public class PaimonConnector implements Connector {
             String dlfCatalogId = properties.get(DLF_CATGALOG_ID);
             if (null != dlfCatalogId && !dlfCatalogId.isEmpty()) {
                 paimonOptions.setString(DLF_CATGALOG_ID, dlfCatalogId);
+            }
+        } else if (catalogType.equalsIgnoreCase("jdbc")) {
+            // Support for Paimon JDBC catalog
+            // JDBC URI is required for connecting to the metastore database (MySQL, PostgreSQL, etc.)
+            String jdbcUri = properties.get(JDBC_URI);
+            if (Strings.isNullOrEmpty(jdbcUri)) {
+                throw new StarRocksConnectorException(
+                        "The property '%s' must be set if paimon catalog type is jdbc. " +
+                        "Example: jdbc:mysql://host:3306/paimon_metastore", JDBC_URI);
+            }
+            paimonOptions.setString(URI.key(), jdbcUri);
+
+            // JDBC authentication credentials (passed with jdbc. prefix as per Paimon convention)
+            String jdbcUser = properties.get(JDBC_USER);
+            if (!Strings.isNullOrEmpty(jdbcUser)) {
+                paimonOptions.setString(JDBC_USER, jdbcUser);
+            }
+            String jdbcPassword = properties.get(JDBC_PASSWORD);
+            if (!Strings.isNullOrEmpty(jdbcPassword)) {
+                paimonOptions.setString(JDBC_PASSWORD, jdbcPassword);
+            }
+
+            // catalog-key is optional, used to isolate multiple Paimon catalogs
+            // sharing the same JDBC metastore database. Default value in Paimon is "jdbc"
+            String catalogKey = properties.get(CATALOG_KEY);
+            if (!Strings.isNullOrEmpty(catalogKey)) {
+                paimonOptions.setString(CATALOG_KEY, catalogKey);
             }
         }
         if (Strings.isNullOrEmpty(warehousePath)

@@ -83,6 +83,51 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testCreateJdbcPaimonConnectorWithoutUri() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "jdbc");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+
+        properties.put("uri", "jdbc:mysql://127.0.0.1:3306/paimon_metastore");
+        new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
+    public void testCreateJdbcPaimonConnectorWithoutWarehouse() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "jdbc");
+        properties.put("uri", "jdbc:mysql://127.0.0.1:3306/paimon_metastore");
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties)));
+    }
+
+    @Test
+    public void testCreateJdbcPaimonConnectorWithFullOptions() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "jdbc");
+        properties.put("uri", "jdbc:mysql://127.0.0.1:3306/paimon_metastore");
+        properties.put("jdbc.user", "root");
+        properties.put("jdbc.password", "password");
+        properties.put("catalog-key", "my_catalog");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+
+        PaimonConnector connector = new PaimonConnector(
+                new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+
+        Assertions.assertEquals("jdbc", options.get("metastore"));
+        Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/paimon_metastore", options.get("uri"));
+        Assertions.assertEquals("root", options.get("jdbc.user"));
+        Assertions.assertEquals("password", options.get("jdbc.password"));
+        Assertions.assertEquals("my_catalog", options.get("catalog-key"));
+        Assertions.assertEquals("hdfs://127.0.0.1:9999/warehouse", options.get("warehouse"));
+    }
+
+    @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
                                       @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         Map<String, String> properties = new HashMap<>();

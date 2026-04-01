@@ -126,9 +126,13 @@ Paimon catalog 的描述。此参数是可选的。
 
 | 参数                      | 是否必需 | 描述                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| paimon.catalog.type      | 是       | 您用于 Paimon 集群的元存储类型。将此参数设置为 `filesystem` 或 `hive`。 |
+| paimon.catalog.type      | 是       | 您用于 Paimon 集群的元存储类型。有效值：`filesystem`、`hive`、`jdbc`。 |
 | paimon.catalog.warehouse | 是       | 您的 Paimon 数据的仓库存储路径。                             |
-| hive.metastore.uris      | 否       | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive 元存储启用了高可用性（HA），您可以指定多个元存储 URI，并用逗号（`,`）分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
+| uri                    | 否       | JDBC 元存储数据库的连接 URI。当 `paimon.catalog.type` 设置为 `jdbc` 时必需。示例：`jdbc:mysql://host:3306/paimon_metastore`。 |
+| jdbc.user               | 否       | 连接 JDBC 元存储数据库的用户名。当 `paimon.catalog.type` 为 `jdbc` 时使用。 |
+| jdbc.password           | 否       | 连接 JDBC 元存储数据库的密码。当 `paimon.catalog.type` 为 `jdbc` 时使用。 |
+| catalog-key             | 否       | 用于隔离多个共享同一 JDBC 元存储数据库的 Paimon catalog 的 catalog key。默认值：`jdbc`。 |
+| hive.metastore.uris      | 否       | 您的 Hive 元存储的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。当 `paimon.catalog.type` 设置为 `hive` 时必需。如果您的 Hive 元存储启用了高可用性（HA），您可以指定多个元存储 URI，并用逗号（`,`）分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 
 > **注意**
 >
@@ -628,6 +632,32 @@ PROPERTIES
         "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     );
     ```
+
+#### JDBC 元存储
+
+如果您选择 JDBC 元存储作为 Paimon 集群的元存储，请运行如下命令：
+
+```SQL
+CREATE EXTERNAL CATALOG paimon_catalog_jdbc
+PROPERTIES
+(
+    "type" = "paimon",
+    "paimon.catalog.type" = "jdbc",
+    "uri" = "jdbc:mysql://<host>:<port>/<database_name>",
+    "jdbc.user" = "<username>",
+    "jdbc.password" = "<password>",
+    "paimon.catalog.warehouse" = "hdfs://<host>:<port>/<warehouse_path>"
+);
+```
+
+下表描述了 JDBC 元存储的相关参数。
+
+| 参数                   | 是否必需 | 描述                                                         |
+| ---------------------- | -------- | ------------------------------------------------------------ |
+| uri                    | 是       | JDBC 元存储数据库的连接 URI。示例：`jdbc:mysql://host:3306/paimon_metastore`。 |
+| jdbc.user              | 否       | 连接 JDBC 元存储数据库的用户名。                             |
+| jdbc.password          | 否       | 连接 JDBC 元存储数据库的密码。                               |
+| catalog-key            | 否       | 用于隔离多个共享同一 JDBC 元存储数据库的 Paimon catalog 的 catalog key。默认值：`jdbc`。 |
 
 ## 查看 Paimon catalog
 
