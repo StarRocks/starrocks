@@ -802,15 +802,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private String getProfileFromOtherFEs(String queryId) {
         NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-        List<Frontend> frontends = nodeMgr.getFrontends(null);
-        Frontend mySelf = nodeMgr.getMySelf();
+        List<Frontend> frontends = nodeMgr.getOtherFrontends()
+                .stream()
+                .filter(Frontend::isAlive)
+                .collect(Collectors.toList());
 
         for (Frontend frontend : frontends) {
-            boolean isLocalFE = mySelf.getHost().equals(frontend.getHost());
-
-            if (isLocalFE) {
-                continue;
-            }
 
             try {
                 TGetProfileRequest request = new TGetProfileRequest();

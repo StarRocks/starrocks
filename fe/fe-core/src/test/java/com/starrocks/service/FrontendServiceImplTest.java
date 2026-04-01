@@ -1990,10 +1990,11 @@ public class FrontendServiceImplTest {
         self.setRpcPort(9020);
         Frontend remote = new Frontend(FrontendNodeType.FOLLOWER, "remote", "127.0.0.2", 9010);
         remote.setRpcPort(9021);
+        remote.setAlive(true);
 
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
-        summaryProfile.addInfoString(ProfileManager.START_TIME, "2024-01-09 11:00:00");
+        summaryProfile.addInfoString(ProfileManager.START_TIME, "2025-04-01 11:00:00");
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, "50ms");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, "Finished");
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, "SELECT 1");
@@ -2014,8 +2015,7 @@ public class FrontendServiceImplTest {
             NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
             globalStateMgrMock.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
             Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
-            Mockito.when(nodeMgr.getMySelf()).thenReturn(self);
-            Mockito.when(nodeMgr.getFrontends(null)).thenReturn(Lists.newArrayList(self, remote));
+            Mockito.when(nodeMgr.getOtherFrontends()).thenReturn(Lists.newArrayList(remote));
 
             thriftMock.when(() -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenReturn(remoteResponse);
