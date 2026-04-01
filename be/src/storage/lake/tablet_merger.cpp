@@ -22,14 +22,8 @@
 #include <unordered_set>
 #include <vector>
 
-<<<<<<< HEAD
-#include "storage/lake/meta_file.h"
-#include "storage/lake/tablet_manager.h"
-#include "storage/lake/tablet_reshard_helper.h"
 #include "testutil/sync_point.h"
-=======
-#include "base/hash/crc32c.h"
-#include "base/testutil/sync_point.h"
+#include "util/crc32c.h"
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
@@ -37,7 +31,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/options.h"
->>>>>>> 90b0bf20e1 ([Enhancement] Rewrite lake tablet merge to handle shared rowset/delvec/dcg/sstable from split (#71069))
 
 namespace starrocks::lake {
 
