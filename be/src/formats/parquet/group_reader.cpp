@@ -851,8 +851,8 @@ Status GroupReader::_create_column_readers() {
                 std::optional<int64_t> first_row_id =
                         _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
                                 ? std::optional<int64_t>(_row_group_first_row_id)
-                        : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                   : std::nullopt;
+                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
+                                                           : std::nullopt;
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
