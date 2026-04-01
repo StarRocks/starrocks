@@ -868,13 +868,38 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MaterializedView createMaterializedViewWithRefreshMode(String query,
                                                                      String refreshMode) throws Exception {
-        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"refresh_mode\" = \"%s\"" +
-                ")\n" +
-                "AS %s;", refreshMode, query);
-        starRocksAssert.withMaterializedView(ddl);
+        return createMaterializedViewWithRefreshMode(query, refreshMode, null, null);
+    }
+
+    /**
+     * Create a materialized view with the given refresh mode, optional partition clause, and extra properties.
+     *
+     * @param query          the AS query for the MV
+     * @param refreshMode    refresh mode: "incremental", "auto", "pct", etc.
+     * @param partitionBy    partition clause content, e.g. "`date`". null for non-partitioned MV.
+     * @param extraProperties extra properties map, e.g. {"partition_refresh_number": "1"}. null if none.
+     */
+    protected MaterializedView createMaterializedViewWithRefreshMode(
+            String query,
+            String refreshMode,
+            String partitionBy,
+            Map<String, String> extraProperties) throws Exception {
+        StringBuilder ddl = new StringBuilder();
+        ddl.append("CREATE MATERIALIZED VIEW `test_mv1` ");
+        if (partitionBy != null) {
+            ddl.append("PARTITION BY (").append(partitionBy).append(") ");
+        }
+        ddl.append("REFRESH DEFERRED MANUAL\n");
+        ddl.append("PROPERTIES (\n");
+        ddl.append("\"refresh_mode\" = \"").append(refreshMode).append("\"");
+        if (extraProperties != null) {
+            for (Map.Entry<String, String> entry : extraProperties.entrySet()) {
+                ddl.append(",\n\"").append(entry.getKey()).append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+        ddl.append("\n)\n");
+        ddl.append("AS ").append(query).append(";");
+        starRocksAssert.withMaterializedView(ddl.toString());
         return getMv("test_mv1");
     }
 }
