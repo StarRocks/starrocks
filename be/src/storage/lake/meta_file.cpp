@@ -331,10 +331,8 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     auto delvecs = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
     using T_DELVEC = std::decay_t<decltype(*delvecs)>;
     int delvec_erase_cnt =
-<<<<<<< HEAD
             delete_from_protobuf_map<T_DELVEC>(delvecs, delete_delvec_sid_range, [](const T_DELVEC& gc_map) {});
-=======
-            delete_from_protobuf_map<T_DELVEC>(delvecs, delete_delvec_sids, [](const T_DELVEC& gc_map) {});
+
     // Also clean up the builder's in-memory _delvecs buffer for compacted segments.
     // Without this, _finalize_delvec() would re-insert these entries as "new" delvecs,
     // creating orphan delvec entries that reference non-existent segments and prevent
@@ -348,7 +346,7 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     if (_delvecs.empty()) {
         _buf.clear();
     }
->>>>>>> 9da08b0ee2 ([BugFix] Fix delvec orphan entries caused by write-before-compaction in same publish batch (backport #71001) (#71049))
+
     // delete dcg by input rowsets
     auto dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
     using T_DCG = std::decay_t<decltype(*dcgs)>;
