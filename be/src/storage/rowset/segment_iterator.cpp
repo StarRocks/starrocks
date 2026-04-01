@@ -2741,7 +2741,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             cid = _schema.field(predicate_count)->id();
         }
 
-        static_assert(std::is_same_v<rowid_t, TypeTraits<TYPE_UNSIGNED_INT>::CppType>);
+        static_assert(std::is_same_v<rowid_t, StorageCppType<TYPE_UNSIGNED_INT>>);
         auto f = std::make_shared<Field>(cid, "ordinal", TYPE_UNSIGNED_INT, -1, -1, false);
         auto* iter = new RowIdColumnIterator();
         _obj_pool.add(iter);

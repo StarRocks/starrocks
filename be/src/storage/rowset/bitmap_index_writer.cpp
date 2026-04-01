@@ -253,7 +253,7 @@ struct BitmapIndexTraits<Slice> {
 template <LogicalType field_type>
 class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)
