@@ -186,7 +186,9 @@ private:
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
+    // Returns true if rows survived the filter, false if all rows were filtered out.
+    StatusOr<bool> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count);
+    Status _fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk);
     const cctz::time_zone& _get_variant_projection_timezone();
 
     Status _create_column_readers();
@@ -248,6 +250,13 @@ private:
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
+    // Column backing store for each get_next() call.  Initialized once in _init_read_chunk()
+    // and reset at the start of every range iteration.  Holds two categories of columns:
+    //   • Physical slots – one column per _param.read_cols entry plus reserved_field_slots.
+    //     The same ColumnPtr objects are SHARED with active_chunk / lazy_chunk (created via
+    //     _create_read_chunk), so filtering those view-chunks also modifies _read_chunk.
+    //   • Hidden variant sources – TYPE_VARIANT columns keyed by synthetic negative slot ids
+    //     (see _hidden_variant_sources).  Not present in any view-chunk; accessed directly.
     ChunkPtr _read_chunk;
 
     // param for read row group
