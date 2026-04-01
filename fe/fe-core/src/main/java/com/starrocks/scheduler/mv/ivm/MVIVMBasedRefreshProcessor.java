@@ -133,11 +133,13 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             try {
-                updatePCTToRefreshMetas(taskRunContext);
+                // IVM refreshes all changed partitions via TVR delta (not limited by partition_refresh_number),
+                // so pass skipBatchFilter=true to record complete PCT metadata without truncation.
+                updatePCTToRefreshMetas(taskRunContext, /* skipBatchFilter */ true);
             } catch (Exception e) {
                 // if the check failed, we should not throw exception here
-                // because this check only affects mv refresh rather than mv refresh.
-                logger.warn("Failed to check PCT partitions for materialized view: {}, error: {}",
+                // because this check only affects pct-based refresh rather than ivm-based mv refresh.
+                logger.warn("Failed to collect PCT metadata for materialized view: {}, error: {}",
                         mv.getName(), e.getMessage(), e);
             }
         }

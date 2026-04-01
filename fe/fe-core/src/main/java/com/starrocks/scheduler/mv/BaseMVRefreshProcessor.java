@@ -480,8 +480,17 @@ public abstract class BaseMVRefreshProcessor {
         return result;
     }
 
-    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext) throws Exception {
-        this.pctMVToRefreshedPartitions = getPCTMVToRefreshedPartitions(false);
+    /**
+     * Compute PCT partition metadata for the current refresh.
+     *
+     * @param skipBatchFilter if true, skip batch filtering (partition_refresh_number, adaptive, refreshPartitionLimit)
+     *                        and record all detected changed partitions. This is used by IVM where all changed
+     *                        partitions are refreshed via TVR delta regardless of partition_refresh_number.
+     *                        if false, apply batch filtering as in normal PCT execution.
+     */
+    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext,
+                                           boolean skipBatchFilter) throws Exception {
+        this.pctMVToRefreshedPartitions = getPCTMVToRefreshedPartitions(false, skipBatchFilter);
         // ref table of mv : refreshed partition names
         this.pctRefTableRefreshPartitions = getPCTRefTableRefreshPartitions(pctMVToRefreshedPartitions);
         // ref table of mv : refreshed partition names
@@ -492,6 +501,10 @@ public abstract class BaseMVRefreshProcessor {
         this.updatePCTMVToRefreshInfoIntoTaskRun(pctMVToRefreshedPartitions, pctRefTablePartitionNames);
         logger.info("mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
                 pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
+    }
+
+    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext) throws Exception {
+        updatePCTToRefreshMetas(taskRunContext, false);
     }
 
     /**
@@ -751,17 +764,26 @@ public abstract class BaseMVRefreshProcessor {
     }
 
     /**
-     * @param tentative: if true, it means this is called in the first phase to compute candidate partitions and not the
-     *                 standard phase to get final partitions to refresh.
+     * @param tentative if true, this is a tentative computation for candidate estimation
+     *                  (isForce() returns true to get all partitions, task run status is not updated).
+     *                  if false, this is the final computation for metadata recording.
+     * @param skipBatchFilter if true, skip batch filtering (partition_refresh_number, adaptive, refreshPartitionLimit).
+     *                        This is used by IVM where all changed partitions are refreshed via TVR delta,
+     *                        so PCT metadata should reflect all of them.
      */
     @VisibleForTesting
-    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative) throws AnalysisException, LockTimeoutException {
-        // change mv refresh params if needed
+    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative,
+                                                        boolean skipBatchFilter)
+            throws AnalysisException, LockTimeoutException {
         mvRefreshParams.setIsTentative(tentative);
-
-        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
+        final PCellSortedSet mvToRefreshedPartitions;
+        if (skipBatchFilter) {
+            mvToRefreshedPartitions = mvRefreshPartitioner.detectMVPartitionsToRefresh(snapshotBaseTables);
+        } else {
+            mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
+        }
         // update mv extra message
-        if (!mvRefreshParams.isTentative()) {
+        if (!tentative) {
             updateTaskRunStatus(status -> {
                 MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
                 extraMessage.setForceRefresh(mvRefreshParams.isForce());
@@ -770,6 +792,12 @@ public abstract class BaseMVRefreshProcessor {
             });
         }
         return mvToRefreshedPartitions;
+    }
+
+    @VisibleForTesting
+    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative)
+            throws AnalysisException, LockTimeoutException {
+        return getPCTMVToRefreshedPartitions(tentative, false);
     }
 
     /**
