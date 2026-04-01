@@ -295,12 +295,14 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
 TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
     create_rowsets_for_testing();
 
-    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    bool old_enable_load_segment_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = true;
 
     std::atomic<int> total_hits{0};
 
     SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp defer([] {
+    DeferOp defer([old_enable_load_segment_parallel] {
+        config::enable_load_segment_parallel = old_enable_load_segment_parallel;
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->ClearTrace();
         SyncPoint::GetInstance()->DisableProcessing();
