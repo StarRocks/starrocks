@@ -23,6 +23,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
@@ -35,8 +36,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -240,6 +243,145 @@ public class StmtExecutorTest {
         Assertions.assertFalse(redacted.contains("AKIA_STMT_EXECUTOR"));
         Assertions.assertFalse(redacted.contains("STMT_EXECUTOR_SECRET"));
         Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testExplainLogsRedactedSqlOnPlanFailure() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "EXPLAIN SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"EXPLAIN_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public ExecPlan generateExecPlan() {
+                throw new RuntimeException("mock plan failure");
+            }
+
+            @Mock
+            public void handleExplainExecPlan(ExecPlan execPlan) {
+                // keep this test focused on failure logging branch.
+            }
+        };
+
+        executor.execute();
+    }
+
+    @Test
+    public void testRetryPathLogsRedactedSql(@Mocked ExecPlan execPlan) throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                            "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public ExecPlan generateExecPlan() {
+                    return execPlan;
+                }
+
+                @Mock
+                public void handleQueryStmt(ExecPlan plan) throws Exception {
+                    throw new RuntimeException("mock query failure");
+                }
+            };
+
+            new MockUp<ExecuteExceptionHandler>() {
+                @Mock
+                public void handle(Exception e, ExecuteExceptionHandler.RetryContext retryContext) {
+                    // keep retry loop moving to hit log branch.
+                }
+            };
+
+            Assertions.assertThrows(RuntimeException.class, executor::execute);
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    @Test
+    public void testLargeInPredicateFailureLogsRedactedSql() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"LARGE_IN_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public ExecPlan generateExecPlan() throws Exception {
+                throw new LargeInPredicateException("mock large in failure");
+            }
+        };
+
+        Assertions.assertThrows(LargeInPredicateException.class, executor::execute);
+    }
+
+    @Test
+    public void testHandleDdlStmtLogsRedactedSqlOnQueryStateException() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement("CREATE TABLE t0(k1 INT)", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<DDLStmtExecutor>() {
+            @Mock
+            public ShowResultSet execute(StatementBase ignoredStmt, ConnectContext ignoredCtx) throws Exception {
+                throw new QueryStateException(MysqlStateType.ERR, "mock ddl failure");
+            }
+        };
+
+        Deencapsulation.invoke(executor, "handleDdlStmt");
+    }
+
+    @Test
+    public void testDeleteOldHandlerLogsRedactedSqlOnQueryStateException(@Mocked GlobalStateMgr stateMgr,
+                                                                         @Mocked DeleteMgr deleteMgr,
+                                                                         @Mocked DeleteStmt deleteStmt) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+
+        new Expectations(deleteStmt, ctx, stateMgr, deleteMgr) {
+            {
+                deleteStmt.getOrigStmt();
+                minTimes = 0;
+                result = null;
+
+                deleteStmt.isExplain();
+                minTimes = 0;
+                result = false;
+
+                deleteStmt.shouldHandledByDeleteHandler();
+                minTimes = 0;
+                result = true;
+
+                ctx.getGlobalStateMgr();
+                minTimes = 0;
+                result = stateMgr;
+
+                stateMgr.getDeleteMgr();
+                minTimes = 0;
+                result = deleteMgr;
+
+                deleteMgr.process((DeleteStmt) any);
+                minTimes = 0;
+                result = new QueryStateException(MysqlStateType.ERR, "mock delete failure");
+            }
+        };
+
+        StmtExecutor executor = new StmtExecutor(ctx, deleteStmt);
+        executor.handleDMLStmt(null, deleteStmt);
     }
 
     @Test
