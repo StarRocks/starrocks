@@ -107,8 +107,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static com.starrocks.common.ErrorCode.ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND;
-import static com.starrocks.common.ErrorCode.ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN;
 import static com.starrocks.common.ErrorCode.ERR_MAPPING_EXPR_INVALID;
+import static com.starrocks.common.ErrorCode.ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class Load {
@@ -759,9 +759,16 @@ public class Load {
         }
     }
 
-    private static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
+    static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
         if (defaultValueType == Column.DefaultValueType.CONST) {
+            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                Expr expr = column.getDefaultExpr().obtainExpr();
+                if (expr == null) {
+                    throw new StarRocksException("Column(" + column + ") has invalid default expr object");
+                }
+                return expr;
+            }
             return new StringLiteral(column.calculatedDefaultValue());
         } else if (defaultValueType == Column.DefaultValueType.VARY) {
             if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {

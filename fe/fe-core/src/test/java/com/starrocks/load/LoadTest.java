@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -550,6 +552,19 @@ public class LoadTest {
         Expr generatedExpr = localExprsByName.get("c3");
         Assertions.assertNotNull(generatedExpr);
         Assertions.assertTrue(ExprToSql.explain(generatedExpr).contains("7"));
+    }
+
+    @Test
+    public void testBuildLoadDefaultExprUsesExprObjectConstDefault() throws StarRocksException {
+        Column c2 = new Column("c2", new ArrayType(IntegerType.INT), false, null, false,
+                new ColumnDef.DefaultValueDef(true, new ArrayExpr(new ArrayType(IntegerType.INT),
+                        Lists.newArrayList(new IntLiteral(7, IntegerType.INT)))), "");
+
+        Expr defaultExpr = Load.buildLoadDefaultExpr(c2);
+        Assertions.assertNotNull(defaultExpr);
+        Assertions.assertInstanceOf(ArrayExpr.class, defaultExpr);
+        Assertions.assertTrue(defaultExpr.getType().isArrayType());
+        Assertions.assertTrue(ExprToSql.explain(defaultExpr).contains("7"));
     }
 
     @Test
