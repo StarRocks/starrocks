@@ -64,8 +64,8 @@ private:
     std::vector<std::unique_ptr<uint8_t[]>> _buffers;
 };
 
-template <LogicalType field_type, class CppType = StorageCppType<field_type>>
-void common_test(CppType src_val) {
+template <LogicalType field_type>
+void common_test(StorageCppType<field_type> src_val) {
     TypeInfoPtr type = get_type_info(field_type);
 
     ASSERT_EQ(field_type, type->type());
