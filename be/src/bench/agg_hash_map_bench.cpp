@@ -72,7 +72,7 @@ static void BM_AggHashMap_Baseline(benchmark::State& state) {
         state_allocator.aggregate_key_size = BASELINE_STATE_SIZE;
         state_allocator.pool = &pool;
 
-        auto allocate_func = [&state_allocator](auto& /*key*/) -> AggDataPtr {
+        auto allocate_func = [&state_allocator](auto & /*key*/) -> AggDataPtr {
             AggDataPtr p = state_allocator.allocate();
             memset(p, 0, BASELINE_STATE_SIZE);
             return p;
@@ -150,7 +150,7 @@ static void BM_AggHashMap_FindOnly_Baseline(benchmark::State& state) {
     HashTableKeyAllocator state_allocator;
     state_allocator.aggregate_key_size = BASELINE_STATE_SIZE;
     state_allocator.pool = &pool;
-    auto allocate_func = [&state_allocator](auto& /*key*/) -> AggDataPtr {
+    auto allocate_func = [&state_allocator](auto & /*key*/) -> AggDataPtr {
         AggDataPtr p = state_allocator.allocate();
         memset(p, 0, BASELINE_STATE_SIZE);
         return p;
@@ -200,7 +200,7 @@ static void BM_AggHashMap_FindOnly_Inline(benchmark::State& state) {
     HashTableKeyAllocator state_allocator;
     state_allocator.aggregate_key_size = BASELINE_STATE_SIZE;
     state_allocator.pool = &pool;
-    auto allocate_func = [&state_allocator](auto& /*key*/) -> AggDataPtr {
+    auto allocate_func = [&state_allocator](auto & /*key*/) -> AggDataPtr {
         AggDataPtr p = state_allocator.allocate();
         memset(p, 0, BASELINE_STATE_SIZE);
         return p;
