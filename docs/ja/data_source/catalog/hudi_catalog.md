@@ -826,7 +826,7 @@ Hudi テーブルのスキーマを表示するには、次のいずれかの構
 
 2. [Hudi Catalog とその中のデータベースに切り替える](#switch-to-a-hudi-catalog-and-a-database-in-it)。
 
-3. 指定されたデータベース内の宛先テーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+3. 指定されたデータベース内の宛先テーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します。
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

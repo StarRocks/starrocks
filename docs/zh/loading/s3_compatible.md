@@ -131,7 +131,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -178,7 +178,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 的数据，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -234,7 +234,7 @@ PROPERTIES
 
 提交导入作业以后，您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持，具体请参见本文“[查看导入作业](#查看导入作业)”小节。
 
-确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句来查询 `table1` 和 `table2` 中的数据：
+确认导入作业成功以后，您可以使用 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句来查询 `table1` 和 `table2` 中的数据：
 
 1. 查询 `table1` 的数据，如下所示：
 
@@ -268,7 +268,7 @@ PROPERTIES
 
 ## 查看导入作业
 
-通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。
+通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 Broker Load 作业的结果。该功能自 3.1 版本起支持。
 
 示例一：通过如下命令查看 `test_db` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示两条结果数据：
 

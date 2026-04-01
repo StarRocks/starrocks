@@ -819,7 +819,7 @@ Delta Lake テーブルのスキーマを表示するには、次のいずれか
 
 2. [Delta Lake Catalog とその中のデータベースへの切り替え](#switch-to-a-delta-lake-catalog-and-a-database-in-it) を行います。
 
-3. 指定されたデータベース内の宛先テーブルをクエリするには、 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します:
+3. 指定されたデータベース内の宛先テーブルをクエリするには、 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

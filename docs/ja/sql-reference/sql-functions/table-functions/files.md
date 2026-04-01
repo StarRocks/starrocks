@@ -29,7 +29,7 @@ v3.2 以降、`FILES()` は基本データ型に加えて、`ARRAY`、`JSON`、`
 
 ## `FILES()` for loading
 
-v3.1.0 以降、StarRocks はテーブル関数 `FILES()` を使用してリモートストレージ内の読み取り専用ファイルを定義することをサポートしています。ファイルのパス関連プロパティを使用してリモートストレージにアクセスし、ファイル内のデータのテーブルスキーマを推測し、データ行を返します。データ行を直接クエリするには [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md) を使用し、既存のテーブルにデータ行をロードするには [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) を使用し、新しいテーブルを作成してデータ行をロードするには [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) を使用します。v3.3.4 以降、`FILES()` を使用してデータファイルのスキーマを [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) で表示することもできます。
+v3.1.0 以降、StarRocks はテーブル関数 `FILES()` を使用してリモートストレージ内の読み取り専用ファイルを定義することをサポートしています。ファイルのパス関連プロパティを使用してリモートストレージにアクセスし、ファイル内のデータのテーブルスキーマを推測し、データ行を返します。データ行を直接クエリするには [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用し、既存のテーブルにデータ行をロードするには [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) を使用し、新しいテーブルを作成してデータ行をロードするには [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) を使用します。v3.3.4 以降、`FILES()` を使用してデータファイルのスキーマを [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) で表示することもできます。
 
 ### 構文
 

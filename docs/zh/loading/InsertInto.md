@@ -589,7 +589,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### 通过 Information Schema 查看
 
-您可以通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
+您可以通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
 
 示例一：查看 `load_test` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示一条结果数据：
 

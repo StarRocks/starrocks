@@ -602,7 +602,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### Information Schema による確認
 
-[SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) ステートメントを使用して、`information_schema` データベースの `loads` テーブルから 1 つ以上のロードジョブの結果をクエリできます。この機能は v3.1 以降でサポートされています。
+[SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) ステートメントを使用して、`information_schema` データベースの `loads` テーブルから 1 つ以上のロードジョブの結果をクエリできます。この機能は v3.1 以降でサポートされています。
 
 例 1: `load_test` データベースで実行されたロードジョブの結果をクエリし、作成時間 (`CREATE_TIME`) で降順にソートし、トップの結果のみを返します。
 

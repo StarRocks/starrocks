@@ -29,7 +29,7 @@ toc_max_heading_level: 5
 
 ## `FILES()` 用于导入
 
-从 v3.1.0 开始，StarRocks 支持使用表函数 `FILES()` 定义远端存储中的只读文件。它可以通过文件的路径相关属性访问远端存储，推断文件中的表结构，并返回数据行。您可以直接使用 [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md) 查询数据行，使用 [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) 将数据行导入到现有表中，或使用 [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 创建新表并将数据行导入其中。从 v3.3.4 开始，您还可以使用 `FILES()` 和 [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) 查看数据文件的结构。
+从 v3.1.0 开始，StarRocks 支持使用表函数 `FILES()` 定义远端存储中的只读文件。它可以通过文件的路径相关属性访问远端存储，推断文件中的表结构，并返回数据行。您可以直接使用 [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询数据行，使用 [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) 将数据行导入到现有表中，或使用 [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 创建新表并将数据行导入其中。从 v3.3.4 开始，您还可以使用 `FILES()` 和 [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) 查看数据文件的结构。
 
 ### 语法
 

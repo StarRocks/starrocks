@@ -44,7 +44,7 @@ StarRocks 2.3以降では、StarRocks の内部データを管理するための
     USE <catalog_name>.<db_name>;
     ```
 
-4. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して内部データをクエリします:
+4. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して内部データをクエリします:
 
       ```SQL
       SELECT * FROM <table_name>;

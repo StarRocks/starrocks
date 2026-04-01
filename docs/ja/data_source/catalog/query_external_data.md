@@ -34,7 +34,7 @@ external catalog は外部データソースに基づいて作成されます。
       USE catalog_name.db_name;
       ```
 
-5. 外部データをクエリします。SELECT ステートメントの詳細な使用方法については、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を参照してください。
+5. 外部データをクエリします。SELECT ステートメントの詳細な使用方法については、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を参照してください。
 
       ```SQL
       SELECT * FROM table_name;

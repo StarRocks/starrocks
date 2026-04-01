@@ -866,7 +866,7 @@ Hive テーブルのスキーマを表示するには、次の構文のいずれ
 
 2. [Hive catalog とその中のデータベースに切り替える](#switch-to-a-hive-catalog-and-a-database-in-it)。
 
-3. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して、指定されたデータベース内の目的のテーブルをクエリします：
+3. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して、指定されたデータベース内の目的のテーブルをクエリします：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

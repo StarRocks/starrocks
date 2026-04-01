@@ -602,7 +602,7 @@ You can locate the problem by checking the log with `tracking_url`.
 
 ### Check via Information Schema
 
-You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
+You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
 Example 1: Query the results of load jobs executed on the `load_test` database, sort the results by creation time (`CREATE_TIME`) in descending order, and only return the top result.
 

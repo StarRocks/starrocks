@@ -211,7 +211,7 @@ DROP Catalog jdbc0;
     USE <catalog_name>.<db_name>;
     ```
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT * FROM <table_name>;
