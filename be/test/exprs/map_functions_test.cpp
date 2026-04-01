@@ -31,6 +31,24 @@ TypeDescriptor map_type(LogicalType key, LogicalType value) {
     return type_creator;
 }
 
+void _assert_nullable_result_has_independent_null_column(const ColumnPtr& input, const ColumnPtr& result,
+                                                         const Filter& filter) {
+    auto input_nullable = NullableColumn::dynamic_pointer_cast(input);
+    auto result_nullable = NullableColumn::dynamic_pointer_cast(result);
+
+    ASSERT_TRUE(input_nullable != nullptr);
+    ASSERT_TRUE(result_nullable != nullptr);
+    EXPECT_NE(input_nullable->null_column().get(), result_nullable->null_column().get());
+
+    const size_t result_data_size = result_nullable->data_column()->size();
+    const size_t result_null_size = result_nullable->null_column()->size();
+
+    input->filter(filter);
+
+    EXPECT_EQ(result_data_size, result_nullable->data_column()->size());
+    EXPECT_EQ(result_null_size, result_nullable->null_column()->size());
+}
+
 PARALLEL_TEST(MapFunctionsTest, test_map) {
     TypeDescriptor input_keys_type;
     input_keys_type.type = LogicalType::TYPE_ARRAY;
@@ -343,19 +361,7 @@ PARALLEL_TEST(MapFunctionsTest, map_size_result_should_not_share_null_column_wit
     column->append_default();
 
     auto result = MapFunctions::map_size(nullptr, {column}).value();
-    auto input_nullable = NullableColumn::dynamic_pointer_cast(column);
-    auto result_nullable = NullableColumn::dynamic_pointer_cast(result);
-
-    ASSERT_TRUE(input_nullable != nullptr);
-    ASSERT_TRUE(result_nullable != nullptr);
-    ASSERT_EQ(4, result_nullable->data_column()->size());
-    ASSERT_EQ(4, result_nullable->null_column()->size());
-
-    Filter filter = {1, 0, 1, 0};
-    column->filter(filter);
-
-    EXPECT_EQ(4, result_nullable->data_column()->size());
-    EXPECT_EQ(4, result_nullable->null_column()->size());
+    _assert_nullable_result_has_independent_null_column(column, result, {1, 0, 1, 0});
 }
 
 PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
