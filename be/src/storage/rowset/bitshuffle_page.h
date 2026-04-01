@@ -376,7 +376,7 @@ private:
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
-    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>)};
+    enum { SIZE_OF_TYPE = sizeof(StorageCppType<Type>) };
 
     Slice _data;
     uint32_t _num_elements{0};

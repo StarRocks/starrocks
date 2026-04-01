@@ -75,7 +75,6 @@ public:
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, class CppType = StorageCppType<Type>>
     void test_encode_decode_page_template(CppType* src, size_t size) {
-
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);
@@ -151,10 +150,8 @@ public:
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, class CppType = StorageCppType<Type>>
-    void test_seek_at_or_after_value_template(CppType* src, size_t size,
-                                              StorageCppType<Type>* small_than_smallest,
+    void test_seek_at_or_after_value_template(CppType* src, size_t size, StorageCppType<Type>* small_than_smallest,
                                               StorageCppType<Type>* bigger_than_biggest) {
-
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);
