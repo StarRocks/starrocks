@@ -653,8 +653,7 @@ public class Load {
         }
 
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
-        analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName,
-                useVectorizedLoad);
+        analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
