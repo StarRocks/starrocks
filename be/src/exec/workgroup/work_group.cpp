@@ -80,13 +80,13 @@ int64_t WorkGroupSchedEntity<Q>::cpu_weight() const {
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_weight();
-    _unadjusted_runtime_ns += runtime_ns;
+    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
+    _unadjusted_runtime_ns.fetch_add(runtime_ns, std::memory_order_relaxed);
 }
 
 template <typename Q>
 void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
-    _vruntime_ns += runtime_ns / cpu_weight();
+    _vruntime_ns.fetch_add(runtime_ns / cpu_weight(), std::memory_order_relaxed);
 }
 
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
