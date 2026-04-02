@@ -64,12 +64,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             long queryTime = 0;
             boolean isAfterQuery = event.type == EventType.AFTER_QUERY;
 
-            if (Config.audit_log_json_format) {
-                logMap.put("EventType", event.type.name());
-            } else {
-                sb.append("|EventType=").append(event.type.name());
-            }
-
             // get each field with annotation "AuditField" in AuditEvent
             Field[] fields = event.getClass().getFields();
             for (Field f : fields) {
@@ -127,6 +121,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     logMap.put(fieldName, value);
                 } else {
                     sb.append("|").append(af.value()).append("=").append(value);
+                }
+            }
+
+            if (Config.audit_stmt_before_execute) {
+                if (Config.audit_log_json_format) {
+                    logMap.put("EventType", event.type.name());
+                } else {
+                    sb.append("|EventType=").append(event.type.name());
                 }
             }
 
