@@ -3,6 +3,8 @@ displayed_sidebar: docs
 sidebar_label: "Feature Differences"
 ---
 
+import EditionSpecificFeature from '../assets/commonMarkdown/Edition_Specific_Feature.mdx'
+
 # Feature Differences between Shared-nothing and Shared-data Clusters
 
 This topic lists the differences of features supported in shared-nothing and shared-data clusters.
@@ -53,18 +55,4 @@ This topic lists the differences of features supported in shared-nothing and sha
 | Query Cache                                          | v2.5+          | v3.4+           |
 | Rollup and Synchronous Materialized view             | v1.x+          | v3.3+           |
 
-## Disaster Recovery
-
-| Feature                                              | Shared-nothing | Shared-data     |
-| ---------------------------------------------------- | -------------- | --------------- |
-| Backup & Restore                                     | v1.x+          | Not applicable  |
-| BE/CN Blacklist                                      | v3.3+          | v4.0+           |
-| Cross-cluster Data Migration Tool                    | v3.3+          | Not applicable  |
-| Cluster Snapshot                                     | Not applicable | v3.4.2+         |
-
-## Security and Authentication
-
-| Feature                                              | Shared-nothing | Shared-data     |
-| ---------------------------------------------------- | -------------- | --------------- |
-| Kerberos Support HDFS                                | Not applicable | v3.2+           |
-| TDE (Single Key)                                     | v3.3+          | Not applicable  |
+<EditionSpecificFeature />
