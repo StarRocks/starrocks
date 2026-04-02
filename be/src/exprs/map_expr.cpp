@@ -48,8 +48,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
                 ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, std::move(pairs_columns[i])));
         // Ensure the column's physical type matches the declared type to prevent buffer overflow
         // in Column::append when child expressions produce narrower types (e.g., TINYINT for SMALLINT).
-        pairs_columns[i] =
-                ColumnHelper::normalize_column_type(std::move(pairs_columns[i]), _type.children[i % 2]);
+        pairs_columns[i] = ColumnHelper::normalize_column_type(std::move(pairs_columns[i]), _type.children[i % 2]);
     }
 
     auto key_col = ColumnHelper::create_column(_type.children[0], true);
