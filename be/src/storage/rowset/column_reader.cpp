@@ -565,13 +565,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
     return success_once(
                    _inverted_index_load_once,
                    [&]() {
-                       LogicalType type;
-                       if (_column_type == LogicalType::TYPE_ARRAY) {
-                           type = _column_child_type;
-                       } else {
-                           type = _column_type;
-                       }
-
+                       LogicalType type = _column_type;
                        ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
                        std::string index_path = IndexDescriptor::inverted_index_file_path(
                                opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());
