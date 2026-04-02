@@ -47,6 +47,7 @@
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "column/fixed_length_column.h"
+#include "column/storage_type_traits.h"
 #include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
@@ -57,7 +58,6 @@
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
 #include "types/date_value.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 

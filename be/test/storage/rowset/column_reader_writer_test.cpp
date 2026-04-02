@@ -44,6 +44,7 @@
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/storage_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
@@ -62,7 +63,6 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "types/date_value.h"
-#include "types/type_traits.h"
 
 using std::string;
 

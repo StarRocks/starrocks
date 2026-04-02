@@ -22,6 +22,7 @@
 #include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/storage_type_traits.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
@@ -30,7 +31,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "types/datum.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 

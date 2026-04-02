@@ -23,6 +23,7 @@
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "column/storage_type_traits.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
@@ -35,7 +36,6 @@
 #include "types/json_value.h"
 #include "types/percentile_value.h"
 #include "types/timestamp_value.h"
-#include "types/type_traits.h"
 #include "util/stack_util.h"
 
 namespace starrocks {

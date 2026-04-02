@@ -40,6 +40,7 @@
 #include <limits>
 
 #include "column/column.h"
+#include "column/storage_type_traits.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -48,7 +49,6 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 

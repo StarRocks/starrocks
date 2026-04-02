@@ -38,13 +38,13 @@
 #include "base/string/faststring.h"
 #include "column/column.h"
 #include "column/container_resource.h"
+#include "column/storage_type_traits.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 

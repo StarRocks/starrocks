@@ -20,11 +20,11 @@
 
 #include "column/chunk.h"
 #include "column/datum_convert.h"
+#include "column/storage_type_traits.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/types.h"
 #include "types/datum.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 

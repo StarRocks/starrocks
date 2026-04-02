@@ -40,7 +40,7 @@
 
 #include "base/string/slice.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
+#include "column/storage_type_traits.h"
 
 namespace starrocks {
 

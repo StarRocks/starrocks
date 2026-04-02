@@ -38,12 +38,12 @@
 #include "base/coding.h"
 #include "base/string/slice.h"
 #include "column/column.h"
+#include "column/storage_type_traits.h"
 #include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 
