@@ -386,14 +386,14 @@ inline constexpr bool kIsNormalizableNumericType =
 // Returns nullptr when no conversion is needed (same width or non-numeric type).
 struct ScalarColumnTypeNormalizer {
     template <LogicalType LT>
-    ColumnPtr operator()(const Column& src_column, size_t count) const {
+    ColumnPtr operator()(const Column* src_column, size_t count) const {
         using TargetCppType = RunTimeCppType<LT>;
 
         if constexpr (!kIsNormalizableNumericType<TargetCppType>) {
             // Non-numeric types (VARCHAR, JSON, …) — no conversion needed.
             return nullptr;
         } else {
-            if (src_column.type_size() == sizeof(TargetCppType)) {
+            if (src_column->type_size() == sizeof(TargetCppType)) {
                 // Physical width already matches — no conversion needed.
                 return nullptr;
             }
@@ -410,8 +410,8 @@ struct ScalarColumnTypeNormalizer {
             // We use the *target* type to disambiguate: a floating-point target
             // implies the source is also in the float family (FE literal typing
             // guarantees same-family mismatches), so we reinterpret accordingly.
-            const auto* raw = src_column.raw_data();
-            switch (src_column.type_size()) {
+            const auto* raw = src_column->raw_data();
+            switch (src_column->type_size()) {
             case 1:
                 for (size_t i = 0; i < count; ++i) {
                     dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int8_t*>(raw)[i]);
@@ -538,7 +538,8 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
     // type_dispatch_predicate with assert=false returns a default-constructed
     // ColumnPtr (nullptr) for types outside APPLY_FOR_ALL_SCALAR_TYPE, so we
     // never need a hand-maintained type whitelist.
-    auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(), *column,
+    auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(),
+                                                         column.get(),
                                                          column->size());
     if (normalized == nullptr) {
         return column;

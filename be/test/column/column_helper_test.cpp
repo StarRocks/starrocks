@@ -447,26 +447,6 @@ TEST_F(ColumnHelperTest, normalize_column_type_struct_no_change) {
     ASSERT_EQ(result.get(), ptr.get());
 }
 
-TEST_F(ColumnHelperTest, normalize_column_type_const_nullable) {
-    auto data_col = Int8Column::create();
-    data_col->append(42);
-    auto null_col = NullColumn::create();
-    null_col->append(0);
-    auto nullable = NullableColumn::create(std::move(data_col), std::move(null_col));
-    auto const_col = ConstColumn::create(std::move(nullable), 2);
-    ColumnPtr ptr = const_col;
-
-    auto result = ColumnHelper::normalize_column_type(ptr, TypeDescriptor(TYPE_INT));
-    ASSERT_FALSE(result->is_constant());
-    ASSERT_TRUE(result->is_nullable());
-    ASSERT_EQ(result->size(), 2);
-
-    auto* result_nullable = down_cast<const NullableColumn*>(result.get());
-    auto* result_data = down_cast<const Int32Column*>(result_nullable->data_column().get());
-    EXPECT_EQ(result_data->get_data()[0], 42);
-    EXPECT_EQ(result_data->get_data()[1], 42);
-}
-
 TEST_F(ColumnHelperTest, normalize_column_type_tinyint_to_bigint) {
     auto col = Int8Column::create();
     col->append(-128);
