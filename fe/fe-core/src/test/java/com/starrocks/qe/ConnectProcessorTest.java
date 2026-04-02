@@ -857,9 +857,118 @@ public class ConnectProcessorTest extends DDLTestBase {
                     Assertions.assertFalse(detail.getSql().contains(";"));
                 }
             }
-            Assertions.assertEquals(2, details.size());
-            Assertions.assertEquals(1, runningCount);
+            Assertions.assertEquals(4, details.size());
+            Assertions.assertEquals(2, runningCount);
+            Assertions.assertEquals(2, finishedCount);
+        } finally {
+            Config.enable_collect_query_detail_info = enableCollectQueryDetail;
+            QueryDetailQueue.TOTAL_QUERIES.clear();
+        }
+    }
+
+    @Test
+    public void testQueryDetailForMultiStatementStopsAfterFailure() throws Exception {
+        boolean enableCollectQueryDetail = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        QueryDetailQueue.TOTAL_QUERIES.clear();
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute(Invocation invocation) throws Exception {
+                    StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                    if (stmtExecutor.getParsedStmt().getOrigStmt().idx == 1) {
+                        throw new IOException("mock stmt failure");
+                    }
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+
+            List<QueryDetail> details = QueryDetailQueue.getQueryDetailsAfterTime(0);
+            int runningCount = 0;
+            int finishedCount = 0;
+            int failedCount = 0;
+            for (QueryDetail detail : details) {
+                if (detail.getState() == QueryDetail.QueryMemState.RUNNING) {
+                    runningCount++;
+                } else if (detail.getState() == QueryDetail.QueryMemState.FINISHED) {
+                    finishedCount++;
+                } else if (detail.getState() == QueryDetail.QueryMemState.FAILED) {
+                    failedCount++;
+                }
+                Assertions.assertFalse(detail.getSql().contains(";"));
+                Assertions.assertFalse(detail.getSql().contains("select 3"));
+            }
+            Assertions.assertEquals(4, details.size());
+            Assertions.assertEquals(2, runningCount);
             Assertions.assertEquals(1, finishedCount);
+            Assertions.assertEquals(1, failedCount);
+        } finally {
+            Config.enable_collect_query_detail_info = enableCollectQueryDetail;
+            QueryDetailQueue.TOTAL_QUERIES.clear();
+        }
+    }
+
+    @Test
+    public void testQueryDetailForMultiStatementRetryDoesNotDuplicateRunning() throws Exception {
+        boolean enableCollectQueryDetail = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        QueryDetailQueue.TOTAL_QUERIES.clear();
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            int[] executeCounts = new int[2];
+            List<String> retriedStmtQueryIds = new ArrayList<>();
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute(Invocation invocation) throws Exception {
+                    StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                    int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                    executeCounts[stmtIdx]++;
+                    if (stmtIdx == 1) {
+                        retriedStmtQueryIds.add(ctx.getQueryId().toString());
+                    }
+                    if (stmtIdx == 1 && executeCounts[stmtIdx] == 1) {
+                        throw new LargeInPredicateException("mock large in predicate retry");
+                    }
+                }
+
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+
+            List<QueryDetail> details = QueryDetailQueue.getQueryDetailsAfterTime(0);
+            int runningCount = 0;
+            int finishedCount = 0;
+            for (QueryDetail detail : details) {
+                if (detail.getState() == QueryDetail.QueryMemState.RUNNING) {
+                    runningCount++;
+                } else if (detail.getState() == QueryDetail.QueryMemState.FINISHED) {
+                    finishedCount++;
+                }
+                Assertions.assertFalse(detail.getSql().contains(";"));
+            }
+            Assertions.assertArrayEquals(new int[] {1, 2}, executeCounts);
+            Assertions.assertEquals(2, retriedStmtQueryIds.size());
+            Assertions.assertEquals(retriedStmtQueryIds.get(0), retriedStmtQueryIds.get(1));
+            Assertions.assertEquals(4, details.size());
+            Assertions.assertEquals(2, runningCount);
+            Assertions.assertEquals(2, finishedCount);
         } finally {
             Config.enable_collect_query_detail_info = enableCollectQueryDetail;
             QueryDetailQueue.TOTAL_QUERIES.clear();

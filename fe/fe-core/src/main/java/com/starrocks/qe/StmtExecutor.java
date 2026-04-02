@@ -419,7 +419,7 @@ public class StmtExecutor {
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         // only print the sepecific sql in multi statement
-        String sql = context.isSingleStmt() ? originStmt.originStmt :
+        String sql = !context.isMultiStmt() ? originStmt.originStmt :
                 AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt);
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
@@ -3816,7 +3816,7 @@ public class StmtExecutor {
 
     private String getQueryDetailSql(StatementBase parsedStmt) {
         String originSql = parsedStmt.getOrigStmt().originStmt;
-        if (context.isSingleStmt() || parsedStmt.getOrigStmt().idx == 0) {
+        if (!context.isMultiStmt()) {
             return originSql;
         }
         return AstToSQLBuilder.toSQLOrDefault(parsedStmt, originSql);

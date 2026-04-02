@@ -411,7 +411,7 @@ public class ConnectProcessor {
         if (parsedStmt == null) {
             return originStmt;
         }
-        if (ctx.isSingleStmt()) {
+        if (!ctx.isMultiStmt()) {
             return originStmt;
         }
         return AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt);
@@ -449,7 +449,7 @@ public class ConnectProcessor {
         auditAfterExec(auditSql, parsedStmt,
                 executor == null ? null : executor.getQueryStatisticsForAuditLog(),
                 getDigestFromLeader(executor));
-        if (ctx.getIsLastStmt() && executor != null) {
+        if (executor != null) {
             executor.addFinishedQueryDetail();
         }
     }
@@ -474,6 +474,7 @@ public class ConnectProcessor {
     private void resetStmtExecutionContext(boolean refreshQueryId) {
         executor = null;
         ctx.setExecutor(null);
+        ctx.setQueryDetail(null);
         ctx.getState().reset();
         ctx.resetReturnRows();
         ctx.setStartTime();
@@ -487,6 +488,14 @@ public class ConnectProcessor {
             //    the current stmt's identity for the failure path and audit.
             ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         }
+    }
+
+    private void resetStmtRetryContext() {
+        executor = null;
+        ctx.setExecutor(null);
+        ctx.getState().reset();
+        ctx.resetReturnRows();
+        resetAuditEventBuilder();
     }
 
     private StatementBase prepareStmtForExecution(StatementBase parsedStmt, String originStmt,
@@ -506,7 +515,7 @@ public class ConnectProcessor {
         parsedStmt.setOrigStmt(new OriginStatement(originStmt, stmtIdx));
         Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
         ctx.setIsLastStmt(stmtIdx == stmtCount - 1);
-        ctx.setSingleStmt(stmtCount == 1);
+        ctx.setMultiStmt(stmtCount > 1);
         // auditAfterExec() reads ctx.getState().isQuery() even when the stmt fails before
         // StmtExecutor.execute(), so we must classify the stmt here as well.
         ctx.getState().setIsQuery(ctx.isQueryStmt(parsedStmt));
@@ -555,7 +564,7 @@ public class ConnectProcessor {
                 }
             }.visit(parsedStmt);
 
-            if (ctx.getIsLastStmt()) {
+            if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
             }
             executor.execute();
@@ -571,7 +580,7 @@ public class ConnectProcessor {
     private StatementBase prepareRetriedStmt(StatementBase parsedStmt, String originStmt, int stmtCount)
             throws AnalysisException {
         StatementBase retriedStmt = parseStatements(originStmt).get(parsedStmt.getOrigStmt().idx);
-        resetStmtExecutionContext(true);
+        resetStmtRetryContext();
         return prepareStmtForExecution(retriedStmt, originStmt, parsedStmt.getOrigStmt().idx, stmtCount);
     }
 
@@ -825,7 +834,6 @@ public class ConnectProcessor {
             originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
             ctx.setIsLastStmt(true);
-            ctx.setSingleStmt(true);
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);
             ctx.getState().setIsQuery(isQuery);
@@ -1055,6 +1063,7 @@ public class ConnectProcessor {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         if (request.isSetResourceInfo()) {
             ctx.getSessionVariable().setResourceGroup(request.getResourceInfo().getGroup());
         }
@@ -1300,6 +1309,7 @@ public class ConnectProcessor {
     public void processOnce(RequestPackage req) throws Exception {
         // set status of query to OK.
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         executor = null;
 
         packetBuf = req.byteBuffer();
@@ -1320,6 +1330,7 @@ public class ConnectProcessor {
     public void processOnce() throws IOException {
         // set status of query to OK.
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         executor = null;
 
         // reset sequence id of MySQL protocol

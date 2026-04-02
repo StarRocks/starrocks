@@ -210,7 +210,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
-    protected boolean isSingleStmt = false;
+    protected boolean isMultiStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -1913,11 +1913,11 @@ public class ConnectContext {
         listeners.clear();
     }
 
-    public boolean isSingleStmt() {
-        return isSingleStmt;
+    public boolean isMultiStmt() {
+        return isMultiStmt;
     }
 
-    public void setSingleStmt(boolean singleStmt) {
-        isSingleStmt = singleStmt;
+    public void setMultiStmt(boolean multiStmt) {
+        isMultiStmt = multiStmt;
     }
 }
