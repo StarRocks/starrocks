@@ -25,6 +25,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
@@ -554,6 +555,173 @@ public class LakePublishBatchTest {
         publishVersionDaemon.publishingTransactionIds.clear();
         awaitPublish(publishVersionDaemon, waiter6, waiter7);
     }
+
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTransactionGraphBySinglePublishRemoveLastNode(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+
+        List<TabletCommitInfo> transPartition1Tablets =  Lists.newArrayList();
+        List<TabletCommitInfo> transPartition2Tablets =  Lists.newArrayList();
+        List<TabletCommitInfo> transPartition3Tablets =  Lists.newArrayList();
+
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    if (num == 0) {
+                        transPartition1Tablets.add(tabletCommitInfo);
+                    } else if (num == 1) {
+                        transPartition2Tablets.add(tabletCommitInfo);
+                    } else if (num == 2) {
+                        transPartition3Tablets.add(tabletCommitInfo);
+                    }
+                }
+            }
+            num++;
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId5 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label5" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter5 = globalTransactionMgr.commitTransaction(db.getId(), transactionId5, transPartition1Tablets,
+                Lists.newArrayList(), null);
+
+
+        long transactionId6 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label6" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter6 = globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transPartition2Tablets,
+                Lists.newArrayList(), null);
+
+        long transactionId7 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label7" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transPartition3Tablets,
+                Lists.newArrayList(), null);
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionState> getReadyToPublishTransactions(boolean nodep) throws AnalysisException {
+                List<TransactionState> transactionStateList = Lists.newArrayList();
+                TransactionState state =  globalTransactionMgr.getDatabaseTransactionMgr(db.getId())
+                        .getTransactionState(transactionId7);
+                transactionStateList.add(state);
+                return transactionStateList;
+            }
+        };
+
+        Config.lake_enable_batch_publish_version = false;
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        awaitPublish(publishVersionDaemon, waiter7);
+
+        List<TransactionStateBatch> batch = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getReadyPublishTransactionsBatch();
+        Assertions.assertEquals(1, batch.size());
+
+        Config.lake_enable_batch_publish_version = true;
+        awaitPublish(publishVersionDaemon, waiter5);
+        awaitPublish(publishVersionDaemon, waiter6);
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testTransactionGraphRemoveMiddleNode(boolean enableAggregation) throws Exception {
+        String tableName = enableAggregation ? TABLE_AGG_ON : TABLE_AGG_OFF;
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+
+        List<TabletCommitInfo> transPartition1Tablets =  Lists.newArrayList();
+        List<TabletCommitInfo> transPartition2Tablets =  Lists.newArrayList();
+        List<TabletCommitInfo> transPartition3Tablets =  Lists.newArrayList();
+
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    if (num == 0) {
+                        transPartition1Tablets.add(tabletCommitInfo);
+                    } else if (num == 1) {
+                        transPartition2Tablets.add(tabletCommitInfo);
+                    } else if (num == 2) {
+                        transPartition3Tablets.add(tabletCommitInfo);
+                    }
+                }
+            }
+            num++;
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId5 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label5" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter5 = globalTransactionMgr.commitTransaction(db.getId(), transactionId5, transPartition1Tablets,
+                Lists.newArrayList(), null);
+
+
+        long transactionId6 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label6" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter6 = globalTransactionMgr.commitTransaction(db.getId(), transactionId6, transPartition2Tablets,
+                Lists.newArrayList(), null);
+
+        long transactionId7 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label7" + "_" + UUIDUtil.genUUID().toString(),
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transPartition3Tablets,
+                Lists.newArrayList(), null);
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionState> getReadyToPublishTransactions(boolean nodep) throws AnalysisException {
+                List<TransactionState> transactionStateList = Lists.newArrayList();
+                TransactionState state =  globalTransactionMgr.getDatabaseTransactionMgr(db.getId())
+                        .getTransactionState(transactionId6);
+                transactionStateList.add(state);
+                return transactionStateList;
+            }
+        };
+
+        Config.lake_enable_batch_publish_version = false;
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        awaitPublish(publishVersionDaemon, waiter6);
+
+        List<TransactionStateBatch> batch = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                getDatabaseTransactionMgr(db.getId()).getReadyToPublishTxnListBatch();
+        Assertions.assertEquals(1, batch.size());
+
+        Config.lake_enable_batch_publish_version = true;
+        awaitPublish(publishVersionDaemon, waiter5);
+        awaitPublish(publishVersionDaemon, waiter7);
+    }
+
+
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
