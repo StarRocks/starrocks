@@ -24,11 +24,9 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
