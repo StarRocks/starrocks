@@ -153,8 +153,8 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {
-                    partial_bloom_filters[i]->set_or_concat(partial_bloom_filter_build_params[i]->runtime_filter.get(),
-                                                            _driver_sequence);
+                    partial_bloom_filters[i]->set_local_colocate_runtime_filter(
+                            partial_bloom_filter_build_params[i]->runtime_filter, _driver_sequence);
                 }
             }
         }

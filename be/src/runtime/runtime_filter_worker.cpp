@@ -289,9 +289,9 @@ void RuntimeFilterPort::prepare_params(PTransmitRuntimeFilterParams& params, Run
 void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs) {
     RuntimeState* state = _state;
     for (auto* rf_desc : rf_descs) {
-        auto* filter = rf_desc->runtime_filter();
-        if (filter == nullptr) continue;
-        state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+        auto instances = rf_desc->runtime_filter_instances();
+        if (instances == nullptr) continue;
+        state->runtime_filter_port()->receive_runtime_filter_instances(rf_desc->filter_id(), instances);
     }
 }
 
@@ -321,6 +321,18 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
               << ", wait_list_size=" << wait_list.size() << ", filter=" << rf->debug_string();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_shared_runtime_filter(rf);
+    }
+}
+
+void RuntimeFilterPort::receive_runtime_filter_instances(int32_t filter_id,
+                                                         const std::shared_ptr<const RuntimeFilterInstanceSet>& rf) {
+    auto it = _listeners.find(filter_id);
+    if (it == _listeners.end()) return;
+    auto& wait_list = it->second;
+    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(instances). filter_id=" << filter_id
+              << ", wait_list_size=" << wait_list.size();
+    for (auto* rf_desc : wait_list) {
+        rf_desc->set_runtime_filter_instances(rf);
     }
 }
 

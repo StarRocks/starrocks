@@ -21,6 +21,7 @@
 #include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exec/runtime_filter/runtime_filter_instances.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
@@ -61,29 +62,41 @@ public:
     bool is_nulls_first() const { return _is_nulls_first; }
     size_t limit() const { return _limit; }
 
-    void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
+    void set_runtime_filter(RuntimeFilter* rf) {
+        std::lock_guard guard(_mutex);
+        _runtime_filter_instances.reset();
+        _runtime_filter = rf;
+    }
     // used in TopN filter to intersect with other runtime filters.
     void set_or_intersect_filter(RuntimeFilter* rf) {
         std::lock_guard guard(_mutex);
         if (_runtime_filter) {
             _runtime_filter->intersect(rf);
         } else {
+            _runtime_filter_instances.reset();
             _runtime_filter = rf;
         }
     }
 
-    // Legacy phase-2 seam: local colocate instances are still stored on RuntimeFilter until
-    // phase 3 extracts this Exec-only ownership from the payload base.
-    void set_or_concat(RuntimeFilter* rf, int32_t driver_sequence) {
+    void set_local_colocate_runtime_filter(MutableRuntimeFilterPtr rf, int32_t driver_sequence) {
         std::lock_guard guard(_mutex);
-        if (_runtime_filter == nullptr) {
-            _runtime_filter = rf;
-            _runtime_filter->group_colocate_filter().resize(_num_colocate_partition);
+        DCHECK(_runtime_filter == nullptr);
+        if (_runtime_filter_instances == nullptr) {
+            _runtime_filter_instances = std::make_shared<RuntimeFilterInstanceSet>(_num_colocate_partition);
         }
-        _runtime_filter->group_colocate_filter()[driver_sequence] = rf;
+        _runtime_filter_instances->set_local_colocate_runtime_filter(std::move(rf), driver_sequence);
     }
 
-    RuntimeFilter* runtime_filter() { return _runtime_filter; }
+    RuntimeFilter* runtime_filter() {
+        return _runtime_filter != nullptr
+                       ? _runtime_filter
+                       : const_cast<RuntimeFilter*>(_runtime_filter_instances != nullptr
+                                                            ? _runtime_filter_instances->runtime_filter(-1)
+                                                            : nullptr);
+    }
+    std::shared_ptr<const RuntimeFilterInstanceSet> runtime_filter_instances() const {
+        return _runtime_filter_instances;
+    }
     void set_is_pipeline(bool flag) { _is_pipeline = flag; }
     bool is_pipeline() const { return _is_pipeline; }
     // TRuntimeFilterBuildJoinMode
@@ -108,6 +121,7 @@ private:
     std::vector<TRuntimeFilterDestination> _broadcast_grf_destinations;
     std::vector<TNetworkAddress> _merge_nodes;
     RuntimeFilter* _runtime_filter = nullptr;
+    std::shared_ptr<RuntimeFilterInstanceSet> _runtime_filter_instances = nullptr;
     bool _is_pipeline = false;
     size_t _num_colocate_partition = 0;
     // field used in top-n runtime filter

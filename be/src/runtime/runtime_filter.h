@@ -230,8 +230,8 @@ private:
 };
 
 // RuntimeFilter is the materialized probe-time payload in the three-layer runtime-filter model.
-// RuntimeCore owns this payload type and its payload-adjacent utilities. Exec-only per-driver
-// colocate plumbing still lives here temporarily as a legacy compatibility seam until phase 3.
+// RuntimeCore owns this payload type and its payload-adjacent utilities. Exec-only ownership such
+// as per-driver colocate instance selection lives in ExecCore rather than on the payload base.
 class RuntimeFilter;
 class RuntimeMembershipFilter;
 using RuntimeFilterPtr = std::shared_ptr<const RuntimeFilter>;
@@ -324,11 +324,6 @@ public:
 
     virtual RuntimeFilter* create_empty(ObjectPool* pool) = 0;
 
-    // Legacy Exec-only seam kept here until phase 3 extracts per-driver colocate ownership.
-    bool is_group_colocate_filter() const { return !_group_colocate_filters.empty(); }
-    std::vector<RuntimeFilter*>& group_colocate_filter() { return _group_colocate_filters; }
-    const std::vector<RuntimeFilter*>& group_colocate_filter() const { return _group_colocate_filters; }
-
     // Legacy compatibility seam: runtime IN-filters are treated as a sibling optimization in this
     // roadmap, but older probe/storage paths still query them through RuntimeFilter.
     virtual const RuntimeFilter* get_in_filter() const { return nullptr; }
@@ -358,8 +353,6 @@ protected:
     bool _has_null = false;
     bool _always_true = false;
     size_t _rf_version = 0;
-    // local colocate filters is local filter we don't have to serialize them
-    std::vector<RuntimeFilter*> _group_colocate_filters;
 };
 
 template <typename F>

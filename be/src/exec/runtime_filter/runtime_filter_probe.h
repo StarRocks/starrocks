@@ -28,6 +28,7 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "exec/runtime_filter/runtime_filter_instances.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -92,17 +93,15 @@ public:
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
     const RuntimeFilter* runtime_filter(int32_t driver_sequence) const {
-        auto runtime_filter = _runtime_filter.load();
-        if (runtime_filter != nullptr && runtime_filter->is_group_colocate_filter()) {
-            DCHECK(_is_group_colocate_rf);
-            DCHECK_GE(driver_sequence, 0);
-            DCHECK_LT(driver_sequence, runtime_filter->group_colocate_filter().size());
-            return runtime_filter->group_colocate_filter()[driver_sequence];
+        auto runtime_filter_instances = std::atomic_load(&_runtime_filter_instances);
+        if (runtime_filter_instances != nullptr) {
+            return runtime_filter_instances->runtime_filter(driver_sequence);
         }
-        return runtime_filter;
+        return _runtime_filter.load();
     }
     void set_runtime_filter(const RuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
+    void set_runtime_filter_instances(const std::shared_ptr<const RuntimeFilterInstanceSet>& instances);
     void add_observer(RuntimeState* state, ReadyObserver observer);
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
@@ -136,11 +135,14 @@ private:
 
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
+    std::shared_ptr<const RuntimeFilterInstanceSet> _runtime_filter_instances = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::vector<ReadyObserver> _ready_observers;
     bool _has_push_down_to_storage = false;
     // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
     int32_t _exchange_hash_function_version = 0;
+
+    void _notify_runtime_filter_ready(const RuntimeFilter* rf);
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

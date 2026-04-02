@@ -42,6 +42,7 @@ class RuntimeState;
 class RuntimeFilter;
 class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
+class RuntimeFilterInstanceSet;
 
 using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
 using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
@@ -63,6 +64,7 @@ public:
     // or allocated in this query(shuffle join generate global runtime filter)
     void receive_runtime_filter(int32_t filter_id, const RuntimeFilter* rf);
     void receive_shared_runtime_filter(int32_t filter_id, const std::shared_ptr<const RuntimeFilter>& rf);
+    void receive_runtime_filter_instances(int32_t filter_id, const std::shared_ptr<const RuntimeFilterInstanceSet>& rf);
     std::string listeners(int32_t filter_id);
 
 private:

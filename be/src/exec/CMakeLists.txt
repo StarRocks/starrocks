@@ -22,6 +22,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_CORE_FILES
     runtime_filter/runtime_filter_descriptor.cpp
+    runtime_filter/runtime_filter_instances.cpp
     runtime_filter/runtime_filter_probe.cpp
     runtime_filter/runtime_filter_helper.cpp
 )

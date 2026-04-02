@@ -16,6 +16,7 @@
 
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
+#include "exec/runtime_filter/runtime_filter_instances.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_filter.h"
@@ -114,6 +115,70 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter
     rf->insert(10);
     desc.set_runtime_filter(rf);
     EXPECT_EQ(desc.runtime_filter(-1), rf);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, InstanceSetResolvesSingletonAndPerDriverFilters) {
+    RuntimeFilterInstanceSet singleton_instances;
+
+    auto* singleton = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    singleton->insert(10);
+    singleton_instances.set_singleton_runtime_filter(singleton);
+
+    EXPECT_EQ(singleton_instances.runtime_filter(-1), singleton);
+    EXPECT_EQ(singleton_instances.runtime_filter(0), singleton);
+
+    RuntimeFilterInstanceSet colocate_instances(2);
+    auto colocate0 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    auto colocate1 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    colocate0->insert(11);
+    colocate1->insert(22);
+
+    colocate_instances.set_local_colocate_runtime_filter(colocate0, 0);
+    colocate_instances.set_local_colocate_runtime_filter(colocate1, 1);
+
+    EXPECT_EQ(colocate_instances.runtime_filter(0), colocate0.get());
+    EXPECT_EQ(colocate_instances.runtime_filter(1), colocate1.get());
+}
+
+TEST_F(RuntimeFilterExecCoreTest, BuildDescriptorExposesLocalColocateInstanceSet) {
+    RuntimeFilterBuildDescriptor desc;
+    desc.set_num_colocate_partition(2);
+
+    auto colocate0 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    auto colocate1 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    desc.set_local_colocate_runtime_filter(colocate0, 0);
+    desc.set_local_colocate_runtime_filter(colocate1, 1);
+
+    auto instances = desc.runtime_filter_instances();
+    ASSERT_NE(instances, nullptr);
+    EXPECT_EQ(instances->runtime_filter(0), colocate0.get());
+    EXPECT_EQ(instances->runtime_filter(1), colocate1.get());
+
+    auto* singleton = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    desc.set_runtime_filter(singleton);
+    EXPECT_EQ(desc.runtime_filter(), singleton);
+    EXPECT_EQ(desc.runtime_filter_instances(), nullptr);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorCanInstallInstanceSet) {
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(23, probe_ctx));
+
+    auto instances = std::make_shared<RuntimeFilterInstanceSet>(2);
+    auto colocate0 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    auto colocate1 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    colocate0->insert(101);
+    colocate1->insert(202);
+    instances->set_local_colocate_runtime_filter(colocate0, 0);
+    instances->set_local_colocate_runtime_filter(colocate1, 1);
+
+    desc.set_runtime_filter_instances(instances);
+
+    EXPECT_EQ(desc.runtime_filter(0), colocate0.get());
+    EXPECT_EQ(desc.runtime_filter(1), colocate1.get());
 }
 
 TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {

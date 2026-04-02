@@ -541,7 +541,7 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     _descriptors[desc->filter_id()] = desc;
 }
 
-void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
+void RuntimeFilterProbeDescriptor::_notify_runtime_filter_ready(const RuntimeFilter* rf) {
     auto notify = DeferOp([this]() {
         FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
         if (_runtime_state && _runtime_state->fragment_prepared()) {
@@ -558,10 +558,24 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
     }
 }
 
+void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
+    const RuntimeFilter* expected = nullptr;
+    _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
+    _notify_runtime_filter_ready(rf);
+}
+
 void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf) {
     std::shared_ptr<const RuntimeFilter> old_value = nullptr;
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
+    }
+}
+
+void RuntimeFilterProbeDescriptor::set_runtime_filter_instances(
+        const std::shared_ptr<const RuntimeFilterInstanceSet>& instances) {
+    std::shared_ptr<const RuntimeFilterInstanceSet> old_value = nullptr;
+    if (std::atomic_compare_exchange_strong(&_runtime_filter_instances, &old_value, instances)) {
+        _notify_runtime_filter_ready(instances != nullptr ? instances->runtime_filter(-1) : nullptr);
     }
 }
 
