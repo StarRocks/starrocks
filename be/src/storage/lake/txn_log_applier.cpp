@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <climits>
+#include <unordered_set>
 
 #include "agent/master_info.h"
 #include "base/debug/trace.h"
@@ -43,6 +44,33 @@
 namespace starrocks::lake {
 
 namespace {
+
+void collect_rowset_referenced_files(const google::protobuf::RepeatedPtrField<RowsetMetadataPB>& rowsets,
+                                     std::unordered_set<std::string>* referenced_files) {
+    for (const auto& rowset : rowsets) {
+        for (const auto& segment : rowset.segments()) {
+            referenced_files->insert(segment);
+        }
+        for (const auto& del_file : rowset.del_files()) {
+            referenced_files->insert(del_file.name());
+        }
+    }
+}
+
+bool has_rowset_file_overlap(const RowsetMetadataPB& old_rowset,
+                             const std::unordered_set<std::string>& referenced_files) {
+    for (const auto& segment : old_rowset.segments()) {
+        if (referenced_files.find(segment) != referenced_files.end()) {
+            return true;
+        }
+    }
+    for (const auto& del_file : old_rowset.del_files()) {
+        if (referenced_files.find(del_file.name()) != referenced_files.end()) {
+            return true;
+        }
+    }
+    return false;
+}
 
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
@@ -708,19 +736,33 @@ private:
                 _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
                 std::unordered_set<uint32_t> new_rowset_ids;
+                std::unordered_set<std::string> new_referenced_rowset_files;
                 for (const auto& rowset : _metadata->rowsets()) {
                     new_rowset_ids.insert(rowset.id());
                 }
+                collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
+
+                size_t skipped_by_rowset_id = 0;
+                size_t skipped_by_file_overlap = 0;
+                size_t moved_to_compaction_inputs = 0;
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    if (new_rowset_ids.find(old_rowset.id()) != new_rowset_ids.end()) {
+                        skipped_by_rowset_id++;
+                        continue;
                     }
+                    if (has_rowset_file_overlap(old_rowset, new_referenced_rowset_files)) {
+                        skipped_by_file_overlap++;
+                        continue;
+                    }
+                    _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    moved_to_compaction_inputs++;
                 }
+
+                LOG(INFO) << "Apply pk full replication rowset gc guard. tablet_id: " << _tablet.id()
+                          << ", txn_id: " << txn_meta.txn_id() << ", skipped_by_rowset_id: " << skipped_by_rowset_id
+                          << ", skipped_by_file_overlap: " << skipped_by_file_overlap
+                          << ", moved_to_compaction_inputs: " << moved_to_compaction_inputs;
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
@@ -1297,19 +1339,33 @@ private:
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
                 std::unordered_set<uint32_t> new_rowset_ids;
+                std::unordered_set<std::string> new_referenced_rowset_files;
                 for (const auto& rowset : _metadata->rowsets()) {
                     new_rowset_ids.insert(rowset.id());
                 }
+                collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
+
+                size_t skipped_by_rowset_id = 0;
+                size_t skipped_by_file_overlap = 0;
+                size_t moved_to_compaction_inputs = 0;
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    if (new_rowset_ids.find(old_rowset.id()) != new_rowset_ids.end()) {
+                        skipped_by_rowset_id++;
+                        continue;
                     }
+                    if (has_rowset_file_overlap(old_rowset, new_referenced_rowset_files)) {
+                        skipped_by_file_overlap++;
+                        continue;
+                    }
+                    _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    moved_to_compaction_inputs++;
                 }
+
+                LOG(INFO) << "Apply full replication rowset gc guard. tablet_id: " << _tablet.id()
+                          << ", txn_id: " << txn_meta.txn_id() << ", skipped_by_rowset_id: " << skipped_by_rowset_id
+                          << ", skipped_by_file_overlap: " << skipped_by_file_overlap
+                          << ", moved_to_compaction_inputs: " << moved_to_compaction_inputs;
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
                 auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/false);
