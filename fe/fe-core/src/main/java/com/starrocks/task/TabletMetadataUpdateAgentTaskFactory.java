@@ -358,6 +358,17 @@ public class TabletMetadataUpdateAgentTaskFactory {
         }
 
         @Override
+        public void setTxnId(long txnId) {
+            super.setTxnId(txnId);
+            // Include txnId in signature to prevent collision between different alter jobs
+            // operating on the same tablet set. Without this, two jobs altering the same
+            // table/partition produce identical signatures (tablets.hashCode()), causing
+            // AgentTaskQueue to reject the second task or FE to match BE's old task
+            // completion report to the wrong job.
+            this.signature = Objects.hash(tablets, txnId);
+        }
+
+        @Override
         public Set<Long> getTablets() {
             return new HashSet<>(tablets);
         }
