@@ -79,8 +79,8 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         }
     };
 
-    auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-            ThreadPool::ExecutionMode::CONCURRENT);
+    auto token =
+            ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (int i = 0; i < num_sstables; i++) {
         auto st = token->submit_func([&open_one, i]() { open_one(i); });
         if (!st.ok()) {
