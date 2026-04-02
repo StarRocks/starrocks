@@ -45,6 +45,7 @@
 #include "util/date_func.h"
 #include "util/int96.h"
 #include "util/phmap/phmap.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
@@ -776,6 +777,131 @@ ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_row
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
 template struct ChunkSliceTemplate<SegmentedChunkPtr>;
+
+// Convert a scalar column's physical type to match the target LogicalType.
+// This handles the case where a column has a narrower type (e.g., int8_t for TINYINT)
+// but needs to be treated as a wider type (e.g., int16_t for SMALLINT).
+template <typename T>
+constexpr bool is_numeric_column_type_v =
+        std::is_arithmetic_v<T> || std::is_same_v<T, int128_t> || std::is_same_v<T, int256_t>;
+
+struct ScalarColumnTypeConverter {
+    template <LogicalType target_ltype>
+    ColumnPtr operator()(const Column& src_column, size_t count) {
+        using TargetCppType = RunTimeCppType<target_ltype>;
+
+        // Only convert numeric fixed-length types. Non-numeric types (VARCHAR, JSON, etc.)
+        // use different column representations and won't have this size mismatch issue.
+        if constexpr (!is_numeric_column_type_v<TargetCppType>) {
+            return {};
+        } else {
+            constexpr size_t target_type_size = sizeof(TargetCppType);
+
+            if (src_column.type_size() == target_type_size) {
+                return {};
+            }
+
+            auto target = RunTimeColumnType<target_ltype>::create();
+            auto& dst_data = target->get_data();
+            raw::stl_vector_resize_uninitialized(&dst_data, count);
+
+            const auto* raw = src_column.raw_data();
+            size_t src_type_size = src_column.type_size();
+
+            for (size_t i = 0; i < count; i++) {
+                TargetCppType value{};
+                switch (src_type_size) {
+                case 1:
+                    value = static_cast<TargetCppType>(reinterpret_cast<const int8_t*>(raw)[i]);
+                    break;
+                case 2:
+                    value = static_cast<TargetCppType>(reinterpret_cast<const int16_t*>(raw)[i]);
+                    break;
+                case 4:
+                    value = static_cast<TargetCppType>(reinterpret_cast<const int32_t*>(raw)[i]);
+                    break;
+                case 8:
+                    value = static_cast<TargetCppType>(reinterpret_cast<const int64_t*>(raw)[i]);
+                    break;
+                case 16:
+                    value = static_cast<TargetCppType>(reinterpret_cast<const int128_t*>(raw)[i]);
+                    break;
+                default:
+                    return {};
+                }
+                dst_data[i] = value;
+            }
+            return target;
+        }
+    }
+};
+
+ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const TypeDescriptor& target_type) {
+    if (column->only_null()) {
+        return column;
+    }
+
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column.get());
+        auto normalized_data = normalize_column_type(nullable->data_column(), target_type);
+        if (normalized_data.get() == nullable->data_column().get()) {
+            return column;
+        }
+        return NullableColumn::create(std::move(normalized_data), nullable->null_column());
+    }
+
+    switch (target_type.type) {
+    case TYPE_STRUCT: {
+        const auto* struct_col = down_cast<const StructColumn*>(column.get());
+        DCHECK_EQ(target_type.children.size(), struct_col->fields_size());
+        bool changed = false;
+        Columns new_fields;
+        new_fields.reserve(struct_col->fields_size());
+        for (size_t i = 0; i < struct_col->fields_size(); i++) {
+            auto normalized = normalize_column_type(struct_col->get_column_by_idx(i), target_type.children[i]);
+            if (normalized.get() != struct_col->get_column_by_idx(i).get()) {
+                changed = true;
+            }
+            new_fields.push_back(std::move(normalized));
+        }
+        if (!changed) return column;
+        return StructColumn::create(std::move(new_fields), struct_col->field_names());
+    }
+    case TYPE_MAP: {
+        const auto* map_col = down_cast<const MapColumn*>(column.get());
+        auto normalized_keys = normalize_column_type(map_col->keys_column(), target_type.children[0]);
+        auto normalized_values = normalize_column_type(map_col->values_column(), target_type.children[1]);
+        if (normalized_keys.get() == map_col->keys_column().get() &&
+            normalized_values.get() == map_col->values_column().get()) {
+            return column;
+        }
+        return MapColumn::create(std::move(normalized_keys), std::move(normalized_values),
+                                 map_col->offsets_column());
+    }
+    case TYPE_ARRAY: {
+        const auto* array_col = down_cast<const ArrayColumn*>(column.get());
+        auto normalized_elements = normalize_column_type(array_col->elements_column(), target_type.children[0]);
+        if (normalized_elements.get() == array_col->elements_column().get()) {
+            return column;
+        }
+        return ArrayColumn::create(std::move(normalized_elements), array_col->offsets_column());
+    }
+    default: {
+        // For scalar types, check if physical type size matches.
+        // If sizes match, the column is already compatible (no buffer overflow risk).
+        // If sizes differ, convert element by element.
+        if (!is_scalar_field_type(target_type.type)) {
+            return column;
+        }
+        size_t count = column->size();
+        auto converted = type_dispatch_column(target_type.type, ScalarColumnTypeConverter(), *column, count);
+        if (converted == nullptr) {
+            return column;
+        }
+        return converted;
+    }
+    }
+}
 
 // Explicit instantiation for t_filter_range
 #define INSTANTIATE_T_FILTER_RANGE(T)                                                                   \

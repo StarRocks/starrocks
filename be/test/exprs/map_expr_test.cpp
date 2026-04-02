@@ -157,4 +157,41 @@ TEST_F(MapExprTest, test_const_evaluate) {
     }
 }
 
+// Test that MapExpr handles type mismatch between child expressions and declared MAP types.
+// This reproduces the heap-buffer-overflow bug where a TINYINT column is used as a SMALLINT key.
+TEST_F(MapExprTest, test_type_mismatch_no_overflow) {
+    // Declare MAP<SMALLINT, SMALLINT> but provide TINYINT children
+    TypeDescriptor type_map_smallint;
+    type_map_smallint.type = LogicalType::TYPE_MAP;
+    type_map_smallint.children.emplace_back();
+    type_map_smallint.children.back().type = LogicalType::TYPE_SMALLINT;
+    type_map_smallint.children.emplace_back();
+    type_map_smallint.children.back().type = LogicalType::TYPE_SMALLINT;
+
+    // Single pair: TINYINT column used where SMALLINT is expected
+    {
+        auto expr(ExprsTestHelper::create_map_expr(type_map_smallint));
+        // Provide TINYINT (int8_t) columns but MAP expects SMALLINT (int16_t)
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
+
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_map());
+    }
+
+    // Multiple pairs with duplicated keys: exercises the row-by-row append path
+    {
+        auto expr(ExprsTestHelper::create_map_expr(type_map_smallint));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({4, 5, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({40, 50, 60}), LogicalType::TYPE_TINYINT));
+
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_map());
+    }
+}
+
 } // namespace starrocks

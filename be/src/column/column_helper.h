@@ -273,6 +273,12 @@ public:
         return update_column_nullable(dst_nullable, std::move(dst_column), num_rows);
     }
 
+    // Recursively normalize a column's physical type to match the target TypeDescriptor.
+    // This is needed when child expression columns have different physical types than declared
+    // (e.g., a TINYINT column used where SMALLINT is expected), which would cause buffer overflow
+    // in Column::append due to raw memcpy with mismatched element sizes.
+    static ColumnPtr normalize_column_type(const ColumnPtr& column, const TypeDescriptor& target_type);
+
     // Create an empty column
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
