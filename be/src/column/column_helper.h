@@ -287,6 +287,21 @@ public:
     static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
                                               size_t num_rows, const bool is_nullable);
 
+    // Recursively normalize a column's physical type to match |target_type|.
+    //
+    // When a MAP/ARRAY/STRUCT expression is evaluated as a default column expression,
+    // child expression columns may carry a narrower physical element type than declared
+    // (e.g., a TINYINT literal produces a 1-byte FixedLengthColumn<int8_t> but the MAP
+    // key type is SMALLINT which expects 2-byte FixedLengthColumn<int16_t>).
+    // Column::append does a raw memcpy that assumes identical element widths, so feeding
+    // a narrower source into a wider destination causes a heap-buffer-overflow.
+    //
+    // This function walks the column tree and, wherever it detects a physical size
+    // mismatch on a leaf FixedLengthColumn, creates a properly typed replacement with
+    // element-by-element conversion.  Pointer comparison is used at every level so the
+    // common case (types already match) incurs no copy at all.
+    static ColumnPtr normalize_column_type(const ColumnPtr& column, const TypeDescriptor& target_type);
+
     // Create a column with specified size, the column will be resized to size
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);
