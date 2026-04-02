@@ -62,6 +62,8 @@ public:
     Status buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
                                              const workgroup::WorkGroup* running_wg);
 
+    Morsel* get_morsel() { return _morsel.get(); }
+
     // Counters of scan
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
     int64_t get_io_time_spent() const { return _io_time_spent_ns; }
