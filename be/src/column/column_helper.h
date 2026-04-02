@@ -288,6 +288,10 @@ public:
     static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
                                               size_t num_rows, const bool is_nullable);
 
+    // Recursively normalize a column's physical layout to match the declared type.
+    // This prevents append paths from reading child buffers with the wrong element width.
+    static ColumnPtr normalize_column_type(const ColumnPtr& column, const TypeDescriptor& target_type);
+
     // Create a column with a specified size, the column will be resized to size
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);

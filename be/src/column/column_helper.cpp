@@ -14,6 +14,8 @@
 
 #include "column/column_helper.h"
 
+#include <type_traits>
+
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -24,6 +26,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
@@ -348,6 +351,132 @@ MutableColumnPtr ColumnHelper::align_return_type(MutableColumnPtr&& old_col, con
 MutableColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                                  bool is_nullable) {
     return align_return_type(Column::mutate(std::move(old_col)), type_desc, num_rows, is_nullable);
+}
+
+namespace {
+
+template <typename T>
+inline constexpr bool kIsNormalizableNumericType = std::is_arithmetic_v<T> || std::is_same_v<T, int128_t>;
+
+struct ScalarColumnTypeNormalizer {
+    template <LogicalType LT>
+    ColumnPtr operator()(const Column& src_column, size_t count) const {
+        using TargetCppType = RunTimeCppType<LT>;
+
+        if constexpr (!kIsNormalizableNumericType<TargetCppType>) {
+            return nullptr;
+        } else {
+            if (src_column.type_size() == sizeof(TargetCppType)) {
+                return nullptr;
+            }
+
+            auto target = RunTimeColumnType<LT>::create();
+            auto& dst_data = target->get_data();
+            dst_data.resize(count);
+
+            const auto* raw = src_column.raw_data();
+            switch (src_column.type_size()) {
+            case 1:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int8_t*>(raw)[i]);
+                }
+                return target;
+            case 2:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int16_t*>(raw)[i]);
+                }
+                return target;
+            case 4:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int32_t*>(raw)[i]);
+                }
+                return target;
+            case 8:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int64_t*>(raw)[i]);
+                }
+                return target;
+            case 16:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int128_t*>(raw)[i]);
+                }
+                return target;
+            default:
+                return nullptr;
+            }
+        }
+    }
+};
+
+} // namespace
+
+ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const TypeDescriptor& target_type) {
+    if (column->only_null()) {
+        return column;
+    }
+
+    if (column->is_constant()) {
+        auto unfolded = ColumnHelper::unfold_const_column(target_type, column->size(), column);
+        return normalize_column_type(unfolded, target_type);
+    }
+
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column.get());
+        auto normalized_data = normalize_column_type(nullable->data_column(), target_type);
+        if (normalized_data.get() == nullable->data_column().get()) {
+            return column;
+        }
+        return NullableColumn::create(std::move(normalized_data), nullable->null_column());
+    }
+
+    switch (target_type.type) {
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(column.get());
+        DCHECK_EQ(target_type.children.size(), struct_column->fields_size());
+        bool changed = false;
+        Columns fields;
+        fields.reserve(struct_column->fields_size());
+        for (size_t i = 0; i < struct_column->fields_size(); ++i) {
+            auto normalized_field = normalize_column_type(struct_column->get_column_by_idx(i), target_type.children[i]);
+            changed |= normalized_field.get() != struct_column->get_column_by_idx(i).get();
+            fields.emplace_back(std::move(normalized_field));
+        }
+        if (!changed) {
+            return column;
+        }
+        return StructColumn::create(fields, struct_column->field_names());
+    }
+    case TYPE_MAP: {
+        const auto* map_column = down_cast<const MapColumn*>(column.get());
+        auto normalized_keys = normalize_column_type(map_column->keys_column(), target_type.children[0]);
+        auto normalized_values = normalize_column_type(map_column->values_column(), target_type.children[1]);
+        if (normalized_keys.get() == map_column->keys_column().get() &&
+            normalized_values.get() == map_column->values_column().get()) {
+            return column;
+        }
+        return MapColumn::create(std::move(normalized_keys), std::move(normalized_values), map_column->offsets_column());
+    }
+    case TYPE_ARRAY: {
+        const auto* array_column = down_cast<const ArrayColumn*>(column.get());
+        auto normalized_elements = normalize_column_type(array_column->elements_column(), target_type.children[0]);
+        if (normalized_elements.get() == array_column->elements_column().get()) {
+            return column;
+        }
+        return ArrayColumn::create(std::move(normalized_elements), array_column->offsets_column());
+    }
+    default:
+        break;
+    }
+
+    if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type)) {
+        return column;
+    }
+
+    auto normalized = type_dispatch_basic(target_type.type, ScalarColumnTypeNormalizer(), *column, column->size());
+    if (normalized == nullptr) {
+        return column;
+    }
+    return normalized;
 }
 
 MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
