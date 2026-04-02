@@ -14,12 +14,14 @@
 
 #include "storage/lake/lake_delvec_loader.h"
 
-#include <future>
+#include <mutex>
 #include <vector>
 
 #include "common/logging.h"
 #include "common/status.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/location_provider.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -107,35 +109,41 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         return Status::OK();
     }
 
-    // Launch concurrent loads using std::async. Each load does one small
-    // range read (~2-3ms) from object storage. Running them concurrently
-    // overlaps the HTTP round-trip latency.
-    struct LoadResult {
-        uint32_t segment_id;
-        DelVectorPtr delvec;
-        Status status;
-    };
+    // Load delvecs concurrently using a bounded thread pool. Each load does
+    // one small range read (~2-3ms) from object storage. The pool limits
+    // concurrency to avoid thread exhaustion under heavy load.
+    auto* pool = ExecEnv::GetInstance()->pk_index_execution_thread_pool();
+    if (pool == nullptr) {
+        // Fallback: load sequentially if thread pool unavailable
+        for (uint32_t seg_id : ids_to_load) {
+            auto dv = std::make_shared<DelVector>();
+            RETURN_IF_ERROR(lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv.get()));
+            _preloaded_delvecs[seg_id] = std::move(dv);
+        }
+        return Status::OK();
+    }
 
-    std::vector<std::future<LoadResult>> futures;
-    futures.reserve(ids_to_load.size());
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::mutex mu;
+    Status first_error;
+
+    // Pre-allocate delvec entries so workers only write to their own slot
+    for (uint32_t seg_id : ids_to_load) {
+        _preloaded_delvecs[seg_id] = std::make_shared<DelVector>();
+    }
 
     for (uint32_t seg_id : ids_to_load) {
-        futures.push_back(std::async(std::launch::async, [this, &metadata, seg_id]() -> LoadResult {
-            LoadResult result;
-            result.segment_id = seg_id;
-            result.delvec = std::make_shared<DelVector>();
-            result.status = lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts,
-                                              result.delvec.get());
-            return result;
+        auto* dv = _preloaded_delvecs[seg_id].get();
+        RETURN_IF_ERROR(token->submit_func([this, &metadata, &mu, &first_error, seg_id, dv]() {
+            auto st = lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv);
+            if (!st.ok()) {
+                std::lock_guard<std::mutex> lock(mu);
+                if (first_error.ok()) first_error = st;
+            }
         }));
     }
-
-    // Collect results
-    for (auto& f : futures) {
-        auto result = f.get();
-        RETURN_IF_ERROR(result.status);
-        _preloaded_delvecs[result.segment_id] = std::move(result.delvec);
-    }
+    token->wait();
+    RETURN_IF_ERROR(first_error);
 
     VLOG(1) << "batch_load: loaded " << _preloaded_delvecs.size() << " delvecs for tablet " << tablet_id << " ("
             << ids_to_load.size() << " from file, " << (segment_ids.size() - ids_to_load.size())
