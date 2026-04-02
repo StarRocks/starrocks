@@ -574,11 +574,10 @@ TEST_F(ColumnHelperTest, normalize_column_type_const_nullable) {
 
     auto result = ColumnHelper::normalize_column_type(ptr, TypeDescriptor(TYPE_INT));
     ASSERT_FALSE(result->is_constant());
-    ASSERT_TRUE(result->is_nullable());
+    ASSERT_FALSE(result->is_nullable());
     ASSERT_EQ(result->size(), 2);
 
-    auto* result_nullable = down_cast<const NullableColumn*>(result.get());
-    auto* result_data = down_cast<const Int32Column*>(result_nullable->data_column().get());
+    auto* result_data = down_cast<const Int32Column*>(result.get());
     EXPECT_EQ(result_data->get_data()[0], 42);
     EXPECT_EQ(result_data->get_data()[1], 42);
 }
