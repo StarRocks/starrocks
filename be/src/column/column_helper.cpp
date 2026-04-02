@@ -14,8 +14,6 @@
 
 #include "column/column_helper.h"
 
-#include <type_traits>
-
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -30,6 +28,7 @@
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "types/type_descriptor.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
@@ -356,33 +355,8 @@ MutableColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const Type
 namespace {
 
 template <typename T>
-inline constexpr bool kIsNormalizableNumericType = std::is_arithmetic_v<T> || std::is_same_v<T, int128_t>;
-
-bool can_dispatch_basic_scalar_normalization(LogicalType type) {
-    switch (type) {
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-    case TYPE_LARGEINT:
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_DECIMALV2:
-    case TYPE_VARCHAR:
-    case TYPE_CHAR:
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-    case TYPE_TIME:
-    case TYPE_JSON:
-    case TYPE_VARBINARY:
-    case TYPE_VARIANT:
-    case TYPE_BOOLEAN:
-    case TYPE_NULL:
-        return true;
-    default:
-        return false;
-    }
-}
+inline constexpr bool kIsNormalizableNumericType =
+        std::is_arithmetic_v<T> || std::is_same_v<T, int128_t> || std::is_same_v<T, int256_t>;
 
 struct ScalarColumnTypeNormalizer {
     template <LogicalType LT>
@@ -398,7 +372,7 @@ struct ScalarColumnTypeNormalizer {
 
             auto target = RunTimeColumnType<LT>::create();
             auto& dst_data = target->get_data();
-            dst_data.resize(count);
+            raw::stl_vector_resize_uninitialized(&dst_data, count);
 
             const auto* raw = src_column.raw_data();
             switch (src_column.type_size()) {
@@ -425,6 +399,11 @@ struct ScalarColumnTypeNormalizer {
             case 16:
                 for (size_t i = 0; i < count; ++i) {
                     dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int128_t*>(raw)[i]);
+                }
+                return target;
+            case 32:
+                for (size_t i = 0; i < count; ++i) {
+                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int256_t*>(raw)[i]);
                 }
                 return target;
             default:
@@ -495,12 +474,14 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
         break;
     }
 
-    if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type) ||
-        !can_dispatch_basic_scalar_normalization(target_type.type)) {
+    if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type)) {
         return column;
     }
 
-    auto normalized = type_dispatch_basic(target_type.type, ScalarColumnTypeNormalizer(), *column, column->size());
+    // Use type_dispatch_predicate (assert=false) so unsupported types return nullptr
+    // instead of CHECK-failing, avoiding the need for a manual type whitelist.
+    auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(),
+                                                         *column, column->size());
     if (normalized == nullptr) {
         return column;
     }
