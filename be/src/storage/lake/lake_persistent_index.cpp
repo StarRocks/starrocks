@@ -14,8 +14,6 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
-#include <future>
-
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_cache_fwd.h"
@@ -68,8 +66,8 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         const TabletMetadataPtr& metadata) {
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
-    std::vector<Status> statuses(num_sstables);
 
+    Status shared_status;
     auto open_one = [&](int idx) {
         auto& pb = sstable_meta.sstables(idx);
         auto res = PersistentIndexSstable::new_sstable(pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
@@ -77,33 +75,22 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         if (res.ok()) {
             sstables[idx] = std::move(res.value());
         } else {
-            statuses[idx] = res.status();
+            shared_status.update(res.status());
         }
     };
 
-    if (num_sstables > 1) {
-        std::vector<std::future<void>> futures;
-        futures.reserve(num_sstables - 1);
-        for (int i = 0; i < num_sstables - 1; i++) {
-            auto task = std::make_shared<std::packaged_task<void()>>([&open_one, i]() { open_one(i); });
-            auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func([task]() { (*task)(); });
-            if (!st.ok()) {
-                open_one(i);
-            } else {
-                futures.push_back(task->get_future());
-            }
-        }
-        open_one(num_sstables - 1);
-        for (auto& f : futures) {
-            f.get();
-        }
-    } else if (num_sstables == 1) {
-        open_one(0);
-    }
-
+    auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
     for (int i = 0; i < num_sstables; i++) {
-        RETURN_IF_ERROR(statuses[i]);
+        auto st = token->submit_func([&open_one, i]() { open_one(i); });
+        if (!st.ok()) {
+            // Fallback to inline execution if submit fails
+            open_one(i);
+        }
     }
+    token->wait();
+
+    RETURN_IF_ERROR(shared_status);
     return std::move(sstables);
 }
 
