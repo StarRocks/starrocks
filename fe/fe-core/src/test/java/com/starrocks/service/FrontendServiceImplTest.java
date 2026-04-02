@@ -61,6 +61,7 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
@@ -2023,6 +2024,60 @@ public class FrontendServiceImplTest {
             TGetProfileResponse response = impl.getQueryProfile(request);
 
             Assertions.assertEquals(Lists.newArrayList(summaryProfile.toString()), response.getQuery_result());
+        }
+    }
+
+    @Test
+    public void testGetQueryProfileRequestAllFrontendWithRpcFailure() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        String queryId = "3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90";
+
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList(queryId));
+        request.setIs_request_all_frontend(true);
+
+        Frontend failedFrontend = new Frontend(FrontendNodeType.FOLLOWER, "failed", "127.0.0.2", 9010);
+        failedFrontend.setRpcPort(9021);
+        failedFrontend.setAlive(true);
+
+        Frontend frontend = new Frontend(FrontendNodeType.FOLLOWER, "empty", "127.0.0.3", 9010);
+        frontend.setRpcPort(9022);
+        frontend.setAlive(true);
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class);
+                MockedStatic<GlobalStateMgr> globalStateMgrMock = mockStatic(GlobalStateMgr.class);
+                MockedStatic<ThriftRPCRequestExecutor> thriftMock = mockStatic(ThriftRPCRequestExecutor.class)) {
+
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile(queryId)).thenReturn(null);
+
+            GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+            NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+            globalStateMgrMock.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+            Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
+            Mockito.when(nodeMgr.getOtherFrontends()).thenReturn(Lists.newArrayList(failedFrontend, frontend));
+
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenAnswer(invocation -> {
+                        TNetworkAddress address = invocation.getArgument(1);
+                        ThriftRPCRequestExecutor.MethodCallable callable = invocation.getArgument(2);
+                        FrontendService.Client client = Mockito.mock(FrontendService.Client.class);
+                        Mockito.when(client.getQueryProfile(any())).thenAnswer(clientInvocation -> {
+                            TGetProfileRequest forwardedRequest = clientInvocation.getArgument(0);
+                            Assertions.assertEquals(Lists.newArrayList(queryId), forwardedRequest.getQuery_id());
+                            Assertions.assertFalse(forwardedRequest.isIs_request_all_frontend());
+                            if (address.getHostname() == failedFrontend.getHost()) {
+                                throw new TException("rpc failure");
+                            }
+                            return new TGetProfileResponse();
+                        });
+                        return callable.apply(client);
+                    });
+
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(""), response.getQuery_result());
         }
     }
 
