@@ -421,15 +421,21 @@ struct ScalarColumnTypeNormalizer {
                 }
                 return target;
             case 16:
-                for (size_t i = 0; i < count; ++i) {
-                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int128_t*>(raw)[i]);
+                if constexpr (std::is_same_v<TargetCppType, int128_t> || std::is_same_v<TargetCppType, int256_t>) {
+                    for (size_t i = 0; i < count; ++i) {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int128_t*>(raw)[i]);
+                    }
+                    return target;
                 }
-                return target;
+                return nullptr;
             case 32:
-                for (size_t i = 0; i < count; ++i) {
-                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int256_t*>(raw)[i]);
+                if constexpr (std::is_same_v<TargetCppType, int256_t>) {
+                    for (size_t i = 0; i < count; ++i) {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int256_t*>(raw)[i]);
+                    }
+                    return target;
                 }
-                return target;
+                return nullptr;
             default:
                 return nullptr;
             }
