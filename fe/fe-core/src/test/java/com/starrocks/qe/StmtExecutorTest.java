@@ -311,7 +311,7 @@ public class StmtExecutorTest {
             new MockUp<ExecuteExceptionHandler>() {
                 @Mock
                 public void handle(Exception e, ExecuteExceptionHandler.RetryContext retryContext) {
-                    // keep retry loop moving to hit log branch.
+                    // Keep retry loop moving to hit the redacted retry-log branch.
                 }
             };
 
