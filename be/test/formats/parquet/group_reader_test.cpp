@@ -3023,8 +3023,8 @@ TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredCo
     // Physical slot must be active (not lazy) because a deferred conjunct needs it.
     EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
                           phys_slot->id()) != group_reader->_active_slot_ids.end());
-    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(),
-                          phys_slot->id()) == group_reader->_lazy_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), phys_slot->id()) ==
+                group_reader->_lazy_slot_ids.end());
     // The virtual conjunct slot must be registered.
     EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(virt_slot->id()));
 }
