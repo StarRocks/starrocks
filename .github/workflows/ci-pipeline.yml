@@ -359,7 +359,9 @@ jobs:
         id: merge_base
         run: |
           git fetch origin ${{ github.base_ref }} --depth=1
-          echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
+          base="$(git merge-base FETCH_HEAD HEAD)"
+          [[ -n "${base}" ]]
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
 
       - name: Determine Baseline Enforcement
         id: baseline_shrink
