@@ -21,7 +21,7 @@
 #include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/statusor.h"
 #include "exec/except_hash_set.h"
 #include "exec/olap_common.h"

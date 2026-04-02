@@ -28,8 +28,8 @@
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 

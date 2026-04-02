@@ -22,7 +22,7 @@
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/arithmetic_operation.h"

@@ -16,7 +16,7 @@
 
 #include "base/string/faststring.h"
 #include "base/utility/meta_macro.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "gutil/strings/substitute.h"
 #include "types/datum.h"
 #include "types/logical_type.h"

@@ -21,7 +21,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/mysql_scanner.h"

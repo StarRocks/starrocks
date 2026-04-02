@@ -16,7 +16,7 @@
 
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/table_function/table_function.h"
 #include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"

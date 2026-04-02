@@ -22,7 +22,7 @@
 #include "base/container/heap.h"
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "runtime/mem_pool.h"

@@ -42,11 +42,11 @@ DIAGNOSTIC_POP
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
-#include <column/type_traits.h>
 #include <exec/arrow_type_traits.h>
 
 #include "base/types/int128.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "storage/tablet_schema_helper.h"
 
 namespace starrocks {

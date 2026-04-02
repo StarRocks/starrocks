@@ -19,8 +19,8 @@
 #include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exprs/cast_expr.h"
 #include "exprs/decimal_cast_expr.h"
 

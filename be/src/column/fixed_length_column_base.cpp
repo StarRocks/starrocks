@@ -22,7 +22,7 @@
 #include "column/column_filter_range.h"
 #include "column/column_sorter_comparator.h"
 #include "column/mysql_row_buffer.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_local_io_fwd.h"
 #include "gutil/casts.h"

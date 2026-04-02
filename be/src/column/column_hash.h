@@ -33,7 +33,7 @@
 
 #include "base/hash/hash.h"
 #include "base/string/slice.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

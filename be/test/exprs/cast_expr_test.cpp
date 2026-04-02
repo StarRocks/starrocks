@@ -23,7 +23,7 @@
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"

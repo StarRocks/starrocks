@@ -20,7 +20,7 @@
 #include <string>
 
 #include "column/chunk.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "http/http_client.h"

@@ -17,7 +17,7 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"

@@ -36,7 +36,7 @@
 
 #include <cmath>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/logging.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"

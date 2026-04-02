@@ -19,7 +19,7 @@
 #include "base/orlp/pdqsort.h"
 #include "column/column_sorter_comparator.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"

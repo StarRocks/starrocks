@@ -21,7 +21,7 @@
 #include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
