@@ -89,12 +89,22 @@ public class AlterTest {
 
     @Test
     public void testAlterPKTableAddingBitmapColumnWithModifyClause() throws Exception {
-        String sql = "ALTER TABLE t0 MODIFY COLUMN c0 bitmap null";
+        createTable(connectContext, "CREATE TABLE t_bitmap_modify(c0 INT, c1 INT) primary key(c0) distributed by hash(c0)");
+        String sql = "ALTER TABLE t_bitmap_modify MODIFY COLUMN c1 bitmap null";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assertions.fail(
                     "Should not throw exception when modifying column to bitmap type with pk table in shared-data mode");
         }
+    }
+
+    @Test
+    public void testAlterPKTableModifyingPkColumnToBitmapNullRejected() {
+        String sql = "ALTER TABLE t0 MODIFY COLUMN c0 bitmap null";
+        Exception exception = Assertions.assertThrows(Exception.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        Assertions.assertTrue(exception.getMessage().contains("primary key column[c0] cannot be nullable"),
+                exception.getMessage());
     }
 }
