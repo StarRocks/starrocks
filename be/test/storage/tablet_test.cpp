@@ -83,7 +83,7 @@ TEST_F(TabletTest, test_concurrent_add_remove_committed_rowsets) {
     }
 }
 
-TEST_F(TabletTest, test_get_basic_info_uses_tablet_data_size) {
+TEST_F(TabletTest, test_get_basic_info_uses_tablet_footprint) {
     auto tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->TEST_set_table_id(20001);
     tablet_meta->set_partition_id(20002);
@@ -119,7 +119,7 @@ TEST_F(TabletTest, test_get_basic_info_uses_tablet_data_size) {
 
     TabletBasicInfo info;
     tablet->get_basic_info(info);
-    ASSERT_EQ(54321, info.data_size);
+    ASSERT_EQ(54321 + 999, info.data_size);
     ASSERT_EQ(321, info.num_row);
     ASSERT_EQ(1, info.num_segment);
 }

@@ -1763,10 +1763,11 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 full_rowset_size = r.value();
                 rowset->rowset_meta()->clear_txn_meta();
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
-                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
-                const auto data_disk_size = std::max<int64_t>(0, full_rowset_size - index_disk_size);
-                rowset->rowset_meta()->set_data_disk_size(data_disk_size);
+                // Segment file size already includes segment data + segment index bytes.
+                // For primary-key tablets, separately persisted index bytes are tracked in index_disk_size.
+                rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size + index_disk_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
