@@ -452,6 +452,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
 
         // ── Phase 2: active physical columns (with optional predicate pushdown) ──
+        // chunk_filter is populated here but active_chunk is NOT physically reduced yet.
+        // Physical reduction is deferred to after Phase 4 so both chunk_filter and
+        // variant_filter share size == count, enabling a simple element-wise AND merge
+        // instead of a walk-and-apply over mismatched indices.
         if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
             has_filter = true;
             ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
@@ -459,71 +463,50 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 _param.stats->late_materialize_skip_rows += count;
                 continue;
             }
-            active_chunk->filter_range(chunk_filter, 0, count);
         } else if (has_filter) {
             RETURN_IF_ERROR(_read_range(_active_column_indices, r, &chunk_filter, &active_chunk));
-            active_chunk->filter_range(chunk_filter, 0, count);
         } else {
             RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
         }
 
-        // Compute the post-Phase-2 survivor range / filter for subsequent post-filter reads.
-        // Reused (and potentially narrowed after Phase 4) by Phase 5 and Phase 6.
-        Range<uint64_t> post_filter_range;
-        Filter post_filter;
-        if (has_filter) {
-            post_filter_range = r.filter(&chunk_filter);
-            DCHECK(post_filter_range.span_size() > 0);
-            post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
-                           chunk_filter.begin() + post_filter_range.end() - r.begin()};
-        }
-
         // ── Phase 3: active hidden variant sources ─────────────────────────────
-        // Read these BEFORE variant conjunct evaluation (Phase 4) so the conjunct
-        // expressions can project sub-fields from the source VARIANT columns.
-        // They are included in active_chunk via _active_hidden_slot_ids; active_chunk->filter()
-        // in Phase 4 covers them automatically.
+        // Read over the full range r because active_chunk has not been physically
+        // reduced yet.  The combined filter applied after Phase 4 covers all columns
+        // in active_chunk including these hidden sources.
         for (SlotId slot_id : _active_hidden_slot_ids) {
             auto* hidden_src = _hidden_slot_index.at(slot_id);
             auto& hidden_col = active_chunk->get_column_by_slot_id(slot_id);
-            if (has_filter) {
-                RETURN_IF_ERROR(hidden_src->reader->read_range(post_filter_range, &post_filter, hidden_col));
-                hidden_col->as_mutable_ptr()->filter_range(post_filter, 0, post_filter_range.span_size());
-            } else {
-                RETURN_IF_ERROR(hidden_src->reader->read_range(r, nullptr, hidden_col));
-            }
+            RETURN_IF_ERROR(hidden_src->reader->read_range(r, nullptr, hidden_col));
         }
 
         // ── Phase 4: variant virtual conjunct evaluation ───────────────────────
-        // Evaluates conjuncts on projected virtual columns.  active_chunk is filtered
-        // in-place; variant_filter records which Phase-2-surviving rows passed Phase 4.
-        // If non-empty, variant_filter is ANDed into chunk_filter so that the combined
-        // filter drives Phase 5 and Phase 6 (lazy) reads.
+        // active_chunk has count rows; variant_filter is also size count.
+        // Simple element-wise AND merges it with chunk_filter (also size count).
         ASSIGN_OR_RETURN(Filter variant_filter, _apply_deferred_variant_conjuncts(active_chunk, count));
         if (!variant_filter.empty()) {
             if (SIMD::count_nonzero(variant_filter.data(), variant_filter.size()) == 0) {
                 continue;
             }
-            // Merge variant_filter back into chunk_filter.
-            // variant_filter is indexed over Phase-2 survivors (size == post_filter count).
-            // chunk_filter is indexed over the raw range (size == count).
-            // If no Phase-2 filter exists, both have the same size and we can AND directly.
-            // Otherwise walk chunk_filter and apply variant_filter only to surviving slots.
-            if (!has_filter) {
-                // Same size: direct element-wise AND.
-                DCHECK_EQ(variant_filter.size(), count);
-                for (size_t i = 0; i < count; i++) {
-                    chunk_filter[i] &= variant_filter[i];
-                }
-            } else {
-                size_t j = 0;
-                for (size_t i = 0; i < count; i++) {
-                    if (chunk_filter[i]) {
-                        chunk_filter[i] = variant_filter[j++];
-                    }
-                }
+            DCHECK_EQ(variant_filter.size(), count);
+            for (size_t i = 0; i < count; i++) {
+                chunk_filter[i] &= variant_filter[i];
             }
             has_filter = true;
+        }
+
+        // Apply the combined chunk_filter once to physically reduce active_chunk.
+        // All columns (physical active + active hidden sources) are filtered here.
+        if (has_filter) {
+            active_chunk->filter(chunk_filter);
+            if (active_chunk->num_rows() == 0) {
+                continue;
+            }
+        }
+
+        // Compute the post-filter range / slice for Phase 5 and Phase 6 lazy reads.
+        Range<uint64_t> post_filter_range;
+        Filter post_filter;
+        if (has_filter) {
             post_filter_range = r.filter(&chunk_filter);
             DCHECK(post_filter_range.span_size() > 0);
             post_filter = {chunk_filter.begin() + post_filter_range.begin() - r.begin(),
@@ -1311,10 +1294,8 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
         _param.stats->late_materialize_skip_rows += raw_count;
     }
 
-    // Filter active_chunk; active hidden source columns are shared column objects
-    // included via _active_hidden_slot_ids and are filtered here automatically.
-    // Lazy hidden sources are not in active_chunk and will be read+filtered in Phase 4.5.
-    active_chunk->filter(filter);
+    // active_chunk is NOT filtered here; the caller merges this filter with
+    // chunk_filter and applies the combined result once after Phase 4.
     return filter;
 }
 

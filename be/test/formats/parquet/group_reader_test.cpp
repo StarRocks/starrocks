@@ -3045,8 +3045,8 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
     ASSERT_EQ(2u, filter.size());
     EXPECT_EQ(0, filter[0]); // row 0 (value=11) rejected
     EXPECT_EQ(1, filter[1]); // row 1 (value=22) passed
-    // active_chunk should have been filtered down to 1 row.
-    EXPECT_EQ(1u, active_chunk->num_rows());
+    // active_chunk is NOT filtered here; the caller merges and applies the combined filter.
+    EXPECT_EQ(2u, active_chunk->num_rows());
 }
 
 // ── _fill_dst_chunk error path ────────────────────────────────────────────────
