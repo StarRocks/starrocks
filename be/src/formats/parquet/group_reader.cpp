@@ -420,6 +420,12 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         return Status::EndOfFile("");
     }
 
+    // Reset per-iteration scratch buffers and create a fresh active_chunk view.
+    // active_chunk is recreated (not reset) so that merged lazy columns from a
+    // previous iteration's Phase 5/6 do not carry over.
+    _read_chunk->reset();
+    ChunkPtr active_chunk = _create_read_chunk(_active_slot_ids);
+
     // Loop until we find a range with surviving rows, skipping ranges filtered entirely
     // by deletion bitmap, predicate pushdown, or deferred variant virtual conjuncts.
     while (true) {
@@ -432,14 +438,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         auto count = r.span_size();
         _param.stats->raw_rows_read += count;
 
-        // Reset per-iteration scratch buffers and create a fresh active_chunk view.
-        // active_chunk is recreated (not reset) so that merged lazy columns from a
-        // previous iteration's Phase 5/6 do not carry over.
-        _read_chunk->reset();
-        ChunkPtr active_chunk = _create_read_chunk(_active_slot_ids);
-
         bool has_filter = false;
         Filter chunk_filter(count, 1);
+        active_chunk->reset();
 
         // ── Phase 1: row-id (deletion bitmap) filter ──────────────────────────
         if (nullptr != _skip_rows_ctx && _skip_rows_ctx->has_skip_rows()) {
