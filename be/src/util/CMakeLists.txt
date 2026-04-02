@@ -52,12 +52,16 @@ set(UTIL_FILES
   mem_info.cpp
   metrics.cpp
   metrics/file_scan_metrics.cpp
+<<<<<<< HEAD
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
   network_util.cpp
   parse_util.cpp
   path_builder.cpp
+=======
+  metrics/catalog_scan_metrics.cpp
+>>>>>>> 86a5607ced ([Enhancement] Add per-catalog-type query metrics for different catalog table observability (#70533))
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   runtime_profile.cpp

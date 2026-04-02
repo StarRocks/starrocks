@@ -555,6 +555,45 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: The number of incorrect queries for each resource group.
 
+### Catalog-type Query Metrics
+
+These metrics provide per-catalog-type query observability. Each metric has a `catalog_type` label
+with values: `default`, `hive`, `iceberg`, `jdbc`, `deltalake`, `hudi`, `paimon`, `odps`, `kudu`, `elasticsearch`.
+
+The `default` value represents internal StarRocks tables (OLAP/Cloud Native).
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `starrocks_fe_catalog_query_total` | Counter | Requests | Total queries by catalog type |
+| `starrocks_fe_catalog_query_success` | Counter | Requests | Successful queries by catalog type |
+| `starrocks_fe_catalog_query_err` | Counter | Requests | Failed queries by catalog type |
+| `starrocks_fe_catalog_query_timeout` | Counter | Requests | Timeout queries by catalog type |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | Requests | Analysis error queries by catalog type |
+| `starrocks_fe_catalog_query_internal_err` | Counter | Requests | Internal error queries by catalog type |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | Error rate by catalog type |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | Timeout rate by catalog type |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | Analysis error rate by catalog type |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | Internal error rate by catalog type |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | Query latency by catalog type |
+| `starrocks_fe_catalog_slow_query` | Counter | Requests | Slow queries by catalog type |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | Bytes | Scan bytes by catalog type |
+| `starrocks_be_catalog_query_scan_rows` | Counter | Rows | Scan rows by catalog type |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | Bytes | File scan bytes read by catalog type |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | Rows | File scan rows returned by catalog type |
+
+**Example Prometheus queries:**
+
+```promql
+# Total queries for Hive catalog
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# Error rate comparison across all catalog types
+starrocks_fe_catalog_query_err_rate
+
+# Scan bytes for external tables only (exclude default)
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
+
 ### starrocks_be_resource_group_cpu_limit_ratio
 
 - Unit: -

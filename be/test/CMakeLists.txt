@@ -392,6 +392,7 @@ set(EXEC_FILES
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
+<<<<<<< HEAD
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
@@ -408,6 +409,10 @@ set(EXEC_FILES
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/threadpool_test.cpp
+=======
+        ./util/metrics/catalog_scan_metrics_test.cpp
+        ./base/raw_container_test.cpp
+>>>>>>> 86a5607ced ([Enhancement] Add per-catalog-type query metrics for different catalog table observability (#70533))
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp

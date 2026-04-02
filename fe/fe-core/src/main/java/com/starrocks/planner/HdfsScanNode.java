@@ -198,6 +198,14 @@ public class HdfsScanNode extends ScanNode {
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+<<<<<<< HEAD
+=======
+        if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
+            tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
+        }
+
+        setConnectorCatalogType(msg);
+>>>>>>> 86a5607ced ([Enhancement] Add per-catalog-type query metrics for different catalog table observability (#70533))
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {
