@@ -19,9 +19,9 @@
 
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/location_provider.h"
-#include "common/thread/threadpool.h"
 
 namespace starrocks::lake {
 
