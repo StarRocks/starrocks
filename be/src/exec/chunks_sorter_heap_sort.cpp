@@ -20,7 +20,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exec/sorting/merge.h"

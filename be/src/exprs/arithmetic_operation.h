@@ -15,7 +15,7 @@
 #pragma once
 
 #include "base/utility/guard.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "types/decimalv3.h"

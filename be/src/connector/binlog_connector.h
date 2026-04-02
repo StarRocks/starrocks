@@ -16,8 +16,8 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/runtime_type_traits.h"
 #include "column/stream_chunk.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/pipeline/fragment_context.h"

@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
 #include "column/variant_merger.h"

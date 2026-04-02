@@ -15,7 +15,7 @@
 #include <exec/filter_condition.h>
 
 #include "base/testutil/assert.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exec/olap_common.h"
 #include "gtest/gtest.h"
 #include "types/logical_type.h"
