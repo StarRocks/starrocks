@@ -165,11 +165,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
-<<<<<<< HEAD
-=======
-                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
                 .append(appendProjectionAndPredicate(node))
->>>>>>> bfc5365aec ([Enhancement] Add more debug info in DebugOperatorTracer (#64883))
                 .append("}");
         return sb.toString();
     }
@@ -234,13 +230,8 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
                 " ,groupKeys=" + node.getGroupingKeys() +
-<<<<<<< HEAD
-                " ,projection=" + node.getProjection() +
-                " ,predicate=" + node.getPredicate() +
-=======
                 ", partitionBys=" + node.getPartitionByColumns() +
                 appendProjectionAndPredicate(node) +
->>>>>>> bfc5365aec ([Enhancement] Add more debug info in DebugOperatorTracer (#64883))
                 "}";
     }
 
@@ -409,11 +400,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
         sb.append(" {").append("table=").append(node.getTable().getCatalogTableName())
                 .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
                 .append(", predicates=").append(node.getScanOperatorPredicates())
-<<<<<<< HEAD
-=======
-                .append(", tvrVersionRange=").append(node.getTvrVersionRange())
                 .append(appendProjectionAndPredicate(node))
->>>>>>> bfc5365aec ([Enhancement] Add more debug info in DebugOperatorTracer (#64883))
                 .append("}");
         return sb.toString();
     }
