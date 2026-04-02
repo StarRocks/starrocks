@@ -69,7 +69,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
                    << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
 =======
-    auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr>>(_ctx);
+    auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr> >(_ctx);
     // The RPC callback can outlive queue ownership when the source finishes early.
     auto self = shared_from_this();
     auto processor = _ctx->processor.lock();
