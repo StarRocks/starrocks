@@ -1559,6 +1559,26 @@ starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
 - 単位: -
 - 説明: BEGIN、COMMIT、ROLLBACK、EXEC のトランザクションリクエスト。
 
+### lake_compaction_success
+
+- 単位: Count
+- 説明: 成功した Lake Compaction ジョブの数。
+
+### lake_compaction_partial_success
+
+- 単位: Count
+- 説明: 部分的に成功した Lake Compaction ジョブの数。
+
+### lake_compaction_failed
+
+- 単位: Count
+- 説明: 失敗した Lake Compaction ジョブの数。
+
+### lake_compaction_running
+
+- 単位: Count
+- 説明: 現在実行中の Lake Compaction ジョブの数。
+
 ### small_file_cache_count
 
 - 単位: Count

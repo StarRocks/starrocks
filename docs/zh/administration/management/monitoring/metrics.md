@@ -1559,6 +1559,26 @@ starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
 - 单位：-
 - 描述：BEGIN、COMMIT、ROLLBACK 和 EXEC 的事务请求。
 
+### lake_compaction_success
+
+- 单位：Count
+- 描述：成功的 Lake Compaction 任务计数。
+
+### lake_compaction_partial_success
+
+- 单位：Count
+- 描述：部分成功的 Lake Compaction 任务计数。
+
+### lake_compaction_failed
+
+- 单位：Count
+- 描述：失败的 Lake Compaction 任务计数。
+
+### lake_compaction_running
+
+- 单位：Count
+- 描述：当前正在运行的 Lake Compaction 任务数量。
+
 ### small_file_cache_count
 
 - 单位：个
