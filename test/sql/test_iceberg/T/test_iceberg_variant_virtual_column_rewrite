@@ -31,7 +31,7 @@ function: assert_explain_verbose_contains("select get_variant_int(data, '$.id') 
 function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.rank') as bigint) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(bigint(20))/profile(bigint(20))/rank(bigint(20))]")
 function: assert_explain_verbose_contains("select sum(get_variant_int(data, '$.profile.metrics.views')) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(bigint(20))/profile(bigint(20))/metrics(bigint(20))/views(bigint(20))]")
 
-set cbo_variant_path_rewrite = false;
+set cbo_variant_path_rewrite = true;
 
 select get_variant_int(data, '$.id') as id
 from test_variant_virtual_column

@@ -14,14 +14,18 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -66,6 +70,9 @@ struct GroupReaderParam {
         const TIcebergSchemaField* t_lake_schema_field = nullptr;
 
         bool decode_needed;
+        bool is_extended_variant_virtual = false;
+        std::string source_variant_column_name;
+        std::string variant_virtual_leaf_path;
 
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
         const SlotId slot_id() const { return slot_desc->id(); }
@@ -146,6 +153,28 @@ public:
     bool& get_is_group_filtered() { return _is_group_filtered; }
 
 private:
+    // Describes a virtual sub-path projection from a variant column, e.g. "data.id" in
+    // "SELECT data.id FROM t" where data is a VARIANT column.  The virtual column has no
+    // physical counterpart in the parquet file; it is computed by extracting parsed_path
+    // from the source variant column identified by source_slot_id.
+    struct VariantVirtualProjection {
+        VariantPath parsed_path;    // sub-path to extract, e.g. ["id"]
+        TypeDescriptor target_type; // expected output type of the projected sub-field
+        SlotId source_slot_id;      // slot that holds the source VARIANT column data
+                                    // (either a physical slot or a hidden slot with a negative id)
+    };
+
+    // A VARIANT column that must be read to serve virtual projections but is not itself
+    // present in the output chunk (i.e. not in the user's SELECT list).
+    // A temporary column is allocated in _read_chunk under a synthetic negative slot_id so
+    // that _variant_virtual_projections can reference it without colliding with real slots.
+    // One HiddenVariantSource is created per unique source column name; multiple virtual
+    // columns referencing the same VARIANT source share the same hidden entry.
+    struct HiddenVariantSource {
+        SlotId slot_id;                       // synthetic negative id (-1, -2, ...) in _read_chunk
+        std::unique_ptr<ColumnReader> reader; // reader for the underlying VARIANT column
+    };
+
     void _set_end_offset(int64_t value) { _end_offset = value; }
 
     // deal_with_pageindex need collect pageindex io range first, it will collect all row groups' io together,
@@ -157,7 +186,10 @@ private:
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
-    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
+    // Returns true if rows survived the filter, false if all rows were filtered out.
+    StatusOr<bool> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count);
+    Status _fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk);
+    const cctz::time_zone& _get_variant_projection_timezone();
 
     Status _create_column_readers();
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
@@ -188,8 +220,25 @@ private:
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
 
+    // Maps each virtual-column slot id to its projection descriptor.
+    // Virtual columns (e.g. "data.id") are skipped in the normal fill path and handled
+    // separately in _fill_dst_chunk by extracting the sub-path from the source variant column.
+    std::unordered_map<SlotId, VariantVirtualProjection> _variant_virtual_projections;
+
+    // Maps source variant column name to its hidden reader and temporary slot.
+    // Only populated when the source VARIANT column is not itself in the output (no physical slot).
+    // If the source column IS selected by the user, its physical slot is used directly and no
+    // hidden entry is created, avoiding a double read.
+    std::unordered_map<std::string, HiddenVariantSource> _hidden_variant_sources;
+
+    // Counter for assigning synthetic slot ids to hidden variant sources.
+    // Starts at -1 and decrements so as not to collide with real (non-negative) slot ids.
+    SlotId _next_hidden_slot_id = -1;
+
     // conjunct ctxs that eval after chunk is dict decoded
     std::vector<ExprContext*> _left_conjunct_ctxs;
+    // variant virtual-column conjuncts can only be evaluated after post-read projection.
+    std::vector<ExprContext*> _deferred_variant_virtual_conjunct_ctxs;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;
@@ -201,6 +250,13 @@ private:
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
+    // Column backing store for each get_next() call.  Initialized once in _init_read_chunk()
+    // and reset at the start of every range iteration.  Holds two categories of columns:
+    //   • Physical slots – one column per _param.read_cols entry plus reserved_field_slots.
+    //     The same ColumnPtr objects are SHARED with active_chunk / lazy_chunk (created via
+    //     _create_read_chunk), so filtering those view-chunks also modifies _read_chunk.
+    //   • Hidden variant sources – TYPE_VARIANT columns keyed by synthetic negative slot ids
+    //     (see _hidden_variant_sources).  Not present in any view-chunk; accessed directly.
     ChunkPtr _read_chunk;
 
     // param for read row group
@@ -225,6 +281,11 @@ private:
 
     // a flag to reflect prepare() is called
     bool _has_prepared = false;
+
+    // Parsed lazily for VARIANT virtual projections only. Most Parquet readers do not need
+    // this value, so avoid failing unrelated scans on malformed session timezone strings.
+    cctz::time_zone _timezone_obj = cctz::utc_time_zone();
+    bool _timezone_resolved = false;
 };
 
 using GroupReaderPtr = std::shared_ptr<GroupReader>;

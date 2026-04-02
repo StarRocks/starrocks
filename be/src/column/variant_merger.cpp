@@ -21,6 +21,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/variant_column.h"
+#include "column/variant_converter.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -181,6 +182,38 @@ static StatusOr<MutableColumnPtr> cast_numeric_column(const Column& src_col, Log
     return dst_col;
 }
 
+template <LogicalType ResultType>
+static StatusOr<MutableColumnPtr> cast_variant_column_to_scalar(const Column& src_col, const cctz::time_zone& zone) {
+    const auto* variant_col = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(&src_col));
+    if (variant_col == nullptr) {
+        return Status::InvalidArgument("input variant column is invalid");
+    }
+    ColumnBuilder<ResultType> builder(src_col.size());
+    const bool is_const = src_col.is_constant();
+    VariantRowRef row_ref;
+    VariantRowValue row_buffer;
+    for (size_t i = 0; i < src_col.size(); ++i) {
+        if (src_col.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        size_t variant_row = is_const ? 0 : i;
+        if (variant_col->try_get_row_ref(variant_row, &row_ref)) {
+            Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row_ref, zone, builder);
+            RETURN_IF_ERROR(cast_status);
+            continue;
+        }
+        const VariantRowValue* row = variant_col->get_row_value(variant_row, &row_buffer);
+        if (row == nullptr) {
+            builder.append_null();
+            continue;
+        }
+        Status cast_status = VariantRowConverter::cast_to<ResultType, false>(row->as_ref(), zone, builder);
+        RETURN_IF_ERROR(cast_status);
+    }
+    return builder.build(false);
+}
+
 static StatusOr<int128_t> datum_to_decimalv3_int128(const Datum& datum, LogicalType src_type) {
     switch (src_type) {
     case TYPE_DECIMAL32:
@@ -258,11 +291,52 @@ StatusOr<TypeDescriptor> VariantColumnMerger::choose_common_type(const TypeDescr
 StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& src_col,
                                                                   const TypeDescriptor& src_type_desc,
                                                                   const TypeDescriptor& dst_type_desc) {
+    if (src_type_desc.type == TYPE_VARIANT &&
+        (dst_type_desc.type == TYPE_DATE || dst_type_desc.type == TYPE_DATETIME || dst_type_desc.type == TYPE_TIME)) {
+        return Status::NotSupported("variant merge cast to temporal type requires explicit timezone context");
+    }
+    return cast_typed_column(src_col, src_type_desc, dst_type_desc, cctz::local_time_zone());
+}
+
+StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& src_col,
+                                                                  const TypeDescriptor& src_type_desc,
+                                                                  const TypeDescriptor& dst_type_desc,
+                                                                  const cctz::time_zone& timezone) {
     if (src_type_desc == dst_type_desc) {
         return src_col.clone();
     }
     if (dst_type_desc.type == TYPE_VARIANT) {
         return cast_column_to_variant(src_col, src_type_desc);
+    }
+    if (src_type_desc.type == TYPE_VARIANT) {
+        switch (dst_type_desc.type) {
+        case TYPE_BOOLEAN:
+            return cast_variant_column_to_scalar<TYPE_BOOLEAN>(src_col, timezone);
+        case TYPE_TINYINT:
+            return cast_variant_column_to_scalar<TYPE_TINYINT>(src_col, timezone);
+        case TYPE_SMALLINT:
+            return cast_variant_column_to_scalar<TYPE_SMALLINT>(src_col, timezone);
+        case TYPE_INT:
+            return cast_variant_column_to_scalar<TYPE_INT>(src_col, timezone);
+        case TYPE_BIGINT:
+            return cast_variant_column_to_scalar<TYPE_BIGINT>(src_col, timezone);
+        case TYPE_LARGEINT:
+            return cast_variant_column_to_scalar<TYPE_LARGEINT>(src_col, timezone);
+        case TYPE_FLOAT:
+            return cast_variant_column_to_scalar<TYPE_FLOAT>(src_col, timezone);
+        case TYPE_DOUBLE:
+            return cast_variant_column_to_scalar<TYPE_DOUBLE>(src_col, timezone);
+        case TYPE_VARCHAR:
+            return cast_variant_column_to_scalar<TYPE_VARCHAR>(src_col, timezone);
+        case TYPE_DATE:
+            return cast_variant_column_to_scalar<TYPE_DATE>(src_col, timezone);
+        case TYPE_DATETIME:
+            return cast_variant_column_to_scalar<TYPE_DATETIME>(src_col, timezone);
+        case TYPE_TIME:
+            return cast_variant_column_to_scalar<TYPE_TIME>(src_col, timezone);
+        default:
+            break;
+        }
     }
     if (src_type_desc.is_decimalv3_type() && dst_type_desc.is_decimalv3_type()) {
         return cast_decimalv3_column(src_col, src_type_desc, dst_type_desc);

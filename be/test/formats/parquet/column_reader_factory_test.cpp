@@ -18,6 +18,7 @@
 
 #include <sstream>
 
+#include "base/testutil/assert.h"
 #include "formats/parquet/complex_column_reader.h"
 
 namespace starrocks::parquet {
@@ -344,6 +345,116 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     SparseRange<uint64_t> sparse_range;
     sparse_range.add(Range<uint64_t>(0, 8));
     st.value()->select_offset_index(sparse_range, 0);
+}
+
+TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+
+    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("a");
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("missing");
+
+    TIcebergSchemaField field_a;
+    field_a.__set_field_id(1);
+    field_a.__set_name("a");
+    TIcebergSchemaField field_missing;
+    field_missing.__set_field_id(2);
+    field_missing.__set_name("missing");
+    TIcebergSchemaField root_field;
+    root_field.__set_field_id(10);
+    root_field.__set_name("col");
+    root_field.__set_children(std::vector<TIcebergSchemaField>{field_a, field_missing});
+
+    tparquet::FileMetaData file_meta;
+    tparquet::SchemaElement root_schema;
+    root_schema.__set_name("table");
+    root_schema.__set_num_children(1);
+    tparquet::SchemaElement col_schema;
+    col_schema.__set_name("col");
+    col_schema.__set_num_children(2);
+    tparquet::SchemaElement a_schema;
+    a_schema.__set_name("a");
+    a_schema.__set_type(tparquet::Type::INT32);
+    a_schema.__set_num_children(0);
+    tparquet::SchemaElement b_schema;
+    b_schema.__set_name("b");
+    b_schema.__set_type(tparquet::Type::INT32);
+    b_schema.__set_num_children(0);
+    file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root_schema, col_schema, a_schema, b_schema});
+
+    auto opts = make_opts_with_num_cols(2);
+    FileMetaData parsed_meta;
+    ASSERT_OK(parsed_meta.init(file_meta, true));
+    opts.file_meta_data = &parsed_meta;
+
+    auto reader_or = ColumnReaderFactory::create(opts, &field, col_type, &root_field);
+    ASSERT_TRUE(reader_or.ok()) << reader_or.status().to_string();
+    auto* struct_reader = dynamic_cast<StructColumnReader*>(reader_or.value().get());
+    ASSERT_NE(struct_reader, nullptr);
+    ASSERT_NE(struct_reader->get_child_column_reader("a"), nullptr);
+    ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
+}
+
+TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysicalName) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a_phys", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("b_phys", 1, tparquet::Type::INT32));
+
+    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("a");
+    col_type.field_physical_names.emplace_back("a_phys");
+    col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+    col_type.field_names.emplace_back("missing");
+    col_type.field_physical_names.emplace_back("missing_phys");
+
+    TIcebergSchemaField field_a;
+    field_a.__set_field_id(1);
+    field_a.__set_name("a");
+    TIcebergSchemaField field_missing;
+    field_missing.__set_field_id(2);
+    field_missing.__set_name("missing");
+    TIcebergSchemaField root_field;
+    root_field.__set_field_id(10);
+    root_field.__set_name("col");
+    root_field.__set_children(std::vector<TIcebergSchemaField>{field_a, field_missing});
+
+    tparquet::FileMetaData file_meta;
+    tparquet::SchemaElement root_schema;
+    root_schema.__set_name("table");
+    root_schema.__set_num_children(1);
+    tparquet::SchemaElement col_schema;
+    col_schema.__set_name("col");
+    col_schema.__set_num_children(2);
+    tparquet::SchemaElement a_schema;
+    a_schema.__set_name("a_phys");
+    a_schema.__set_type(tparquet::Type::INT32);
+    a_schema.__set_num_children(0);
+    tparquet::SchemaElement b_schema;
+    b_schema.__set_name("b_phys");
+    b_schema.__set_type(tparquet::Type::INT32);
+    b_schema.__set_num_children(0);
+    file_meta.__set_schema(std::vector<tparquet::SchemaElement>{root_schema, col_schema, a_schema, b_schema});
+
+    auto opts = make_opts_with_num_cols(2);
+    FileMetaData parsed_meta;
+    ASSERT_OK(parsed_meta.init(file_meta, true));
+    opts.file_meta_data = &parsed_meta;
+
+    auto reader_or = ColumnReaderFactory::create(opts, &field, col_type, &root_field);
+    ASSERT_TRUE(reader_or.ok()) << reader_or.status().to_string();
+    auto* struct_reader = dynamic_cast<StructColumnReader*>(reader_or.value().get());
+    ASSERT_NE(struct_reader, nullptr);
+    ASSERT_NE(struct_reader->get_child_column_reader("a"), nullptr);
+    ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
 }
 
 } // namespace starrocks::parquet

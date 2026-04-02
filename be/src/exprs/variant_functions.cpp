@@ -149,7 +149,9 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
                                           size_t num_rows) {
     if constexpr (ResultType == TYPE_BIGINT || ResultType == TYPE_DOUBLE) {
         TypeDescriptor result_type_desc = TypeDescriptor::from_logical_type(ResultType);
-        auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc);
+        cctz::time_zone zone =
+                (context->state() == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
+        auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc, zone);
         if (casted.ok()) {
             return _build_typed_bulk_result<ResultType>(casted.value().get(), variant_col, num_rows);
         }
