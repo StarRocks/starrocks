@@ -432,12 +432,12 @@ TEST_F(ColumnHelperTest, normalize_column_type_map) {
 
     auto* map_result = down_cast<const MapColumn*>(result.get());
     auto* result_keys = down_cast<const NullableColumn*>(map_result->keys_column().get());
-    auto* key_data = down_cast<const Int16Column*>(result_keys->data_column().get());
-    EXPECT_EQ(key_data->get_data()[0], 1);
+    auto* result_key_data = down_cast<const Int16Column*>(result_keys->data_column().get());
+    EXPECT_EQ(result_key_data->get_data()[0], 1);
 
     auto* result_values = down_cast<const NullableColumn*>(map_result->values_column().get());
-    auto* val_data = down_cast<const Int16Column*>(result_values->data_column().get());
-    EXPECT_EQ(val_data->get_data()[0], 10);
+    auto* result_val_data = down_cast<const Int16Column*>(result_values->data_column().get());
+    EXPECT_EQ(result_val_data->get_data()[0], 10);
 }
 
 // --- Coverage gap: MAP pointer stability when types match ---
@@ -484,9 +484,9 @@ TEST_F(ColumnHelperTest, normalize_column_type_array) {
 
     auto* arr_result = down_cast<const ArrayColumn*>(result.get());
     auto* result_elements = down_cast<const NullableColumn*>(arr_result->elements_column().get());
-    auto* elem_data = down_cast<const Int16Column*>(result_elements->data_column().get());
-    EXPECT_EQ(elem_data->get_data()[0], 5);
-    EXPECT_EQ(elem_data->get_data()[1], 6);
+    auto* result_elem_data = down_cast<const Int16Column*>(result_elements->data_column().get());
+    EXPECT_EQ(result_elem_data->get_data()[0], 5);
+    EXPECT_EQ(result_elem_data->get_data()[1], 6);
 }
 
 // --- Coverage gap: ARRAY pointer stability when types match ---
