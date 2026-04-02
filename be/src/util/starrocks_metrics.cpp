@@ -38,6 +38,7 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
+#include "util/metrics/catalog_scan_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -298,6 +299,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     }
 
     _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(&_metrics);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {

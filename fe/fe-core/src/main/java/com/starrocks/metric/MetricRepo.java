@@ -99,6 +99,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -142,6 +143,43 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("time_travel_type",
                     () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
+
+    // Per-catalog-type query counters
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_total", MetricUnit.REQUESTS,
+                            "total query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_SUCCESS =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_success", MetricUnit.REQUESTS,
+                            "total success query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_err", MetricUnit.REQUESTS,
+                            "total error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TIMEOUT =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_timeout", MetricUnit.REQUESTS,
+                            "total timeout query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_ANALYSIS_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_analysis_err", MetricUnit.REQUESTS,
+                            "total analysis error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_INTERNAL_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_internal_err", MetricUnit.REQUESTS,
+                            "total internal error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_SLOW_QUERY =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_slow_query", MetricUnit.REQUESTS,
+                            "total slow query by catalog type"));
+
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,
@@ -257,6 +295,20 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
 
     public static Histogram HISTO_QUERY_LATENCY;
+
+    // Per-catalog-type query latency histograms
+    private static final Map<String, HistogramMetric> HISTO_CATALOG_QUERY_LATENCY_MAP = new ConcurrentHashMap<>();
+
+    public static HistogramMetric getOrCreateCatalogQueryLatencyHistogram(String catalogType) {
+        return HISTO_CATALOG_QUERY_LATENCY_MAP.computeIfAbsent(catalogType, k -> {
+            HistogramMetric histogram = new HistogramMetric("catalog_query_latency_ms");
+            histogram.addLabel(new MetricLabel("catalog_type", catalogType));
+            METRIC_REGISTER.register(
+                    MetricRegistry.name("catalog_query", "latency", "ms", catalogType), histogram);
+            return histogram;
+        });
+    }
+
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
@@ -272,6 +324,27 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_INTERNAL_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_ANALYSIS_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_TIMEOUT_RATE;
+
+    // Per-catalog-type rate gauges
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_err_rate", MetricUnit.NOUNIT,
+                            "query error rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_TIMEOUT_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_timeout_rate", MetricUnit.NOUNIT,
+                            "query timeout rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_ANALYSIS_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_analysis_err_rate", MetricUnit.NOUNIT,
+                            "query analysis error rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_INTERNAL_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_internal_err_rate", MetricUnit.NOUNIT,
+                            "query internal error rate by catalog type"));
 
     // these query latency is different from HISTO_QUERY_LATENCY, for these only summarize the latest queries, but HISTO_QUERY_LATENCY summarizes all queries.
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEAN;
