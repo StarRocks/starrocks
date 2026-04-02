@@ -381,7 +381,7 @@ Status Aggregator::open(RuntimeState* state) {
             // Zero-init requirement: inline state is stored in the hash map value slot which is
             // zero-initialized on entry creation; functions like min/max need a non-zero initial
             // value (INT_MAX / INT_MIN) and must not use the inline path.
-            if (state->enable_inline_agg_state() && _agg_fn_ctxs.size() == 1 &&
+            if (state->enable_inline_agg_state() && _allow_inline_agg_state && _agg_fn_ctxs.size() == 1 &&
                 _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state()) {
                 uint64_t tmp_state = 0;
                 _agg_functions[0]->create(_agg_fn_ctxs[0], reinterpret_cast<AggDataPtr>(&tmp_state));

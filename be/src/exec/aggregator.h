@@ -541,6 +541,9 @@ protected:
     // When true, small aggregate states (<=8 bytes, POD) are stored directly
     // in the hash map value slot instead of via an external pointer.
     bool _use_inline_agg_state = false;
+    // Subclasses that cannot support inline agg state (e.g. StreamAggregator)
+    // should set this to false in their constructor, before open() is called.
+    bool _allow_inline_agg_state = true;
 
 public:
     bool use_inline_agg_state() const { return _use_inline_agg_state; }
