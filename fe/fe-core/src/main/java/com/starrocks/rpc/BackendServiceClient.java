@@ -119,26 +119,7 @@ public class BackendServiceClient {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
             final PBackendService service = BrpcProxy.getBackendService(address);
             TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
-<<<<<<< HEAD
             return service.execPlanFragmentAsync(pRequest);
-        } catch (NoSuchElementException e) {
-            try {
-                // retry
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    // do nothing
-                }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.execPlanFragmentAsync(pRequest);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Execute plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-=======
-            return serviceCall.apply(service);
->>>>>>> 240fcd29f5 ([BugFix] Fix brpc connection retry to handle wrapped NoSuchElementException (#70203))
         } catch (Throwable e) {
             if (isConnectionPoolException(e)) {
                 // retry once for transient connection pool failures
@@ -149,7 +130,7 @@ public class BackendServiceClient {
                 }
                 try {
                     final PBackendService service = BrpcProxy.getBackendService(address);
-                    return serviceCall.apply(service);
+                    return service.execPlanFragmentAsync(pRequest);
                 } catch (Throwable retryException) {
                     LOG.warn("Execute plan fragment retry failed, address={}:{}",
                             address.getHostname(), address.getPort(), retryException);
