@@ -85,8 +85,7 @@ public:
     virtual Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) = 0;
     // Batch-load delvecs for multiple segments concurrently.
     // Default implementation loads sequentially; subclasses may override for parallel IO.
-    virtual Status batch_load(int64_t tablet_id, int64_t version,
-                              const std::unordered_set<uint32_t>& segment_ids) {
+    virtual Status batch_load(int64_t tablet_id, int64_t version, const std::unordered_set<uint32_t>& segment_ids) {
         for (uint32_t seg_id : segment_ids) {
             DelVectorPtr delvec;
             RETURN_IF_ERROR(load({tablet_id, seg_id}, version, &delvec));

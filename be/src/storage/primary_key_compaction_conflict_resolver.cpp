@@ -153,8 +153,8 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                 // per-request HTTP latency across hundreds of segments.
                 {
                     TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
-                    RETURN_IF_ERROR(params.delvec_loader->batch_load(params.tablet_id, params.base_version,
-                                                                     unique_rssids));
+                    RETURN_IF_ERROR(
+                            params.delvec_loader->batch_load(params.tablet_id, params.base_version, unique_rssids));
                 }
 
                 // Phase 3: Process rows using pre-loaded delvecs.
@@ -168,8 +168,8 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                         if (rssid_to_delvec.count(rssid) == 0) {
                             DelVectorPtr delvec_ptr;
                             // This will hit the preloaded map — no remote IO
-                            RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
-                                                                       params.base_version, &delvec_ptr));
+                            RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid}, params.base_version,
+                                                                       &delvec_ptr));
                             rssid_to_delvec[rssid] = delvec_ptr;
                         }
                         if (!rssid_to_delvec[rssid]->empty() && rssid_to_delvec[rssid]->roaring()->contains(rowid)) {

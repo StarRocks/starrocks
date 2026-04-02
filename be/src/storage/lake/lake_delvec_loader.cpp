@@ -78,8 +78,8 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         const std::string filepath = _lake_io_opts.location_provider->tablet_metadata_location(tablet_id, version);
         ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(filepath, _fill_cache, 0, _lake_io_opts.fs));
     } else {
-        ASSIGN_OR_RETURN(metadata, _tablet_manager->get_tablet_metadata(tablet_id, version, _fill_cache, 0,
-                                                                        _lake_io_opts.fs));
+        ASSIGN_OR_RETURN(metadata,
+                         _tablet_manager->get_tablet_metadata(tablet_id, version, _fill_cache, 0, _lake_io_opts.fs));
     }
 
     // Filter to segment IDs that have delvecs in metadata
@@ -137,8 +137,8 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         _preloaded_delvecs[result.segment_id] = std::move(result.delvec);
     }
 
-    VLOG(1) << "batch_load: loaded " << _preloaded_delvecs.size() << " delvecs for tablet " << tablet_id
-            << " (" << ids_to_load.size() << " from file, " << (segment_ids.size() - ids_to_load.size())
+    VLOG(1) << "batch_load: loaded " << _preloaded_delvecs.size() << " delvecs for tablet " << tablet_id << " ("
+            << ids_to_load.size() << " from file, " << (segment_ids.size() - ids_to_load.size())
             << " from builder/empty)";
     return Status::OK();
 }
