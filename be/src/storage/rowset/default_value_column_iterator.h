@@ -38,7 +38,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/types.h"
-#include "types/datum.h"
+#include "column/datum.h"
 
 namespace starrocks {
 
