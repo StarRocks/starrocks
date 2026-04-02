@@ -34,9 +34,11 @@
 
 #pragma once
 
+#include "column/datum.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -58,6 +60,18 @@ public:
               _pool(),
               _num_rows(num_rows),
               _path(path) {}
+
+    ~DefaultValueColumnIterator() override {
+        // For complex types (ARRAY/MAP/STRUCT), a Datum is placement-new'd into _mem_value.
+        // MemPool only frees raw memory without calling destructors, so we must explicitly
+        // destroy the Datum to avoid leaking its internal heap-allocated containers.
+        if (_mem_value != nullptr && _type_info != nullptr && !_is_default_value_null) {
+            auto type = _type_info->type();
+            if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+                reinterpret_cast<Datum*>(_mem_value)->~Datum();
+            }
+        }
+    }
 
     Status init(const ColumnIteratorOptions& opts) override;
 
