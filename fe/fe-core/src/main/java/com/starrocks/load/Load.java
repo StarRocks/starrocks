@@ -38,10 +38,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -124,13 +124,14 @@ public class Load {
      * 2. should not be bitmap/hll/percentile/json/varchar column
      * 3. should not be primary key
      * 4. table should be primary key model
+     *
      * @param mergeCondition
      * @param table
      * @return
      * @throws StarRocksException
      */
     public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
-            boolean missAutoIncrementColumn) throws DdlException {
+                                           boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
         }
@@ -141,7 +142,7 @@ public class Load {
 
         Optional<Column> conditionCol = columns.stream().filter(c -> c.getName().equalsIgnoreCase(mergeCondition)).findFirst();
         if (!conditionCol.isPresent()) {
-            throw new DdlException("Merge condition column " + mergeCondition + 
+            throw new DdlException("Merge condition column " + mergeCondition +
                     " does not exist. If you are doing partial update with condition update, please check condition column" +
                     " is in the given update columns. Otherwise please check condition column is in table " + table.getName());
         } else {
@@ -249,10 +250,10 @@ public class Load {
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
-                    new Scope(RelationId.anonymous(), new RelationFields(
-                            tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                    col.getType(), tableName, null))
-                                .collect(Collectors.toList()))), connectContext);
+                        new Scope(RelationId.anonymous(), new RelationFields(
+                                tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                col.getType(), tableName, null))
+                                        .collect(Collectors.toList()))), connectContext);
             }
 
             ImportColumnDesc importColumnDesc = new ImportColumnDesc(column.getName(), expr);
@@ -294,18 +295,18 @@ public class Load {
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath) throws StarRocksException {
-        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
                 columnsFromPath, false, false);
     }
 
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction,
-                                   Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isStreamLoadJson,
@@ -460,7 +461,7 @@ public class Load {
                 }
             }
         }
-    
+
         copiedColumnExprs.addAll(getMaterializedShadowColumnDesc(tbl, dbName, true));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
@@ -530,7 +531,7 @@ public class Load {
                 Expr expr = transformHadoopFunctionExpr(tbl, realColName, importColumnDesc.getExpr());
                 exprsByName.put(realColName, expr);
             } else {
-                SlotDescriptor slotDesc = analyzer.getDescTbl().addSlotDescriptor(srcTupleDesc);
+                SlotDescriptor slotDesc = descriptorTable.addSlotDescriptor(srcTupleDesc);
                 if (useVectorizedLoad) {
                     if (tblColumn != null) {
                         if (pathColumns.contains(columnName) || exprArgsColumns.contains(columnName)) {
@@ -588,7 +589,6 @@ public class Load {
                 mvDefineExpr.put(column.getName(), column.getDefineExpr());
             }
         }
-
 
         if (dbName != null && !dbName.isEmpty()) {
             for (Entry<String, Expr> entry : exprsByName.entrySet()) {
@@ -654,7 +654,7 @@ public class Load {
             // 1. analyze all exprs using varchar type
             Map<String, Expr> copiedExprsByName = Maps.newHashMap(exprsByName);
             Map<String, Expr> copiedMvDefineExpr = Maps.newHashMap(mvDefineExpr);
-            analyzeMappingExprs(tbl, analyzer, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
+            analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
                     slotDescByName, useVectorizedLoad);
 
             // 2. replace src slot desc with cast return type after expr analyzed
@@ -662,12 +662,12 @@ public class Load {
         }
 
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
-        analyzeMappingExprs(tbl, analyzer, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
+        analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-             List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+                                                      List<Boolean> missAutoIncrementColumn) throws StarRocksException {
         Set<String> specified = columnExprs.stream()
                 .map(desc -> desc.getColumnName())
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
@@ -698,8 +698,8 @@ public class Load {
 
                             if (!ret.contains(originColumn)) {
                                 throw new DdlException("column " + originColumn.getName() + " needs to be " +
-                                                       "used for expression evaluation for materialized " +
-                                                       "column " + col.getName());
+                                        "used for expression evaluation for materialized " +
+                                        "column " + col.getName());
                             }
                         }
                     }
@@ -768,21 +768,9 @@ public class Load {
         }
     }
 
-<<<<<<< HEAD
-    private static void analyzeMappingExprs(Table tbl, Analyzer analyzer, TupleDescriptor srcTupleDesc,
-                Map<String, Expr> exprsByName, Map<String, Expr> mvDefineExpr,
-                Map<String, SlotDescriptor> slotDescByName, boolean useVectorizedLoad) throws StarRocksException {
-=======
     static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
         if (defaultValueType == Column.DefaultValueType.CONST) {
-            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
-                Expr expr = column.getDefaultExpr().obtainExpr();
-                if (expr == null) {
-                    throw new StarRocksException("Column(" + column + ") has invalid default expr object");
-                }
-                return expr;
-            }
             return new StringLiteral(column.calculatedDefaultValue());
         } else if (defaultValueType == Column.DefaultValueType.VARY) {
             if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
@@ -824,7 +812,6 @@ public class Load {
                                             Map<String, Expr> exprsByName, Map<String, Expr> mvDefineExpr,
                                             Map<String, SlotDescriptor> slotDescByName, boolean useVectorizedLoad)
             throws StarRocksException {
->>>>>>> c2f48ac474 ([BugFix] Fix NPE when analyzing generated columns in Stream Load/Broker Load if a referenced column is missing (#71116))
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // only for normal column here
             if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isGeneratedColumn()) {
@@ -860,7 +847,7 @@ public class Load {
 
             try {
                 java.util.function.Function<SlotRef, ColumnRefOperator> resolveSlotFunc =
-                        (slotRef) -> resolveSlotRef(analyzer, srcTupleDesc, slotDescByName, slotRef);
+                        (slotRef) -> resolveSlotRef(descriptorTable, srcTupleDesc, slotDescByName, slotRef);
                 expr = Expr.analyzeLoadExpr(expr, resolveSlotFunc);
             } catch (SemanticException e) {
                 ErrorReport.reportAnalysisException(ERR_MAPPING_EXPR_INVALID, AstToSQLBuilder.toSQL(entry.getValue()),
@@ -888,46 +875,18 @@ public class Load {
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
-<<<<<<< HEAD
-                SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
-                // In this case, generated column ref some mapping column
-                // and the expression should be replace by mapping column expression.
-
-                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
-                // it means that the ref columns are both in column list and expression list.
-                // In this case, we should rewrite the generated column expression using
-                // the expression in expression list instead of column list.
-                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    smap.getLhs().add(slot);
-                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
-                    }
-                    smap.getRhs().add(replaceExpr);
-                } else {
-                    smap.getLhs().add(slot);
-                    SlotRef slotRef = new SlotRef(slotDesc);
-                    slotRef.setColumnName(slot.getColumnName());
-                    Expr replaceExpr = slotRef;
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
-                    }
-                    smap.getRhs().add(replaceExpr);
-=======
                 // Generated columns should prefer the mapping expression when a referenced column
                 // exists in both the input column list and the expression list.
                 Expr replaceExpr = resolveGeneratedColumnRefExpr(tbl, slot, exprsByName, slotDescByName);
                 if (replaceExpr == null) {
                     ErrorReport.reportAnalysisException(ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN, entry.getKey());
->>>>>>> c2f48ac474 ([BugFix] Fix NPE when analyzing generated columns in Stream Load/Broker Load if a referenced column is missing (#71116))
                 }
-                if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
+                if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
                         !replaceExpr.getType().matchesType(slot.getType())) {
-                    replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
+                    replaceExpr = replaceExpr.castTo(slot.getType());
                 }
-                smap.put(slot, replaceExpr);
+                smap.getLhs().add(slot);
+                smap.getRhs().add(replaceExpr);
             }
             Expr expr = entry.getValue().clone(smap);
 
@@ -978,13 +937,12 @@ public class Load {
     /**
      * Resolve {@code SlotRef} to {@code ColumnRefOperator} when analyzing
      *
-     * @param analyzer the analyzer
      * @param srcTupleDescriptor The tuple descriptor used to create a slot descriptor for the new SlotRef
-     * @param slotDescriptors slot descriptors that have been created. mapping from column name to slot descriptor
-     * @param node the slot ref to resolve
+     * @param slotDescriptors    slot descriptors that have been created. mapping from column name to slot descriptor
+     * @param node               the slot ref to resolve
      * @return The resolved column ref operator
      */
-    private static ColumnRefOperator resolveSlotRef(Analyzer analyzer, TupleDescriptor srcTupleDescriptor,
+    private static ColumnRefOperator resolveSlotRef(DescriptorTable descriptorTable, TupleDescriptor srcTupleDescriptor,
                                                     Map<String, SlotDescriptor> slotDescriptors, SlotRef node) {
         if (!node.isFromLambda() && !node.isAnalyzed()) {
             // The SlotRef for non-lambda argument is analyzed manually before using Analyzer
@@ -996,7 +954,7 @@ public class Load {
         if (node.isFromLambda()) {
             SlotDescriptor descriptor = slotDescriptors.get(node.getColumnName());
             if (descriptor == null) {
-                descriptor = analyzer.getDescTbl().addSlotDescriptor(srcTupleDescriptor);
+                descriptor = descriptorTable.addSlotDescriptor(srcTupleDescriptor);
                 descriptor.setType(node.getType());
                 descriptor.setLabel(node.getColumnName());
                 descriptor.setIsNullable(node.isNullable());
