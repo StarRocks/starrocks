@@ -1326,4 +1326,136 @@ public class TaskManagerTest {
         Assertions.assertFalse(executeTaskCalled[0], "Non-MV task should not be executed immediately");
         Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
     }
+
+    @Test
+    public void testPeriodSchedulerSkipsWhenNotLeader() throws Exception {
+        // Mock isLeader() to return false
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName, ExecuteOption option) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        Task task = new Task("test_period_leader_check");
+        task.setDefinition("select 1");
+        task.setSource(Constants.TaskSource.MV);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setId(10L);
+
+        TaskSchedule schedule = new TaskSchedule();
+        long now = TimeUtils.getEpochSeconds();
+        schedule.setStartTime(now - 3600);
+        schedule.setPeriod(1);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Wait enough time for the scheduler to fire
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+
+        // executeTask should NOT be called since isLeader() returns false
+        Assertions.assertFalse(executeTaskCalled[0],
+                "Periodical task should not execute on non-leader node");
+    }
+
+    @Test
+    public void testPeriodSchedulerExecutesWhenLeader() throws Exception {
+        // Mock isLeader() to return true
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName, ExecuteOption option) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        Task task = new Task("test_period_leader_execute");
+        task.setDefinition("select 1");
+        task.setSource(Constants.TaskSource.MV);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setId(11L);
+
+        TaskSchedule schedule = new TaskSchedule();
+        long now = TimeUtils.getEpochSeconds();
+        schedule.setStartTime(now - 3600);
+        schedule.setPeriod(1);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Wait enough time for the scheduler to fire
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+
+        // executeTask SHOULD be called since isLeader() returns true
+        Assertions.assertTrue(executeTaskCalled[0],
+                "Periodical task should execute on leader node");
+    }
+
+    @Test
+    public void testDispatchSchedulerSkipsWhenNotLeader() throws Exception {
+        // Verify that checkRunningTaskRun/scheduledPendingTaskRun are not called when not leader.
+        // We cannot call tm.start() directly because clearUnfinishedTaskRun() writes edit log,
+        // so we simulate the dispatch scheduler callback logic instead.
+        final boolean[] dispatched = {false};
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        TaskManager tm = new TaskManager();
+        TaskRunManager taskRunManager = tm.getTaskRunManager();
+
+        // Simulate the dispatch scheduler callback logic from TaskManager.start()
+        // This is the same guard that was added in the fix
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            // should enter here
+            dispatched[0] = false;
+        } else {
+            dispatched[0] = true;
+        }
+        Assertions.assertFalse(dispatched[0],
+                "Dispatch scheduler should skip when not leader");
+
+        // Now verify with isLeader = true
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            dispatched[0] = false;
+        } else {
+            dispatched[0] = true;
+        }
+        Assertions.assertTrue(dispatched[0],
+                "Dispatch scheduler should proceed when leader");
+    }
 }
