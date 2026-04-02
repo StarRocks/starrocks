@@ -1025,10 +1025,31 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             continue;
         }
         const int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
+        // Build per-segment rowid ranges to skip rows already covered by SSTables.
+        // For the segment containing rebuild_rss_rowid_point, only rows after that point need rebuild.
+        std::vector<SparseRangePtr> rowid_ranges(rowset->num_segments());
+        if (rebuild_rss_rowid_point > 0) {
+            for (int32_t si = 0; si < rowset->num_segments(); si++) {
+                uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), si);
+                if (rssid == rebuild_rss_id) {
+                    uint32_t low_rowid = rebuild_rss_rowid_point & 0xFFFFFFFF;
+                    if (low_rowid < std::numeric_limits<uint32_t>::max()) {
+                        uint32_t start_rowid = low_rowid + 1;
+                        auto range = std::make_shared<SparseRange<>>();
+                        range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
+                        rowid_ranges[si] = std::move(range);
+                    }
+                    // If low_rowid == UINT32_MAX, the entire segment is covered,
+                    // and will be skipped by the rssid < rebuild_rss_id check below.
+                    break;
+                }
+            }
+        }
         StatusOr<std::vector<ChunkIteratorPtr>> res;
         {
             TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_get_segment_iterator_with_delvec_us");
-            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+            res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats,
+                                                                &rowid_ranges);
         }
         if (!res.ok()) {
             return res.status();
