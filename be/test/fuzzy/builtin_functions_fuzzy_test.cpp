@@ -27,7 +27,7 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "testutil/init_test_env.h"
