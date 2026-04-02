@@ -965,6 +965,26 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     // no entry in _column_readers and are never added to active/lazy indices.
     // Physical columns with conjuncts go into _active_column_indices; the rest are
     // deferred to _lazy_column_indices when late materialisation is enabled.
+    //
+    // Pre-pass: collect physical VARIANT slot IDs that are sources for deferred
+    // virtual conjuncts.  A virtual column's source_slot_id may point at a physical
+    // VARIANT column (positive slot ID) rather than a hidden variant source
+    // (negative slot ID).  Such physical columns have no direct conjuncts and would
+    // normally be classified as lazy, but deferred Phase-4 evaluation reads them
+    // via active_chunk, so they must be active.
+    std::unordered_set<SlotId> deferred_conjunct_physical_source_slots;
+    for (const auto& column : _param.read_cols) {
+        if (!column.is_extended_variant_virtual) continue;
+        if (conjunct_ctxs_by_slot.count(column.slot_id()) == 0) continue;
+        auto proj_it = _variant_virtual_projections.find(column.slot_id());
+        if (proj_it == _variant_virtual_projections.end()) continue;
+        // Hidden sources have negative slot IDs; positive IDs are physical columns.
+        SlotId src = proj_it->second.source_slot_id;
+        if (src > 0) {
+            deferred_conjunct_physical_source_slots.insert(src);
+        }
+    }
+
     int read_col_idx = 0;
     for (auto& column : _param.read_cols) {
         if (column.is_extended_variant_virtual) {
@@ -993,7 +1013,10 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
                 }
             }
             _active_column_indices.push_back(read_col_idx);
-        } else if (config::parquet_late_materialization_enable) {
+        } else if (config::parquet_late_materialization_enable &&
+                   deferred_conjunct_physical_source_slots.count(slot_id) == 0) {
+            // Do not lazify a physical column that is referenced as a source by a
+            // deferred virtual conjunct; Phase 4 must be able to project from it.
             _lazy_column_indices.push_back(read_col_idx);
             _column_readers[slot_id]->set_can_lazy_decode(true);
         } else {
@@ -1308,15 +1331,14 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
 //   - Lazy hidden variant sources (read in Phase 6, merged into active_chunk)
 // All projection sources are therefore found directly in active_chunk.
 //
-// IMPORTANT: virtual projections (Pass 1) run BEFORE physical fill_dst_column (Pass 2).
-// fill_dst_column uses swap_column which empties the source in active_chunk.  If the
-// source of a virtual projection is a physical column, we must project it BEFORE the
-// swap destroys the data.
 Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     active_chunk->check_or_die();
 
-    // Pass 1: virtual projections — read-only from active_chunk.
-    // Must run BEFORE Pass 2 because fill_dst_column (swap) empties the source column.
+    // Pass 1: virtual projections — must run BEFORE Pass 2.
+    // source_slot_id may point to either a hidden variant source (negative slot ID)
+    // or a physical VARIANT column (positive slot ID, see _create_column_readers lines
+    // 791-793).  Pass 2 performs a destructive swap that would move the physical source
+    // column out of active_chunk, so virtual projections must read their sources first.
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
             return Status::InternalError(fmt::format("variant virtual column source slot {} not found in active_chunk",
@@ -1329,8 +1351,8 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
         (*chunk)->get_column_by_slot_id(slot_id) = std::move(result_column);
     }
 
-    // Pass 2: physical columns.  Skip slots that have a virtual projection (no entry in
-    // _column_readers) and do the destructive swap after all projections are done.
+    // Pass 2: physical columns — destructive swap from active_chunk into *chunk.
+    // Slots that have a virtual projection have no entry in _column_readers and are skipped.
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
         if (_variant_virtual_projections.count(slot_id)) continue;

@@ -2975,6 +2975,60 @@ TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWith
                 group_reader->_lazy_slot_ids.end());
 }
 
+// Covers: physical VARIANT column with no direct conjuncts must be promoted to
+//         active when it is the source_slot_id for a deferred virtual conjunct.
+//         Without the pre-pass fix this column would be lazified and Phase 4
+//         would fail to find it in active_chunk.
+TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredConjunct) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Physical VARIANT column — no direct conjunct, should normally be lazy.
+    auto* phys_slot =
+            _pool.add(new SlotDescriptor(170, "v", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+    // Virtual slot with a deferred conjunct whose source is the physical slot.
+    auto* virt_slot =
+            _pool.add(new SlotDescriptor(171, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column pc{};
+    pc.slot_desc = phys_slot;
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = virt_slot;
+    vc.is_extended_variant_virtual = true;
+    param->read_cols.emplace_back(pc);
+    param->read_cols.emplace_back(vc);
+
+    // Conjunct on the virtual slot.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, virt_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[virt_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto variant_col = make_typed_only_variant_column_for_virtual_column_test();
+    group_reader->_column_readers.emplace(phys_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+
+    // Wire projection: virtual slot 171 → source is physical slot 170 (positive).
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", virt_slot->type(), phys_slot->id()));
+    group_reader->_variant_virtual_projections.emplace(virt_slot->id(), std::move(proj));
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // Physical slot must be active (not lazy) because a deferred conjunct needs it.
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          phys_slot->id()) != group_reader->_active_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(),
+                          phys_slot->id()) == group_reader->_lazy_slot_ids.end());
+    // The virtual conjunct slot must be registered.
+    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(virt_slot->id()));
+}
+
 // ── _apply_deferred_variant_conjuncts ────────────────────────────────────────
 
 // Covers: Status::InternalError when a deferred-conjunct slot's source is absent
