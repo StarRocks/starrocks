@@ -50,7 +50,8 @@ public:
               tablet_id_in_metadata(tablet_id_in_metadata),
               split_count(split_count),
               split_index(split_index) {
-        DCHECK(publish_tablet_type != SPLITTING_TABLET || (split_count > 1 && split_index >= 0 && split_index < split_count));
+        DCHECK(publish_tablet_type != SPLITTING_TABLET ||
+               (split_count > 1 && split_index >= 0 && split_index < split_count));
     }
 
     // For cross publish merging tablet with multiple txn logs

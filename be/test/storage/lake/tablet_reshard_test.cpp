@@ -3448,7 +3448,7 @@ TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_basic) {
 
     // Split into 3, index 0: gets remainder
     lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 3, 0);
-    EXPECT_EQ(34, rowset.num_rows());  // 100/3=33, 100%3=1, index 0 < 1 => +1
+    EXPECT_EQ(34, rowset.num_rows());   // 100/3=33, 100%3=1, index 0 < 1 => +1
     EXPECT_EQ(334, rowset.data_size()); // 1000/3=333, 1000%3=1, index 0 < 1 => +1
 }
 
@@ -3524,23 +3524,30 @@ TEST_F(LakeTabletReshardTest, test_update_txn_log_data_stats_all_op_types) {
     repl_rowset->set_data_size(400);
 
     // op_parallel_compaction
-    auto* parallel_rowset = txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset();
+    auto* parallel_rowset =
+            txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset();
     parallel_rowset->set_num_rows(50);
     parallel_rowset->set_data_size(500);
 
     // split_count=3, split_index=0 (gets extra remainder)
     lake::tablet_reshard_helper::update_txn_log_data_stats(&txn_log, 3, 0);
 
-    EXPECT_EQ(4, txn_log.op_write().rowset().num_rows());        // 10/3=3 + (0<1?1:0) = 4
-    EXPECT_EQ(34, txn_log.op_write().rowset().data_size());       // 100/3=33 + (0<1?1:0) = 34
-    EXPECT_EQ(7, txn_log.op_compaction().output_rowset().num_rows());  // 20/3=6 + (0<2?1:0) = 7
+    EXPECT_EQ(4, txn_log.op_write().rowset().num_rows());               // 10/3=3 + (0<1?1:0) = 4
+    EXPECT_EQ(34, txn_log.op_write().rowset().data_size());             // 100/3=33 + (0<1?1:0) = 34
+    EXPECT_EQ(7, txn_log.op_compaction().output_rowset().num_rows());   // 20/3=6 + (0<2?1:0) = 7
     EXPECT_EQ(67, txn_log.op_compaction().output_rowset().data_size()); // 200/3=66 + (0<2?1:0) = 67
     EXPECT_EQ(10, txn_log.op_schema_change().rowsets(0).num_rows());
     EXPECT_EQ(100, txn_log.op_schema_change().rowsets(0).data_size());
-    EXPECT_EQ(14, txn_log.op_replication().op_writes(0).rowset().num_rows());  // 40/3=13 + (0<1?1:0) = 14
+    EXPECT_EQ(14, txn_log.op_replication().op_writes(0).rowset().num_rows());   // 40/3=13 + (0<1?1:0) = 14
     EXPECT_EQ(134, txn_log.op_replication().op_writes(0).rowset().data_size()); // 400/3=133 + (0<1?1:0) = 134
-    EXPECT_EQ(17, txn_log.op_parallel_compaction().subtask_compactions(0).output_rowset().num_rows()); // 50/3=16 + (0<2?1:0) = 17
-    EXPECT_EQ(167, txn_log.op_parallel_compaction().subtask_compactions(0).output_rowset().data_size()); // 500/3=166 + (0<2?1:0) = 167
+    EXPECT_EQ(17, txn_log.op_parallel_compaction()
+                          .subtask_compactions(0)
+                          .output_rowset()
+                          .num_rows()); // 50/3=16 + (0<2?1:0) = 17
+    EXPECT_EQ(167, txn_log.op_parallel_compaction()
+                           .subtask_compactions(0)
+                           .output_rowset()
+                           .data_size()); // 500/3=166 + (0<2?1:0) = 167
 }
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitting) {
