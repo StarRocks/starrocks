@@ -39,7 +39,6 @@
 #include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "types/storage_type_traits.h"
 #include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -50,6 +49,7 @@
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/storage_type_traits.h"
 #include "types/type_info.h"
 
 namespace starrocks {

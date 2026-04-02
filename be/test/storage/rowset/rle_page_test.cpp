@@ -39,7 +39,6 @@
 #include <memory>
 
 #include "column/fixed_length_column.h"
-#include "types/storage_type_traits.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -47,6 +46,7 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
+#include "types/storage_type_traits.h"
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;

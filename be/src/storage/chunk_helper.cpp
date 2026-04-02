@@ -25,7 +25,6 @@
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/schema.h"
-#include "types/storage_type_traits.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
@@ -35,6 +34,7 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

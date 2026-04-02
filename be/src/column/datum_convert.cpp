@@ -13,12 +13,12 @@
 // limitations under the License.
 
 #include "column/datum_convert.h"
-#include "types/storage_type_traits.h"
 
 #include <cstring>
 
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

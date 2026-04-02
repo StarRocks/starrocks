@@ -21,7 +21,6 @@
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
 #include "column/runtime_type_traits.h"
-#include "types/storage_type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -35,6 +34,7 @@
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
+#include "types/storage_type_traits.h"
 
 class Roaring;
 

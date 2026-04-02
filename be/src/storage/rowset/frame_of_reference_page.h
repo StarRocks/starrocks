@@ -35,10 +35,10 @@
 #pragma once
 
 #include "column/column.h"
-#include "types/storage_type_traits.h"
 #include "storage/rowset/options.h"      // for PageBuilderOptions/PageDecoderOptions
 #include "storage/rowset/page_builder.h" // for PageBuilder
 #include "storage/rowset/page_decoder.h" // for PageDecoder
+#include "types/storage_type_traits.h"
 #include "util/frame_of_reference_coding.h"
 
 namespace starrocks {
