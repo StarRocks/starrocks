@@ -1217,6 +1217,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 }
                 // TODO(ml): use previous be id depend on change reason
             }
+
+            // check if BE explicitly marked this error as non-retryable
+            RLTaskTxnCommitAttachment rlAttachment =
+                    (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
+            if (rlAttachment != null && rlAttachment.isNonRetryable()) {
+                String msg = "be " + taskBeId + " abort task "
+                        + "with non-retryable reason: " + txnStatusChangeReasonString;
+                updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
+                return;
+            }
+
             // step2: commit task , update progress, maybe create a new task
             executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
                     txnStatusChangeReasonString);
