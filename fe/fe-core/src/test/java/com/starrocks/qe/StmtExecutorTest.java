@@ -270,8 +270,6 @@ public class StmtExecutorTest {
             throws Exception {
         int oldRetryTime = Config.max_query_retry_time;
         Config.max_query_retry_time = 2;
-        MockUp<StmtExecutor> stmtExecutorMock = null;
-        MockUp<ExecuteExceptionHandler> exceptionHandlerMock = null;
         try {
             ConnectContext ctx = UtFrameUtils.createDefaultCtx();
             ConnectContext.threadLocalInfo.set(ctx);
@@ -292,7 +290,7 @@ public class StmtExecutorTest {
                     SqlModeHelper.MODE_DEFAULT);
             StmtExecutor executor = new StmtExecutor(ctx, stmt);
 
-            stmtExecutorMock = new MockUp<StmtExecutor>() {
+            new MockUp<StmtExecutor>() {
                 @Mock
                 public ExecPlan generateExecPlan() {
                     return execPlan;
@@ -304,7 +302,7 @@ public class StmtExecutorTest {
                 }
             };
 
-            exceptionHandlerMock = new MockUp<ExecuteExceptionHandler>() {
+            new MockUp<ExecuteExceptionHandler>() {
                 @Mock
                 public void handle(Exception e, ExecuteExceptionHandler.RetryContext retryContext) {
                     // keep retry loop moving to hit log branch.
@@ -313,12 +311,6 @@ public class StmtExecutorTest {
 
             Assertions.assertThrows(RuntimeException.class, executor::execute);
         } finally {
-            if (exceptionHandlerMock != null) {
-                exceptionHandlerMock.tearDown();
-            }
-            if (stmtExecutorMock != null) {
-                stmtExecutorMock.tearDown();
-            }
             ConnectContext.threadLocalInfo.remove();
             Config.max_query_retry_time = oldRetryTime;
         }
