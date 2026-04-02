@@ -376,26 +376,23 @@ Status Aggregator::open(RuntimeState* state) {
             _state_allocator.aggregate_key_size = _agg_states_total_size;
             _state_allocator.pool = _mem_pool.get();
 
-            // Detect inline state eligibility: single POD agg function with state <= 8 bytes
-            // whose initial state (set by create()) is all-zeros.
-            // Zero-init requirement: inline state is stored in the hash map value slot which is
-            // zero-initialized on entry creation; functions like min/max need a non-zero initial
-            // value (INT_MAX / INT_MIN) and must not use the inline path.
+            // Detect inline state eligibility: single POD agg function with state <= 8 bytes.
+            // The initial state value is precomputed via create() and stored in _inline_initial_state
+            // so that InlineAllocFunc can initialize hash map slots correctly (handles both
+            // zero-init functions like COUNT/SUM and non-zero-init functions like MIN/MAX).
             if (state->enable_inline_agg_state() && _allow_inline_agg_state && _agg_fn_ctxs.size() == 1 &&
                 _agg_functions[0]->size() <= sizeof(AggDataPtr) && _agg_functions[0]->is_pod_state()) {
-                uint64_t tmp_state = 0;
-                _agg_functions[0]->create(_agg_fn_ctxs[0], reinterpret_cast<AggDataPtr>(&tmp_state));
-                const bool initial_state_is_zero = (tmp_state == 0);
-                _agg_functions[0]->destroy(_agg_fn_ctxs[0], reinterpret_cast<AggDataPtr>(&tmp_state));
-                if (initial_state_is_zero) {
-                    _hash_map_variant.visit([&](auto& variant) {
-                        using MapType = std::remove_reference_t<decltype(*variant)>;
-                        if constexpr (MapType::supports_inline_state) {
-                            _use_inline_agg_state = true;
-                            _agg_states_offsets[0] = 0;
-                        }
-                    });
-                }
+                _hash_map_variant.visit([&](auto& variant) {
+                    using MapType = std::remove_reference_t<decltype(*variant)>;
+                    if constexpr (MapType::supports_inline_state) {
+                        _use_inline_agg_state = true;
+                        _agg_states_offsets[0] = 0;
+                        // Precompute inline initial state for the agg function
+                        _inline_initial_state = 0;
+                        _agg_functions[0]->create(_agg_fn_ctxs[0],
+                                                  reinterpret_cast<AggDataPtr>(&_inline_initial_state));
+                    }
+                });
             }
         }
     }
@@ -1683,11 +1680,12 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row, bool) {
+                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
                     agg_func->update(fn_ctx, columns, state, row);
                 };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map<decltype(update_fn)>(
-                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states, update_fn);
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states, update_fn);
                 return;
             }
         }
@@ -1725,11 +1723,12 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row, bool) {
+                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
                     agg_func->update(fn_ctx, columns, state, row);
                 };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_limit<decltype(update_fn)>(
-                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
                         &_streaming_selection, _limit, update_fn);
                 return;
             }
@@ -1754,11 +1753,12 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row, bool) {
+                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
                     agg_func->update(fn_ctx, columns, state, row);
                 };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection<decltype(update_fn)>(
-                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
                         &_streaming_selection, update_fn);
                 return;
             }
@@ -1783,11 +1783,12 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row, bool) {
+                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
                     agg_func->update(fn_ctx, columns, state, row);
                 };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
-                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
                         &_streaming_selection, update_fn);
                 return;
             }
@@ -1820,11 +1821,12 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row, bool) {
+                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
                     agg_func->update(fn_ctx, columns, state, row);
                 };
+                InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
-                        chunk_size, _group_by_columns, _mem_pool.get(), NoAllocFunc{}, &_tmp_agg_states,
+                        chunk_size, _group_by_columns, _mem_pool.get(), inline_alloc, &_tmp_agg_states,
                         &_streaming_selection, update_fn);
                 return;
             }

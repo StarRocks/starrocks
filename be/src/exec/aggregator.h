@@ -544,6 +544,9 @@ protected:
     // Subclasses that cannot support inline agg state (e.g. StreamAggregator)
     // should set this to false in their constructor, before open() is called.
     bool _allow_inline_agg_state = true;
+    // Precomputed initial state bit pattern for inline agg state (e.g. 0 for COUNT/SUM,
+    // TYPE_MAX for MIN, etc.). Set during open() when _use_inline_agg_state is enabled.
+    uint64_t _inline_initial_state = 0;
     // Transient: set during evaluate_groupby_exprs for use in build_hash_map inline path.
     Chunk* _current_chunk = nullptr;
 

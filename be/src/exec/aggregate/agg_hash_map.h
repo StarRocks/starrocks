@@ -55,11 +55,14 @@ concept AllocFunc = HasKeyType<HashMapWithKey>&& requires(T t, const typename Ha
     ->std::same_as<AggDataPtr>;
 };
 
-// NoAllocFunc: a dummy allocator used when inline state is active (no external allocation needed).
-struct NoAllocFunc {
+// InlineAllocFunc: returns a precomputed initial state value for inline state.
+// The initial value (computed via AggregateFunction::create) is stored as a
+// reinterpreted AggDataPtr so that lazy_emplace can construct the slot directly.
+struct InlineAllocFunc {
+    AggDataPtr initial_state_as_ptr;
     template <typename T>
-    AggDataPtr operator()(T) {
-        return nullptr;
+    AggDataPtr operator()(T) const {
+        return initial_state_as_ptr;
     }
 };
 
@@ -188,8 +191,9 @@ struct AggHashMapWithKey {
         ExtraAggParam extra;
         if constexpr (InlineState) {
             static_cast<Impl*>(this)
-                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<true, false, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
+                    ->template compute_agg_states<Func, HTBuildOp<true, false, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
+                            update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -215,8 +219,9 @@ struct AggHashMapWithKey {
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
             static_cast<Impl*>(this)
-                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
+                    ->template compute_agg_states<Func, HTBuildOp<false, true, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
+                            update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -243,8 +248,9 @@ struct AggHashMapWithKey {
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
             static_cast<Impl*>(this)
-                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, true>, UpdateFunc>(
-                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
+                    ->template compute_agg_states<Func, HTBuildOp<false, true, true>, UpdateFunc>(
+                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
+                            update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -270,8 +276,9 @@ struct AggHashMapWithKey {
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
             static_cast<Impl*>(this)
-                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<true, true, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
+                    ->template compute_agg_states<Func, HTBuildOp<true, true, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
+                            update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -347,17 +354,14 @@ struct AggHashMapWithOneNumberKeyWithNullable
         static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         if (key_column->only_null()) {
             if constexpr (InlineState) {
-                AggDataPtr null_ptr;
-                bool first_created = false;
                 if (!_inline_null_key_state_created) {
-                    _inline_null_key_state = 0;
+                    _inline_null_key_state = reinterpret_cast<size_t>(allocate_func(nullptr));
                     _inline_null_key_state_created = true;
-                    first_created = true;
                 }
-                null_ptr = reinterpret_cast<AggDataPtr>(&_inline_null_key_state);
+                AggDataPtr null_ptr = reinterpret_cast<AggDataPtr>(&_inline_null_key_state);
                 for (size_t i = 0; i < chunk_size; i++) {
                     (*agg_states)[i] = null_ptr;
-                    update_func(null_ptr, i, first_created && (i == 0));
+                    update_func(null_ptr, i);
                 }
             } else {
                 if (null_key_data == nullptr) {
@@ -400,13 +404,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
                         this->template _emplace_key_with_hash<true>(key, hash_values[i], (*agg_states)[i],
-                                                                    allocate_func, [&] {
-                                                                        inserted = true;
-                                                                        hash_table_size++;
-                                                                    });
-                        update_func((*agg_states)[i], i, inserted);
+                                                                    allocate_func, [&] { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
                                                [&] { hash_table_size++; });
@@ -415,7 +415,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
@@ -423,13 +423,10 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
                     this->template _emplace_key_with_hash<true>(
-                            key, hash_values[i], (*agg_states)[i], allocate_func, [&] {
-                                inserted = true;
-                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                            });
-                    update_func((*agg_states)[i], i, inserted);
+                            key, hash_values[i], (*agg_states)[i], allocate_func,
+                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
                                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -439,7 +436,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
@@ -464,12 +461,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
-                        this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func, [&] {
-                            inserted = true;
-                            hash_table_size++;
-                        });
-                        update_func((*agg_states)[i], i, inserted);
+                        this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func,
+                                                          [&] { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key(key, (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
                     }
@@ -477,7 +471,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], key);
@@ -485,12 +479,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
-                    this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func, [&] {
-                        inserted = true;
-                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                    });
-                    update_func((*agg_states)[i], i, inserted);
+                    this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func,
+                                                      FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key(key, (*agg_states)[i], allocate_func,
                                  FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -500,7 +491,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key);
@@ -526,14 +517,12 @@ struct AggHashMapWithOneNumberKeyWithNullable
             const auto key = container[i];
             if (null_data[i]) {
                 if constexpr (InlineState) {
-                    bool null_inserted = false;
                     if (UNLIKELY(!_inline_null_key_state_created)) {
-                        _inline_null_key_state = 0;
+                        _inline_null_key_state = reinterpret_cast<size_t>(allocate_func(nullptr));
                         _inline_null_key_state_created = true;
-                        null_inserted = true;
                     }
                     (*agg_states)[i] = reinterpret_cast<AggDataPtr>(&_inline_null_key_state);
-                    update_func((*agg_states)[i], i, null_inserted);
+                    update_func((*agg_states)[i], i);
                 } else {
                     if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
@@ -544,13 +533,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         if constexpr (InlineState) {
-                            bool inserted = false;
                             this->template _emplace_key<true>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
-                                                              [&]() {
-                                                                  inserted = true;
-                                                                  hash_table_size++;
-                                                              });
-                            update_func((*agg_states)[i], i, inserted);
+                                                              [&]() { hash_table_size++; });
+                            update_func((*agg_states)[i], i);
                         } else {
                             _emplace_key(key, (*agg_states)[i], std::forward<Func>(allocate_func),
                                          [&]() { hash_table_size++; });
@@ -559,7 +544,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                         if constexpr (InlineState) {
                             this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
                             if (!(*not_founds)[i]) {
-                                update_func((*agg_states)[i], i, false);
+                                update_func((*agg_states)[i], i);
                             }
                         } else {
                             _find_key((*agg_states)[i], (*not_founds)[i], key);
@@ -567,13 +552,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
                     }
                 } else if constexpr (HTBuildOp::allocate) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
                         this->template _emplace_key<true>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
-                                                          [&]() {
-                                                              inserted = true;
-                                                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                                                          });
-                        update_func((*agg_states)[i], i, inserted);
+                                                          FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key(key, (*agg_states)[i], std::forward<Func>(allocate_func),
                                      FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -582,7 +563,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], key);
@@ -597,12 +578,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
@@ -616,12 +592,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
@@ -1216,13 +1187,9 @@ struct AggHashMapWithSerializedKeyFixedSize
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
                         this->template _emplace_key_with_hash<true>(key, caches[i].hashval, (*agg_states)[i],
-                                                                    allocate_func, [&]() {
-                                                                        inserted = true;
-                                                                        hash_table_size++;
-                                                                    });
-                        update_func((*agg_states)[i], i, inserted);
+                                                                    allocate_func, [&]() { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
                                                [&]() { hash_table_size++; });
@@ -1231,7 +1198,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
@@ -1239,13 +1206,10 @@ struct AggHashMapWithSerializedKeyFixedSize
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
                     this->template _emplace_key_with_hash<true>(
-                            key, caches[i].hashval, (*agg_states)[i], allocate_func, [&]() {
-                                inserted = true;
-                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                            });
-                    update_func((*agg_states)[i], i, inserted);
+                            key, caches[i].hashval, (*agg_states)[i], allocate_func,
+                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
                                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -1254,7 +1218,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
@@ -1285,12 +1249,9 @@ struct AggHashMapWithSerializedKeyFixedSize
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
-                        this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func, [&] {
-                            inserted = true;
-                            hash_table_size++;
-                        });
-                        update_func((*agg_states)[i], i, inserted);
+                        this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func,
+                                                          [&] { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key(key[i], (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
                     }
@@ -1298,7 +1259,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key[i]);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], key[i]);
@@ -1306,12 +1267,9 @@ struct AggHashMapWithSerializedKeyFixedSize
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
-                    this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func, [&] {
-                        inserted = true;
-                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                    });
-                    update_func((*agg_states)[i], i, inserted);
+                    this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func,
+                                                      FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key(key[i], (*agg_states)[i], allocate_func,
                                  FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -1320,7 +1278,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key[i]);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], key[i]);
@@ -1354,12 +1312,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
@@ -1373,12 +1326,7 @@ struct AggHashMapWithSerializedKeyFixedSize
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
@@ -1469,12 +1417,9 @@ struct AggHashMapWithCompressedKeyFixedSize
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
-                        this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func, [&] {
-                            inserted = true;
-                            hash_table_size++;
-                        });
-                        update_func((*agg_states)[i], i, inserted);
+                        this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func,
+                                                          [&] { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key(fixed_keys[i], (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
                     }
@@ -1482,7 +1427,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
@@ -1490,12 +1435,9 @@ struct AggHashMapWithCompressedKeyFixedSize
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
-                    this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func, [&] {
-                        inserted = true;
-                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                    });
-                    update_func((*agg_states)[i], i, inserted);
+                    this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func,
+                                                      FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key(fixed_keys[i], (*agg_states)[i], allocate_func,
                                  FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -1504,7 +1446,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
@@ -1536,13 +1478,9 @@ struct AggHashMapWithCompressedKeyFixedSize
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
-                        bool inserted = false;
                         this->template _emplace_key_with_hash<true>(fixed_keys[i], hashs[i], (*agg_states)[i],
-                                                                    allocate_func, [&] {
-                                                                        inserted = true;
-                                                                        hash_table_size++;
-                                                                    });
-                        update_func((*agg_states)[i], i, inserted);
+                                                                    allocate_func, [&] { hash_table_size++; });
+                        update_func((*agg_states)[i], i);
                     } else {
                         _emplace_key_with_hash(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
                                                [&] { hash_table_size++; });
@@ -1551,7 +1489,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                     if constexpr (InlineState) {
                         this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
                         if (!(*not_founds)[i]) {
-                            update_func((*agg_states)[i], i, false);
+                            update_func((*agg_states)[i], i);
                         }
                     } else {
                         _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
@@ -1559,13 +1497,10 @@ struct AggHashMapWithCompressedKeyFixedSize
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 if constexpr (InlineState) {
-                    bool inserted = false;
                     this->template _emplace_key_with_hash<true>(
-                            fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func, [&] {
-                                inserted = true;
-                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
-                            });
-                    update_func((*agg_states)[i], i, inserted);
+                            fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
+                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    update_func((*agg_states)[i], i);
                 } else {
                     _emplace_key_with_hash(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
                                            FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
@@ -1574,7 +1509,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                 if constexpr (InlineState) {
                     this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
                     if (!(*not_founds)[i]) {
-                        update_func((*agg_states)[i], i, false);
+                        update_func((*agg_states)[i], i);
                     }
                 } else {
                     _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
@@ -1606,12 +1541,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
@@ -1625,12 +1555,7 @@ struct AggHashMapWithCompressedKeyFixedSize
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
-            if constexpr (InlineState) {
-                ctor(key, AggDataPtr{});
-            } else {
-                AggDataPtr pv = allocate_func(key);
-                ctor(key, pv);
-            }
+            ctor(key, allocate_func(key));
         });
         if constexpr (InlineState) {
             target_state = reinterpret_cast<AggDataPtr>(&iter->second);
