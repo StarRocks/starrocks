@@ -109,9 +109,13 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         return Status::OK();
     }
 
-    // Load delvecs concurrently using a bounded thread pool. Each load does
-    // one small range read (~2-3ms) from object storage. The pool limits
-    // concurrency to avoid thread exhaustion under heavy load.
+    // Load delvecs concurrently in small batches. Each load does one small
+    // range read (~2-3ms) from object storage. We submit kBatchSize tasks at a
+    // time, wait, then submit the next batch. This limits the number of
+    // in-flight IO requests to avoid overwhelming the thread pool or object
+    // storage during burst/compaction-heavy workloads.
+    static constexpr size_t kBatchSize = 16;
+
     auto* pool = ExecEnv::GetInstance()->pk_index_execution_thread_pool();
     if (pool == nullptr) {
         // Fallback: load sequentially if thread pool unavailable
@@ -124,26 +128,30 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         return Status::OK();
     }
 
-    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-    std::mutex mu;
-    Status first_error;
-
     // Pre-allocate delvec entries so workers only write to their own slot
     for (uint32_t seg_id : ids_to_load) {
         _preloaded_delvecs[seg_id] = std::make_shared<DelVector>();
     }
 
-    for (uint32_t seg_id : ids_to_load) {
-        auto* dv = _preloaded_delvecs[seg_id].get();
-        RETURN_IF_ERROR(token->submit_func([this, &metadata, &mu, &first_error, seg_id, dv]() {
-            auto st = lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv);
-            if (!st.ok()) {
-                std::lock_guard<std::mutex> lock(mu);
-                if (first_error.ok()) first_error = st;
-            }
-        }));
+    // Process in batches of kBatchSize to limit concurrent IO pressure
+    std::mutex mu;
+    Status first_error;
+    for (size_t start = 0; start < ids_to_load.size() && first_error.ok(); start += kBatchSize) {
+        size_t end = std::min(start + kBatchSize, ids_to_load.size());
+        auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        for (size_t i = start; i < end; i++) {
+            uint32_t seg_id = ids_to_load[i];
+            auto* dv = _preloaded_delvecs[seg_id].get();
+            RETURN_IF_ERROR(token->submit_func([this, &metadata, &mu, &first_error, seg_id, dv]() {
+                auto st = lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv);
+                if (!st.ok()) {
+                    std::lock_guard<std::mutex> lock(mu);
+                    if (first_error.ok()) first_error = st;
+                }
+            }));
+        }
+        token->wait();
     }
-    token->wait();
     RETURN_IF_ERROR(first_error);
 
     VLOG(1) << "batch_load: loaded " << _preloaded_delvecs.size() << " delvecs for tablet " << tablet_id << " ("
