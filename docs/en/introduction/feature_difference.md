@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_label: "Feature Differences"
 ---
 
-import EditionSpecificFeature from '../assets/commonMarkdown/Edition_Specific_Feature.mdx'
+import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # Feature Differences between Shared-nothing and Shared-data Clusters
 
