@@ -100,6 +100,13 @@ public class CompactionMgr implements MemoryTrackable {
         this.compactionScheduler = compactionScheduler;
     }
 
+    public int getRunningCompactionCount() {
+        if (compactionScheduler == null) {
+            return 0;
+        }
+        return compactionScheduler.getRunningCompactions().size();
+    }
+
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -148,9 +155,6 @@ public class CompactionMgr implements MemoryTrackable {
             v.setCompactionScore(compactionScore);
             return v;
         });
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Finished loading: {}", statistics);
-        }
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
@@ -165,8 +169,8 @@ public class CompactionMgr implements MemoryTrackable {
             v.setCompactionScoreAndAdjustPunishFactor(compactionScore, isPartialSuccess);
             return v;
         });
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Finished compaction: {}", statistics);
+        if (compactionScheduler != null) {
+            compactionScheduler.setScoreAfter(partition, compactionScore);
         }
     }
 

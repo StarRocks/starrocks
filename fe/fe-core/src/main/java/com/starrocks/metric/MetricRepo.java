@@ -305,6 +305,10 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -872,6 +876,26 @@ public final class MetricRepo {
         COUNTER_TXN_FAILED =
                 new LeaderAwareCounterMetricLong("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_FAILED);
+        COUNTER_LAKE_COMPACTION_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_success", MetricUnit.REQUESTS,
+                        "counter of successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_SUCCESS);
+        COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_partial_success", MetricUnit.REQUESTS,
+                        "counter of partially successful lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS);
+        COUNTER_LAKE_COMPACTION_FAILED =
+                new LeaderAwareCounterMetricLong("lake_compaction_failed", MetricUnit.REQUESTS,
+                        "counter of failed lake compaction jobs");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_COMPACTION_FAILED);
+        GAUGE_LAKE_COMPACTION_RUNNING = new LeaderAwareGaugeMetricLong("lake_compaction_running", MetricUnit.NOUNIT,
+                "number of currently running lake compaction jobs") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getRunningCompactionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");

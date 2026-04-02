@@ -29,6 +29,9 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.metric.LeaderAwareCounterMetricLong;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -53,6 +56,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -65,6 +69,19 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CompactionSchedulerTest {
+    @BeforeAll
+    public static void beforeAll() {
+        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_success", Metric.MetricUnit.REQUESTS,
+                        "counter of successful lake compaction jobs");
+        MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS =
+                new LeaderAwareCounterMetricLong("lake_compaction_partial_success", Metric.MetricUnit.REQUESTS,
+                        "counter of partially successful lake compaction jobs");
+        MetricRepo.COUNTER_LAKE_COMPACTION_FAILED =
+                new LeaderAwareCounterMetricLong("lake_compaction_failed", Metric.MetricUnit.REQUESTS,
+                        "counter of failed lake compaction jobs");
+    }
+
     @Mocked
     private GlobalStateMgr globalStateMgr;
     @Mocked
@@ -261,12 +278,12 @@ public class CompactionSchedulerTest {
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
                 PhysicalPartition partition1 = new PhysicalPartition(123, 123, new MaterializedIndex());
                 PhysicalPartition partition2 = new PhysicalPartition(124, 124, new MaterializedIndex());
-                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "");
+                CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false, null, "", null);
                 try {
                     Thread.sleep(10);
                 } catch (InterruptedException e) {
                 }
-                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "");
+                CompactionJob job2 = new CompactionJob(db, table, partition2, 101, false, null, "", null);
                 r.put(partitionIdentifier1, job1);
                 r.put(partitionIdentifier2, job2);
                 return r;
@@ -276,6 +293,31 @@ public class CompactionSchedulerTest {
         List<CompactionRecord> list = compactionScheduler.getHistory();
         Assertions.assertEquals(2, list.size());
         Assertions.assertTrue(list.get(0).getStartTs() <= list.get(1).getStartTs());
+    }
+
+    @Test
+    public void testSetScoreAfter() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+
+        Database db = new Database();
+        Table table = new LakeTable();
+        PhysicalPartition partition = new PhysicalPartition(3, 3, new MaterializedIndex());
+        PartitionIdentifier partitionId = new PartitionIdentifier(1, 2, 3);
+        CompactionJob job = new CompactionJob(db, table, partition, 100, false, WarehouseManager.DEFAULT_RESOURCE, "wh", null);
+        compactionScheduler.getRunningCompactions().put(partitionId, job);
+
+        Assertions.assertNull(job.getScoreAfter());
+
+        // set scoreAfter for an existing partition
+        Quantiles scoreAfter = new Quantiles(1.0, 1.0, 2.0);
+        compactionScheduler.setScoreAfter(partitionId, scoreAfter);
+        Assertions.assertEquals(scoreAfter, job.getScoreAfter());
+
+        // set scoreAfter for a non-existing partition should not throw
+        PartitionIdentifier nonExistent = new PartitionIdentifier(1, 2, 999);
+        compactionScheduler.setScoreAfter(nonExistent, scoreAfter);
     }
 
     @Test
@@ -349,7 +391,7 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
-                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+                return new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName, null);
             }
         };
         new MockUp<WarehouseManager>() {
@@ -552,7 +594,8 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 long partitionId = partitionStatisticsSnapshot.getPartition().getPartitionId();
                 PhysicalPartition partition = new PhysicalPartition(partitionId, partitionId, new MaterializedIndex());
-                CompactionJob job = new CompactionJob(db, table, partition, 100, false, info.computeResource, info.warehouseName);
+                CompactionJob job = new CompactionJob(db, table, partition, 100, false,
+                        info.computeResource, info.warehouseName, null);
                 return job;
             }
         };

@@ -235,6 +235,26 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_compaction_failed`
+
+- Unit: Count
+- Description: Counter of failed lake compaction jobs.
+
+## `lake_compaction_partial_success`
+
+- Unit: Count
+- Description: Counter of partially successful lake compaction jobs.
+
+## `lake_compaction_running`
+
+- Unit: Count
+- Description: Number of currently running lake compaction jobs.
+
+## `lake_compaction_success`
+
+- Unit: Count
+- Description: Counter of successful lake compaction jobs.
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - Unit: Count (files per batch)
