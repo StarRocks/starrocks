@@ -180,7 +180,7 @@ private:
         StatusOr<ColumnPtr> lower;
         if (haystack_column->is_nullable()) {
             auto haystack_nullable = ColumnHelper::as_column<NullableColumn>(haystack_column);
-            res_null = haystack_nullable->null_column();
+            res_null = NullColumn::static_pointer_cast(Column::mutate(haystack_nullable->null_column()));
             haystackPtr = haystack_nullable->data_column();
         } else {
             haystackPtr = haystack_column;
