@@ -190,10 +190,8 @@ struct AggHashMapWithKey {
         }
         ExtraAggParam extra;
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)
-                    ->template compute_agg_states<Func, HTBuildOp<true, false, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
-                            update_func);
+            static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>, UpdateFunc>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -218,10 +216,8 @@ struct AggHashMapWithKey {
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)
-                    ->template compute_agg_states<Func, HTBuildOp<false, true, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
-                            update_func);
+            static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>, UpdateFunc>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -247,10 +243,8 @@ struct AggHashMapWithKey {
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)
-                    ->template compute_agg_states<Func, HTBuildOp<false, true, true>, UpdateFunc>(
-                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
-                            update_func);
+            static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>, UpdateFunc>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -275,10 +269,8 @@ struct AggHashMapWithKey {
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)
-                    ->template compute_agg_states<Func, HTBuildOp<true, true, false>, UpdateFunc>(
-                            chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra,
-                            update_func);
+            static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>, UpdateFunc>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
