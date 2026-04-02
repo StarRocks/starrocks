@@ -48,7 +48,12 @@ Status FetchTask::submit(RuntimeState* state) {
 
 Status FetchTask::_submit_local_task(RuntimeState* state) {
     _ctx->callback = [ctx = _ctx](const Status& status) {
-        DeferOp defer([&]() { ctx->unit->finished_request_num++; });
+        auto unit = ctx->unit.lock();
+        DeferOp defer([&]() {
+            if (unit != nullptr) {
+                unit->finished_request_num++;
+            }
+        });
         if (!status.ok()) {
             LOG(WARNING) << "local fetch request failed, error: " << status.to_string();
             ctx->processor->_set_io_task_status(status);
@@ -64,29 +69,37 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto& request_chunk = _ctx->request_chunk;
 
     auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
-    closure->addSuccessHandler([this, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
-        DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
-                   << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
+    // The RPC callback can outlive queue ownership when the source finishes early.
+    auto self = shared_from_this();
+    closure->addSuccessHandler([self, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+        auto* processor = ctx->processor;
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
+        DLOG(INFO) << "[GLM] receive a response, finished request num: " << unit->finished_request_num
+                   << ", total request num: " << unit->total_request_num
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
+            if (++unit->finished_request_num == unit->total_request_num) {
                 VLOG_ROW << "[GLM] all request finished, notify fetch processor, total_request_num: "
-                         << ctx->unit->total_request_num << ", " << (void*)ctx->processor;
+                         << unit->total_request_num;
             }
-            _is_done = true;
+            self->_is_done = true;
         });
-        COUNTER_UPDATE(ctx->processor->_rpc_count, 1);
-        COUNTER_UPDATE(ctx->processor->_network_timer, MonotonicNanos() - ctx->send_ts);
+        COUNTER_UPDATE(processor->_rpc_count, 1);
+        COUNTER_UPDATE(processor->_network_timer, MonotonicNanos() - ctx->send_ts);
 
         if (resp.status().status_code() != TStatusCode::OK) {
             auto msg = fmt::format("fetch request failed, error: {}", resp.status().DebugString());
             LOG(WARNING) << msg;
-            ctx->processor->_set_io_task_status(Status::InternalError(msg));
+            processor->_set_io_task_status(Status::InternalError(msg));
             return;
         }
         DLOG(INFO) << "[GLM] receive a response, response size: " << closure->cntl.response_attachment().size();
         if (closure->cntl.response_attachment().size() > 0) {
-            SCOPED_TIMER(ctx->processor->_deserialize_timer);
+            SCOPED_TIMER(processor->_deserialize_timer);
             butil::IOBuf& io_buf = closure->cntl.response_attachment();
             raw::RawString buffer;
 
@@ -96,7 +109,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                     auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
                                            pcolumn.data_size());
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 buffer.resize(pcolumn.data_size());
@@ -104,18 +117,18 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                 if (UNLIKELY(size != pcolumn.data_size())) {
                     auto msg = fmt::format("iobuf read {} != expected {}", size, pcolumn.data_size());
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 int32_t slot_id = pcolumn.slot_id();
-                const SlotDescriptor* slot_desc = ctx->processor->_slot_id_to_desc.at(slot_id);
+                const SlotDescriptor* slot_desc = processor->_slot_id_to_desc.at(slot_id);
                 auto column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
                 const uint8_t* buff = reinterpret_cast<const uint8_t*>(buffer.data());
                 auto ret = serde::ColumnArraySerde::deserialize(buff, buff + buffer.size(), column.get());
                 if (!ret.ok()) {
                     auto msg = fmt::format("deserialize column error, slot_id: {}", slot_id);
                     LOG(WARNING) << msg;
-                    ctx->processor->_set_io_task_status(Status::InternalError(msg));
+                    processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
                 DCHECK(!ctx->response_columns.contains(slot_id));
@@ -125,15 +138,21 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
-    closure->addFailureHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+    closure->addFailureHandler([self](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+        auto* processor = ctx->processor;
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
-                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)ctx->processor;
+            if (++unit->finished_request_num == unit->total_request_num) {
+                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor;
             }
-            _is_done = true;
+            self->_is_done = true;
         });
+        processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
         LOG(WARNING) << "fetch request failed, error: " << rpc_error_msg;
-        ctx->processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
     });
 
     closure->cntl.Reset();
@@ -173,8 +192,10 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         size_t actual_serialize_size = buff - begin;
         closure->cntl.request_attachment().append(_ctx->processor->_serialize_buffer.data(), actual_serialize_size);
     }
+    auto unit = _ctx->unit.lock();
+    auto unit_debug_string = unit != nullptr ? unit->debug_string() : std::string("BatchUnit <expired>");
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
-               << ", unit: " << _ctx->unit->debug_string();
+               << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
     const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
