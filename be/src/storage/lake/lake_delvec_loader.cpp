@@ -67,7 +67,7 @@ Status LakeDelvecLoader::load_from_file(const TabletSegmentId& tsid, int64_t ver
 }
 
 StatusOr<std::string> LakeDelvecLoader::_read_delvec_page(const TabletMetadataPtr& metadata,
-                                                           const DelvecPagePB& delvec_page) {
+                                                          const DelvecPagePB& delvec_page) {
     // Look up which file this delvec page belongs to
     auto ver_it = metadata->delvec_meta().version_to_file().find(delvec_page.version());
     if (ver_it == metadata->delvec_meta().version_to_file().end()) {
@@ -87,8 +87,8 @@ StatusOr<std::string> LakeDelvecLoader::_read_delvec_page(const TabletMetadataPt
                     rf, _lake_io_opts.fs->new_random_access_file(
                                 opts, _lake_io_opts.location_provider->delvec_location(metadata->id(), delvec_name)));
         } else {
-            ASSIGN_OR_RETURN(
-                    rf, fs::new_random_access_file(opts, _tablet_manager->delvec_location(metadata->id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
+                                         opts, _tablet_manager->delvec_location(metadata->id(), delvec_name)));
         }
         ASSIGN_OR_RETURN(auto content, rf->read_all());
         cache_it = _delvec_file_cache.emplace(delvec_name, std::move(content)).first;
@@ -97,9 +97,9 @@ StatusOr<std::string> LakeDelvecLoader::_read_delvec_page(const TabletMetadataPt
     // Extract the requested page from the cached file content
     const auto& file_content = cache_it->second;
     if (delvec_page.offset() + delvec_page.size() > file_content.size()) {
-        return Status::Corruption(
-                fmt::format("Delvec page out of bounds: offset={}, size={}, file_size={}, tablet={}, file={}",
-                            delvec_page.offset(), delvec_page.size(), file_content.size(), metadata->id(), delvec_name));
+        return Status::Corruption(fmt::format(
+                "Delvec page out of bounds: offset={}, size={}, file_size={}, tablet={}, file={}", delvec_page.offset(),
+                delvec_page.size(), file_content.size(), metadata->id(), delvec_name));
     }
     return file_content.substr(delvec_page.offset(), delvec_page.size());
 }
