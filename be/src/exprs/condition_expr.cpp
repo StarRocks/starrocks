@@ -21,7 +21,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/simd_selector.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/dispatch.h"

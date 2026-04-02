@@ -23,7 +23,7 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 
 namespace starrocks {
 

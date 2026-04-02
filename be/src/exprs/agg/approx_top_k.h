@@ -21,7 +21,7 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"

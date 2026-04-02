@@ -21,7 +21,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
