@@ -34,8 +34,8 @@
 #include "types/hll.h"
 #include "types/json_value.h"
 #include "types/percentile_value.h"
+#include "types/storage_type_traits.h"
 #include "types/timestamp_value.h"
-#include "types/type_traits.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
