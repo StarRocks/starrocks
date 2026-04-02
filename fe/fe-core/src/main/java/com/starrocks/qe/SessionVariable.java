@@ -968,8 +968,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
-    public static final String AUDIT_STMT_BEFORE_EXECUTE = "audit_stmt_before_execute";
-
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
@@ -2991,9 +2989,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = true;
 
-    @VariableMgr.VarAttr(name = AUDIT_STMT_BEFORE_EXECUTE)
-    private boolean auditStmtBeforeExecute = false;
-
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
 
@@ -3451,14 +3446,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLargeInPredicate(boolean enableLargeInPredicate) {
         this.enableLargeInPredicate = enableLargeInPredicate;
-    }
-
-    public boolean isAuditStmtBeforeExecute() {
-        return auditStmtBeforeExecute;
-    }
-
-    public void setAuditStmtBeforeExecute(boolean auditStmtBeforeExecute) {
-        this.auditStmtBeforeExecute = auditStmtBeforeExecute;
     }
 
     public int getLargeInPredicateThreshold() {

@@ -601,135 +601,153 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @Test
     public void testMultiStatementAuditBeforeAndAfterPerStatement() throws Exception {
-        ByteBuffer packet = createQueryPacket("select 1; select 2;");
-        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
-        List<String> auditRecords = new ArrayList<>();
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
-            }
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
+                }
 
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() {
-            }
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString()
+                            + ":" + origStmt);
+                }
+            };
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
 
-        processor.processOnce();
-        Assertions.assertEquals(4, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
-        Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
-        Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:OK:"));
-        Assertions.assertFalse(auditRecords.get(0).contains(";"));
-        Assertions.assertFalse(auditRecords.get(1).contains(";"));
-        Assertions.assertFalse(auditRecords.get(2).contains(";"));
-        Assertions.assertFalse(auditRecords.get(3).contains(";"));
+            processor.processOnce();
+            Assertions.assertEquals(4, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
+            Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
+            Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:OK:"));
+            Assertions.assertFalse(auditRecords.get(0).contains(";"));
+            Assertions.assertFalse(auditRecords.get(1).contains(";"));
+            Assertions.assertFalse(auditRecords.get(2).contains(";"));
+            Assertions.assertFalse(auditRecords.get(3).contains(";"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test
     public void testMultiStatementAuditBeforeAndAfterStopsAfterFailure() throws Exception {
-        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
-        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
-        List<String> auditRecords = new ArrayList<>();
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
-            }
-
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute(Invocation invocation) throws Exception {
-                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
-                if (stmtExecutor.getParsedStmt().getOrigStmt().idx == 1) {
-                    throw new IOException("mock stmt failure");
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
                 }
-            }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString()
+                            + ":" + origStmt);
+                }
+            };
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute(Invocation invocation) throws Exception {
+                    StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                    if (stmtExecutor.getParsedStmt().getOrigStmt().idx == 1) {
+                        throw new IOException("mock stmt failure");
+                    }
+                }
 
-        processor.processOnce();
-        Assertions.assertEquals(4, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
-        Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
-        Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:ERR:"));
-        Assertions.assertFalse(auditRecords.get(0).contains(";"));
-        Assertions.assertFalse(auditRecords.get(1).contains(";"));
-        Assertions.assertFalse(auditRecords.get(2).contains(";"));
-        Assertions.assertFalse(auditRecords.get(3).contains("; select 3"));
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+            Assertions.assertEquals(4, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
+            Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
+            Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:ERR:"));
+            Assertions.assertFalse(auditRecords.get(0).contains(";"));
+            Assertions.assertFalse(auditRecords.get(1).contains(";"));
+            Assertions.assertFalse(auditRecords.get(2).contains(";"));
+            Assertions.assertFalse(auditRecords.get(3).contains("; select 3"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test
     public void testMultiStatementAuditBeforeExecOnlyOnceWhenStmtRetries() throws Exception {
-        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
-        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
-        List<String> auditRecords = new ArrayList<>();
-        int[] executeCounts = new int[3];
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
-            }
-
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute(Invocation invocation) throws Exception {
-                StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
-                int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
-                executeCounts[stmtIdx]++;
-                if (stmtIdx == 1 && executeCounts[stmtIdx] == 1) {
-                    throw new LargeInPredicateException("mock large in predicate retry");
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            List<String> auditRecords = new ArrayList<>();
+            int[] executeCounts = new int[3];
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
                 }
-            }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString()
+                            + ":" + origStmt);
+                }
+            };
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute(Invocation invocation) throws Exception {
+                    StmtExecutor stmtExecutor = (StmtExecutor) invocation.getInvokedInstance();
+                    int stmtIdx = stmtExecutor.getParsedStmt().getOrigStmt().idx;
+                    executeCounts[stmtIdx]++;
+                    if (stmtIdx == 1 && executeCounts[stmtIdx] == 1) {
+                        throw new LargeInPredicateException("mock large in predicate retry");
+                    }
+                }
 
-        processor.processOnce();
-        Assertions.assertArrayEquals(new int[] {1, 2, 1}, executeCounts);
-        Assertions.assertEquals(6, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
-        Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
-        Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:OK:"));
-        Assertions.assertTrue(auditRecords.get(4).startsWith("BEFORE:2:"));
-        Assertions.assertTrue(auditRecords.get(5).startsWith("AFTER:2:OK:"));
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+            Assertions.assertArrayEquals(new int[] {1, 2, 1}, executeCounts);
+            Assertions.assertEquals(6, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
+            Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
+            Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:OK:"));
+            Assertions.assertTrue(auditRecords.get(4).startsWith("BEFORE:2:"));
+            Assertions.assertTrue(auditRecords.get(5).startsWith("AFTER:2:OK:"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test
@@ -778,48 +796,54 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @Test
     public void testMultiStatementPreExecutionFailureHasBeforeAndAfterAudit() throws Exception {
-        ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
-        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
-        ctx.setTxnId(1);
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
-        List<String> auditRecords = new ArrayList<>();
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
-            }
-
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
-        new MockUp<ExplicitTxnStatementValidator>() {
-            @Mock
-            public void validate(StatementBase statement, ConnectContext context) {
-                if (statement.getOrigStmt().idx == 1) {
-                    throw new SemanticException("mock pre execution failure");
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer packet = createQueryPacket("select 1; select 2; select 3;");
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ctx.setTxnId(1);
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + parsedStmt.getOrigStmt().idx + ":" + origStmt);
                 }
-            }
-        };
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() {
-            }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + parsedStmt.getOrigStmt().idx + ":" + ctx.getState().toString()
+                            + ":" + origStmt);
+                }
+            };
+            new MockUp<ExplicitTxnStatementValidator>() {
+                @Mock
+                public void validate(StatementBase statement, ConnectContext context) {
+                    if (statement.getOrigStmt().idx == 1) {
+                        throw new SemanticException("mock pre execution failure");
+                    }
+                }
+            };
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() {
+                }
 
-        processor.processOnce();
-        Assertions.assertEquals(4, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
-        Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
-        Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:ERR:"));
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
+
+            processor.processOnce();
+            Assertions.assertEquals(4, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:0:"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:0:OK:"));
+            Assertions.assertTrue(auditRecords.get(2).startsWith("BEFORE:1:"));
+            Assertions.assertTrue(auditRecords.get(3).startsWith("AFTER:1:ERR:"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test
@@ -1434,85 +1458,95 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @Test
     public void testHandleExecuteAuditBeforeAndAfter() throws Exception {
-        ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
-        ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+            ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
 
-        PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
-        PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
-        ctx.putPreparedStmt("1", prepareCtx);
+            PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+            PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
+            ctx.putPreparedStmt("1", prepareCtx);
 
-        List<String> auditRecords = new ArrayList<>();
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + origStmt);
-            }
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + origStmt);
+                }
 
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
+                }
+            };
 
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-            }
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() throws Exception {
+                }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
 
-        processor.processOnce();
-        Assertions.assertEquals(2, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:SELECT 1 + 2"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:OK:SELECT 1 + 2"));
+            processor.processOnce();
+            Assertions.assertEquals(2, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:SELECT 1 + 2"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:OK:SELECT 1 + 2"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     @Test
     public void testHandleExecuteAuditBeforeAndAfterOnFailure() throws Exception {
-        ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
-        ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setAuditStmtBeforeExecute(true);
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+            ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
 
-        PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
-        PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
-        ctx.putPreparedStmt("1", prepareCtx);
+            PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+            PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
+            ctx.putPreparedStmt("1", prepareCtx);
 
-        List<String> auditRecords = new ArrayList<>();
-        ConnectProcessor processor = new ConnectProcessor(ctx) {
-            @Override
-            public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-                auditRecords.add("BEFORE:" + origStmt);
-            }
+            List<String> auditRecords = new ArrayList<>();
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    auditRecords.add("BEFORE:" + origStmt);
+                }
 
-            @Override
-            public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                                       String digestFromLeader) {
-                auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
-            }
-        };
+                @Override
+                public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                                           String digestFromLeader) {
+                    auditRecords.add("AFTER:" + ctx.getState().toString() + ":" + origStmt);
+                }
+            };
 
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                throw new IOException("mock execute failure");
-            }
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void execute() throws Exception {
+                    throw new IOException("mock execute failure");
+                }
 
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return null;
-            }
-        };
+                @Mock
+                public PQueryStatistics getQueryStatisticsForAuditLog() {
+                    return null;
+                }
+            };
 
-        processor.processOnce();
-        Assertions.assertEquals(2, auditRecords.size());
-        Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:SELECT 1 + 2"));
-        Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:ERR:SELECT 1 + 2"));
+            processor.processOnce();
+            Assertions.assertEquals(2, auditRecords.size());
+            Assertions.assertTrue(auditRecords.get(0).startsWith("BEFORE:SELECT 1 + 2"));
+            Assertions.assertTrue(auditRecords.get(1).startsWith("AFTER:ERR:SELECT 1 + 2"));
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
     }
 
     /**

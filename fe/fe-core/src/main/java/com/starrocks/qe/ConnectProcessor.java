@@ -223,7 +223,7 @@ public class ConnectProcessor {
     }
 
     public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
-        if (!ctx.getSessionVariable().isAuditStmtBeforeExecute()) {
+        if (!Config.audit_stmt_before_execute) {
             return;
         }
 
@@ -522,7 +522,8 @@ public class ConnectProcessor {
         return parsedStmt;
     }
 
-    private boolean shouldTerminateBeforeStmtExecution(StatementBase parsedStmt, String originStmt) {
+    // return true if validate failed, which means it should terminate
+    private boolean validateStmtBeforeExecution(StatementBase parsedStmt, String originStmt) {
         try {
             if (ctx.getTxnId() != 0) {
                 ExplicitTxnStatementValidator.validate(parsedStmt, ctx);
@@ -569,6 +570,7 @@ public class ConnectProcessor {
             }
             executor.execute();
         } catch (LargeInPredicateException e) {
+            // we will retry this sql later, so don't audit here
             throw e;
         } catch (Exception e) {
             auditStmtFailure(e, parsedStmt, auditSql);
@@ -579,6 +581,7 @@ public class ConnectProcessor {
 
     private StatementBase prepareRetriedStmt(StatementBase parsedStmt, String originStmt, int stmtCount)
             throws AnalysisException {
+        // reparse the whole sql
         StatementBase retriedStmt = parseStatements(originStmt).get(parsedStmt.getOrigStmt().idx);
         resetStmtRetryContext();
         return prepareStmtForExecution(retriedStmt, originStmt, parsedStmt.getOrigStmt().idx, stmtCount);
@@ -589,6 +592,7 @@ public class ConnectProcessor {
         try {
             return prepareRetriedStmt(parsedStmt, originStmt, stmtCount);
         } catch (Exception e) {
+            // since this is the retry stmt, we have to audit
             auditStmtFailureForStmt(e, parsedStmt, originStmt);
             throw e;
         }
@@ -599,22 +603,14 @@ public class ConnectProcessor {
             executeStmtWithAudit(parsedStmt, getAuditSql(parsedStmt, originStmt));
         } catch (LargeInPredicateException e) {
             boolean originalEnableLargeInPredicate = ctx.getSessionVariable().enableLargeInPredicate();
-            if (!originalEnableLargeInPredicate) {
-                auditStmtFailureForStmt(e, parsedStmt, originStmt);
-                throw e;
-            }
             try {
                 ctx.getSessionVariable().setEnableLargeInPredicate(false);
                 LOG.warn("Retrying statement with enable_large_in_predicate=false, stmt idx: {}",
                         parsedStmt.getOrigStmt().idx);
                 Tracers.record(Tracers.Module.BASE, "retry_with_large_in_predicate_exception", "true");
                 StatementBase retriedStmt = prepareRetriedStmtWithAudit(parsedStmt, originStmt, stmtCount);
-                try {
-                    executeStmtWithAudit(retriedStmt, getAuditSql(retriedStmt, originStmt));
-                } catch (LargeInPredicateException retryException) {
-                    auditStmtFailureForStmt(retryException, retriedStmt, originStmt);
-                    throw retryException;
-                }
+                // retry this sql, and audit
+                executeStmtWithAudit(retriedStmt, getAuditSql(retriedStmt, originStmt));
             } finally {
                 ctx.getSessionVariable().setEnableLargeInPredicate(originalEnableLargeInPredicate);
             }
@@ -657,6 +653,7 @@ public class ConnectProcessor {
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            // if parse failed, audit stmts together once
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
             }
@@ -667,6 +664,7 @@ public class ConnectProcessor {
                     ", because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            // for safety
             if (!parseSucceeded) {
                 auditAfterExec(originStmt, null, null, null);
             }
@@ -701,12 +699,12 @@ public class ConnectProcessor {
         for (int i = 0; i < stmts.size(); ++i) {
             resetStmtExecutionContext(i > 0);
             StatementBase parsedStmt = stmts.get(i);
+            parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
             if (!(parsedStmt instanceof SetStmt)) {
                 allStatementsAreSet = false;
             }
-            parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
             auditBeforeExec(getAuditSql(parsedStmt, originStmt), parsedStmt);
-            if (shouldTerminateBeforeStmtExecution(parsedStmt, originStmt)) {
+            if (validateStmtBeforeExecution(parsedStmt, originStmt)) {
                 auditCurrentStmt(getAuditSql(parsedStmt, originStmt), parsedStmt);
                 return new QueryAttemptResult(allStatementsAreSet, true);
             }

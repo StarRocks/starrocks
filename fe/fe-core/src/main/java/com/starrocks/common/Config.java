@@ -159,6 +159,8 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_audit_sql = true;
+    @ConfField(mutable = true, comment = "Whether to emit BEFORE_QUERY audit events before each statement executes.")
+    public static boolean audit_stmt_before_execute = false;
     @ConfField
     public static boolean enable_internal_sql = true;
     @ConfField
