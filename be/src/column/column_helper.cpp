@@ -15,6 +15,7 @@
 #include "column/column_helper.h"
 
 #include <runtime/types.h>
+
 #include <type_traits>
 
 #ifdef __x86_64__
