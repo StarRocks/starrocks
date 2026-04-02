@@ -67,6 +67,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
 
+    std::mutex mutex;
     Status shared_status;
     auto open_one = [&](int idx) {
         auto& pb = sstable_meta.sstables(idx);
@@ -75,6 +76,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         if (res.ok()) {
             sstables[idx] = std::move(res.value());
         } else {
+            std::lock_guard<std::mutex> lock(mutex);
             shared_status.update(res.status());
         }
     };
