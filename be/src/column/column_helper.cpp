@@ -358,6 +358,32 @@ namespace {
 template <typename T>
 inline constexpr bool kIsNormalizableNumericType = std::is_arithmetic_v<T> || std::is_same_v<T, int128_t>;
 
+bool can_dispatch_basic_scalar_normalization(LogicalType type) {
+    switch (type) {
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_LARGEINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DECIMALV2:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_TIME:
+    case TYPE_JSON:
+    case TYPE_VARBINARY:
+    case TYPE_VARIANT:
+    case TYPE_BOOLEAN:
+    case TYPE_NULL:
+        return true;
+    default:
+        return false;
+    }
+}
+
 struct ScalarColumnTypeNormalizer {
     template <LogicalType LT>
     ColumnPtr operator()(const Column& src_column, size_t count) const {
@@ -469,7 +495,8 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
         break;
     }
 
-    if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type)) {
+    if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type) ||
+        !can_dispatch_basic_scalar_normalization(target_type.type)) {
         return column;
     }
 

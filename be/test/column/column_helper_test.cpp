@@ -15,6 +15,9 @@
 #include "column/column_helper.h"
 
 #include "column/column_builder.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "gtest/gtest.h"
 #include "testutil/column_test_helper.h"
 
@@ -189,6 +192,80 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
+}
+
+TEST_F(ColumnHelperTest, normalize_column_type_no_change) {
+    auto col = Int32Column::create();
+    col->append(1);
+    col->append(2);
+    ColumnPtr ptr = col;
+
+    auto result = ColumnHelper::normalize_column_type(ptr, TypeDescriptor(TYPE_INT));
+    ASSERT_EQ(result.get(), ptr.get());
+}
+
+TEST_F(ColumnHelperTest, normalize_column_type_widen_tinyint_to_smallint) {
+    auto col = Int8Column::create();
+    col->append(1);
+    col->append(-5);
+    col->append(127);
+    ColumnPtr ptr = col;
+
+    auto result = ColumnHelper::normalize_column_type(ptr, TypeDescriptor(TYPE_SMALLINT));
+    ASSERT_NE(result.get(), ptr.get());
+    ASSERT_EQ(result->size(), 3);
+    ASSERT_EQ(result->type_size(), sizeof(int16_t));
+
+    auto* converted = down_cast<const Int16Column*>(result.get());
+    ASSERT_EQ(converted->get_data()[0], 1);
+    ASSERT_EQ(converted->get_data()[1], -5);
+    ASSERT_EQ(converted->get_data()[2], 127);
+}
+
+TEST_F(ColumnHelperTest, normalize_column_type_nullable) {
+    auto data_col = Int8Column::create();
+    data_col->append(10);
+    data_col->append(20);
+    auto null_col = NullColumn::create();
+    null_col->append(0);
+    null_col->append(1);
+    ColumnPtr ptr = NullableColumn::create(std::move(data_col), std::move(null_col));
+
+    auto result = ColumnHelper::normalize_column_type(ptr, TypeDescriptor(TYPE_SMALLINT));
+    ASSERT_NE(result.get(), ptr.get());
+    ASSERT_TRUE(result->is_nullable());
+
+    auto* result_nullable = down_cast<const NullableColumn*>(result.get());
+    auto* result_data = down_cast<const Int16Column*>(result_nullable->data_column().get());
+    ASSERT_EQ(result_data->get_data()[0], 10);
+    ASSERT_EQ(result_data->get_data()[1], 20);
+    ASSERT_EQ(result_nullable->null_column()->get_data()[0], 0);
+    ASSERT_EQ(result_nullable->null_column()->get_data()[1], 1);
+}
+
+TEST_F(ColumnHelperTest, normalize_column_type_struct_nested) {
+    auto field = Int8Column::create();
+    field->append(42);
+    auto null_col = NullColumn::create();
+    null_col->append(0);
+    ColumnPtr nullable_field = NullableColumn::create(std::move(field), std::move(null_col));
+
+    Columns fields;
+    fields.emplace_back(std::move(nullable_field));
+    ColumnPtr ptr = StructColumn::create(fields, {"f1"});
+
+    TypeDescriptor type_struct;
+    type_struct.type = TYPE_STRUCT;
+    type_struct.children.emplace_back(TYPE_SMALLINT);
+    type_struct.field_names.emplace_back("f1");
+
+    auto result = ColumnHelper::normalize_column_type(ptr, type_struct);
+    ASSERT_NE(result.get(), ptr.get());
+
+    auto* result_struct = down_cast<const StructColumn*>(result.get());
+    auto* result_field = down_cast<const NullableColumn*>(result_struct->field_column_raw_ptr(0));
+    auto* result_data = down_cast<const Int16Column*>(result_field->data_column().get());
+    ASSERT_EQ(result_data->get_data()[0], 42);
 }
 
 } // namespace starrocks

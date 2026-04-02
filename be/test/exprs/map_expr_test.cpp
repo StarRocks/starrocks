@@ -175,15 +175,27 @@ TEST_F(MapExprTest, test_type_mismatch_no_overflow) {
     type_map_smallint.children.emplace_back();
     type_map_smallint.children.back().type = LogicalType::TYPE_SMALLINT;
 
-    auto expr = create_map_expr(type_map_smallint);
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({4, 5, 3}), LogicalType::TYPE_TINYINT));
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({40, 50, 60}), LogicalType::TYPE_TINYINT));
+    {
+        auto expr = create_map_expr(type_map_smallint);
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
 
-    auto result = expr->evaluate(nullptr, nullptr);
-    EXPECT_EQ(3, result->size());
-    EXPECT_TRUE(result->is_map());
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_map());
+    }
+
+    {
+        auto expr = create_map_expr(type_map_smallint);
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({4, 5, 3}), LogicalType::TYPE_TINYINT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({40, 50, 60}), LogicalType::TYPE_TINYINT));
+
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_EQ(3, result->size());
+        EXPECT_TRUE(result->is_map());
+    }
 }
 
 TEST_F(MapExprTest, test_nested_type_mismatch_no_overflow) {
