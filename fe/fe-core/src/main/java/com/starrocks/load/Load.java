@@ -771,13 +771,6 @@ public class Load {
     static Expr buildLoadDefaultExpr(Column column) throws StarRocksException {
         Column.DefaultValueType defaultValueType = column.getDefaultValueType();
         if (defaultValueType == Column.DefaultValueType.CONST) {
-            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
-                Expr expr = column.getDefaultExpr().obtainExpr();
-                if (expr == null) {
-                    throw new StarRocksException("Column(" + column + ") has invalid default expr object");
-                }
-                return expr;
-            }
             return new StringLiteral(column.calculatedDefaultValue());
         } else if (defaultValueType == Column.DefaultValueType.VARY) {
             if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
@@ -882,46 +875,18 @@ public class Load {
             List<SlotRef> slots = Lists.newArrayList();
             entry.getValue().collect(SlotRef.class, slots);
             for (SlotRef slot : slots) {
-<<<<<<< HEAD
-                SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
-                // In this case, generated column ref some mapping column
-                // and the expression should be replace by mapping column expression.
-
-                // Notes that, if slotDesc != null and exprsByName.get(slot.getColumnName()) != null
-                // it means that the ref columns are both in column list and expression list.
-                // In this case, we should rewrite the generated column expression using
-                // the expression in expression list instead of column list.
-                if (slotDesc == null || exprsByName.get(slot.getColumnName()) != null) {
-                    smap.getLhs().add(slot);
-                    Expr replaceExpr = exprsByName.get(slot.getColumnName());
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
-                    }
-                    smap.getRhs().add(replaceExpr);
-                } else {
-                    smap.getLhs().add(slot);
-                    SlotRef slotRef = new SlotRef(slotDesc);
-                    slotRef.setColumnName(slot.getColumnName());
-                    Expr replaceExpr = slotRef;
-                    if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
-                            !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
-                    }
-                    smap.getRhs().add(replaceExpr);
-=======
                 // Generated columns should prefer the mapping expression when a referenced column
                 // exists in both the input column list and the expression list.
                 Expr replaceExpr = resolveGeneratedColumnRefExpr(tbl, slot, exprsByName, slotDescByName);
                 if (replaceExpr == null) {
                     ErrorReport.reportAnalysisException(ERR_MISSING_DEPENDENCY_FOR_GENERATED_COLUMN, entry.getKey());
->>>>>>> c2f48ac474 ([BugFix] Fix NPE when analyzing generated columns in Stream Load/Broker Load if a referenced column is missing (#71116))
                 }
-                if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
+                if (replaceExpr.getType().matchesType(Type.VARCHAR) &&
                         !replaceExpr.getType().matchesType(slot.getType())) {
-                    replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
+                    replaceExpr = replaceExpr.castTo(slot.getType());
                 }
-                smap.put(slot, replaceExpr);
+                smap.getLhs().add(slot);
+                smap.getRhs().add(replaceExpr);
             }
             Expr expr = entry.getValue().clone(smap);
 
