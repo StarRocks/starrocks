@@ -49,7 +49,7 @@ TEST_F(AggHashMapInlineTest, InlineStateCorrectness) {
     Columns key_columns = {column};
     Buffer<AggDataPtr> agg_states(100);
 
-    map.build_hash_map_inline(100, key_columns, &pool, &agg_states);
+    map.template build_hash_map<true>(100, key_columns, &pool, NoAllocFunc{}, &agg_states);
 
     // Simulate count update at offset 0.
     for (size_t i = 0; i < 100; i++) {

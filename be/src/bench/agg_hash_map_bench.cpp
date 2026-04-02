@@ -124,7 +124,7 @@ static void BM_AggHashMap_Inline(benchmark::State& state) {
             Columns chunk_cols = {ColumnPtr(std::move(chunk_col))};
 
             agg_states.assign(chunk_rows, nullptr);
-            map.build_hash_map_inline(chunk_rows, chunk_cols, &pool, &agg_states);
+            map.template build_hash_map<true>(chunk_rows, chunk_cols, &pool, NoAllocFunc{}, &agg_states);
             simulate_count_update(agg_states, chunk_rows, /*offset=*/0);
         }
 
