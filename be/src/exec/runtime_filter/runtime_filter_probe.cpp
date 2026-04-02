@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter/runtime_filter_probe.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 
 #include <algorithm>
 #include <chrono>
@@ -22,11 +22,8 @@
 #include "base/simd/simd.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -152,11 +149,10 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
 
 RuntimeFilterProbeDescriptor::~RuntimeFilterProbeDescriptor() = default;
 
-void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
-    if (_observable == nullptr) {
-        _observable = std::make_unique<pipeline::Observable>();
+void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, ReadyObserver observer) {
+    if (state != nullptr && state->enable_event_scheduler() && observer) {
+        _ready_observers.emplace_back(std::move(observer));
     }
-    _observable->add_observer(state, observer);
 }
 
 static const int default_runtime_filter_wait_timeout_ms = 1000;
@@ -545,70 +541,13 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     _descriptors[desc->filter_id()] = desc;
 }
 
-// only used in non-pipeline mode
-void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
-    if (_descriptors.empty()) return;
-
-    std::list<RuntimeFilterProbeDescriptor*> wait_list;
-    for (auto& it : _descriptors) {
-        auto* rf = it.second;
-        int filter_id = rf->filter_id();
-        VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
-                  << ", plan_node_id = " << _plan_node_id << ", finst_id = " << _runtime_state->fragment_instance_id();
-        wait_list.push_back(it.second);
-    }
-
-    int wait_time = _wait_timeout_ms;
-    if (on_scan_node) {
-        wait_time = _scan_wait_timeout_ms;
-    }
-    const int wait_interval = 5;
-    auto wait_duration = std::chrono::milliseconds(wait_interval);
-    while (wait_time >= 0 && !wait_list.empty()) {
-        auto it = wait_list.begin();
-        while (it != wait_list.end()) {
-            auto* rf = (*it)->runtime_filter(-1);
-            // find runtime filter in cache.
-            if (rf == nullptr) {
-                RuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(_runtime_state->query_id(),
-                                                                                             (*it)->filter_id());
-                if (t != nullptr) {
-                    VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
-                              << ", plan_node_id = " << _plan_node_id
-                              << ", finst_id  = " << _runtime_state->fragment_instance_id();
-                    (*it)->set_shared_runtime_filter(t);
-                    rf = t.get();
-                }
-            }
-            if (rf != nullptr) {
-                it = wait_list.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        if (wait_list.empty()) break;
-        std::this_thread::sleep_for(wait_duration);
-        wait_time -= wait_interval;
-    }
-
-    if (_descriptors.size() != 0) {
-        for (const auto& it : _descriptors) {
-            auto* rf = it.second;
-            int filter_id = rf->filter_id();
-            bool ready = (rf->runtime_filter(-1) != nullptr);
-            VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
-                      << ", plan_node_id = " << _plan_node_id
-                      << ", finst_id = " << _runtime_state->fragment_instance_id()
-                      << ", ready = " << std::to_string(ready);
-        }
-    }
-}
-
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
     auto notify = DeferOp([this]() {
         FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
-        if (_runtime_state && _runtime_state->fragment_prepared() && _observable != nullptr) {
-            _observable->notify_source_observers();
+        if (_runtime_state && _runtime_state->fragment_prepared()) {
+            for (auto& observer : _ready_observers) {
+                observer();
+            }
         }
     });
     const RuntimeFilter* expected = nullptr;

@@ -14,26 +14,4 @@
 
 #pragma once
 
-#include "common/global_types.h"
-#include "common/object_pool.h"
-#include "common/statusor.h"
-#include "types/logical_type.h"
-
-namespace starrocks {
-
-class Chunk;
-class Expr;
-class ExprContext;
-class RuntimeFilter;
-
-class RuntimeFilterHelper {
-public:
-    static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
-                                                                            Chunk* chunk);
-
-    // create min/max predicate from filter.
-    static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
-                                               const RuntimeFilter* filter, Expr** min_max_predicate);
-};
-
-} // namespace starrocks
+#include "exec/runtime_filter/runtime_filter_helper.h"

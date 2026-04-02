@@ -25,9 +25,9 @@
 #include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exec/chunks_sorter_heap_sort.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_filter.h"
-#include "runtime/runtime_filter/runtime_filter_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
