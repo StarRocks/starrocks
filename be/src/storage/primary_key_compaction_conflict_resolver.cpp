@@ -134,29 +134,45 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     RETURN_IF_ERROR(segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
-                std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
+                // Phase 1: Read all rssid_rowids from mapper and collect unique rssids.
+                // Store per-segment data for reuse in Phase 2.
+                std::vector<std::vector<uint64_t>> all_rssid_rowids(segments.size());
+                std::unordered_set<uint32_t> unique_rssids;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
                     RETURN_IF_ERROR(breakpoint_check());
-                    // 2. get input rssid & rowids, so we can generate delvec
+                    RETURN_IF_ERROR(
+                            mapper_iter.next_values(segments[segment_id]->num_rows(), &all_rssid_rowids[segment_id]));
+                    DCHECK(segments[segment_id]->num_rows() == all_rssid_rowids[segment_id].size());
+                    for (const auto& rssid_rowid : all_rssid_rowids[segment_id]) {
+                        unique_rssids.insert(rssid_rowid >> 32);
+                    }
+                }
+
+                // Phase 2: Batch-load all delvecs concurrently.
+                // This issues all range reads in parallel, overlapping the ~2-3ms
+                // per-request HTTP latency across hundreds of segments.
+                {
+                    TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
+                    RETURN_IF_ERROR(params.delvec_loader->batch_load(params.tablet_id, params.base_version,
+                                                                     unique_rssids));
+                }
+
+                // Phase 3: Process rows using pre-loaded delvecs.
+                std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
+                for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
                     vector<uint32_t> tmp_deletes;
-                    std::vector<uint64_t> rssid_rowids;
-                    RETURN_IF_ERROR(mapper_iter.next_values(segments[segment_id]->num_rows(), &rssid_rowids));
-                    DCHECK(segments[segment_id]->num_rows() == rssid_rowids.size());
+                    const auto& rssid_rowids = all_rssid_rowids[segment_id];
                     for (int i = 0; i < rssid_rowids.size(); i++) {
                         const uint32_t rssid = rssid_rowids[i] >> 32;
                         const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
                         if (rssid_to_delvec.count(rssid) == 0) {
-                            // get delvec by loader
                             DelVectorPtr delvec_ptr;
-                            {
-                                TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
-                                RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
-                                                                           params.base_version, &delvec_ptr));
-                            }
+                            // This will hit the preloaded map — no remote IO
+                            RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
+                                                                       params.base_version, &delvec_ptr));
                             rssid_to_delvec[rssid] = delvec_ptr;
                         }
                         if (!rssid_to_delvec[rssid]->empty() && rssid_to_delvec[rssid]->roaring()->contains(rowid)) {
-                            // Input row had been deleted, so we need to delete it from output rowset
                             tmp_deletes.push_back(i);
                         }
                     }

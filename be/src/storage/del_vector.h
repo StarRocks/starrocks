@@ -15,6 +15,7 @@
 #pragma once
 
 #include <roaring/roaring.hh>
+#include <unordered_set>
 
 #include "common/status.h"
 #include "storage/olap_common.h"
@@ -82,6 +83,16 @@ public:
     DelvecLoader() = default;
     virtual ~DelvecLoader() = default;
     virtual Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) = 0;
+    // Batch-load delvecs for multiple segments concurrently.
+    // Default implementation loads sequentially; subclasses may override for parallel IO.
+    virtual Status batch_load(int64_t tablet_id, int64_t version,
+                              const std::unordered_set<uint32_t>& segment_ids) {
+        for (uint32_t seg_id : segment_ids) {
+            DelVectorPtr delvec;
+            RETURN_IF_ERROR(load({tablet_id, seg_id}, version, &delvec));
+        }
+        return Status::OK();
+    }
 };
 
 } // namespace starrocks
