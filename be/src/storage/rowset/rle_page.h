@@ -38,7 +38,7 @@
 #include "base/coding.h"
 #include "base/string/slice.h"
 #include "column/column.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"

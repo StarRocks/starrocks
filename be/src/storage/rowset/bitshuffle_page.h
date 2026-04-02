@@ -47,7 +47,7 @@
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "column/fixed_length_column.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"

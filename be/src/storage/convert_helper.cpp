@@ -23,7 +23,7 @@
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"

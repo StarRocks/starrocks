@@ -16,7 +16,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/hash_set.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "storage/types.h"
 #include "types/decimalv3.h"
 

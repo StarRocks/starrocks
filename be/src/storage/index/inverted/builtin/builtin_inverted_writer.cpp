@@ -30,7 +30,7 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

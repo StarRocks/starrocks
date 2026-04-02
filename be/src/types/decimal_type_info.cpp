@@ -20,7 +20,7 @@
 #include "gutil/compiler_util.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

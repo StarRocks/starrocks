@@ -40,7 +40,7 @@
 #include <limits>
 
 #include "column/column.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"

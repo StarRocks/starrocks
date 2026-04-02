@@ -39,7 +39,7 @@
 #include <memory>
 
 #include "column/fixed_length_column.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"

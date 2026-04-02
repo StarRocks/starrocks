@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "column/datum_convert.h"
-#include "column/storage_type_traits.h"
+#include "types/storage_type_traits.h"
 
 #include <cstring>
 
