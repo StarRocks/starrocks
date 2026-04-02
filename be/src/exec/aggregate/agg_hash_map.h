@@ -1377,7 +1377,10 @@ struct AggHashMapWithCompressedKeyFixedSize
                                 keys.data());
     }
 
-    static constexpr bool supports_inline_state = true;
+    // SmallFixedSizeHashMap (Int8AggHashMap) uses nullptr as its empty-slot sentinel,
+    // which conflicts with the nullptr value stored during inline-state insertion.
+    // Its iterator also returns a temporary PPair, making &iter->second a dangling pointer.
+    static constexpr bool supports_inline_state = !is_no_prefetch_map<HashMap>;
     static constexpr bool has_single_null_key = false;
 
     std::vector<int> used_bits;
