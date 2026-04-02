@@ -1,13 +1,13 @@
 ---
 displayed_sidebar: docs
-sidebar_label: "Feature Differences"
+sidebar_label: "機能の違い"
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
 # Shared-nothingとShared-dataクラスター間の機能の違い
 
-このトピックでは、Shared-nothingクラスターとShared-dataクラスターでサポートされている機能の違いを一覧表示します。
+このトピックでは、Shared-nothing クラスターと Shared-data クラスターでサポートされている機能の違いを一覧表示します。
 
 ## リアルタイム分析と主キーテーブル
 
@@ -18,8 +18,8 @@ import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_F
 | 部分更新 (行モード) | v2.3+ | v3.1+ |
 | 条件付き更新を伴う部分更新 | v3.1+ | v3.4.1+ |
 | 主キーインデックスの永続化 | v2.3+ | v3.2+ |
-| 主キーからのORDER BY列の分離 | v3.0+ | v3.1+ |
-| 主キーテーブルの豊富なUPDATEおよびDELETE構文 | v3.0+ | v3.1+ |
+| 主キーからの ORDER BY 列の分離 | v3.0+ | v3.1+ |
+| 主キーテーブルの豊富な UPDATE およびDELETE構文 | v3.0+ | v3.1+ |
 
 ## ストレージエンジン
 
@@ -30,7 +30,7 @@ import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_F
 | 転置インデックス | v3.3+ | v4.1+ |
 | 手動コンパクション | v3.1+ | v3.3+ |
 | 行ストア | v3.2+ | サポート予定 |
-| STRUCTフィールドの追加/削除 | v3.3.2+ | v3.3.5+ |
+| STRUCT フィールドの追加/削除 | v3.3.2+ | v3.3.5+ |
 | ベクトルインデックス | v3.4+ | サポート予定 |
 
 ## データ分散
