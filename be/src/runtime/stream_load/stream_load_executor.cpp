@@ -49,9 +49,13 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
+<<<<<<< HEAD
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+=======
+#include "storage/non_retryable_load_errors.h"
+>>>>>>> 39a4352ad9 ([Enhancement] Pause routine load job on non-retryable errors like primary key size exceed (#71161))
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -468,6 +472,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        if (!ctx->status.ok() && is_non_retryable_load_error(ctx->status.message())) {
+            rl_attach.__set_nonRetryable(true);
+        }
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;

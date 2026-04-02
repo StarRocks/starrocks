@@ -1236,6 +1236,23 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
                         txnStatusChangeReasonString);
             }
+<<<<<<< HEAD
+=======
+
+            // check if BE explicitly marked this error as non-retryable
+            RLTaskTxnCommitAttachment rlAttachment =
+                    (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
+            if (rlAttachment != null && rlAttachment.isNonRetryable()) {
+                String msg = "be " + taskBeId + " abort task "
+                        + "with non-retryable reason: " + txnStatusChangeReasonString;
+                updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
+                return;
+            }
+
+            // step2: commit task , update progress, maybe create a new task
+            executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.ABORTED,
+                    txnStatusChangeReasonString);
+>>>>>>> 39a4352ad9 ([Enhancement] Pause routine load job on non-retryable errors like primary key size exceed (#71161))
         } catch (Exception e) {
             String msg =
                     "be " + taskBeId + " abort task " + txnState.getLabel() + " failed with error " + e.getMessage();

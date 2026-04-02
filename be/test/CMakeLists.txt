@@ -346,6 +346,7 @@ set(EXEC_FILES
         ./types/int256_test.cpp
         ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
+<<<<<<< HEAD
         ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
         ./simd/batch_run_counter_test.cpp
@@ -362,6 +363,11 @@ set(EXEC_FILES
         ./util/bit_mask_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
+=======
+        ./types/type_checker_xml_loader_test.cpp
+        ./column/simd_selector_test.cpp
+        ./column/simd_mulselector_test.cpp
+>>>>>>> 39a4352ad9 ([Enhancement] Pause routine load job on non-retryable errors like primary key size exceed (#71161))
         ./util/block_compression_test.cpp
         ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
@@ -572,6 +578,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
