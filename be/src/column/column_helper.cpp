@@ -539,8 +539,7 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
     // ColumnPtr (nullptr) for types outside APPLY_FOR_ALL_SCALAR_TYPE, so we
     // never need a hand-maintained type whitelist.
     auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(),
-                                                         column.get(),
-                                                         column->size());
+                                                         column.get(), column->size());
     if (normalized == nullptr) {
         return column;
     }
