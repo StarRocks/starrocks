@@ -2858,4 +2858,229 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
 }
 
+// ── Hidden variant source active/lazy classification ─────────────────────────
+
+// Covers: _lazy_hidden_slot_ids.push_back (lazy hidden source path in Step 4)
+//         _active_slot_ids.push_back for active hidden (Step 5)
+TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Two virtual columns: slot 120 has a conjunct (→ active source),
+    //                      slot 121 is projection-only (→ lazy source).
+    auto* vslot_active =
+            _pool.add(new SlotDescriptor(120, "v1.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* vslot_lazy =
+            _pool.add(new SlotDescriptor(121, "v2.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc1{};
+    vc1.slot_desc = vslot_active;
+    vc1.is_extended_variant_virtual = true;
+    vc1.source_variant_column_name = "v1";
+    vc1.variant_virtual_leaf_path = "a";
+    GroupReaderParam::Column vc2{};
+    vc2.slot_desc = vslot_lazy;
+    vc2.is_extended_variant_virtual = true;
+    vc2.source_variant_column_name = "v2";
+    vc2.variant_virtual_leaf_path = "a";
+    param->read_cols.emplace_back(vc1);
+    param->read_cols.emplace_back(vc2);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot_active->id(), 11, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[vslot_active->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Manually wire projections and hidden sources (normally done by _create_column_readers).
+    const SlotId active_src_id = SlotId(-10);
+    const SlotId lazy_src_id = SlotId(-11);
+    ASSIGN_OR_ABORT(auto proj_active, make_virtual_projection_for_test("a", vslot_active->type(), active_src_id));
+    ASSIGN_OR_ABORT(auto proj_lazy, make_virtual_projection_for_test("a", vslot_lazy->type(), lazy_src_id));
+    group_reader->_variant_virtual_projections.emplace(vslot_active->id(), std::move(proj_active));
+    group_reader->_variant_virtual_projections.emplace(vslot_lazy->id(), std::move(proj_lazy));
+
+    auto& active_src =
+            group_reader->_hidden_variant_sources
+                    .emplace("v1", GroupReader::HiddenVariantSource{.slot_id = active_src_id, .reader = nullptr})
+                    .first->second;
+    auto& lazy_src = group_reader->_hidden_variant_sources
+                             .emplace("v2", GroupReader::HiddenVariantSource{.slot_id = lazy_src_id, .reader = nullptr})
+                             .first->second;
+    group_reader->_hidden_slot_index[active_src_id] = &active_src;
+    group_reader->_hidden_slot_index[lazy_src_id] = &lazy_src;
+
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    // active_src_id should be in _active_hidden_slot_ids (backed by conjunct)
+    EXPECT_TRUE(std::find(group_reader->_active_hidden_slot_ids.begin(), group_reader->_active_hidden_slot_ids.end(),
+                          active_src_id) != group_reader->_active_hidden_slot_ids.end());
+    // lazy_src_id should be in _lazy_hidden_slot_ids (projection-only)
+    EXPECT_TRUE(std::find(group_reader->_lazy_hidden_slot_ids.begin(), group_reader->_lazy_hidden_slot_ids.end(),
+                          lazy_src_id) != group_reader->_lazy_hidden_slot_ids.end());
+    // active_src_id should also appear in unified _active_slot_ids
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          active_src_id) != group_reader->_active_slot_ids.end());
+    // _deferred_conjunct_slot_ids must contain vslot_active
+    EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(vslot_active->id()));
+}
+
+// Covers: _lazy_slot_ids.push_back (physical lazy column path in Step 5)
+TEST_F(GroupReaderTest, ProcessColumnsPopulatesLazySlotIdsForPhysicalColumnsWithoutPredicates) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    // Two physical variant columns: slot 130 has a predicate (active), 131 has none (lazy).
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(130, "col_a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* lazy_slot =
+            _pool.add(new SlotDescriptor(131, "col_b", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    GroupReaderParam::Column cb{};
+    cb.slot_desc = lazy_slot;
+    param->read_cols.emplace_back(ca);
+    param->read_cols.emplace_back(cb);
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, active_slot->id(), 42, &conjunct_ctxs));
+    param->conjunct_ctxs_by_slot[active_slot->id()] = conjunct_ctxs;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto variant_col = make_typed_only_variant_column_for_virtual_column_test();
+    group_reader->_column_readers.emplace(active_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+    group_reader->_column_readers.emplace(lazy_slot->id(),
+                                          std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
+
+    // parquet_late_materialization_enable defaults to true; the no-predicate
+    // column is expected to land in _lazy_column_indices / _lazy_slot_ids.
+    group_reader->_process_columns_and_conjunct_ctxs();
+
+    EXPECT_TRUE(std::find(group_reader->_active_slot_ids.begin(), group_reader->_active_slot_ids.end(),
+                          active_slot->id()) != group_reader->_active_slot_ids.end());
+    EXPECT_TRUE(std::find(group_reader->_lazy_slot_ids.begin(), group_reader->_lazy_slot_ids.end(), lazy_slot->id()) !=
+                group_reader->_lazy_slot_ids.end());
+}
+
+// ── _apply_deferred_variant_conjuncts ────────────────────────────────────────
+
+// Covers: Status::InternalError when a deferred-conjunct slot's source is absent
+//         from active_chunk (invariant violation path, lines ~1289-1293).
+TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsReturnsErrorWhenConjunctSourceMissing) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(140, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire projection for vslot pointing to source slot -20 (absent from active_chunk).
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-20)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+    // Mark this slot as having a deferred conjunct (simulating Step 1 output).
+    group_reader->_deferred_conjunct_slot_ids.insert(vslot->id());
+    // Push a dummy conjunct so the early-exit guard doesn't fire.
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 11, &conjunct_ctxs));
+    for (auto* ctx : conjunct_ctxs) {
+        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+    }
+
+    // active_chunk is empty — source slot -20 is absent.
+    auto active_chunk = std::make_shared<Chunk>();
+    auto status = group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.status().is_internal_error());
+}
+
+// Covers: eval_chunk->append_column (line ~1300) — the success path where source
+//         IS in active_chunk and the filter correctly selects matching rows.
+TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(150, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Source slot -21 will be present in active_chunk.
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-21)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    // Conjunct: v.a == 22  (row 0 has 11, row 1 has 22 → only row 1 passes).
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, vslot->id(), 22, &conjunct_ctxs));
+    for (auto* ctx : conjunct_ctxs) {
+        group_reader->_deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
+    }
+
+    // active_chunk contains the source variant column with typed path "a.b.c" → [11, 22].
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-21));
+
+    ASSIGN_OR_ABORT(auto filter, group_reader->_apply_deferred_variant_conjuncts(active_chunk, 2));
+    ASSERT_EQ(2u, filter.size());
+    EXPECT_EQ(0, filter[0]); // row 0 (value=11) rejected
+    EXPECT_EQ(1, filter[1]); // row 1 (value=22) passed
+    // active_chunk should have been filtered down to 1 row.
+    EXPECT_EQ(1u, active_chunk->num_rows());
+}
+
+// ── _fill_dst_chunk error path ────────────────────────────────────────────────
+
+// Covers: Status::InternalError in _fill_dst_chunk when source slot absent
+//         from active_chunk (lines ~1340-1342).
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveChunk) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(160, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Wire projection pointing to source slot -30 — NOT present in active_chunk.
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-30)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>(); // source slot -30 absent
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = group_reader->_fill_dst_chunk(active_chunk, &dst_chunk);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_internal_error());
+}
+
 } // namespace starrocks::parquet
