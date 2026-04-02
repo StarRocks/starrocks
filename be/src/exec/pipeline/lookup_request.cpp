@@ -61,7 +61,9 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
 }
 
 void LocalLookUpRequestContext::callback(const Status& status) {
-    fetch_ctx->unit->finished_request_num++;
+    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
+        unit->finished_request_num++;
+    }
 }
 
 // Deserialize remote request payload into a reusable chunk for processing.
