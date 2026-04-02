@@ -386,6 +386,12 @@ struct ScalarColumnTypeNormalizer {
 
             // Read source elements according to their actual physical width and
             // widen/narrow via static_cast into the target type.
+            //
+            // For 4-byte and 8-byte sources, the raw bytes could represent either
+            // an integer (int32/int64) or a floating-point value (float/double).
+            // We use the *target* type to disambiguate: a floating-point target
+            // implies the source is also in the float family (FE literal typing
+            // guarantees same-family mismatches), so we reinterpret accordingly.
             const auto* raw = src_column.raw_data();
             switch (src_column.type_size()) {
             case 1:
@@ -400,12 +406,20 @@ struct ScalarColumnTypeNormalizer {
                 return target;
             case 4:
                 for (size_t i = 0; i < count; ++i) {
-                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int32_t*>(raw)[i]);
+                    if constexpr (std::is_floating_point_v<TargetCppType>) {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const float*>(raw)[i]);
+                    } else {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int32_t*>(raw)[i]);
+                    }
                 }
                 return target;
             case 8:
                 for (size_t i = 0; i < count; ++i) {
-                    dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int64_t*>(raw)[i]);
+                    if constexpr (std::is_floating_point_v<TargetCppType>) {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const double*>(raw)[i]);
+                    } else {
+                        dst_data[i] = static_cast<TargetCppType>(reinterpret_cast<const int64_t*>(raw)[i]);
+                    }
                 }
                 return target;
             case 16:
