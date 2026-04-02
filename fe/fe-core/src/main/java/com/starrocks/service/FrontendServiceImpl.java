@@ -1144,6 +1144,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             final TMasterOpResult result = new TMasterOpResult();
             result.setErrorMsg(e.getMessage());
             return result;
+        } finally {
+            ConnectContext.remove();
         }
     }
 
