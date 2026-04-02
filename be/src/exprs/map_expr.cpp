@@ -46,6 +46,10 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     for (size_t i = 0; i < num_pairs; i++) {
         pairs_columns[i] = ColumnHelper::cast_to_nullable_column(
                 ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, std::move(pairs_columns[i])));
+        // Ensure the child column's physical element width matches the declared MAP
+        // key/value type.  Without this, a TINYINT literal (1 byte) fed into a
+        // SMALLINT slot (2 bytes) causes heap-buffer-overflow in Column::append.
+        pairs_columns[i] = ColumnHelper::normalize_column_type(pairs_columns[i], _type.children[i % 2]);
     }
 
     auto key_col = ColumnHelper::create_column(_type.children[0], true);

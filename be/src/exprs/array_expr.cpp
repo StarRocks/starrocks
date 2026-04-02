@@ -53,6 +53,9 @@ public:
         for (size_t i = 0; i < num_elements; i++) {
             element_columns[i] =
                     ColumnHelper::unfold_const_column(element_type, cal_rows, std::move(element_columns[i]));
+            // Ensure the child column's physical element width matches the declared
+            // ARRAY element type.  See normalize_column_type() for details.
+            element_columns[i] = ColumnHelper::normalize_column_type(element_columns[i], element_type);
         }
 
         auto array_elements = ColumnHelper::create_column(element_type, true);
