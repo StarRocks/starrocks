@@ -117,7 +117,8 @@ Status LakeDelvecLoader::batch_load(int64_t tablet_id, int64_t version,
         // Fallback: load sequentially if thread pool unavailable
         for (uint32_t seg_id : ids_to_load) {
             auto dv = std::make_shared<DelVector>();
-            RETURN_IF_ERROR(lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv.get()));
+            RETURN_IF_ERROR(
+                    lake::get_del_vec(_tablet_manager, *metadata, seg_id, _fill_cache, _lake_io_opts, dv.get()));
             _preloaded_delvecs[seg_id] = std::move(dv);
         }
         return Status::OK();
