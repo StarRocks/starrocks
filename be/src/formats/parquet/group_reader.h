@@ -22,6 +22,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "column/column_access_path.h"
@@ -270,6 +271,9 @@ private:
     std::vector<ExprContext*> _left_conjunct_ctxs;
     // variant virtual-column conjuncts can only be evaluated after post-read projection.
     std::vector<ExprContext*> _deferred_variant_virtual_conjunct_ctxs;
+    // slot ids of virtual columns that have at least one deferred conjunct.
+    // used in _apply_deferred_variant_conjuncts to detect invariant violations.
+    std::unordered_set<SlotId> _deferred_conjunct_slot_ids;
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;

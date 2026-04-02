@@ -51,7 +51,6 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
-#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
@@ -136,8 +135,8 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
     }
     const Column* eff_typed = variant_src->is_constant() ? expanded_typed.get() : typed_col;
     if (eff_typed->size() != num_rows) {
-        return Status::InternalError(strings::Substitute(
-                "variant typed column size mismatch: typed_size=$0, variant_src_size=$1", eff_typed->size(), num_rows));
+        return Status::InternalError(fmt::format(
+                "variant typed column size mismatch: typed_size={}, variant_src_size={}", eff_typed->size(), num_rows));
     }
 
     // Merge null masks: result is null when either the outer variant or the typed leaf
@@ -543,8 +542,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk, true));
             }
             if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
-                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
-                                                                 active_chunk->num_rows(), lazy_chunk->num_rows()));
+                return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_rows={}",
+                                                         active_chunk->num_rows(), lazy_chunk->num_rows()));
             }
             active_chunk->merge(std::move(*lazy_chunk));
         }
@@ -567,9 +566,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
                 lazy_hidden_chunk->append_column(std::move(col), slot_id);
             }
             if (lazy_hidden_chunk->num_rows() != active_chunk->num_rows()) {
-                return Status::InternalError(
-                        strings::Substitute("Unmatched row count, active_rows=$0, lazy_hidden_rows=$1",
-                                            active_chunk->num_rows(), lazy_hidden_chunk->num_rows()));
+                return Status::InternalError(fmt::format("Unmatched row count, active_rows={}, lazy_hidden_rows={}",
+                                                         active_chunk->num_rows(), lazy_hidden_chunk->num_rows()));
             }
             active_chunk->merge(std::move(*lazy_hidden_chunk));
         }
@@ -699,18 +697,18 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(co
 
 StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
     if (_param.scan_range == nullptr || !_param.scan_range->__isset.extended_columns) {
-        return Status::NotFound(strings::Substitute("Cannot find extended column for slot $0", slot_id));
+        return Status::NotFound(fmt::format("Cannot find extended column for slot {}", slot_id));
     }
 
     const auto& extended_columns = _param.scan_range->extended_columns;
     auto it = extended_columns.find(slot_id);
     if (it == extended_columns.end()) {
-        return Status::NotFound(strings::Substitute("Cannot find extended column value for slot $0", slot_id));
+        return Status::NotFound(fmt::format("Cannot find extended column value for slot {}", slot_id));
     }
 
     const auto& expr = it->second;
     if (expr.nodes.empty()) {
-        return Status::InvalidArgument(strings::Substitute("Invalid extended column expression for slot $0", slot_id));
+        return Status::InvalidArgument(fmt::format("Invalid extended column expression for slot {}", slot_id));
     }
 
     const auto& node = expr.nodes[0];
@@ -718,8 +716,7 @@ StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
         return kNullDatum;
     }
     if (node.node_type != TExprNodeType::INT_LITERAL || !node.__isset.int_literal) {
-        return Status::InvalidArgument(
-                strings::Substitute("Unsupported extended column expression for slot $0", slot_id));
+        return Status::InvalidArgument(fmt::format("Unsupported extended column expression for slot {}", slot_id));
     }
 
     return Datum(node.int_literal.value);
@@ -820,14 +817,14 @@ Status GroupReader::_create_column_readers() {
                 const auto* source_schema_node =
                         _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
                 if (source_schema_node == nullptr) {
-                    return Status::InternalError(strings::Substitute(
-                            "invalid source parquet field idx for variant virtual column, idx=$0, slot=$1",
-                            column.idx_in_parquet, column.slot_id()));
+                    return Status::InternalError(
+                            fmt::format("invalid source parquet field idx for variant virtual column, idx={}, slot={}",
+                                        column.idx_in_parquet, column.slot_id()));
                 }
                 if (source_schema_node->type != ColumnType::STRUCT) {
-                    return Status::InternalError(strings::Substitute(
-                            "invalid source parquet field type for variant virtual column, idx=$0, type=$1",
-                            column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
+                    return Status::InternalError(
+                            fmt::format("invalid source parquet field type for variant virtual column, idx={}, type={}",
+                                        column.idx_in_parquet, static_cast<int>(source_schema_node->type)));
                 }
                 VariantShreddedReadHints hints = _get_variant_shredded_hints(column.source_variant_column_name);
                 ASSIGN_OR_RETURN(auto hidden_reader, ColumnReaderFactory::create_variant_column_reader(
@@ -993,6 +990,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
                 for (ExprContext* ctx : it->second) {
                     _deferred_variant_virtual_conjunct_ctxs.push_back(ctx);
                 }
+                _deferred_conjunct_slot_ids.insert(column.slot_id());
             }
             ++read_col_idx;
             continue;
@@ -1286,6 +1284,12 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
+            if (_deferred_conjunct_slot_ids.count(slot_id)) {
+                return Status::InternalError(
+                        fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
+                                    "is not in active_chunk",
+                                    slot_id, projection.source_slot_id));
+            }
             continue;
         }
         const ColumnPtr& source_col = active_chunk->get_column_by_slot_id(projection.source_slot_id);
@@ -1334,8 +1338,8 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     // Must run BEFORE Pass 2 because fill_dst_column (swap) empties the source column.
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
-            return Status::InternalError(strings::Substitute(
-                    "variant virtual column source slot $0 not found in active_chunk", projection.source_slot_id));
+            return Status::InternalError(fmt::format("variant virtual column source slot {} not found in active_chunk",
+                                                     projection.source_slot_id));
         }
         const ColumnPtr& source_column = active_chunk->get_column_by_slot_id(projection.source_slot_id);
         ASSIGN_OR_RETURN(auto result_column,
