@@ -2665,10 +2665,12 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
     group_reader->_hidden_variant_sources.emplace(
             "data", GroupReader::HiddenVariantSource{.slot_id = SlotId(-1), .reader = nullptr});
 
-    group_reader->_read_chunk = std::make_shared<Chunk>();
-    group_reader->_read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-1));
-
+    // With the new design, _fill_dst_chunk looks up all sources in active_chunk only.
+    // The hidden source column (slot -1) must be in the active_chunk argument, not in
+    // _read_chunk.  This matches the runtime flow where Phase 4.5 merges lazy hidden
+    // sources into active_chunk before _fill_dst_chunk is called.
     auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-1));
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
