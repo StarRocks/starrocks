@@ -1,5 +1,6 @@
 *.swp
 *.pyc
+.flattened-pom.xml
 be/output
 be/build
 be/build_Release

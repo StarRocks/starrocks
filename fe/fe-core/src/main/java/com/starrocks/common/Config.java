@@ -41,10 +41,27 @@ import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
 import com.starrocks.statistic.sample.NDVEstimator;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
 
 public class Config extends ConfigBase {
+
+    private static String loadVersionProperty(String key, String defaultValue) {
+        try (InputStream in = Config.class.getClassLoader()
+                .getResourceAsStream("starrocks-version.properties")) {
+            if (in != null) {
+                Properties props = new Properties();
+                props.load(in);
+                return props.getProperty(key, defaultValue);
+            }
+        } catch (IOException ignored) {
+        }
+        return defaultValue;
+    }
 
     /**
      *  STARROCKS_HOME is the root dir of starrocks installation.
@@ -1259,7 +1276,7 @@ public class Config extends ConfigBase {
      * Default spark dpp version
      */
     @ConfField
-    public static String spark_dpp_version = "4.1.0";
+    public static String spark_dpp_version = loadVersionProperty("spark_dpp_version", "main");
     /**
      * Default spark load timeout
      */
