@@ -52,7 +52,8 @@ public:
     virtual ~FetchTaskContext() = default;
 
     std::weak_ptr<FetchProcessor> processor;
-    BatchUnitPtr unit;
+    // Keep the batch weak to avoid a BatchUnit -> FetchTask -> FetchTaskContext -> BatchUnit cycle.
+    std::weak_ptr<BatchUnit> unit;
     TupleId request_tuple_id = 0;
     // source_id , used to find the target BE/CN to send request
     int32_t source_node_id = 0;
@@ -65,7 +66,7 @@ public:
 };
 using FetchTaskContextPtr = std::shared_ptr<FetchTaskContext>;
 
-class FetchTask {
+class FetchTask : public std::enable_shared_from_this<FetchTask> {
 public:
     FetchTask(FetchTaskContextPtr ctx) : _ctx(std::move(ctx)) {}
     virtual ~FetchTask() = default;

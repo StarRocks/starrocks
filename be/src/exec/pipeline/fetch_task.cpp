@@ -50,27 +50,31 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto& request_chunk = _ctx->request_chunk;
 
     auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr>>(_ctx);
+    // The RPC callback can outlive queue ownership when the source finishes early.
+    auto self = shared_from_this();
     auto processor = _ctx->processor.lock();
     DCHECK(processor != nullptr);
     const auto* node_info = processor->_nodes_info->find_node(source_id);
     DCHECK(node_info != nullptr);
     RETURN_IF(node_info == nullptr,
               Status::InternalError(fmt::format("Failed to find node info for source_id: {}", source_id)));
-    closure->addSuccessHandler([this, done = closure.get(), host = node_info->host, port = node_info->brpc_port](
+    closure->addSuccessHandler([self, done = closure.get(), host = node_info->host, port = node_info->brpc_port](
                                        const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
         auto processor = ctx->processor.lock();
-        if (processor == nullptr) {
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
             return;
         }
-        DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
-                   << ", total request num: " << ctx->unit->total_request_num
+        DLOG(INFO) << "[GLM] receive a response, finished request num: " << unit->finished_request_num
+                   << ", total request num: " << unit->total_request_num
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
+            if (++unit->finished_request_num == unit->total_request_num) {
                 VLOG_ROW << "[GLM] all request finished, notify fetch processor, total_request_num: "
-                         << ctx->unit->total_request_num;
+                         << unit->total_request_num;
             }
-            _is_done = true;
+            self->_is_done = true;
         });
         COUNTER_UPDATE(processor->_rpc_count, 1);
         COUNTER_UPDATE(processor->_network_timer, MonotonicNanos() - ctx->send_ts);
@@ -123,16 +127,18 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
-    closure->addFailureHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+    closure->addFailureHandler([self](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
         auto processor = ctx->processor.lock();
-        if (processor == nullptr) {
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
             return;
         }
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
+            if (++unit->finished_request_num == unit->total_request_num) {
                 DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor.get();
             }
-            _is_done = true;
+            self->_is_done = true;
         });
         processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
         LOG(WARNING) << "fetch request failed, error: " << rpc_error_msg;
@@ -175,8 +181,10 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         size_t actual_serialize_size = buff - begin;
         closure->cntl.request_attachment().append(processor->_serialize_buffer.data(), actual_serialize_size);
     }
+    auto unit = _ctx->unit.lock();
+    auto unit_debug_string = unit != nullptr ? unit->debug_string() : std::string("BatchUnit <expired>");
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
-               << ", unit: " << _ctx->unit->debug_string();
+               << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
     if (stub == nullptr) {
