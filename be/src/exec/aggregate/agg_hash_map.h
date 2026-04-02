@@ -55,6 +55,20 @@ concept AllocFunc = HasKeyType<HashMapWithKey>&& requires(T t, const typename Ha
     ->std::same_as<AggDataPtr>;
 };
 
+// NoAllocFunc: a dummy allocator used when inline state is active (no external allocation needed).
+struct NoAllocFunc {
+    template <typename T>
+    AggDataPtr operator()(T) {
+        return nullptr;
+    }
+};
+
+// Sentinel type: when UpdateFunc is NullUpdateFunc, use traditional two-phase path.
+struct NullUpdateFunc {};
+
+template <typename T>
+inline constexpr bool is_inline_update_v = !std::is_same_v<std::decay_t<T>, NullUpdateFunc>;
+
 // =====================
 // one level agg hash map
 template <PhmapSeed seed>
@@ -153,28 +167,18 @@ private:
     int _idx;
 };
 
-// Sentinel allocator used for inline-state paths where no external allocation is needed.
-struct NoAllocFunc {
-    template <typename T>
-    AggDataPtr operator()(T&&) const {
-        return static_cast<AggDataPtr>(nullptr);
-    }
-};
-
 template <typename HashMap, typename Impl>
 struct AggHashMapWithKey {
     AggHashMapWithKey(int chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
     using HashMapType = HashMap;
-    static constexpr bool supports_inline_state = false;
     HashMap hash_map;
     AggStatistics* agg_stat;
 
     ////// Common Methods ////////
-    // When InlineState=true: aggregation state is stored directly in the hash map value slot.
-    // Only valid when Impl::supports_inline_state == true.
-    template <bool InlineState = false, AllocFunc<Impl> Func>
+    template <typename UpdateFunc = NullUpdateFunc, AllocFunc<Impl> Func>
     void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                        Buffer<AggDataPtr>* agg_states) {
+                        Buffer<AggDataPtr>* agg_states, UpdateFunc update_func = {}) {
+        constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         CancelableDefer defer = [this]() { hash_map.clear(); };
         if constexpr (InlineState) {
             if constexpr (requires { hash_map.reserve(size_t{}); }) {
@@ -183,8 +187,9 @@ struct AggHashMapWithKey {
         }
         ExtraAggParam extra;
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)->template compute_agg_states<NoAllocFunc, HTBuildOp<true, false, false>, true>(
-                    chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra);
+            static_cast<Impl*>(this)
+                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<true, false, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -192,17 +197,26 @@ struct AggHashMapWithKey {
         defer.cancel();
     }
 
-    template <bool InlineState = false, AllocFunc<Impl> Func>
+    template <typename UpdateFunc = NullUpdateFunc, AllocFunc<Impl> Func>
     void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
-                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
+                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* not_founds,
+                                       UpdateFunc update_func = {}) {
+        constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         CancelableDefer defer = [this]() { hash_map.clear(); };
+        if constexpr (InlineState) {
+            if constexpr (requires { hash_map.reserve(size_t{}); }) {
+                hash_map.reserve(hash_map.size() + chunk_size);
+            }
+        }
+        // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, false>, true>(
-                    chunk_size, key_columns, nullptr, NoAllocFunc{}, agg_states, &extra);
+            static_cast<Impl*>(this)
+                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -210,23 +224,27 @@ struct AggHashMapWithKey {
         defer.cancel();
     }
 
-    template <bool InlineState = false, AllocFunc<Impl> Func>
+    template <typename UpdateFunc = NullUpdateFunc, AllocFunc<Impl> Func>
     void build_hash_map_with_limit(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
-                                   Buffer<AggDataPtr>* agg_states, Filter* not_founds, size_t limit) {
+                                   Buffer<AggDataPtr>* agg_states, Filter* not_founds, size_t limit,
+                                   UpdateFunc update_func = {}) {
+        constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         CancelableDefer defer = [this]() { hash_map.clear(); };
         if constexpr (InlineState) {
             if constexpr (requires { hash_map.reserve(size_t{}); }) {
                 hash_map.reserve(hash_map.size() + chunk_size);
             }
         }
+        // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         extra.limits = limit;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, true>, true>(
-                    chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra);
+            static_cast<Impl*>(this)
+                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<false, true, true>, UpdateFunc>(
+                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -234,23 +252,26 @@ struct AggHashMapWithKey {
         defer.cancel();
     }
 
-    template <bool InlineState = false, AllocFunc<Impl> Func>
+    template <typename UpdateFunc = NullUpdateFunc, AllocFunc<Impl> Func>
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                      Filter* not_founds) {
+                                                      Filter* not_founds, UpdateFunc update_func = {}) {
+        constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         CancelableDefer defer = [this]() { hash_map.clear(); };
         if constexpr (InlineState) {
             if constexpr (requires { hash_map.reserve(size_t{}); }) {
                 hash_map.reserve(hash_map.size() + chunk_size);
             }
         }
+        // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
         if constexpr (InlineState) {
-            static_cast<Impl*>(this)->template compute_agg_states<NoAllocFunc, HTBuildOp<true, true, false>, true>(
-                    chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra);
+            static_cast<Impl*>(this)
+                    ->template compute_agg_states<NoAllocFunc, HTBuildOp<true, true, false>, UpdateFunc>(
+                            chunk_size, key_columns, pool, NoAllocFunc{}, agg_states, &extra, update_func);
         } else {
             static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
                     chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
@@ -282,59 +303,69 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
-    template <typename Func, typename HTBuildOp, bool InlineState = false>
+    static constexpr bool supports_inline_state = true;
+
+    template <typename Func, typename HTBuildOp, typename UpdateFunc = NullUpdateFunc>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, [[maybe_unused]] MemPool* pool,
-                            Func&& allocate_func, Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+                            Func&& allocate_func, Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
+                            UpdateFunc update_func = {}) {
         auto key_column = key_columns[0].get();
         if constexpr (is_nullable) {
-            return this->template compute_agg_states_nullable<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_column, std::forward<Func>(allocate_func), agg_states, extra);
+            return this->template compute_agg_states_nullable<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_column, pool, std::forward<Func>(allocate_func), agg_states, extra, update_func);
         } else {
-            return this->template compute_agg_states_non_nullable<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_column, std::forward<Func>(allocate_func), agg_states, extra);
+            return this->template compute_agg_states_non_nullable<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_column, pool, std::forward<Func>(allocate_func), agg_states, extra, update_func);
         }
     }
 
     // Non Nullable
-    template <bool InlineState, typename Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Column* key_column,
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
                                                          Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                         ExtraAggParam* extra) {
+                                                         ExtraAggParam* extra, UpdateFunc update_func = {}) {
         DCHECK(!key_column->is_nullable());
         const auto column = down_cast<const ColumnType*>(key_column);
 
         if constexpr (is_no_prefetch_map<HashMap>) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
-                    column, agg_states, std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_noprefetch<UpdateFunc, Func, HTBuildOp>(
+                    column, agg_states, std::forward<Func>(allocate_func), extra, update_func);
         } else if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
-                    column, agg_states, std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_noprefetch<UpdateFunc, Func, HTBuildOp>(
+                    column, agg_states, std::forward<Func>(allocate_func), extra, update_func);
         } else {
-            this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(column, agg_states,
-                                                                              std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_prefetch<UpdateFunc, Func, HTBuildOp>(
+                    column, agg_states, std::forward<Func>(allocate_func), extra, update_func);
         }
     }
 
     // Nullable
-    template <bool InlineState, typename Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Column* key_column, Func&& allocate_func,
-                                                     Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
+                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                     ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         if (key_column->only_null()) {
-            AggDataPtr null_ptr;
             if constexpr (InlineState) {
+                AggDataPtr null_ptr;
+                bool first_created = false;
                 if (!_inline_null_key_state_created) {
                     _inline_null_key_state = 0;
                     _inline_null_key_state_created = true;
+                    first_created = true;
                 }
                 null_ptr = reinterpret_cast<AggDataPtr>(&_inline_null_key_state);
+                for (size_t i = 0; i < chunk_size; i++) {
+                    (*agg_states)[i] = null_ptr;
+                    update_func(null_ptr, i, first_created && (i == 0));
+                }
             } else {
                 if (null_key_data == nullptr) {
                     null_key_data = allocate_func(nullptr);
                 }
-                null_ptr = null_key_data;
-            }
-            for (size_t i = 0; i < chunk_size; i++) {
-                (*agg_states)[i] = null_ptr;
+                for (size_t i = 0; i < chunk_size; i++) {
+                    (*agg_states)[i] = null_key_data;
+                }
             }
         } else {
             DCHECK(key_column->is_nullable());
@@ -343,19 +374,22 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
             // Shortcut: if nullable column has no nulls.
             if (!nullable_column->has_null()) {
-                this->template compute_agg_states_non_nullable<InlineState, Func, HTBuildOp>(
-                        chunk_size, data_column, std::forward<Func>(allocate_func), agg_states, extra);
+                this->template compute_agg_states_non_nullable<UpdateFunc, Func, HTBuildOp>(
+                        chunk_size, data_column, pool, std::forward<Func>(allocate_func), agg_states, extra,
+                        update_func);
             } else {
-                this->template compute_agg_through_null_data<InlineState, Func, HTBuildOp>(
-                        chunk_size, nullable_column, agg_states, std::forward<Func>(allocate_func), extra);
+                this->template compute_agg_through_null_data<UpdateFunc, Func, HTBuildOp>(
+                        chunk_size, nullable_column, agg_states, std::forward<Func>(allocate_func), extra, update_func);
             }
         }
     }
 
     // prefetch branch better performance in case with larger hash tables
-    template <bool InlineState, typename Func, typename HTBuildOp>
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                              Func&& allocate_func, ExtraAggParam* extra) {
+                                              Func&& allocate_func, ExtraAggParam* extra,
+                                              UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
@@ -366,25 +400,61 @@ struct AggHashMapWithOneNumberKeyWithNullable
 
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key_with_hash<InlineState>(key, hash_values[i], (*agg_states)[i], allocate_func,
-                                                        [&] { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key_with_hash<true>(
+                                key, hash_values[i], (*agg_states)[i], allocate_func, [&] {
+                                    inserted = true;
+                                    hash_table_size++;
+                                });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
+                                               [&] { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key_with_hash<InlineState>(key, hash_values[i], (*agg_states)[i], allocate_func,
-                                                    FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key_with_hash<true>(
+                            key, hash_values[i], (*agg_states)[i], allocate_func, [&] {
+                                inserted = true;
+                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                            });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
+                                           FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 DCHECK(not_founds);
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key, hash_values[i]);
+                }
             }
         }
     }
 
     // prefetch branch better performance in case with small hash tables
-    template <bool InlineState, typename Func, typename HTBuildOp>
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                                Func&& allocate_func, ExtraAggParam* extra) {
+                                                Func&& allocate_func, ExtraAggParam* extra,
+                                                UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         size_t num_rows = column->size();
@@ -394,16 +464,48 @@ struct AggHashMapWithOneNumberKeyWithNullable
             FieldType key = container[i];
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key<InlineState>(key, (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func, [&] {
+                            inserted = true;
+                            hash_table_size++;
+                        });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key(key, (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key<InlineState>(key, (*agg_states)[i], allocate_func,
-                                          FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key<true>(key, (*agg_states)[i], allocate_func, [&] {
+                        inserted = true;
+                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                    });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key(key, (*agg_states)[i], allocate_func,
+                                 FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
                 DCHECK(not_founds);
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
+                }
             }
             FAIL_POINT_TRIGGER_EXECUTE(aggregate_build_hash_map_bad_alloc, {
                 if (i > 0) throw std::bad_alloc();
@@ -411,10 +513,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    template <bool InlineState, typename Func, typename HTBuildOp>
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, const NullableColumn* nullable_column,
                                                        Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                                       ExtraAggParam* extra) {
+                                                       ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
@@ -424,11 +527,14 @@ struct AggHashMapWithOneNumberKeyWithNullable
             const auto key = container[i];
             if (null_data[i]) {
                 if constexpr (InlineState) {
+                    bool null_inserted = false;
                     if (UNLIKELY(!_inline_null_key_state_created)) {
                         _inline_null_key_state = 0;
                         _inline_null_key_state_created = true;
+                        null_inserted = true;
                     }
                     (*agg_states)[i] = reinterpret_cast<AggDataPtr>(&_inline_null_key_state);
+                    update_func((*agg_states)[i], i, null_inserted);
                 } else {
                     if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
@@ -438,30 +544,65 @@ struct AggHashMapWithOneNumberKeyWithNullable
             } else {
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
-                        _emplace_key<InlineState>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
-                                                  [&]() { hash_table_size++; });
+                        if constexpr (InlineState) {
+                            bool inserted = false;
+                            this->template _emplace_key<true>(key, (*agg_states)[i],
+                                                              std::forward<Func>(allocate_func), [&]() {
+                                                                  inserted = true;
+                                                                  hash_table_size++;
+                                                              });
+                            update_func((*agg_states)[i], i, inserted);
+                        } else {
+                            _emplace_key(key, (*agg_states)[i], std::forward<Func>(allocate_func),
+                                         [&]() { hash_table_size++; });
+                        }
                     } else {
-                        _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
+                        if constexpr (InlineState) {
+                            this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
+                            if (!(*not_founds)[i]) {
+                                update_func((*agg_states)[i], i, false);
+                            }
+                        } else {
+                            _find_key((*agg_states)[i], (*not_founds)[i], key);
+                        }
                     }
                 } else if constexpr (HTBuildOp::allocate) {
-                    _emplace_key<InlineState>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
-                                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key<true>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
+                                                          [&]() {
+                                                              inserted = true;
+                                                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                                                          });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key(key, (*agg_states)[i], std::forward<Func>(allocate_func),
+                                     FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                    }
                 } else if constexpr (HTBuildOp::fill_not_found) {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key);
+                    }
                 }
             }
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -471,15 +612,16 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key_with_hash(KeyType key, size_t hash, AggDataPtr& target_state, Func&& allocate_func,
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -489,7 +631,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    template <bool InlineState, typename... Args>
+    template <bool InlineState = false, typename... Args>
     ALWAYS_INLINE void _find_key(AggDataPtr& target_state, uint8_t& not_found, Args&&... args) {
         if (auto iter = this->hash_map.find(std::forward<Args>(args)...); iter != this->hash_map.end()) {
             if constexpr (InlineState) {
@@ -515,20 +657,18 @@ struct AggHashMapWithOneNumberKeyWithNullable
         }
     }
 
-    AggDataPtr get_inline_null_key_data() {
-        return _inline_null_key_state_created ? reinterpret_cast<AggDataPtr>(&_inline_null_key_state) : nullptr;
-    }
-
     static constexpr bool has_single_null_key = is_nullable;
-    static constexpr bool supports_inline_state = !is_no_prefetch_map<HashMap>;
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
 
-    // ===== Inline state support =====
-    // When inline state is enabled, the aggregation state (e.g., int64_t count) is stored
-    // directly in the hash map value slot instead of via an external pointer.
-    uint64_t _inline_null_key_state = 0;
+    // Inline agg state for null key (used when UpdateFunc is active)
+    size_t _inline_null_key_state = 0;
     bool _inline_null_key_state_created = false;
+
+    AggDataPtr get_inline_null_key_data() const {
+        return _inline_null_key_state_created ? const_cast<AggDataPtr>(reinterpret_cast<const uint8_t*>(&_inline_null_key_state))
+                                              : nullptr;
+    }
 };
 
 template <LogicalType logical_type, typename HashMap>
@@ -542,6 +682,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     using Self = AggHashMapWithOneStringKeyWithNullable<HashMap, is_nullable>;
     using Base = AggHashMapWithKey<HashMap, Self>;
     using KeyType = typename HashMap::key_type;
+    static constexpr bool supports_inline_state = false;
     using Iterator = typename HashMap::iterator;
     using ResultVector = Buffer<Slice>;
 
@@ -552,7 +693,7 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     void set_null_key_data(AggDataPtr data) { null_key_data = data; }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         const auto* key_column = key_columns[0].get();
@@ -566,7 +707,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     }
 
     // Non Nullable
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
                                                          Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                          ExtraAggParam* extra) {
@@ -582,7 +723,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     }
 
     // Nullable
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
                                                      Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                      ExtraAggParam* extra) {
@@ -609,7 +750,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(const BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
                                               Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
@@ -636,7 +777,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(const BinaryColumn* column, Buffer<AggDataPtr>* agg_states,
                                                 MemPool* pool, Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
@@ -661,7 +802,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_through_null_data(size_t chunk_size, const NullableColumn* nullable_column,
                                                        Buffer<AggDataPtr>* agg_states, MemPool* pool,
                                                        Func&& allocate_func, ExtraAggParam* extra) {
@@ -696,7 +837,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         }
     }
 
-    template <typename Func, typename EmplaceCallBack>
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
     void _emplace_key_with_hash(const KeyType& key, size_t hash_val, MemPool* pool, Func&& allocate_func,
                                 AggDataPtr& target_state, EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
@@ -704,12 +845,13 @@ struct AggHashMapWithOneStringKeyWithNullable
             uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
-            ctor(pk, allocate_func(pk));
+            AggDataPtr pv = allocate_func(pk);
+            ctor(pk, pv);
         });
         target_state = iter->second;
     }
 
-    template <typename Func, typename EmplaceCallBack>
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
     void _emplace_key(const KeyType& key, MemPool* pool, Func&& allocate_func, AggDataPtr& target_state,
                       EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
@@ -717,7 +859,8 @@ struct AggHashMapWithOneStringKeyWithNullable
             uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
-            ctor(pk, allocate_func(pk));
+            AggDataPtr pv = allocate_func(pk);
+            ctor(pk, pv);
         });
         target_state = iter->second;
     }
@@ -748,9 +891,6 @@ struct AggHashMapWithOneStringKeyWithNullable
     }
 
     static constexpr bool has_single_null_key = is_nullable;
-    // String keys use Slice pointing to MemPool; iterating the hash map in slot order
-    // causes random MemPool access during key deserialization, hurting output performance.
-    static constexpr bool supports_inline_state = false;
 
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
@@ -766,6 +906,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     using Self = AggHashMapWithSerializedKey<HashMap>;
     using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>>;
     using KeyType = typename HashMap::key_type;
+    static constexpr bool supports_inline_state = false;
     using Iterator = typename HashMap::iterator;
     using ResultVector = Buffer<Slice>;
 
@@ -785,7 +926,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     AggDataPtr get_null_key_data() { return nullptr; }
     void set_null_key_data(AggDataPtr data) {}
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         slice_sizes.assign(_chunk_size, 0);
@@ -813,7 +954,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     }
 
     // There may be additional virtual function overhead, but the bottleneck point for this branch is serialization
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                     ExtraAggParam* extra, size_t max_serialize_each_row) {
@@ -842,7 +983,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                     ExtraAggParam* extra, size_t max_serialize_each_row) {
@@ -867,7 +1008,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_cols_non_prefetch(size_t chunk_size, const Columns& key_columns,
                                                                  MemPool* pool, Func&& allocate_func,
                                                                  Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
@@ -892,7 +1033,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    template <typename Func, typename HTBuildOp>
+    template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_cols_prefetch(size_t chunk_size, const Columns& key_columns,
                                                              MemPool* pool, Func&& allocate_func,
                                                              Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
@@ -929,7 +1070,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    template <typename Func, typename EmplaceCallBack>
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
     void _emplace_key_with_hash(const KeyType& key, size_t hash_val, MemPool* pool, Func&& allocate_func,
                                 AggDataPtr& target_state, EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
@@ -938,12 +1079,13 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             uint8_t* pos = pool->allocate(key.size);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
-            ctor(pk, allocate_func(pk));
+            AggDataPtr pv = allocate_func(pk);
+            ctor(pk, pv);
         });
         target_state = iter->second;
     }
 
-    template <typename Func, typename EmplaceCallBack>
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
     void _emplace_key(const KeyType& key, MemPool* pool, Func&& allocate_func, AggDataPtr& target_state,
                       EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
@@ -952,7 +1094,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             uint8_t* pos = pool->allocate(key.size);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
-            ctor(pk, allocate_func(pk));
+            AggDataPtr pv = allocate_func(pk);
+            ctor(pk, pv);
         });
         target_state = iter->second;
     }
@@ -995,9 +1138,6 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    // Serialized keys use Slice pointing to MemPool; iterating the hash map in slot order
-    // causes random MemPool access during key deserialization, hurting output performance.
-    static constexpr bool supports_inline_state = false;
     static constexpr bool has_single_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
@@ -1019,6 +1159,7 @@ struct AggHashMapWithSerializedKeyFixedSize
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    static constexpr bool supports_inline_state = true;
 
     // TODO: make has_null_column as a constexpr
     bool has_null_column = false;
@@ -1045,10 +1186,11 @@ struct AggHashMapWithSerializedKeyFixedSize
     AggDataPtr get_null_key_data() { return nullptr; }
     void set_null_key_data(AggDataPtr data) {}
 
-    template <bool InlineState, typename Func, typename HTBuildOp>
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns,
                                               Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                              ExtraAggParam* extra) {
+                                              ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
@@ -1073,24 +1215,59 @@ struct AggHashMapWithSerializedKeyFixedSize
             FixedSizeSliceKey& key = caches[i].key;
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key_with_hash<InlineState>(key, caches[i].hashval, (*agg_states)[i], allocate_func,
-                                                        [&]() { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key_with_hash<true>(
+                                key, caches[i].hashval, (*agg_states)[i], allocate_func, [&]() {
+                                    inserted = true;
+                                    hash_table_size++;
+                                });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
+                                               [&]() { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key_with_hash<InlineState>(key, caches[i].hashval, (*agg_states)[i], allocate_func,
-                                                    FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key_with_hash<true>(
+                            key, caches[i].hashval, (*agg_states)[i], allocate_func, [&]() {
+                                inserted = true;
+                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                            });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
+                                           FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                }
             }
         }
     }
 
-    template <bool InlineState, typename Func, typename HTBuildOp>
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns,
                                                 Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
-                                                ExtraAggParam* extra) {
+                                                ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         constexpr int key_size = sizeof(FixedSizeSliceKey);
@@ -1107,22 +1284,54 @@ struct AggHashMapWithSerializedKeyFixedSize
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key<InlineState>(key[i], (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func, [&] {
+                            inserted = true;
+                            hash_table_size++;
+                        });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key(key[i], (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key[i]);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key[i]);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key[i]);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key<InlineState>(key[i], (*agg_states)[i], allocate_func,
-                                          FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key<true>(key[i], (*agg_states)[i], allocate_func, [&] {
+                        inserted = true;
+                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                    });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key(key[i], (*agg_states)[i], allocate_func,
+                                 FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], key[i]);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], key[i]);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key[i]);
+                }
             }
         }
     }
 
-    template <typename Func, typename HTBuildOp, bool InlineState = false>
-    void compute_agg_states(size_t chunk_size, const Columns& key_columns, [[maybe_unused]] MemPool* pool,
-                            Func&& allocate_func, Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+    template <typename Func, typename HTBuildOp, typename UpdateFunc = NullUpdateFunc>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra, UpdateFunc update_func = {}) {
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
@@ -1132,23 +1341,24 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
 
         if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_noprefetch<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), extra, update_func);
         } else {
-            this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(chunk_size, key_columns, agg_states,
-                                                                              std::forward<Func>(allocate_func), extra);
+            this->template compute_agg_prefetch<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), extra, update_func);
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -1158,15 +1368,16 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key_with_hash(KeyType key, size_t hash, AggDataPtr& target_state, Func&& allocate_func,
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -1176,7 +1387,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    template <bool InlineState, typename... Args>
+    template <bool InlineState = false, typename... Args>
     ALWAYS_INLINE void _find_key(AggDataPtr& target_state, uint8_t& not_found, Args&&... args) {
         if (auto iter = this->hash_map.find(std::forward<Args>(args)...); iter != this->hash_map.end()) {
             if constexpr (InlineState) {
@@ -1213,7 +1424,6 @@ struct AggHashMapWithSerializedKeyFixedSize
         }
     }
 
-    static constexpr bool supports_inline_state = true;
     static constexpr bool has_single_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
@@ -1232,6 +1442,7 @@ struct AggHashMapWithCompressedKeyFixedSize
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    static constexpr bool supports_inline_state = true;
 
     template <class... Args>
     AggHashMapWithCompressedKeyFixedSize(int chunk_size, Args&&... args)
@@ -1244,10 +1455,11 @@ struct AggHashMapWithCompressedKeyFixedSize
     AggDataPtr get_null_key_data() { return nullptr; }
     void set_null_key_data(AggDataPtr data) {}
 
-    template <bool InlineState, typename Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns,
-                                                [[maybe_unused]] MemPool* pool, Func&& allocate_func,
-                                                Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                                Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         // serialize
@@ -1256,24 +1468,56 @@ struct AggHashMapWithCompressedKeyFixedSize
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key<InlineState>(fixed_keys[i], (*agg_states)[i], allocate_func,
-                                              [&] { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func, [&] {
+                            inserted = true;
+                            hash_table_size++;
+                        });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key(fixed_keys[i], (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key<InlineState>(fixed_keys[i], (*agg_states)[i], allocate_func,
-                                          FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key<true>(fixed_keys[i], (*agg_states)[i], allocate_func, [&] {
+                        inserted = true;
+                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                    });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key(fixed_keys[i], (*agg_states)[i], allocate_func,
+                                 FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                }
             }
         }
     }
 
-    template <bool InlineState, typename Func, typename HTBuildOp>
-    ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns,
-                                              [[maybe_unused]] MemPool* pool, Func&& allocate_func,
-                                              Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+    template <typename UpdateFunc, typename Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                              Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                              ExtraAggParam* extra, UpdateFunc update_func = {}) {
+        static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         // serialize
@@ -1291,47 +1535,82 @@ struct AggHashMapWithCompressedKeyFixedSize
             }
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key_with_hash<InlineState>(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
-                                                        [&] { hash_table_size++; });
+                    if constexpr (InlineState) {
+                        bool inserted = false;
+                        this->template _emplace_key_with_hash<true>(
+                                fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func, [&] {
+                                    inserted = true;
+                                    hash_table_size++;
+                                });
+                        update_func((*agg_states)[i], i, inserted);
+                    } else {
+                        _emplace_key_with_hash(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
+                                               [&] { hash_table_size++; });
+                    }
                 } else {
-                    _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    if constexpr (InlineState) {
+                        this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                        if (!(*not_founds)[i]) {
+                            update_func((*agg_states)[i], i, false);
+                        }
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    }
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key_with_hash<InlineState>(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
-                                                    FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                if constexpr (InlineState) {
+                    bool inserted = false;
+                    this->template _emplace_key_with_hash<true>(
+                            fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func, [&] {
+                                inserted = true;
+                                FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i)();
+                            });
+                    update_func((*agg_states)[i], i, inserted);
+                } else {
+                    _emplace_key_with_hash(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,
+                                           FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                }
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key<InlineState>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                if constexpr (InlineState) {
+                    this->template _find_key<true>((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                    if (!(*not_founds)[i]) {
+                        update_func((*agg_states)[i], i, false);
+                    }
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], fixed_keys[i]);
+                }
             }
         }
     }
 
-    template <typename Func, typename HTBuildOp, bool InlineState = false>
-    void compute_agg_states(size_t chunk_size, const Columns& key_columns, [[maybe_unused]] MemPool* pool,
-                            Func&& allocate_func, Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+    template <typename Func, typename HTBuildOp, typename UpdateFunc = NullUpdateFunc>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra, UpdateFunc update_func = {}) {
         auto* buffer = reinterpret_cast<uint8_t*>(fixed_keys.data());
         memset(buffer, 0x0, sizeof(FixedSizeSliceKey) * chunk_size);
 
         if constexpr (is_no_prefetch_map<HashMap>) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra);
+            this->template compute_agg_noprefetch<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra, update_func);
         } else if (this->hash_map.bucket_count() < prefetch_threhold) {
-            this->template compute_agg_noprefetch<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra);
+            this->template compute_agg_noprefetch<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra, update_func);
         } else {
-            this->template compute_agg_prefetch<InlineState, Func, HTBuildOp>(
-                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra);
+            this->template compute_agg_prefetch<UpdateFunc, Func, HTBuildOp>(
+                    chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, extra, update_func);
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
                                     EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -1341,15 +1620,16 @@ struct AggHashMapWithCompressedKeyFixedSize
         }
     }
 
-    template <bool InlineState, typename Func, typename EmplaceCallBack>
+    template <bool InlineState = false, AllocFunc<Self> Func, typename EmplaceCallBack>
     ALWAYS_INLINE void _emplace_key_with_hash(KeyType key, size_t hash, AggDataPtr& target_state, Func&& allocate_func,
                                               EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             callback();
             if constexpr (InlineState) {
-                ctor(key, reinterpret_cast<AggDataPtr>(0));
+                ctor(key, AggDataPtr{});
             } else {
-                ctor(key, allocate_func(key));
+                AggDataPtr pv = allocate_func(key);
+                ctor(key, pv);
             }
         });
         if constexpr (InlineState) {
@@ -1359,7 +1639,7 @@ struct AggHashMapWithCompressedKeyFixedSize
         }
     }
 
-    template <bool InlineState, typename... Args>
+    template <bool InlineState = false, typename... Args>
     ALWAYS_INLINE void _find_key(AggDataPtr& target_state, uint8_t& not_found, Args&&... args) {
         if (auto iter = this->hash_map.find(std::forward<Args>(args)...); iter != this->hash_map.end()) {
             if constexpr (InlineState) {
@@ -1377,10 +1657,6 @@ struct AggHashMapWithCompressedKeyFixedSize
                                 keys.data());
     }
 
-    // SmallFixedSizeHashMap (Int8AggHashMap) uses nullptr as its empty-slot sentinel,
-    // which conflicts with the nullptr value stored during inline-state insertion.
-    // Its iterator also returns a temporary PPair, making &iter->second a dangling pointer.
-    static constexpr bool supports_inline_state = !is_no_prefetch_map<HashMap>;
     static constexpr bool has_single_null_key = false;
 
     std::vector<int> used_bits;

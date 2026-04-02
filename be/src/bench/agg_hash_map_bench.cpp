@@ -124,8 +124,9 @@ static void BM_AggHashMap_Inline(benchmark::State& state) {
             Columns chunk_cols = {ColumnPtr(std::move(chunk_col))};
 
             agg_states.assign(chunk_rows, nullptr);
-            map.template build_hash_map<true>(chunk_rows, chunk_cols, &pool, NoAllocFunc{}, &agg_states);
-            simulate_count_update(agg_states, chunk_rows, /*offset=*/0);
+            auto count_update = [](AggDataPtr state, size_t, bool) { (*reinterpret_cast<int64_t*>(state)) += 1; };
+            map.template build_hash_map<decltype(count_update)>(chunk_rows, chunk_cols, &pool, NoAllocFunc{},
+                                                                 &agg_states, count_update);
         }
 
         benchmark::DoNotOptimize(map.hash_map.size());
@@ -226,7 +227,9 @@ static void BM_AggHashMap_FindOnly_Inline(benchmark::State& state) {
             chunk_col->append(*key_column, offset, chunk_rows);
             Columns chunk_cols = {ColumnPtr(std::move(chunk_col))};
             agg_states.assign(chunk_rows, nullptr);
-            map.build_hash_map_with_selection_inline(chunk_rows, chunk_cols, &agg_states, &not_founds);
+            auto count_update = [](AggDataPtr state, size_t, bool) { (*reinterpret_cast<int64_t*>(state)) += 1; };
+            map.template build_hash_map_with_selection<decltype(count_update)>(
+                    chunk_rows, chunk_cols, nullptr, NoAllocFunc{}, &agg_states, &not_founds, count_update);
         }
         benchmark::DoNotOptimize(agg_states[0]);
     }

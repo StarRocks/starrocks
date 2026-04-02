@@ -544,6 +544,8 @@ protected:
     // Subclasses that cannot support inline agg state (e.g. StreamAggregator)
     // should set this to false in their constructor, before open() is called.
     bool _allow_inline_agg_state = true;
+    // Transient: set during evaluate_groupby_exprs for use in build_hash_map inline path.
+    Chunk* _current_chunk = nullptr;
 
 public:
     bool use_inline_agg_state() const { return _use_inline_agg_state; }

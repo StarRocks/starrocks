@@ -49,13 +49,9 @@ TEST_F(AggHashMapInlineTest, InlineStateCorrectness) {
     Columns key_columns = {column};
     Buffer<AggDataPtr> agg_states(100);
 
-    map.template build_hash_map<true>(100, key_columns, &pool, NoAllocFunc{}, &agg_states);
-
-    // Simulate count update at offset 0.
-    for (size_t i = 0; i < 100; i++) {
-        ASSERT_NE(agg_states[i], nullptr);
-        (*reinterpret_cast<int64_t*>(agg_states[i])) += 1;
-    }
+    auto count_update = [](AggDataPtr state, size_t, bool) { (*reinterpret_cast<int64_t*>(state)) += 1; };
+    map.template build_hash_map<decltype(count_update)>(100, key_columns, &pool, NoAllocFunc{}, &agg_states,
+                                                         count_update);
 
     // Verify: iterate hash map, each key should have count = 10.
     for (auto it = map.hash_map.begin(); it != map.hash_map.end(); ++it) {
