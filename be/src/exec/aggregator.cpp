@@ -1680,8 +1680,13 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
-                    agg_func->update(fn_ctx, columns, state, row);
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
                 };
                 InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map<decltype(update_fn)>(
@@ -1723,8 +1728,13 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
-                    agg_func->update(fn_ctx, columns, state, row);
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
                 };
                 InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_limit<decltype(update_fn)>(
@@ -1753,8 +1763,13 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
-                    agg_func->update(fn_ctx, columns, state, row);
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
                 };
                 InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection<decltype(update_fn)>(
@@ -1783,8 +1798,13 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
-                    agg_func->update(fn_ctx, columns, state, row);
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
                 };
                 InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
@@ -1821,8 +1841,13 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
                 auto* agg_func = _agg_functions[0];
                 auto* fn_ctx = _agg_fn_ctxs[0];
                 const auto** columns = _agg_input_raw_columns[0].data();
-                auto update_fn = [agg_func, fn_ctx, columns](AggDataPtr state, size_t row) {
-                    agg_func->update(fn_ctx, columns, state, row);
+                bool is_merge = _is_merge_funcs[0] || use_intermediate;
+                auto update_fn = [agg_func, fn_ctx, columns, is_merge, this](AggDataPtr state, size_t row) {
+                    if (is_merge) {
+                        agg_func->merge(fn_ctx, _agg_input_columns[0][0].get(), state, row);
+                    } else {
+                        agg_func->update(fn_ctx, columns, state, row);
+                    }
                 };
                 InlineAllocFunc inline_alloc{reinterpret_cast<AggDataPtr>(_inline_initial_state)};
                 hash_map_with_key->template build_hash_map_with_selection_and_allocation<decltype(update_fn)>(
