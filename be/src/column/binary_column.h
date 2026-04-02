@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -108,7 +109,7 @@ public:
         // sometimes we may fill _bytes and _offsets separately and resize them in the final stage,
         // if an exception is thrown in the middle process, _offsets maybe inconsistent with _bytes,
         // we should skip the check.
-        if (std::uncaught_exception()) {
+        if (std::uncaught_exceptions() > 0) {
             return;
         }
 #endif
