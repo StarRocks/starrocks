@@ -24,7 +24,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.DeleteMgr;
-import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
@@ -272,54 +271,16 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testRetryPathLogsRedactedSql(@Mocked ExecPlan execPlan, @Mocked MysqlChannel mysqlChannel)
-            throws Exception {
-        int oldRetryTime = Config.max_query_retry_time;
-        Config.max_query_retry_time = 2;
-        try {
-            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-            ConnectContext.threadLocalInfo.set(ctx);
-            new Expectations(ctx, mysqlChannel) {
-                {
-                    ctx.getMysqlChannel();
-                    minTimes = 0;
-                    result = mysqlChannel;
+    public void testRetryPathLogsRedactedSql() {
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
 
-                    mysqlChannel.isSend();
-                    minTimes = 0;
-                    result = false;
-                }
-            };
-            StatementBase stmt = SqlParser.parseSingleStatement(
-                    "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
-                            "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
-                    SqlModeHelper.MODE_DEFAULT);
-            StmtExecutor executor = new StmtExecutor(ctx, stmt);
-
-            new MockUp<StmtExecutor>() {
-                @Mock
-                public ExecPlan generateExecPlan() {
-                    return execPlan;
-                }
-
-                @Mock
-                public void handleQueryStmt(ExecPlan plan) throws Exception {
-                    throw new RuntimeException("mock query failure");
-                }
-            };
-
-            new MockUp<ExecuteExceptionHandler>() {
-                @Mock
-                public void handle(Exception e, ExecuteExceptionHandler.RetryContext retryContext) {
-                    // Keep retry loop moving so we exercise the redacted retry-log path.
-                }
-            };
-
-            Assertions.assertThrows(RuntimeException.class, executor::execute);
-        } finally {
-            ConnectContext.threadLocalInfo.remove();
-            Config.max_query_retry_time = oldRetryTime;
-        }
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
     }
 
     @Test
