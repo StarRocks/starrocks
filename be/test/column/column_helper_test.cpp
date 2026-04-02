@@ -403,15 +403,20 @@ TEST_F(ColumnHelperTest, normalize_column_type_varchar_no_conversion) {
 // --- Coverage gap: MAP column path (lines 489-499) ---
 TEST_F(ColumnHelperTest, normalize_column_type_map) {
     // Build a MAP<int8, int8> column, normalize to MAP<SMALLINT, SMALLINT>
-    auto keys = NullableColumn::create(Int8Column::create(), NullColumn::create());
-    auto values = NullableColumn::create(Int8Column::create(), NullColumn::create());
+    auto key_data = Int8Column::create();
+    key_data->append(1);
+    auto key_null = NullColumn::create();
+    key_null->append(0);
+    auto keys = NullableColumn::create(std::move(key_data), std::move(key_null));
+
+    auto val_data = Int8Column::create();
+    val_data->append(10);
+    auto val_null = NullColumn::create();
+    val_null->append(0);
+    auto values = NullableColumn::create(std::move(val_data), std::move(val_null));
+
     auto offsets = UInt32Column::create();
     offsets->append(0);
-
-    down_cast<Int8Column*>(down_cast<NullableColumn*>(keys.get())->data_column().get())->append(1);
-    down_cast<NullColumn*>(down_cast<NullableColumn*>(keys.get())->null_column().get())->append(0);
-    down_cast<Int8Column*>(down_cast<NullableColumn*>(values.get())->data_column().get())->append(10);
-    down_cast<NullColumn*>(down_cast<NullableColumn*>(values.get())->null_column().get())->append(0);
     offsets->append(1);
 
     ColumnPtr ptr = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
@@ -455,14 +460,16 @@ TEST_F(ColumnHelperTest, normalize_column_type_map_no_change) {
 
 // --- Coverage gap: ARRAY column path (lines 500-507) ---
 TEST_F(ColumnHelperTest, normalize_column_type_array) {
-    auto elements = NullableColumn::create(Int8Column::create(), NullColumn::create());
+    auto elem_data = Int8Column::create();
+    elem_data->append(5);
+    elem_data->append(6);
+    auto elem_null = NullColumn::create();
+    elem_null->append(0);
+    elem_null->append(0);
+    auto elements = NullableColumn::create(std::move(elem_data), std::move(elem_null));
+
     auto offsets = UInt32Column::create();
     offsets->append(0);
-
-    down_cast<Int8Column*>(down_cast<NullableColumn*>(elements.get())->data_column().get())->append(5);
-    down_cast<NullColumn*>(down_cast<NullableColumn*>(elements.get())->null_column().get())->append(0);
-    down_cast<Int8Column*>(down_cast<NullableColumn*>(elements.get())->data_column().get())->append(6);
-    down_cast<NullColumn*>(down_cast<NullableColumn*>(elements.get())->null_column().get())->append(0);
     offsets->append(2);
 
     ColumnPtr ptr = ArrayColumn::create(std::move(elements), std::move(offsets));
