@@ -45,8 +45,8 @@ class RuntimeFilterBuildDescriptor;
 
 using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
 using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
-// RuntimeFilterPort is bind to a fragment instance
-// and it's to exchange RF(publish/receive) with outside world.
+// Runtime-owned fragment/service boundary for publishing and receiving materialized runtime-filter
+// payloads. Transport, relay, and listener delivery stay in Runtime rather than ExecCore.
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
@@ -119,8 +119,8 @@ public:
     bool isSent = false;
 };
 
-// RuntimeFilterMerger is to merge partitioned RF
-// and sent merged RF to consumer nodes.
+// Runtime-owned service helper that merges partitioned payloads and delivers merged results to
+// consumer nodes.
 class RuntimeFilterMerger {
 public:
     RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
@@ -174,6 +174,8 @@ inline std::string EventTypeToString(EventType type) {
     }
     __builtin_unreachable();
 }
+// Runtime-owned lifecycle worker for deserialize/merge/forward work. This layer coordinates
+// transport, cache, and service concerns and intentionally stays out of RuntimeCore/ExecCore.
 // RuntimeFilterWorker works in a separated thread, and does following jobs:
 // 1. deserialize runtime filters.
 // 2. merge runtime filters.

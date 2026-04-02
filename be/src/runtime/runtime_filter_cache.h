@@ -50,6 +50,8 @@ struct RfTracePoint {
     std::string msg;
 };
 
+// Runtime-owned cache for delivered runtime-filter payloads and trace events. Arrival, retention,
+// and lookup policy stay in Runtime rather than ExecCore.
 class RuntimeFilterCache {
 public:
     explicit RuntimeFilterCache(size_t log2_num_slots);

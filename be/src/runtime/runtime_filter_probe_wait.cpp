@@ -22,7 +22,8 @@
 
 namespace starrocks {
 
-// only used in non-pipeline mode
+// ExecCore keeps the wait() API on RuntimeFilterProbeCollector because ExecNode owns the call
+// site, but the current non-pipeline cache-backed wait policy remains Runtime-owned until phase 4.
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     if (_descriptors.empty()) return;
 

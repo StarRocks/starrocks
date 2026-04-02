@@ -29,6 +29,9 @@ struct RuntimeFilterSkewMaterial {
     ColumnPtr key_column;
 };
 
+// RuntimeFilterSerde is the RuntimeCore payload serialization boundary. It preserves the
+// materialized probe-time payload format while Exec build/probe orchestration and Runtime
+// transport/lifecycle remain in higher layers.
 class RuntimeFilterSerde {
 public:
     static size_t max_size(const RuntimeState* state, const RuntimeFilter* rf);

@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+// RuntimeFilterBuilder is a RuntimeCore payload-construction helper. It materializes probe-time
+// payload state from build-side columns without owning Exec descriptors or Runtime delivery logic.
 class RuntimeFilterBuilder {
 public:
     static Status fill(RuntimeFilter* filter, LogicalType type, const ColumnPtr& column, size_t column_offset,

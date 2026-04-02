@@ -21,6 +21,9 @@
 namespace starrocks {
 class ObjectPool;
 
+// RuntimeFilterFactory is a RuntimeCore payload factory. It chooses payload implementations and
+// preserves the current payload shape without taking ownership of Exec orchestration or Runtime
+// transport/lifecycle services.
 class RuntimeFilterFactory {
 public:
     static RuntimeFilter* create_empty_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);

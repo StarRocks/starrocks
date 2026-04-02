@@ -71,6 +71,8 @@ public:
     virtual void clear() = 0;
 };
 
+// Runtime IN-filters remain wire-compatible here, but this roadmap treats them as a sibling
+// execution optimization rather than the canonical runtime-filter payload abstraction.
 template <LogicalType Type>
 class InRuntimeFilter final : public AbstractInRuntimeFilter {
 public:

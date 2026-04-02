@@ -44,6 +44,8 @@ class HashJoinNode;
 class RowDescriptor;
 class RuntimeProfile;
 
+// ExecCore-owned probe-side metadata for applying a materialized runtime-filter payload. Payload
+// representation stays in RuntimeCore, while cache/wait transport policy stays in Runtime.
 class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
 public:
     using ReadyObserver = std::function<void()>;
@@ -166,7 +168,9 @@ struct RuntimeMembershipFilterEvalContext {
     RuntimeProfile::Counter* join_runtime_filter_eval_counter = nullptr;
 };
 
-// The collection of `RuntimeFilterProbeDescriptor`
+// ExecCore-owned collector for probe-time orchestration across RuntimeFilterProbeDescriptor
+// instances. ExecNode calls the wait() API here, but the current non-pipeline cache-backed wait
+// implementation still lives in Runtime and is intentionally deferred to phase 4.
 class RuntimeFilterProbeCollector {
 public:
     RuntimeFilterProbeCollector();
@@ -196,7 +200,7 @@ public:
     int wait_timeout_ms() const { return _wait_timeout_ms; }
     void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
     long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
-    // wait for all runtime filters are ready.
+    // Called from ExecNode. The current non-pipeline cache/wait policy remains Runtime-owned.
     void wait(bool on_scan_node);
 
     std::string debug_string() const;

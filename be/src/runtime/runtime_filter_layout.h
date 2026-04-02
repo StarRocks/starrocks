@@ -23,6 +23,9 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 
 namespace starrocks {
+// RuntimeFilterLayout is RuntimeCore-owned payload-adjacent metadata. It describes how a
+// materialized payload is partitioned and applied, but not Exec build/probe orchestration or
+// Runtime transport/lifecycle policy.
 class RuntimeFilterLayout {
 public:
     void init(const TRuntimeFilterLayout& layout);
