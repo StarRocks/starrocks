@@ -14,10 +14,10 @@
 
 #include "storage/lake/tablet_reshard.h"
 
-#include <unordered_map>
-
-#include <bvar/bvar.h>
 #include <butil/time.h>
+#include <bvar/bvar.h>
+
+#include <unordered_map>
 
 #include "common/logging.h"
 #include "storage/lake/metacache.h"

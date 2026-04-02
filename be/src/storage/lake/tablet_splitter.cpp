@@ -14,12 +14,12 @@
 
 #include "storage/lake/tablet_splitter.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
 #include <set>
 #include <unordered_map>
 #include <vector>
-
-#include <bvar/bvar.h>
 
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
