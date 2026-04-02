@@ -81,16 +81,24 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         }
     };
 
-    auto token =
-            ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::unique_ptr<ThreadPoolToken> token;
+    if (config::enable_pk_index_parallel_execution) {
+        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
+    }
     for (int i = 0; i < num_sstables; i++) {
-        auto st = token->submit_func([&open_one, i]() { open_one(i); });
-        if (!st.ok()) {
-            // Fallback to inline execution if submit fails
+        if (token) {
+            auto st = token->submit_func([&open_one, i]() { open_one(i); });
+            if (!st.ok()) {
+                open_one(i);
+            }
+        } else {
             open_one(i);
         }
     }
-    token->wait();
+    if (token) {
+        token->wait();
+    }
 
     RETURN_IF_ERROR(shared_status);
     return std::move(sstables);
