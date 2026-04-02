@@ -73,6 +73,7 @@ public class IcebergScanNode extends ScanNode {
     private int selectedPartitionCount = -1;
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private PartitionIdGenerator partitionIdGenerator = null;
+    private boolean enableIncrementalScanRanges = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -124,6 +125,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+        this.enableIncrementalScanRanges = enableIncrementalScanRanges;
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -159,7 +161,8 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
+        scanRangeSource =
+                new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
     }
 
     private void setupCloudCredential() {
@@ -223,6 +226,10 @@ public class IcebergScanNode extends ScanNode {
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
+    }
+
+    public IcebergTable getIcebergTable() {
+        return icebergTable;
     }
 
     @Override
@@ -335,6 +342,16 @@ public class IcebergScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+    }
+
+    @Override
+    public void prepareRetry() {
+        clear();
+        try {
+            setupScanRangeLocations(enableIncrementalScanRanges);
+        } catch (StarRocksException e) {
+            throw new RuntimeException("Failed to reset IcebergScanNode for retry", e);
+        }
     }
 
     @Override

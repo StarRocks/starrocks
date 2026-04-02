@@ -230,4 +230,8 @@ public abstract class ScanNode extends PlanNode {
         }
         return output.toString();
     }
+
+    public void prepareRetry() {
+        // default no-op: subclasses that maintain streaming scan state should override
+    }
 }

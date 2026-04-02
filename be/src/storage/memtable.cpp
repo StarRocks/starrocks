@@ -26,6 +26,7 @@
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
@@ -289,7 +290,7 @@ Status MemTable::finalize() {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
-                return Status::Cancelled("primary key size exceed the limit.");
+                return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
             if (_has_op_slot) {
                 // TODO(cbl): mem_tracker

@@ -47,7 +47,8 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     }
 
     /**
-     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into result.
+     * Iterate srcListMap, if the partition name is not in dstListMap or the partition value is different, add into
+     * result.
      *
      * Compare the partition of the base table and the partition of the mv.
      * @param baseItems the partition name to its list partition cell of the base table

@@ -816,6 +816,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_metadata_fetch_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
@@ -893,6 +900,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _pipeline_sink_io_pool->shutdown();
         component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_metadata_fetch_thread_pool) {
+        start = MonotonicMillis();
+        _lake_metadata_fetch_thread_pool->shutdown();
+        component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
@@ -1075,6 +1088,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _lake_metadata_fetch_thread_pool.reset();
     _metrics = nullptr;
 }
 

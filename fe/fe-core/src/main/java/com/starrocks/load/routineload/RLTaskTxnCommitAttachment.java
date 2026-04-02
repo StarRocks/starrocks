@@ -65,6 +65,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private RoutineLoadProgress timestampProgress;
     private String errorLogUrl;
     private long loadedBytes;
+    private boolean nonRetryable = false;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
@@ -98,6 +99,9 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
         if (rlTaskTxnCommitAttachment.isSetErrorLogUrl()) {
             this.errorLogUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
+        }
+        if (rlTaskTxnCommitAttachment.isSetNonRetryable()) {
+            this.nonRetryable = rlTaskTxnCommitAttachment.isNonRetryable();
         }
     }
 
@@ -147,6 +151,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public String getErrorLogUrl() {
         return errorLogUrl;
+    }
+
+    public boolean isNonRetryable() {
+        return nonRetryable;
     }
 
     @Override

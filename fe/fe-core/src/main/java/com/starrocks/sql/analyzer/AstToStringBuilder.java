@@ -73,7 +73,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -85,12 +84,12 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -188,6 +187,7 @@ public class AstToStringBuilder {
     }
 
     public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
+        private static final String MASKED_AUTH_TEXT = "*XXX";
 
         // when you want to get the full string of a functionCallExpr set it true
         // when you just want to a function name as its alias set it false
@@ -245,26 +245,39 @@ public class AstToStringBuilder {
                 return sb;
             }
 
+            String authString = authOption.getAuthString();
+            String printedAuthString = shouldHideAuthString(authOption) ? MASKED_AUTH_TEXT : authString;
+
             if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
                 sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
-                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                if (!Strings.isNullOrEmpty(authString)) {
                     if (authOption.isPasswordPlain()) {
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
-                    sb.append(authOption.getAuthString()).append("'");
+                    sb.append(printedAuthString).append("'");
                 }
             } else {
-                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                if (!Strings.isNullOrEmpty(authString)) {
                     if (authOption.isPasswordPlain()) {
-                        sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                        sb.append(" IDENTIFIED BY '").append(printedAuthString).append("'");
                     } else {
-                        sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getAuthString()).append("'");
+                        sb.append(" IDENTIFIED BY PASSWORD '").append(printedAuthString).append("'");
                     }
                 }
             }
             return sb;
+        }
+
+        private boolean shouldHideAuthString(UserAuthOption authOption) {
+            if (!hideCredential || Strings.isNullOrEmpty(authOption.getAuthString())) {
+                return false;
+            }
+            if (Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                return true;
+            }
+            return !AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name().equalsIgnoreCase(authOption.getAuthPlugin());
         }
 
         @Override
@@ -1701,10 +1714,6 @@ public class AstToStringBuilder {
         sb.append("`").append(table.getName()).append("` (\n");
         int idx = 0;
         for (Column column : table.getBaseSchema()) {
-            // Skip expression partition generated columns to show user-created DDL
-            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
-                continue;
-            }
             if (idx++ != 0) {
                 sb.append(",\n");
             }
@@ -1755,14 +1764,7 @@ public class AstToStringBuilder {
                 partitionId = Lists.newArrayList();
             }
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                // Use expression (not generated column name) for user-created DDL display
-                if (partitionInfo instanceof ListPartitionInfo) {
-                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                    sb.append("\n").append(listPartitionInfo.toSql(olapTable,
-                            listPartitionInfo.isAutomaticPartition(), false));
-                } else {
-                    sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
-                }
+                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
             }
 
             // distribution

@@ -381,6 +381,8 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
+    ThreadPool* lake_metadata_fetch_thread_pool() { return _lake_metadata_fetch_thread_pool.get(); }
+
     void try_release_resource_before_core_dump();
 
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
@@ -450,6 +452,7 @@ private:
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    std::unique_ptr<ThreadPool> _lake_metadata_fetch_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;

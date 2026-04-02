@@ -56,7 +56,7 @@ constexpr int TIMER_TASK_RUNNING = 1;
 class ExecEnv;
 
 template <typename StubCacheT>
-class EndpointCleanupTask : public starrocks::pipeline::PipelineTimerTask {
+class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
 public:
     EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
     void Run() override { _cache->cleanup_expired(_endpoint); }
@@ -85,8 +85,8 @@ private:
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-        EndpointCleanupTask<BrpcStubCache>* _cleanup_task = nullptr;
         int64_t _idx = -1;
+        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 
     SpinLock _lock;

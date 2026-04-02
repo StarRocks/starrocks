@@ -71,6 +71,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+        ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -398,6 +399,7 @@ set(EXEC_FILES
         ./storage/get_use_pk_index_test.cpp
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
+        ./storage/non_retryable_load_errors_test.cpp
         ./storage/olap_meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
         ./storage/column_or_predicate_test.cpp
