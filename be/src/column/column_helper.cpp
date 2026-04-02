@@ -454,7 +454,8 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
             normalized_values.get() == map_column->values_column().get()) {
             return column;
         }
-        return MapColumn::create(std::move(normalized_keys), std::move(normalized_values), map_column->offsets_column());
+        return MapColumn::create(std::move(normalized_keys), std::move(normalized_values),
+                                 map_column->offsets_column());
     }
     case TYPE_ARRAY: {
         const auto* array_column = down_cast<const ArrayColumn*>(column.get());
