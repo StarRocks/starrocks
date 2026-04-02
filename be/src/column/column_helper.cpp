@@ -354,19 +354,29 @@ MutableColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const Type
 
 namespace {
 
+// True for C++ types that back numeric FixedLengthColumns and can be safely
+// converted via static_cast between different widths (int8→int16, int32→float, etc.).
+// Non-numeric column types (Slice for VARCHAR, JsonValue* for JSON, …) are excluded
+// because they use entirely different column representations and never hit the
+// size-mismatch problem that normalize_column_type is designed to fix.
 template <typename T>
 inline constexpr bool kIsNormalizableNumericType =
         std::is_arithmetic_v<T> || std::is_same_v<T, int128_t> || std::is_same_v<T, int256_t>;
 
+// Functor used with type_dispatch_predicate to convert a source scalar column
+// into a properly typed target column when the physical element widths differ.
+// Returns nullptr when no conversion is needed (same width or non-numeric type).
 struct ScalarColumnTypeNormalizer {
     template <LogicalType LT>
     ColumnPtr operator()(const Column& src_column, size_t count) const {
         using TargetCppType = RunTimeCppType<LT>;
 
         if constexpr (!kIsNormalizableNumericType<TargetCppType>) {
+            // Non-numeric types (VARCHAR, JSON, …) — no conversion needed.
             return nullptr;
         } else {
             if (src_column.type_size() == sizeof(TargetCppType)) {
+                // Physical width already matches — no conversion needed.
                 return nullptr;
             }
 
@@ -374,6 +384,8 @@ struct ScalarColumnTypeNormalizer {
             auto& dst_data = target->get_data();
             raw::stl_vector_resize_uninitialized(&dst_data, count);
 
+            // Read source elements according to their actual physical width and
+            // widen/narrow via static_cast into the target type.
             const auto* raw = src_column.raw_data();
             switch (src_column.type_size()) {
             case 1:
@@ -420,20 +432,25 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
         return column;
     }
 
+    // Handle ConstColumn: unfold first, then normalize the inner column.
+    // unfold_const_column alone does NOT convert the physical type — it only
+    // replicates the inner data column to the required row count.
     if (column->is_constant()) {
         auto unfolded = ColumnHelper::unfold_const_column(target_type, column->size(), column);
         return normalize_column_type(unfolded, target_type);
     }
 
+    // NullableColumn: normalize the data column, keep the null bitmap as-is.
     if (column->is_nullable()) {
         const auto* nullable = down_cast<const NullableColumn*>(column.get());
         auto normalized_data = normalize_column_type(nullable->data_column(), target_type);
         if (normalized_data.get() == nullable->data_column().get()) {
-            return column;
+            return column; // data column unchanged — return original to avoid copy
         }
         return NullableColumn::create(std::move(normalized_data), nullable->null_column());
     }
 
+    // Nested complex types: recurse into children.
     switch (target_type.type) {
     case TYPE_STRUCT: {
         const auto* struct_column = down_cast<const StructColumn*>(column.get());
@@ -474,12 +491,15 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
         break;
     }
 
+    // Leaf scalar type: dispatch to ScalarColumnTypeNormalizer which compares
+    // source and target element widths and converts if they differ.
     if (target_type.type == TYPE_UNKNOWN || target_type.type == TYPE_NULL || !is_scalar_field_type(target_type.type)) {
         return column;
     }
 
-    // Use type_dispatch_predicate (assert=false) so unsupported types return nullptr
-    // instead of CHECK-failing, avoiding the need for a manual type whitelist.
+    // type_dispatch_predicate with assert=false returns a default-constructed
+    // ColumnPtr (nullptr) for types outside APPLY_FOR_ALL_SCALAR_TYPE, so we
+    // never need a hand-maintained type whitelist.
     auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(), *column,
                                                          column->size());
     if (normalized == nullptr) {
