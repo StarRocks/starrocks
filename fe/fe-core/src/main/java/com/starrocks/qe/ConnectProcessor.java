@@ -572,7 +572,7 @@ public class ConnectProcessor {
         } catch (LargeInPredicateException e) {
             // we will retry this sql later, so don't audit here
             throw e;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             auditStmtFailure(e, parsedStmt, auditSql);
             throw e;
         }
@@ -591,7 +591,7 @@ public class ConnectProcessor {
             throws Exception {
         try {
             return prepareRetriedStmt(parsedStmt, originStmt, stmtCount);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // since this is the retry stmt, we have to audit
             auditStmtFailureForStmt(e, parsedStmt, originStmt);
             throw e;
@@ -699,7 +699,12 @@ public class ConnectProcessor {
         for (int i = 0; i < stmts.size(); ++i) {
             resetStmtExecutionContext(i > 0);
             StatementBase parsedStmt = stmts.get(i);
-            parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
+            try {
+                parsedStmt = prepareStmtForExecution(parsedStmt, originStmt, i, stmts.size());
+            } catch (Throwable e) {
+                auditStmtFailureForStmt(e, parsedStmt, originStmt);
+                throw e;
+            }
             if (!(parsedStmt instanceof SetStmt)) {
                 allStatementsAreSet = false;
             }
@@ -855,6 +860,7 @@ public class ConnectProcessor {
             executor = new StmtExecutor(ctx, executeStmt);
             ctx.setExecutor(executor);
             if (enableAudit) {
+                resetAuditEventBuilder();
                 auditBeforeExec(originStmt, executeStmt);
             }
 
@@ -1209,6 +1215,7 @@ public class ConnectProcessor {
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
 
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            ctx.setMultiStmt(stmts.size() > 1);
             StatementBase statement = stmts.get(idx);
             //Build View SQL without Policy Rewrite
             new AstTraverser<Void, Void>() {
