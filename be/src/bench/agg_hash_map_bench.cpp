@@ -126,7 +126,7 @@ static void BM_AggHashMap_Inline(benchmark::State& state) {
             agg_states.assign(chunk_rows, nullptr);
             auto count_update = [](AggDataPtr state, size_t, bool) { (*reinterpret_cast<int64_t*>(state)) += 1; };
             map.template build_hash_map<decltype(count_update)>(chunk_rows, chunk_cols, &pool, NoAllocFunc{},
-                                                                 &agg_states, count_update);
+                                                                &agg_states, count_update);
         }
 
         benchmark::DoNotOptimize(map.hash_map.size());

@@ -387,8 +387,7 @@ struct AggHashMapWithOneNumberKeyWithNullable
     // prefetch branch better performance in case with larger hash tables
     template <typename UpdateFunc, typename Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_prefetch(const ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                              Func&& allocate_func, ExtraAggParam* extra,
-                                              UpdateFunc update_func = {}) {
+                                              Func&& allocate_func, ExtraAggParam* extra, UpdateFunc update_func = {}) {
         static constexpr bool InlineState = is_inline_update_v<UpdateFunc>;
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
@@ -402,11 +401,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
                         bool inserted = false;
-                        this->template _emplace_key_with_hash<true>(
-                                key, hash_values[i], (*agg_states)[i], allocate_func, [&] {
-                                    inserted = true;
-                                    hash_table_size++;
-                                });
+                        this->template _emplace_key_with_hash<true>(key, hash_values[i], (*agg_states)[i],
+                                                                    allocate_func, [&] {
+                                                                        inserted = true;
+                                                                        hash_table_size++;
+                                                                    });
                         update_func((*agg_states)[i], i, inserted);
                     } else {
                         _emplace_key_with_hash(key, hash_values[i], (*agg_states)[i], allocate_func,
@@ -546,8 +545,8 @@ struct AggHashMapWithOneNumberKeyWithNullable
                     if (hash_table_size < extra->limits) {
                         if constexpr (InlineState) {
                             bool inserted = false;
-                            this->template _emplace_key<true>(key, (*agg_states)[i],
-                                                              std::forward<Func>(allocate_func), [&]() {
+                            this->template _emplace_key<true>(key, (*agg_states)[i], std::forward<Func>(allocate_func),
+                                                              [&]() {
                                                                   inserted = true;
                                                                   hash_table_size++;
                                                               });
@@ -666,8 +665,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
     bool _inline_null_key_state_created = false;
 
     AggDataPtr get_inline_null_key_data() const {
-        return _inline_null_key_state_created ? const_cast<AggDataPtr>(reinterpret_cast<const uint8_t*>(&_inline_null_key_state))
-                                              : nullptr;
+        return _inline_null_key_state_created
+                       ? const_cast<AggDataPtr>(reinterpret_cast<const uint8_t*>(&_inline_null_key_state))
+                       : nullptr;
     }
 };
 
@@ -1217,11 +1217,11 @@ struct AggHashMapWithSerializedKeyFixedSize
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
                         bool inserted = false;
-                        this->template _emplace_key_with_hash<true>(
-                                key, caches[i].hashval, (*agg_states)[i], allocate_func, [&]() {
-                                    inserted = true;
-                                    hash_table_size++;
-                                });
+                        this->template _emplace_key_with_hash<true>(key, caches[i].hashval, (*agg_states)[i],
+                                                                    allocate_func, [&]() {
+                                                                        inserted = true;
+                                                                        hash_table_size++;
+                                                                    });
                         update_func((*agg_states)[i], i, inserted);
                     } else {
                         _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
@@ -1537,11 +1537,11 @@ struct AggHashMapWithCompressedKeyFixedSize
                 if (hash_table_size < extra->limits) {
                     if constexpr (InlineState) {
                         bool inserted = false;
-                        this->template _emplace_key_with_hash<true>(
-                                fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func, [&] {
-                                    inserted = true;
-                                    hash_table_size++;
-                                });
+                        this->template _emplace_key_with_hash<true>(fixed_keys[i], hashs[i], (*agg_states)[i],
+                                                                    allocate_func, [&] {
+                                                                        inserted = true;
+                                                                        hash_table_size++;
+                                                                    });
                         update_func((*agg_states)[i], i, inserted);
                     } else {
                         _emplace_key_with_hash(fixed_keys[i], hashs[i], (*agg_states)[i], allocate_func,

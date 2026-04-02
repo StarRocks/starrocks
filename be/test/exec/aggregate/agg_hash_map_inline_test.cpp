@@ -51,7 +51,7 @@ TEST_F(AggHashMapInlineTest, InlineStateCorrectness) {
 
     auto count_update = [](AggDataPtr state, size_t, bool) { (*reinterpret_cast<int64_t*>(state)) += 1; };
     map.template build_hash_map<decltype(count_update)>(100, key_columns, &pool, NoAllocFunc{}, &agg_states,
-                                                         count_update);
+                                                        count_update);
 
     // Verify: iterate hash map, each key should have count = 10.
     for (auto it = map.hash_map.begin(); it != map.hash_map.end(); ++it) {
