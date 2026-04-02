@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
@@ -26,6 +27,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -609,15 +611,154 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     /**
+     * Verify that IVM→PCT fallback allows multi-batch splitting (respects partition_refresh_number)
+     * and correctly persists TVR checkpoint for the next IVM refresh.
+     *
+     * Before the fix: setCanGenerateNextTaskRun(false) forced all partitions into a single task_run,
+     * which could cause OOM on large tables.
+     *
+     * After the fix: TVR is persisted in tempBaseTableInfoTvrDeltaMap (via editlog) so that
+     * subsequent batch task_runs can access it, and partition_refresh_number is respected.
+     */
+    @Test
+    public void testAutoRefreshFallbackAllowsMultiBatchAndPersistsTvr() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        // Run 1: IVM fails (retractable changes) → fallback to PCT
+        MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid1 =
+                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        // Verify fallback to PCT
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        // Verify canGenerateNextTaskRun is NOT blocked (the core fix)
+        MVPCTBasedRefreshProcessor pctProcessor =
+                (MVPCTBasedRefreshProcessor) hybrid1.getCurrentProcessor();
+        Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
+                "IVM→PCT fallback should allow multi-batch splitting (canGenerateNextTaskRun=true)");
+
+        // Verify TVR checkpoint is persisted to baseTableInfoTvrVersionRangeMap
+        MaterializedView refreshedMv = getMv("test_mv1");
+        TvrVersionRange checkpoint = refreshedMv.getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap()
+                .values()
+                .iterator()
+                .next();
+        Assertions.assertTrue(checkpoint instanceof TvrTableSnapshot);
+        Assertions.assertEquals(2L, checkpoint.to().getVersion());
+
+        // Run 2: append-only changes → IVM should recover from checkpoint
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(2L, 3L),
+                        TvrDeltaStats.EMPTY)
+        ));
+
+        MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid2 =
+                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
+        // Should switch back to IVM since delta[2,3] is append-only
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor,
+                "After PCT fallback persists checkpoint, next IVM refresh should recover");
+    }
+
+    /**
+     * Verify IVM→PCT fallback with partition_refresh_number=1 produces multi-batch task_runs
+     * and only promotes TVR checkpoint on the last batch.
+     *
+     * Uses partitioned Iceberg table t1 (4 partitions). With partition_refresh_number=1,
+     * the PCT fallback should split into multiple batches. Intermediate batches should NOT
+     * promote TVR to baseTableInfoTvrVersionRangeMap; only the last batch should.
+     */
+    @Test
+    public void testAutoRefreshFallbackMultiBatchTvrPromoteOnlyOnLastBatch() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+
+        // First task_run: IVM fails (retractable changes) → fallback to PCT, batch 1
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid =
+                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        // Verify fallback to PCT
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        // Verify canGenerateNextTaskRun is allowed
+        MVPCTBasedRefreshProcessor pctProcessor =
+                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
+                "IVM→PCT fallback should allow multi-batch splitting");
+
+        // Check if there are more batches (partition_refresh_number=1, 4 partitions → should have next)
+        TaskRun nextTaskRun = pctProcessor.getNextTaskRun();
+        if (nextTaskRun != null) {
+            // Intermediate batch: TVR should NOT be promoted to baseTableInfoTvrVersionRangeMap yet
+            MaterializedView intermediateMv = getMv("test_mv1");
+            Map<BaseTableInfo, TvrVersionRange> intermediateCheckpoint = intermediateMv.getRefreshScheme()
+                    .getAsyncRefreshContext()
+                    .getBaseTableInfoTvrVersionRangeMap();
+            // baseTableInfoTvrVersionRangeMap should be empty (first refresh, no previous IVM success)
+            // TVR should only be promoted on the last batch
+            Assertions.assertTrue(intermediateCheckpoint.isEmpty(),
+                    "TVR should not be promoted to baseTableInfoTvrVersionRangeMap on intermediate batches, " +
+                            "but got: " + intermediateCheckpoint);
+
+            // tempBaseTableInfoTvrDeltaMap should have the pending TVR
+            Map<BaseTableInfo, TvrVersionRange> tempTvr = intermediateMv.getRefreshScheme()
+                    .getAsyncRefreshContext()
+                    .getTempBaseTableInfoTvrDeltaMap();
+            Assertions.assertFalse(tempTvr.isEmpty(),
+                    "tempBaseTableInfoTvrDeltaMap should contain pending TVR for subsequent batches");
+
+            // Execute remaining batches
+            while (nextTaskRun != null) {
+                initAndExecuteTaskRun(nextTaskRun);
+                MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
+                BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+                if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
+                    MVHybridBasedRefreshProcessor nextHybrid =
+                            (MVHybridBasedRefreshProcessor) refreshProcessor;
+                    nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
+                } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
+                    nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+                } else {
+                    nextTaskRun = null;
+                }
+            }
+        }
+
+        // After all batches complete: TVR checkpoint should be promoted
+        MaterializedView finalMv = getMv("test_mv1");
+        Map<BaseTableInfo, TvrVersionRange> finalCheckpoint = finalMv.getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        Assertions.assertFalse(finalCheckpoint.isEmpty(),
+                "TVR checkpoint should be promoted to baseTableInfoTvrVersionRangeMap after all batches complete");
+        TvrVersionRange checkpoint = finalCheckpoint.values().iterator().next();
+        Assertions.assertTrue(checkpoint instanceof TvrTableSnapshot);
+        Assertions.assertEquals(2L, checkpoint.to().getVersion(),
+                "TVR checkpoint should point to version 2");
+    }
+
+    /**
      * Test that IVM refresh records complete PCT metadata without batch truncation.
-     *
-     * Before the fix, updatePCTToRefreshMetas in IVM path went through filterPartitionByRefreshNumber,
-     * which truncated the partition list based on partition_refresh_number (default 1).
-     * This caused incomplete visibleVersionMap updates — partitions that were actually refreshed by IVM
-     * (via TVR delta) would still appear stale in PCT metadata, breaking MV query rewrite.
-     *
-     * The fix passes skipBatchFilter=true so that detectMVPartitionsToRefresh is used instead of
-     * getMVToRefreshedPartitions, skipping all batch filtering.
      */
     @Test
     public void testIVMPCTMetadataNotTruncatedByPartitionRefreshNumber() throws Exception {
