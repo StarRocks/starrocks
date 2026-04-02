@@ -42,6 +42,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -246,6 +248,14 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
     public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
 
+    // tablet reshard metrics
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
+
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
@@ -253,6 +263,7 @@ public final class MetricRepo {
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
+    public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -363,6 +374,41 @@ public final class MetricRepo {
                     .addLabel(new MetricLabel("type", jobType.name()))
                     .addLabel(new MetricLabel("state", "running"));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
+        }
+
+        // tablet reshard jobs
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        if (tabletReshardJobMgr != null) {
+            for (TabletReshardJob.JobType reshardJobType : TabletReshardJob.JobType.values()) {
+                for (TabletReshardJob.JobState reshardJobState : TabletReshardJob.JobState.values()) {
+                    Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
+                            MetricUnit.NOUNIT, "job statistics") {
+                        @Override
+                        public Long getValueLeader() {
+                            long count = 0;
+                            for (TabletReshardJob job : tabletReshardJobMgr.getTabletReshardJobs().values()) {
+                                if (job.getJobType() == reshardJobType && job.getJobState() == reshardJobState) {
+                                    count++;
+                                }
+                            }
+                            return count;
+                        }
+                    };
+                    gauge.addLabel(new MetricLabel("job", "tablet_reshard"))
+                            .addLabel(new MetricLabel("type", reshardJobType.name()))
+                            .addLabel(new MetricLabel("state", reshardJobState.name()));
+                    STARROCKS_METRIC_REGISTER.addMetric(gauge);
+                }
+            }
+
+            Metric<Long> parallelTabletsGauge = new LeaderAwareGaugeMetricLong("tablet_reshard_parallel_tablets",
+                    MetricUnit.NOUNIT, "number of tablets being resharded") {
+                @Override
+                public Long getValueLeader() {
+                    return tabletReshardJobMgr.getTotalParallelTablets();
+                }
+            };
+            STARROCKS_METRIC_REGISTER.addMetric(parallelTabletsGauge);
         }
 
         // capacity
@@ -717,6 +763,33 @@ public final class MetricRepo {
                 "total file bytes have been vacuumed");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
 
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL = new LongCounterMetric("tablet_reshard_job_total",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs created");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL = new LongCounterMetric("tablet_reshard_job_total",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs created");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL);
+
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED = new LongCounterMetric("tablet_reshard_job_finished",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs finished");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED = new LongCounterMetric("tablet_reshard_job_finished",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs finished");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED);
+
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED = new LongCounterMetric("tablet_reshard_job_aborted",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs aborted");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED = new LongCounterMetric("tablet_reshard_job_aborted",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs aborted");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
+
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
@@ -730,6 +803,8 @@ public final class MetricRepo {
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
+        HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_reshard_job", "duration", "ms"));
 
         // init system metrics
         initSystemMetrics();
