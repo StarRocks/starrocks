@@ -61,7 +61,9 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
 }
 
 void LocalLookUpRequestContext::callback(const Status& status) {
-    fetch_ctx->unit->finished_request_num++;
+    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
+        unit->finished_request_num++;
+    }
 }
 
 // Deserialize remote request payload into a reusable chunk for processing.
@@ -642,4 +644,262 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+Status NativeLookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(lookup_request_failed);
+
+    // For native lookup, the request chunk is already in the expected order and contains all necessary columns,
+    // so we can directly fill the response without additional processing.
+    if (_ctx->request_ctxs.empty()) {
+        return Status::OK();
+    }
+
+    SmallPermutation permutation;
+    Buffer<uint32_t> replicated;
+
+    Columns columns;
+
+    for (size_t i = 0; i < _ctx->fetch_ref_slot_ids.size(); i++) {
+        columns.push_back(request_chunk->get_column_by_slot_id(_ctx->fetch_ref_slot_ids[i]));
+    }
+
+    ASSIGN_OR_RETURN(auto locators, _build_row_id_range(state, columns, &permutation, &replicated));
+
+    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
+
+    std::vector<SlotDescriptor*> query_slots;
+
+    // skip all request column (they have existed in request chunk)
+    auto should_keep = [&](SlotDescriptor* slot) {
+        int id = slot->id();
+        return !std::ranges::any_of(_ctx->lookup_ref_slot_ids, [&](int ref_id) { return id == ref_id; });
+    };
+
+    const auto& slots = tuple_desc->slots();
+
+    for (auto* slot : slots | std::views::filter(should_keep)) {
+        query_slots.push_back(slot);
+    }
+
+    ASSIGN_OR_RETURN(auto late_materialized_chunk,
+                     _late_materialize_by_row_locators(state, query_slots, locators, request_chunk));
+
+    if (!replicated.empty()) {
+        auto chunk = std::make_shared<Chunk>();
+        for (const auto& [slot_id, _] : late_materialized_chunk->get_slot_id_to_index_map()) {
+            auto old_column = late_materialized_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
+            ASSIGN_OR_RETURN(auto new_column, old_column->replicate(replicated));
+            chunk->append_column(std::move(new_column), slot_id);
+        }
+        late_materialized_chunk = std::move(chunk);
+    }
+    {
+        size_t num_rows = late_materialized_chunk->num_rows();
+        auto sorted_chunk = late_materialized_chunk->clone_empty_with_slot(num_rows);
+        materialize_by_permutation_single(sorted_chunk.get(), late_materialized_chunk, permutation);
+        late_materialized_chunk = std::move(sorted_chunk);
+    }
+
+    {
+        size_t start_offset = 0;
+        for (const auto& request_ctx : _ctx->request_ctxs) {
+            ASSIGN_OR_RETURN(auto num_rows,
+                             request_ctx->fill_response(late_materialized_chunk, query_slots, start_offset));
+            start_offset += num_rows;
+        }
+    }
+
+    return Status::OK();
+}
+
+// Generate the inverse of a given permutation.
+SmallPermutation transform(const SmallPermutation& origin) {
+    SmallPermutation result;
+    result.resize(origin.size());
+
+    for (size_t i = 0; i < origin.size(); ++i) {
+        result[origin[i].index_in_chunk].index_in_chunk = i;
+    }
+
+    return result;
+}
+
+auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& row_locator, SmallPermutation* output,
+                                           Buffer<uint32_t>* replicated) -> StatusOr<RowLocators> {
+    DCHECK_EQ(row_locator[0]->size(), row_locator[1]->size());
+    DCHECK_EQ(row_locator[0]->size(), row_locator[2]->size());
+
+    for (const auto& col : row_locator) {
+        DCHECK(!col->is_constant()) << "row locator columns should not be constant";
+        DCHECK(!col->is_nullable() || !col->has_null());
+    }
+
+    ASSIGN_OR_RETURN(auto permutation, _sort_columns(state, row_locator));
+
+    auto chunk = std::make_shared<Chunk>();
+    for (size_t i = 0; i < row_locator.size(); ++i) {
+        chunk->append_column(row_locator[i], i);
+    }
+
+    auto sorted_chunk = chunk->clone_empty_with_slot(chunk->num_rows());
+
+    materialize_by_permutation_single(sorted_chunk.get(), chunk, permutation);
+
+    {
+        // right now we only have semantics a[i] = b[c[i]] (in materialize_by_permutation_single). so we need to transform permutation.
+        // if we implement semantics a[c[i]] = b[i], then we can directly use the permutation from sort_and_tie_columns without transformation.
+        *output = transform(permutation);
+    }
+
+    size_t num_rows = sorted_chunk->num_rows();
+    const auto& sorted_columns = sorted_chunk->columns();
+
+    const auto& tablet_id_column = ColumnHelper::get_data_column_by_type<TYPE_BIGINT>(sorted_columns[0]);
+    const auto& rss_id_column = ColumnHelper::get_data_column_by_type<TYPE_INT>(sorted_columns[1]);
+    const auto& row_id_column = ColumnHelper::get_data_column_by_type<TYPE_BIGINT>(sorted_columns[2]);
+
+    const auto tablet_ids = tablet_id_column->immutable_data();
+    const auto rss_ids = rss_id_column->immutable_data();
+    const auto row_ids = row_id_column->immutable_data();
+
+    std::vector<RowLocatorTuple> locators;
+
+    if (num_rows == 0) {
+        return Status::OK();
+    }
+
+    int64_t cur_tablet = tablet_ids[0];
+    uint32_t cur_rss_id = rss_ids[0];
+
+    SparseRange<rowid_t> ranges;
+    Range<rowid_t> cur_range(row_ids[0], row_ids[0] + 1);
+
+    replicated->push_back(0);
+    uint32_t current_group_size = 1;
+
+    for (size_t i = 1; i < num_rows; ++i) {
+        int64_t tablet = tablet_ids[i];
+        uint32_t rssid = rss_ids[i];
+        rowid_t rowid = row_ids[i];
+
+        bool same_locator = tablet == tablet_ids[i - 1] && rssid == rss_ids[i - 1] && rowid == row_ids[i - 1];
+
+        bool same_segment = tablet == cur_tablet && rssid == cur_rss_id;
+
+        if (same_locator) {
+            current_group_size++;
+        } else {
+            replicated->push_back(replicated->back() + current_group_size);
+            current_group_size = 1;
+        }
+
+        // not the same segment file
+        if (!same_segment) {
+            ranges.add(cur_range);
+            locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
+
+            // reset
+            ranges = SparseRange<rowid_t>();
+            cur_range = Range<rowid_t>(rowid, rowid + 1);
+
+            cur_tablet = tablet;
+            cur_rss_id = rssid;
+
+            continue;
+        }
+
+        // rowid continuous -> expand current range
+        if (rowid == cur_range.end()) {
+            cur_range.expand(1);
+        }
+
+        // new rowid -> new range
+        else if (rowid != cur_range.end() - 1) {
+            ranges.add(cur_range);
+            cur_range = Range<rowid_t>(rowid, rowid + 1);
+        }
+    }
+
+    // flush the last range
+    ranges.add(cur_range);
+    locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
+    replicated->push_back(replicated->back() + current_group_size);
+
+    return locators;
+}
+
+StatusOr<SmallPermutation> NativeLookUpTask::_sort_columns(RuntimeState* state, const Columns& columns) {
+    SortDescs sort_descs;
+    sort_descs.descs.reserve(columns.size());
+    for (size_t i = 0; i < columns.size(); i++) {
+        sort_descs.descs.emplace_back(true, true);
+    }
+    SmallPermutation permutation = create_small_permutation(columns[0]->size());
+    RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), columns, sort_descs, permutation));
+    return permutation;
+}
+
+auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
+                                                         const RowLocators& row_locators, const ChunkPtr& chunk)
+        -> StatusOr<ChunkPtr> {
+    ChunkAccumulator accumulator(chunk->num_rows());
+
+    // acquire global late materialization context
+    auto scan_id = _ctx->scan_id;
+    auto glm_ctx = state->query_ctx()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id);
+    if (glm_ctx == nullptr) {
+        return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
+                                     std::to_string(scan_id));
+    }
+
+    ObjectPool obj_pool;
+
+    for (const auto& row_locator : row_locators) {
+        auto [tablet_id, rssid, row_id_ranges] = row_locator;
+        RETURN_IF_ERROR(_tablet_adaptor->capture(glm_ctx));
+
+        RETURN_IF_ERROR(_tablet_adaptor->init(tablet_id));
+
+        RETURN_IF_ERROR(_tablet_adaptor->init_schema(state));
+
+        // init access path
+        RETURN_IF_ERROR(_tablet_adaptor->init_access_path(state, &obj_pool));
+        // init global dicts
+        RETURN_IF_ERROR(_tablet_adaptor->init_global_dicts(state, &obj_pool, slots));
+        RETURN_IF_ERROR(_tablet_adaptor->init_read_columns(slots));
+
+        // Do read
+        ASSIGN_OR_RETURN(auto iterator, _tablet_adaptor->get_iterator(rssid, row_id_ranges));
+
+        // init chunk iterator
+        do {
+            ChunkPtr chunk(ChunkHelper::new_chunk_pooled(iterator->output_schema(), row_id_ranges.span_size()));
+            auto status = iterator->get_next(chunk.get());
+            if (status.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(status);
+            RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
+        } while (true);
+    }
+
+    accumulator.finalize();
+    auto accumulated = accumulator.pull();
+
+    for (const auto& slot : slots) {
+        size_t column_index = accumulated->schema()->get_field_index_by_name(slot->col_name());
+        accumulated->set_slot_id_to_index(slot->id(), column_index);
+        auto column = accumulated->get_column_by_slot_id(slot->id());
+        if (slot->is_nullable() && !column->is_nullable()) {
+            auto nullable_column = NullableColumn::wrap_if_necessary(std::move(column));
+            accumulated->update_column(std::move(nullable_column), slot->id());
+        }
+    }
+
+    return accumulated;
+}
+
+} // namespace starrocks::pipeline
+>>>>>>> 7992c66878 ([BugFix] Fix a memory leak issue caused by shared_ptr cycle between `BatchUnit` and `FetchTaskContext` (#71126))

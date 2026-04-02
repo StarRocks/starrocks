@@ -63,17 +63,43 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto source_id = _ctx->source_node_id;
     const auto& request_chunk = _ctx->request_chunk;
 
+<<<<<<< HEAD
     auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
     closure->addSuccessHandler([this, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
         DLOG(INFO) << "[GLM] receive a response, finished request num: " << ctx->unit->finished_request_num
                    << ", total request num: " << ctx->unit->total_request_num << ", " << (void*)ctx->processor
+=======
+    auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr>>(_ctx);
+    // The RPC callback can outlive queue ownership when the source finishes early.
+    auto self = shared_from_this();
+    auto processor = _ctx->processor.lock();
+    DCHECK(processor != nullptr);
+    const auto* node_info = processor->_nodes_info->find_node(source_id);
+    DCHECK(node_info != nullptr);
+    RETURN_IF(node_info == nullptr,
+              Status::InternalError(fmt::format("Failed to find node info for source_id: {}", source_id)));
+    closure->addSuccessHandler([self, done = closure.get(), host = node_info->host, port = node_info->brpc_port](
+                                       const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+        auto processor = ctx->processor.lock();
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
+        DLOG(INFO) << "[GLM] receive a response, finished request num: " << unit->finished_request_num
+                   << ", total request num: " << unit->total_request_num
+>>>>>>> 7992c66878 ([BugFix] Fix a memory leak issue caused by shared_ptr cycle between `BatchUnit` and `FetchTaskContext` (#71126))
                    << ", latency: " << (MonotonicNanos() - ctx->send_ts) * 1.0 / 1000000 << "ms";
         DeferOp defer([&]() {
-            if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
+            if (++unit->finished_request_num == unit->total_request_num) {
                 VLOG_ROW << "[GLM] all request finished, notify fetch processor, total_request_num: "
+<<<<<<< HEAD
                          << ctx->unit->total_request_num << ", " << (void*)ctx->processor;
+=======
+                         << unit->total_request_num;
+>>>>>>> 7992c66878 ([BugFix] Fix a memory leak issue caused by shared_ptr cycle between `BatchUnit` and `FetchTaskContext` (#71126))
             }
-            _is_done = true;
+            self->_is_done = true;
         });
         COUNTER_UPDATE(ctx->processor->_rpc_count, 1);
         COUNTER_UPDATE(ctx->processor->_network_timer, MonotonicNanos() - ctx->send_ts);
@@ -125,12 +151,25 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
     });
 
+<<<<<<< HEAD
     closure->addFailureHandler([this](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
         DeferOp defer([&]() {
             if (++ctx->unit->finished_request_num == ctx->unit->total_request_num) {
                 DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)ctx->processor;
+=======
+    closure->addFailureHandler([self](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
+        auto processor = ctx->processor.lock();
+        auto unit = ctx->unit.lock();
+        if (processor == nullptr || unit == nullptr) {
+            self->_is_done = true;
+            return;
+        }
+        DeferOp defer([&]() {
+            if (++unit->finished_request_num == unit->total_request_num) {
+                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor.get();
+>>>>>>> 7992c66878 ([BugFix] Fix a memory leak issue caused by shared_ptr cycle between `BatchUnit` and `FetchTaskContext` (#71126))
             }
-            _is_done = true;
+            self->_is_done = true;
         });
         LOG(WARNING) << "fetch request failed, error: " << rpc_error_msg;
         ctx->processor->_set_io_task_status(Status::InternalError(rpc_error_msg));
@@ -173,8 +212,15 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         size_t actual_serialize_size = buff - begin;
         closure->cntl.request_attachment().append(_ctx->processor->_serialize_buffer.data(), actual_serialize_size);
     }
+<<<<<<< HEAD
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
                << ", unit: " << _ctx->unit->debug_string();
+=======
+    auto unit = _ctx->unit.lock();
+    auto unit_debug_string = unit != nullptr ? unit->debug_string() : std::string("BatchUnit <expired>");
+    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
+               << ", unit: " << unit_debug_string;
+>>>>>>> 7992c66878 ([BugFix] Fix a memory leak issue caused by shared_ptr cycle between `BatchUnit` and `FetchTaskContext` (#71126))
     _ctx->send_ts = MonotonicNanos();
     const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
