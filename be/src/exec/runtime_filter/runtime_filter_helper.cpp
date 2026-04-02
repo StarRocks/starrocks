@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter/runtime_filter_helper.h"
+#include "exec/runtime_filter/runtime_filter_helper.h"
 
 #include "column/column.h"
 #include "column/column_helper.h"

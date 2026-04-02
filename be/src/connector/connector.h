@@ -21,9 +21,9 @@
 
 #include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 

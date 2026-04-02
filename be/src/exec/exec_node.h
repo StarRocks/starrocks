@@ -44,11 +44,11 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 

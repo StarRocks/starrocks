@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <list>
 #include <map>
 #include <memory>
@@ -43,13 +44,10 @@ class HashJoinNode;
 class RowDescriptor;
 class RuntimeProfile;
 
-namespace pipeline {
-class Observable;
-class PipelineObserver;
-} // namespace pipeline
-
 class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
 public:
+    using ReadyObserver = std::function<void()>;
+
     RuntimeFilterProbeDescriptor();
     ~RuntimeFilterProbeDescriptor();
 
@@ -103,7 +101,7 @@ public:
     }
     void set_runtime_filter(const RuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
-    void add_observer(RuntimeState* state, pipeline::PipelineObserver* observer);
+    void add_observer(RuntimeState* state, ReadyObserver observer);
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
@@ -137,7 +135,7 @@ private:
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::unique_ptr<pipeline::Observable> _observable;
+    std::vector<ReadyObserver> _ready_observers;
     bool _has_push_down_to_storage = false;
     // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
     int32_t _exchange_hash_function_version = 0;
