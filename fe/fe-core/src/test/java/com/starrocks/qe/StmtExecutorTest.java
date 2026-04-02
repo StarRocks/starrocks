@@ -24,6 +24,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.DeleteMgr;
+import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
@@ -271,19 +272,33 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testRetryPathLogsRedactedSql(@Mocked ExecPlan execPlan) throws Exception {
+    public void testRetryPathLogsRedactedSql(@Mocked ExecPlan execPlan, @Mocked MysqlChannel mysqlChannel)
+            throws Exception {
         int oldRetryTime = Config.max_query_retry_time;
         Config.max_query_retry_time = 2;
+        MockUp<StmtExecutor> stmtExecutorMock = null;
+        MockUp<ExecuteExceptionHandler> exceptionHandlerMock = null;
         try {
             ConnectContext ctx = UtFrameUtils.createDefaultCtx();
             ConnectContext.threadLocalInfo.set(ctx);
+            new Expectations(ctx, mysqlChannel) {
+                {
+                    ctx.getMysqlChannel();
+                    minTimes = 0;
+                    result = mysqlChannel;
+
+                    mysqlChannel.isSend();
+                    minTimes = 0;
+                    result = false;
+                }
+            };
             StatementBase stmt = SqlParser.parseSingleStatement(
                     "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
                             "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
                     SqlModeHelper.MODE_DEFAULT);
             StmtExecutor executor = new StmtExecutor(ctx, stmt);
 
-            new MockUp<StmtExecutor>() {
+            stmtExecutorMock = new MockUp<StmtExecutor>() {
                 @Mock
                 public ExecPlan generateExecPlan() {
                     return execPlan;
@@ -295,7 +310,7 @@ public class StmtExecutorTest {
                 }
             };
 
-            new MockUp<ExecuteExceptionHandler>() {
+            exceptionHandlerMock = new MockUp<ExecuteExceptionHandler>() {
                 @Mock
                 public void handle(Exception e, ExecuteExceptionHandler.RetryContext retryContext) {
                     // keep retry loop moving to hit log branch.
@@ -304,6 +319,13 @@ public class StmtExecutorTest {
 
             Assertions.assertThrows(RuntimeException.class, executor::execute);
         } finally {
+            if (exceptionHandlerMock != null) {
+                exceptionHandlerMock.tearDown();
+            }
+            if (stmtExecutorMock != null) {
+                stmtExecutorMock.tearDown();
+            }
+            ConnectContext.threadLocalInfo.remove();
             Config.max_query_retry_time = oldRetryTime;
         }
     }
