@@ -47,46 +47,32 @@ Status FetchTask::submit(RuntimeState* state) {
 }
 
 Status FetchTask::_submit_local_task(RuntimeState* state) {
-    auto self = shared_from_this();
-    _ctx->callback = [self, ctx = _ctx](const Status& status) {
+    _ctx->callback = [ctx = _ctx](const Status& status) {
         auto unit = ctx->unit.lock();
-        auto processor = ctx->processor.lock();
         DeferOp defer([&]() {
             if (unit != nullptr) {
                 unit->finished_request_num++;
             }
-            self->_is_done = true;
         });
         if (!status.ok()) {
             LOG(WARNING) << "local fetch request failed, error: " << status.to_string();
-            if (processor != nullptr) {
-                processor->_set_io_task_status(status);
-            }
+            ctx->processor->_set_io_task_status(status);
             return;
         }
     };
-    auto processor = _ctx->processor.lock();
-    DCHECK(processor != nullptr);
     LookUpRequestContextPtr request = std::make_shared<LocalLookUpRequestContext>(_ctx);
-    return processor->_local_dispatcher->add_request(std::move(request));
+    return _ctx->processor->_local_dispatcher->add_request(std::move(request));
 }
 
 Status FetchTask::_submit_remote_task(RuntimeState* state) {
     const auto source_id = _ctx->source_node_id;
     const auto& request_chunk = _ctx->request_chunk;
 
-    auto closure = std::make_unique<DisposableClosure<PLookUpResponse, FetchTaskContextPtr>>(_ctx);
+    auto* closure = new DisposableClosure<PLookUpResponse, FetchTaskContextPtr>(_ctx);
     // The RPC callback can outlive queue ownership when the source finishes early.
     auto self = shared_from_this();
-    auto processor = _ctx->processor.lock();
-    DCHECK(processor != nullptr);
-    const auto* node_info = processor->_nodes_info->find_node(source_id);
-    DCHECK(node_info != nullptr);
-    RETURN_IF(node_info == nullptr,
-              Status::InternalError(fmt::format("Failed to find node info for source_id: {}", source_id)));
-    closure->addSuccessHandler([self, done = closure.get(), host = node_info->host, port = node_info->brpc_port](
-                                       const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
-        auto processor = ctx->processor.lock();
+    closure->addSuccessHandler([self, closure](const FetchTaskContextPtr& ctx, const PLookUpResponse& resp) noexcept {
+        auto* processor = ctx->processor;
         auto unit = ctx->unit.lock();
         if (processor == nullptr || unit == nullptr) {
             self->_is_done = true;
@@ -106,16 +92,15 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         COUNTER_UPDATE(processor->_network_timer, MonotonicNanos() - ctx->send_ts);
 
         if (resp.status().status_code() != TStatusCode::OK) {
-            auto msg = fmt::format("fetch request failed, error: {}, host: {}, port: {}", resp.status().DebugString(),
-                                   host, port);
+            auto msg = fmt::format("fetch request failed, error: {}", resp.status().DebugString());
             LOG(WARNING) << msg;
             processor->_set_io_task_status(Status::InternalError(msg));
             return;
         }
-        DLOG(INFO) << "[GLM] receive a response, response size: " << done->cntl.response_attachment().size();
-        if (done->cntl.response_attachment().size() > 0) {
+        DLOG(INFO) << "[GLM] receive a response, response size: " << closure->cntl.response_attachment().size();
+        if (closure->cntl.response_attachment().size() > 0) {
             SCOPED_TIMER(processor->_deserialize_timer);
-            butil::IOBuf& io_buf = done->cntl.response_attachment();
+            butil::IOBuf& io_buf = closure->cntl.response_attachment();
             raw::RawString buffer;
 
             for (size_t i = 0; i < resp.columns_size(); i++) {
@@ -154,7 +139,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     });
 
     closure->addFailureHandler([self](const FetchTaskContextPtr& ctx, std::string_view rpc_error_msg) noexcept {
-        auto processor = ctx->processor.lock();
+        auto* processor = ctx->processor;
         auto unit = ctx->unit.lock();
         if (processor == nullptr || unit == nullptr) {
             self->_is_done = true;
@@ -162,7 +147,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
         }
         DeferOp defer([&]() {
             if (++unit->finished_request_num == unit->total_request_num) {
-                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor.get();
+                DLOG(INFO) << "all request finished, notify fetch processor, " << (void*)processor;
             }
             self->_is_done = true;
         });
@@ -178,19 +163,19 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     p_query_id.set_hi(state->query_id().hi);
     p_query_id.set_lo(state->query_id().lo);
     *request.mutable_query_id() = std::move(p_query_id);
-    request.set_lookup_node_id(processor->_target_node_id);
+    request.set_lookup_node_id(_ctx->processor->_target_node_id);
     request.set_request_tuple_id(_ctx->request_tuple_id);
     {
-        SCOPED_TIMER(processor->_serialize_timer);
+        SCOPED_TIMER(_ctx->processor->_serialize_timer);
         size_t max_serialize_size = 0;
         for (const auto& column : request_chunk->columns()) {
             max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
         }
 
-        processor->_serialize_buffer.clear();
-        processor->_serialize_buffer.resize(max_serialize_size);
+        _ctx->processor->_serialize_buffer.clear();
+        _ctx->processor->_serialize_buffer.resize(max_serialize_size);
 
-        uint8_t* buff = reinterpret_cast<uint8_t*>(processor->_serialize_buffer.data());
+        uint8_t* buff = reinterpret_cast<uint8_t*>(_ctx->processor->_serialize_buffer.data());
         uint8_t* begin = buff;
         for (const auto& [slot_id, idx] : request_chunk->get_slot_id_to_index_map()) {
             if (slot_id == FetchProcessor::kPositionColumnSlotId) {
@@ -205,22 +190,16 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
             p_column->set_data_size(buff - start);
         }
         size_t actual_serialize_size = buff - begin;
-        closure->cntl.request_attachment().append(processor->_serialize_buffer.data(), actual_serialize_size);
+        closure->cntl.request_attachment().append(_ctx->processor->_serialize_buffer.data(), actual_serialize_size);
     }
     auto unit = _ctx->unit.lock();
     auto unit_debug_string = unit != nullptr ? unit->debug_string() : std::string("BatchUnit <expired>");
-    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
+    DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)_ctx->processor
                << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
+    const auto* node_info = _ctx->processor->_nodes_info->find_node(source_id);
     auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
-    if (stub == nullptr) {
-        auto msg = fmt::format("Connect {}:{} failed.", node_info->host, node_info->brpc_port);
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
-    }
-
-    auto done = closure.release();
-    stub->lookup(&done->cntl, &request, &done->result, done);
+    stub->lookup(&closure->cntl, &request, &closure->result, closure);
 
     return Status::OK();
 }

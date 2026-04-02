@@ -24,7 +24,6 @@
 #include <thread>
 #include <vector>
 
-#include "base/utility/defer_op.h"
 #define private public
 #include "exec/pipeline/fetch_processor.h"
 #undef private
@@ -69,7 +68,7 @@ std::shared_ptr<StarRocksNodesInfo> create_nodes_info(int port) {
 std::shared_ptr<FetchProcessor> create_fetch_processor(const std::shared_ptr<StarRocksNodesInfo>& nodes_info) {
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs;
     phmap::flat_hash_map<SlotId, SlotDescriptor*> slot_descs;
-    auto processor = std::make_shared<FetchProcessor>(100, row_pos_descs, slot_descs, nodes_info);
+    auto processor = std::make_shared<FetchProcessor>(100, row_pos_descs, slot_descs, nodes_info, nullptr);
 
     auto profile = std::make_shared<RuntimeProfile>("fetch_task_test");
     processor->_rpc_count =
@@ -209,7 +208,7 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_marks_done_and_updates_status) {
     auto unit = std::make_shared<BatchUnit>();
     unit->total_request_num = 1;
     auto ctx = std::make_shared<FetchTaskContext>();
-    ctx->processor = processor;
+    ctx->processor = processor.get();
     ctx->unit = unit;
     ctx->source_node_id = kSourceNodeId;
     ctx->request_tuple_id = 10;
@@ -232,7 +231,7 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_handles_expired_unit) {
     const int unused_port = reserve_unused_local_port();
     auto processor = create_fetch_processor(create_nodes_info(unused_port));
     auto ctx = std::make_shared<FetchTaskContext>();
-    ctx->processor = processor;
+    ctx->processor = processor.get();
     {
         auto unit = std::make_shared<BatchUnit>();
         ctx->unit = unit;

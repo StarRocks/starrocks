@@ -55,7 +55,7 @@ public:
     FetchTaskContext() = default;
     virtual ~FetchTaskContext() = default;
 
-    std::weak_ptr<FetchProcessor> processor;
+    FetchProcessor* processor = nullptr;
     // Keep the batch weak to avoid a BatchUnit -> FetchTask -> FetchTaskContext -> BatchUnit cycle.
     std::weak_ptr<BatchUnit> unit;
     TupleId request_tuple_id = 0;
