@@ -33,7 +33,9 @@ class CompactionProfileTest {
         stat.writeSegmentBytes = 9L;
         stat.writeTimeRemote = 10L;
 
-        CompactionProfile profile = new CompactionProfile(stat);
+        Quantiles scoreBefore = new Quantiles(1.0, 2.0, 3.0);
+        Quantiles scoreAfter = new Quantiles(4.0, 5.0, 6.0);
+        CompactionProfile profile = new CompactionProfile(stat, scoreBefore, scoreAfter, false);
 
         String s = profile.toString();
         Assertions.assertTrue(s.contains("sub_task_count"));
@@ -46,5 +48,8 @@ class CompactionProfileTest {
         Assertions.assertTrue(s.contains("write_segment_mb"));
         Assertions.assertTrue(s.contains("write_remote_sec"));
         Assertions.assertTrue(s.contains("in_queue_sec"));
+        Assertions.assertTrue(s.contains("score_before"));
+        Assertions.assertTrue(s.contains("score_after"));
+        Assertions.assertTrue(s.contains("partial_success"));
     }
 }
