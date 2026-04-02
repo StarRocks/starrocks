@@ -41,6 +41,15 @@ std::string_view parquet_lookup_name(const HdfsScannerContext::ColumnInfo& colum
     return column.name();
 }
 
+int32_t find_field_idx_for_materialized_column(const FileMetaData* file_metadata,
+                                               const HdfsScannerContext::ColumnInfo& materialized_column) {
+    const SlotDescriptor* slot_desc = materialized_column.slot_desc;
+    if (slot_desc->col_unique_id() != -1) {
+        return file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
+    }
+    return file_metadata->schema().get_field_idx_by_column_name(std::string(parquet_lookup_name(materialized_column)));
+}
+
 std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_binding(
         const std::vector<ColumnAccessPathPtr>* column_access_paths, std::string_view slot_name) {
     if (column_access_paths == nullptr) {
@@ -68,25 +77,11 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
-        const SlotDescriptor* slotDesc = materialized_column.slot_desc;
         auto extended_variant_binding =
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
-        int32_t field_idx = -1;
-        if (extended_variant_binding.has_value()) {
-            field_idx = _file_metadata->schema().get_field_idx_by_column_name(
-                    extended_variant_binding->access_path->path());
-            if (field_idx < 0) continue;
-        } else if (slotDesc->col_unique_id() != -1) {
-            field_idx = _file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
-            if (field_idx < 0) continue;
-        } else if (!slotDesc->col_physical_name().empty()) {
-            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_physical_name());
-            if (field_idx < 0) continue;
-        } else {
-            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
-            if (field_idx < 0) continue;
-        }
+        int32_t field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
+        if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is type is invalid

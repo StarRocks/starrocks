@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <unordered_set>
 #include <utility>
 
@@ -134,7 +135,10 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
         expanded_typed->as_mutable_ptr()->assign(num_rows, 0);
     }
     const Column* eff_typed = variant_src->is_constant() ? expanded_typed.get() : typed_col;
-    DCHECK_EQ(eff_typed->size(), num_rows);
+    if (eff_typed->size() != num_rows) {
+        return Status::InternalError(strings::Substitute(
+                "variant typed column size mismatch: typed_size=$0, variant_src_size=$1", eff_typed->size(), num_rows));
+    }
 
     // Merge null masks: result is null when either the outer variant or the typed leaf
     // is null.  Outer nulls only exist for non-const variant_src (const-null was handled
@@ -334,6 +338,11 @@ Status GroupReader::prepare() {
         for (const auto& pair : _column_readers) {
             pair.second->select_offset_index(_range, _row_group_first_row);
         }
+        // Hidden variant source readers are not in _column_readers; apply the same
+        // page-index range restriction so they decode only the surviving rows.
+        for (const auto& [name, hidden_source] : _hidden_variant_sources) {
+            hidden_source.reader->select_offset_index(_range, _row_group_first_row);
+        }
     }
 
     // if coalesce read enabled, we have to
@@ -437,6 +446,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     // active_chunk is a shared-reference VIEW of _read_chunk physical columns.
     // See the three-chunk model comment above _fill_dst_chunk declaration.
+    _read_chunk->reset();
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices, false);
     // Loop until we find a range with surviving rows, skipping ranges filtered entirely
     // by deletion bitmap, predicate pushdown, or deferred variant virtual conjuncts.
@@ -452,7 +462,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         // Reset per-iteration scratch buffers.
         active_chunk->reset();
-        _read_chunk->reset();
 
         bool has_filter = false;
         Filter chunk_filter(count, 1);
@@ -495,6 +504,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //                  therefore not part of active_chunk or *chunk.
         //
         // Both share the same post-filter range / filter vector, computed once here.
+        // Declared unconditionally so the lazy and hidden-variant blocks below can
+        // reference them without extra scope nesting; values are only valid when
+        // has_filter is true, and both blocks guard their use behind the same check.
         Range<uint64_t> post_filter_range;
         Filter post_filter;
         if (has_filter) {
@@ -552,6 +564,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // default values for missing slots.
         {
             SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
+            // row_count must be get from active_chunk. chunk could contains some partition columns
+            // which have been filled before, and those partition columns may have different row count
+            // with active_chunk. So we can't use (*chunk)->num_rows() as row count.
             *row_count = active_chunk->num_rows();
             RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
         }
@@ -850,11 +865,12 @@ Status GroupReader::_create_column_readers() {
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
                 ASSIGN_OR_RETURN(auto reader,
                                  _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
-                std::optional<int64_t> first_row_id =
-                        _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
-                                ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
+                std::optional<int64_t> first_row_id = std::nullopt;
+                if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
+                    first_row_id = std::optional<int64_t>(_row_group_first_row_id);
+                } else if (use_legacy_lookup_row_id) {
+                    first_row_id = std::optional<int64_t>(_row_group_first_row_id);
+                }
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
@@ -1206,7 +1222,10 @@ StatusOr<bool> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_c
         return true;
     }
 
-    Filter filter(active_chunk->num_rows(), 1);
+    // Use eval_chunk->num_rows() rather than active_chunk->num_rows(): when all
+    // requested columns are virtual, active_chunk has no physical columns and
+    // num_rows() == 0, while eval_chunk is built from hidden sources with real rows.
+    Filter filter(eval_chunk->num_rows(), 1);
     ASSIGN_OR_RETURN(size_t hit_count, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
                                                _deferred_variant_virtual_conjunct_ctxs, eval_chunk.get(), &filter));
     if (hit_count == 0) {
