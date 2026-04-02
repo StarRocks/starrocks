@@ -480,8 +480,8 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
 
     // Use type_dispatch_predicate (assert=false) so unsupported types return nullptr
     // instead of CHECK-failing, avoiding the need for a manual type whitelist.
-    auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(),
-                                                         *column, column->size());
+    auto normalized = type_dispatch_predicate<ColumnPtr>(target_type.type, false, ScalarColumnTypeNormalizer(), *column,
+                                                         column->size());
     if (normalized == nullptr) {
         return column;
     }
