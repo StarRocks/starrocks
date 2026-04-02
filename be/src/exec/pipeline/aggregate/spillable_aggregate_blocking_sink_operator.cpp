@@ -292,7 +292,7 @@ std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_bui
         }
         if (should_spill_hash_table && _aggregator->hash_map_variant().size() > 0) {
             if (!iterator_initialized) {
-                _aggregator->it_hash() = _aggregator->state_allocator().begin();
+                _aggregator->init_hash_map_iterator();
                 iterator_initialized = true;
             }
             if (!_aggregator->is_ht_eos()) {
