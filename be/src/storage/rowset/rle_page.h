@@ -43,7 +43,7 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

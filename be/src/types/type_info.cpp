@@ -60,9 +60,9 @@
 #include "types/datetime_value.h"
 #include "types/datum.h"
 #include "types/decimalv2_value.h"
+#include "types/storage_type_traits.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 
