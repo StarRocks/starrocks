@@ -274,6 +274,30 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         column.set_default_value("10");
         r = segment->new_column_iterator_or_default(column, nullptr);
         ASSERT_TRUE(r.ok()) << r.status();
+
+        // Complex default value path should be safe when caller initializes returned iterator.
+        // Under ASAN, this catches a historical double-init leak in DefaultValueColumnIterator.
+        TabletColumn array_column;
+        array_column.set_unique_id(6);
+        array_column.set_name("c_array");
+        array_column.set_type(LogicalType::TYPE_ARRAY);
+        array_column.set_is_nullable(false);
+        array_column.set_default_value("[1, 2, 3]");
+        array_column.set_length(24);
+
+        TabletColumn item_column;
+        item_column.set_unique_id(7);
+        item_column.set_name("element");
+        item_column.set_type(LogicalType::TYPE_INT);
+        item_column.set_is_nullable(false);
+        item_column.set_length(4);
+        array_column.add_sub_column(item_column);
+
+        auto array_iter_or = segment->new_column_iterator_or_default(array_column, nullptr);
+        ASSERT_TRUE(array_iter_or.ok()) << array_iter_or.status();
+        auto array_iter = std::move(array_iter_or.value());
+        ColumnIteratorOptions iter_opts;
+        ASSERT_OK(array_iter->init(iter_opts));
     }
     // test new_dcg_segment
     {
