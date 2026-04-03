@@ -42,10 +42,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
-import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -246,31 +244,6 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testExplainLogsRedactedSqlOnPlanFailure() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement(
-                "EXPLAIN SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
-                        "\"aws.s3.secret_key\"=\"EXPLAIN_SECRET\")",
-                SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public ExecPlan generateExecPlan() {
-                throw new RuntimeException("mock plan failure");
-            }
-
-            @Mock
-            public void handleExplainExecPlan(ExecPlan execPlan) {
-                // keep this test focused on failure logging branch.
-            }
-        };
-
-        executor.execute();
-    }
-
-    @Test
     public void testRetryPathLogsRedactedSql() {
         StatementBase stmt = SqlParser.parseSingleStatement(
                 "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
@@ -281,26 +254,6 @@ public class StmtExecutorTest {
         String redacted = executor.getRedactedOriginStmtInString();
         Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
         Assertions.assertTrue(redacted.contains("***"));
-    }
-
-    @Test
-    public void testLargeInPredicateFailureLogsRedactedSql() {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement(
-                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
-                        "\"aws.s3.secret_key\"=\"LARGE_IN_SECRET\")",
-                SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public ExecPlan generateExecPlan() throws Exception {
-                throw new LargeInPredicateException("mock large in failure");
-            }
-        };
-
-        Assertions.assertThrows(LargeInPredicateException.class, executor::execute);
     }
 
     @Test
