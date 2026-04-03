@@ -61,9 +61,7 @@ public:
               _num_rows(num_rows),
               _path(path) {}
 
-    ~DefaultValueColumnIterator() override {
-        _cleanup_initialized_value();
-    }
+    ~DefaultValueColumnIterator() override { _cleanup_initialized_value(); }
 
     Status init(const ColumnIteratorOptions& opts) override;
 
