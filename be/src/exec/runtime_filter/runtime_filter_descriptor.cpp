@@ -63,7 +63,7 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _runtime_filter_type = desc.filter_type;
     }
 
-    WithLayoutMixin::init(desc);
+    init_runtime_filter_layout(desc, &_layout);
     RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }

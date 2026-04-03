@@ -35,6 +35,7 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_layout.h"
+#include "runtime/runtime_filter_port_types.h"
 #include "runtime/runtime_fwd.h"
 #include "types/logical_type.h"
 
@@ -44,7 +45,7 @@ class HashJoinNode;
 class RowDescriptor;
 class RuntimeProfile;
 
-class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
+class RuntimeFilterProbeDescriptor {
 public:
     using ReadyObserver = std::function<void()>;
 
@@ -85,6 +86,7 @@ public:
     TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     int8_t join_mode() const { return _join_mode; };
+    const RuntimeFilterLayout& layout() const { return _layout; }
     // runtime filter's partition-by-exprs's size
     const size_t num_partition_by_exprs() const { return _partition_by_exprs_contexts.size(); }
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
@@ -102,6 +104,7 @@ public:
     void set_runtime_filter(const RuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
     void add_observer(RuntimeState* state, ReadyObserver observer);
+    RuntimeFilterProbeListener to_listener();
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
@@ -120,6 +123,7 @@ private:
     bool _is_local;
     TPlanNodeId _build_plan_node_id;
     TPlanNodeId _probe_plan_node_id;
+    RuntimeFilterLayout _layout;
     // we want to measure when this runtime filter is applied since it's opened.
     RuntimeProfile::Counter* _latency_timer = nullptr;
     int64_t _open_timestamp = 0;
