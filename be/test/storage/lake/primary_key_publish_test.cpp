@@ -2525,8 +2525,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_preload_update_state_slow_log) {
     ASSERT_TRUE(read(tablet_id, 2).ok());
 }
 
-<<<<<<< HEAD
-=======
 // Test that persistent index rebuild skips rows already covered by SSTables.
 TEST_P(LakePrimaryKeyPublishTest, test_rebuild_persistent_index_skip_covered_rows) {
     if (!GetParam().enable_persistent_index ||
@@ -2702,5 +2700,4 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_sstable_open_on_index_init) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 }
 
->>>>>>> 785a222887 ([Enhancement] Parallelize SSTable opening during persistent index init (#71145))
 } // namespace starrocks::lake

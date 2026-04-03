@@ -106,15 +106,6 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
         return Status::InternalError("Block cache is null.");
     }
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
-<<<<<<< HEAD
-    uint64_t max_rss_rowid = 0;
-    std::vector<std::unique_ptr<PersistentIndexSstable>> cur_fileset;
-    for (auto& sstable_pb : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto sstable,
-                         PersistentIndexSstable::new_sstable(
-                                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
-                                 block_cache->cache(), true /* need filter */, nullptr, metadata, _tablet_mgr));
-=======
     const int num_sstables = sstable_meta.sstables_size();
     TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
 
@@ -134,7 +125,6 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     for (int i = 0; i < num_sstables; i++) {
         auto& sstable_pb = sstable_meta.sstables(i);
         total_sst_filesize += sstable_pb.filesize();
->>>>>>> 785a222887 ([Enhancement] Parallelize SSTable opening during persistent index init (#71145))
         if (cur_fileset.empty() ||
             (cur_fileset.back()->sstable_pb().has_fileset_id() &&
              UniqueId(cur_fileset.back()->sstable_pb().fileset_id()) == UniqueId(sstable_pb.fileset_id()))) {
