@@ -399,7 +399,7 @@ public class HistogramStatisticsTest {
         mcv.put("0", 1L);
         mcv.put("1", 3L);
         Histogram histogram = new Histogram(new ArrayList<>(), mcv);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, BooleanType.BOOLEAN, "b1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
         ColumnStatistic columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2,
                 histogram, ColumnStatistic.StatisticType.ESTIMATE);
 
