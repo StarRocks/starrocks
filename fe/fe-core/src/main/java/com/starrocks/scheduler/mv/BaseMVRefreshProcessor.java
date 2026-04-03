@@ -202,9 +202,10 @@ public abstract class BaseMVRefreshProcessor {
      * @param mvRefreshedPartitions the refreshed partitions of the mv
      * @param refTableAndPartitionNames the refreshed partitions of the base tables
      */
-    public abstract void updateVersionMeta(ExecPlan execPlan,
-                                           PCellSortedSet mvRefreshedPartitions,
-                                           Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames);
+    public void updateVersionMeta(ExecPlan execPlan,
+                                   PCellSortedSet mvRefreshedPartitions,
+                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+    }
 
     public MVRefreshParams getMvRefreshParams() {
         return mvRefreshParams;
@@ -250,10 +251,6 @@ public abstract class BaseMVRefreshProcessor {
 
     protected void setSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
         refreshRuntimeState.replaceSnapshotBaseTables(snapshotBaseTables);
-    }
-
-    protected Map<BaseTableInfo, TvrVersionRange> getPendingBaseTableTvrVersionRangeMap() {
-        return refreshRuntimeState.getPendingBaseTableTvrVersionRangeMap();
     }
 
     /**
