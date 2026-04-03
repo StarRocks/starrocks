@@ -978,9 +978,9 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         if (conjunct_ctxs_by_slot.count(column.slot_id()) == 0) continue;
         auto proj_it = _variant_virtual_projections.find(column.slot_id());
         if (proj_it == _variant_virtual_projections.end()) continue;
-        // Hidden sources have negative slot IDs; positive IDs are physical columns.
+        // Hidden sources have negative slot IDs; non-negative IDs are physical columns.
         SlotId src = proj_it->second.source_slot_id;
-        if (src > 0) {
+        if (src >= 0) {
             deferred_conjunct_physical_source_slots.insert(src);
         }
     }

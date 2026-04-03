@@ -3014,7 +3014,7 @@ TEST_F(GroupReaderTest, ProcessColumnsPromotesPhysicalVariantSourceForDeferredCo
     group_reader->_column_readers.emplace(phys_slot->id(),
                                           std::make_unique<MockVariantSourceColumnReader>(variant_col->clone()));
 
-    // Wire projection: virtual slot 171 → source is physical slot 170 (positive).
+    // Wire projection: virtual slot 171 → source is physical slot 170 (non-negative).
     ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a", virt_slot->type(), phys_slot->id()));
     group_reader->_variant_virtual_projections.emplace(virt_slot->id(), std::move(proj));
 
