@@ -93,6 +93,7 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <zookeeper.version>3.8.6</zookeeper.version>
     </properties>
 
     <profiles>
@@ -184,6 +185,13 @@ under the License.
 
     <dependencyManagement>
         <dependencies>
+
+            <!-- CVE-2026-24281 / CVE-2026-24308: pin zookeeper to fix version -->
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>${zookeeper.version}</version>
+            </dependency>
 
             <!-- internal modules unified -->
             <dependency>
