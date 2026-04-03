@@ -387,6 +387,7 @@ public:
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
 
     Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
         return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
