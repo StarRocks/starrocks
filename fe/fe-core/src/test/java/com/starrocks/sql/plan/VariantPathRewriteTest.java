@@ -14,7 +14,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VariantType;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     private static final String VARIANT_TABLE = "iceberg0.unpartitioned_db.variant_t0";
@@ -200,4 +210,33 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         assertNotContains(verbose,
                 "ExtendedColumnAccessPath: [/v(bigint(20))/a(bigint(20))/b(bigint(20))/c(bigint(20))]");
     }
+
+    @Test
+    public void testExtendedColumnInheritsSourcePhysicalName() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        VariantPathRewriteRule.VariantPathRewriteContext context =
+                new VariantPathRewriteRule.VariantPathRewriteContext(columnRefFactory);
+
+        Table table = Mockito.mock(Table.class);
+        Column sourceColumn = new Column("v_new", VariantType.VARIANT, false, null, null,
+                true, null, "", Column.COLUMN_UNIQUE_ID_INIT_VALUE, "v");
+        Mockito.when(table.getId()).thenReturn(1L);
+        Mockito.when(table.getColumn("v_new")).thenReturn(sourceColumn);
+        Mockito.when(table.containColumn("v_new.a")).thenReturn(false);
+
+        ColumnRefOperator sourceColumnRef = columnRefFactory.create("v_new", VariantType.VARIANT, true);
+        columnRefFactory.updateColumnRefToColumns(sourceColumnRef, sourceColumn, table);
+
+        ColumnAccessPath accessPath =
+                ColumnAccessPath.createLinearPath(java.util.List.of("v_new", "a"), IntegerType.BIGINT);
+        accessPath.setExtended(true);
+
+        ColumnRefOperator extendedColumnRef = context.getOrCreateColumn(sourceColumnRef, accessPath).second;
+        Column extendedColumn = context.getExtendedColumns().get(extendedColumnRef);
+
+        Assertions.assertNotNull(extendedColumn);
+        Assertions.assertEquals("v_new.a", extendedColumn.getName());
+        Assertions.assertEquals("v", extendedColumn.getPhysicalName());
+    }
+
 }

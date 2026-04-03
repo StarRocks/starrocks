@@ -50,8 +50,15 @@ public class IcebergVariantShreddingTest {
     private static final Namespace NAMESPACE = Namespace.of("zya");
     private static final String SHREDDING_TABLE = "test_shredding_variant";
     private static final String NO_SHREDDING_TABLE = "test_noshredding_variant";
+    // Schema includes top-level physical columns (id, age, city) alongside the variant
+    // column so that predicates on them trigger Phase 2 (has_filter=true) while
+    // predicates on variant sub-fields are evaluated in Phase 4.  The physical columns
+    // mirror fields inside the variant to enable cross-validation.
     private static final Schema SCHEMA = new Schema(
-            Types.NestedField.optional(1, "data", Types.VariantType.get())
+            Types.NestedField.optional(1, "data", Types.VariantType.get()),
+            Types.NestedField.optional(2, "id", Types.LongType.get()),
+            Types.NestedField.optional(3, "age", Types.IntegerType.get()),
+            Types.NestedField.optional(4, "city", Types.StringType.get())
     );
 
     public static void main(String[] args) throws IOException {
@@ -367,6 +374,11 @@ public class IcebergVariantShreddingTest {
             obj.put("email", Variants.of("user" + i + "@example.com"));
             Variant value = Variant.of(metadata, obj);
             rec.setField("data", value);
+            // Mirror key fields as top-level physical columns for Phase-2 filter testing
+            // and cross-validation against the variant sub-fields.
+            rec.setField("id", 1000L + i);
+            rec.setField("age", 20 + i);
+            rec.setField("city", "city_" + i);
             records.add(rec);
         }
         return records;

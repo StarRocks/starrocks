@@ -157,7 +157,7 @@ public class VariantPathRewriteRule extends TransformationRule {
                 }
             }
 
-            Column extendedColumn = createExtendedColumn(targetTable, path, variantPath);
+            Column extendedColumn = createExtendedColumn(targetTable, targetColumn, path, variantPath);
             ColumnRefOperator newColumnRef = columnRefFactory.create(path, variantPath.getValueType(), true);
             newColumnRef.setHints(List.of(COLUMN_REF_HINT));
             columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, targetTable);
@@ -166,11 +166,13 @@ public class VariantPathRewriteRule extends TransformationRule {
             return Pair.create(false, newColumnRef);
         }
 
-        private Column createExtendedColumn(Table table, String path, ColumnAccessPath variantPath) {
+        private Column createExtendedColumn(Table table, Column sourceColumn, String path, ColumnAccessPath variantPath) {
             if (table.containColumn(path)) {
                 return table.getColumn(path);
             }
-            return new Column(path, variantPath.getValueType(), true);
+            String sourcePhysicalName = sourceColumn != null ? sourceColumn.getPhysicalName() : null;
+            return new Column(path, variantPath.getValueType(), false, null, null, true, null, "",
+                    Column.COLUMN_UNIQUE_ID_INIT_VALUE, sourcePhysicalName == null ? "" : sourcePhysicalName);
         }
 
         public static ColumnAccessPath pathFromColumn(Column column) {

@@ -19,7 +19,10 @@ set cbo_variant_path_rewrite = false;
 -- result:
 -- !result
 CREATE TABLE test_shredding_variant (
-    data VARIANT
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
 ) properties(
   'format-version' = '3',
   'iceberg.enableVariantShredding' = 'true'
@@ -35,7 +38,10 @@ alter table test_shredding_variant execute add_files(location='oss://${oss_bucke
 -- result:
 -- !result
 CREATE TABLE test_noshredding_variant (
-    data VARIANT
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
 ) properties(
   'format-version' = '3'
 );
@@ -263,6 +269,66 @@ ORDER BY id, label;
 1003	shredded	{"age":23,"city":"city_3","email":"user3@example.com","events":[{"count":4,"detail":"detail_view_3","type":"view"},{"count":8,"detail":"detail_click_3","type":"click"}],"groups":[{"name":"group_0","note":"note_3_0","scores":[13,23,33]},{"name":"group_1","note":"note_3_1","scores":[43,53,63]}],"id":1003,"name":"name_3","numbers":[4,5,6],"profile":{"department":"dept_3","metrics":{"ratio":0.25,"views":130},"rank":"L4","salary":53000.0},"score":"S83","status":"inactive"}
 1004	noshred	{"age":24,"city":"city_4","email":"user4@example.com","events":[{"count":5,"detail":"detail_view_4","type":"view"},{"count":10,"detail":"detail_click_4","type":"click"}],"groups":[{"name":"group_0","note":"note_4_0","scores":[14,24,34]},{"name":"group_1","note":"note_4_1","scores":[44,54,64]}],"id":1004,"name":"name_4","numbers":[5,6,7],"profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
 1004	shredded	{"age":24,"city":"city_4","email":"user4@example.com","events":[{"count":5,"detail":"detail_view_4","type":"view"},{"count":10,"detail":"detail_click_4","type":"click"}],"groups":[{"name":"group_0","note":"note_4_0","scores":[14,24,34]},{"name":"group_1","note":"note_4_1","scores":[44,54,64]}],"id":1004,"name":"name_4","numbers":[5,6,7],"profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
+-- !result
+SELECT id, age, city,
+       get_variant_int(data, '$.id') as v_id,
+       get_variant_int(data, '$.age') as v_age,
+       get_variant_string(data, '$.city') as v_city
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	20	city_0	1000	20	city_0
+1001	21	city_1	1001	21	city_1
+1002	22	city_2	1002	22	city_2
+1003	23	city_3	1003	23	city_3
+1004	24	city_4	1004	24	city_4
+-- !result
+SELECT id, age, city,
+       get_variant_int(data, '$.id') as v_id,
+       get_variant_int(data, '$.age') as v_age,
+       get_variant_string(data, '$.city') as v_city
+FROM test_noshredding_variant
+ORDER BY id;
+-- result:
+1000	20	city_0	1000	20	city_0
+1001	21	city_1	1001	21	city_1
+1002	22	city_2	1002	22	city_2
+1003	23	city_3	1003	23	city_3
+1004	24	city_4	1004	24	city_4
+-- !result
+SELECT id, age, cast(variant_query(data, '$.score') as string) as score
+FROM test_shredding_variant
+WHERE age >= 22
+  AND get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY id;
+-- result:
+1002	22	82
+1004	24	84
+-- !result
+SELECT id, age, cast(variant_query(data, '$.score') as string) as score
+FROM test_noshredding_variant
+WHERE age >= 22
+  AND get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY id;
+-- result:
+1002	22	82
+1004	24	84
+-- !result
+SELECT id, city, get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_shredding_variant
+WHERE city IN ('city_1', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 115
+ORDER BY id;
+-- result:
+1003	city_3	130
+-- !result
+SELECT id, city, get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_noshredding_variant
+WHERE city IN ('city_1', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 115
+ORDER BY id;
+-- result:
+1003	city_3	130
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/ > /dev/null
 -- result:
