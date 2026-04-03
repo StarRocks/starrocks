@@ -1,4 +1,4 @@
--- name: test_prepare_stmt_varchar_metadata_on
+-- name: test_prepare_stmt_varchar_metadata_on @sequential
 create database db_prepare_stmt_varchar_metadata_on_${uuid0};
 -- result:
 -- !result
