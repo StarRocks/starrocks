@@ -27,6 +27,7 @@ public:
     virtual ~ColumnVisitorMutable() = default;
 
     // The default implementation of `visit` will return `Status::NotSupported`
+    virtual Status visit(AdaptiveNullableColumn* column);
     virtual Status visit(NullableColumn* column);
     virtual Status visit(ConstColumn* column);
     virtual Status visit(ArrayColumn* column);

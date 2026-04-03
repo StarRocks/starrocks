@@ -16,6 +16,7 @@
 
 #include <span>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -208,6 +209,11 @@ public:
     }
 
     Status do_visit(JsonColumn* dst) { return generic_visit(dst); }
+
+    Status do_visit(AdaptiveNullableColumn* dst) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn in ColumnAppendPermutation");
+    }
 
 private:
     template <class COL_TYPE>

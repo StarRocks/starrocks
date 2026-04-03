@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "column/adaptive_nullable_column.h"
+#include "column/column_visitor_adapter.h"
 #include "column/column_visitor_mutable.h"
 
 namespace starrocks {
@@ -42,6 +44,71 @@ TEST(ColumnVisitorTest, ResolveVisitorMethodPointers) {
     EXPECT_NE(const_int32, nullptr);
     EXPECT_NE(mut_int8, nullptr);
     EXPECT_NE(mut_int32, nullptr);
+}
+
+class DemoVisitor final : public ColumnVisitorAdapter<DemoVisitor> {
+public:
+    DemoVisitor() : ColumnVisitorAdapter(this) {}
+
+    // Catch-all for column types we don't care about in this test.
+    template <typename T>
+    static Status do_visit(const T&) {
+        return Status::NotSupported("unexpected column type");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn&) {
+        visited_adaptive = true;
+        return Status::OK();
+    }
+
+    bool result() const { return visited_adaptive; }
+
+private:
+    bool visited_adaptive = false;
+};
+
+class DemoMutableVisitor final : public ColumnVisitorMutableAdapter<DemoMutableVisitor> {
+public:
+    DemoMutableVisitor() : ColumnVisitorMutableAdapter(this) {}
+
+    // Catch-all for column types we don't care about in this test.
+    template <typename T>
+    static Status do_visit(T*) {
+        return Status::NotSupported("unexpected column type");
+    }
+
+    Status do_visit(AdaptiveNullableColumn* col) {
+        col->append_nulls(1);
+        visited_adaptive = true;
+        return Status::OK();
+    }
+
+    bool result() const { return visited_adaptive; }
+
+private:
+    bool visited_adaptive = false;
+};
+
+TEST(ColumnVisitorAdapterTest, VisitAdaptiveNullableColumnMutable) {
+    DemoMutableVisitor visitor;
+
+    auto col = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+    col->append_nulls(2);
+    size_t size_before = col->size();
+
+    ASSERT_TRUE(col->accept_mutable(&visitor).ok());
+    EXPECT_TRUE(visitor.result());
+    EXPECT_EQ(col->size(), size_before + 1);
+}
+
+TEST(ColumnVisitorAdapterTest, VisitAdaptiveNullableColumn) {
+    DemoVisitor visitor;
+
+    auto col = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+    col->append_nulls(3);
+
+    ASSERT_TRUE(col->accept(&visitor).ok());
+    EXPECT_TRUE(visitor.result());
 }
 
 } // namespace starrocks

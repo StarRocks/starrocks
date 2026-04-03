@@ -24,6 +24,7 @@
 #include "base/coding.h"
 #include "base/status.h"
 #include "base/statusor.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -934,6 +935,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+    }
+
     int64_t size() const { return _size; }
 
 private:
@@ -1001,6 +1007,11 @@ public:
     Status do_visit(const VariantColumn& column) {
         _cur = VariantColumnSerde::serialize(column, _cur);
         return Status::OK();
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
     uint8_t* cur() const { return _cur; }
@@ -1081,6 +1092,11 @@ public:
     Status do_visit(VariantColumn* column) {
         ASSIGN_OR_RETURN(_cur, VariantColumnSerde::deserialize(_cur, _end, column));
         return Status::OK();
+    }
+
+    Status do_visit(AdaptiveNullableColumn* column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
     }
 
     const uint8_t* cur() const { return _cur; }

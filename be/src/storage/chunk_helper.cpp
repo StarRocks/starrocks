@@ -17,6 +17,7 @@
 #include <numeric>
 #include <utility>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -805,6 +806,11 @@ public:
         _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
 
         return {};
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported in SegmentedColumnSelectiveCopy");
     }
 
     Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
