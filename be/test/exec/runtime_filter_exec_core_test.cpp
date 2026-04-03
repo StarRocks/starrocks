@@ -19,6 +19,7 @@
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_layout.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -61,6 +62,13 @@ TRuntimeFilterDescription make_probe_desc(int32_t filter_id, TPlanNodeId node_id
     return desc;
 }
 
+TRuntimeFilterDescription make_bucket_fallback_desc(int32_t filter_id) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(filter_id);
+    desc.__set_bucketseq_to_instance({2, 0, 1});
+    return desc;
+}
+
 } // namespace
 
 class RuntimeFilterExecCoreTest : public ::testing::Test {
@@ -68,6 +76,28 @@ protected:
     ObjectPool pool;
     RuntimeState runtime_state;
 };
+
+TEST_F(RuntimeFilterExecCoreTest, LayoutHelperInitializesFromExplicitLayout) {
+    RuntimeFilterLayout layout;
+    init_runtime_filter_layout(make_build_desc(), &layout);
+
+    EXPECT_EQ(layout.filter_id(), 7);
+    EXPECT_EQ(layout.local_layout(), TRuntimeFilterLayoutMode::SINGLETON);
+    EXPECT_EQ(layout.global_layout(), TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_1L);
+    EXPECT_FALSE(layout.pipeline_level_multi_partitioned());
+    EXPECT_EQ(layout.num_instances(), 1);
+    EXPECT_EQ(layout.num_drivers_per_instance(), 1);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, LayoutHelperFallsBackToBucketSequence) {
+    RuntimeFilterLayout layout;
+    init_runtime_filter_layout(make_bucket_fallback_desc(29), &layout);
+
+    EXPECT_EQ(layout.filter_id(), 29);
+    EXPECT_EQ(layout.local_layout(), TRuntimeFilterLayoutMode::SINGLETON);
+    EXPECT_EQ(layout.global_layout(), TRuntimeFilterLayoutMode::GLOBAL_BUCKET_1L);
+    EXPECT_EQ(layout.bucketseq_to_instance(), std::vector<int32_t>({2, 0, 1}));
+}
 
 TEST_F(RuntimeFilterExecCoreTest, BuildDescriptorInitCapturesPlannerMetadata) {
     RuntimeFilterBuildDescriptor desc;
