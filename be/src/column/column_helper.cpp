@@ -465,7 +465,8 @@ ColumnPtr ColumnHelper::normalize_column_type(const ColumnPtr& column, const Typ
         if (normalized_data.get() == nullable->data_column().get()) {
             return column; // data column unchanged — return original to avoid copy
         }
-        return NullableColumn::create(std::move(normalized_data), nullable->null_column());
+        auto null_column = NullColumn::static_pointer_cast(Column::mutate(nullable->null_column()));
+        return NullableColumn::create(std::move(normalized_data), std::move(null_column));
     }
 
     // Nested complex types: recurse into children.
