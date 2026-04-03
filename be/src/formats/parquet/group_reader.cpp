@@ -1201,7 +1201,7 @@ Status GroupReader::_init_read_chunk() {
     size_t chunk_size = _param.chunk_size;
     ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
     // Only pre-allocate active hidden sources in _read_chunk so they can be shared with
-    // active_chunk.  Lazy hidden sources are created fresh each iteration in Phase 4.5
+    // active_chunk.  Lazy hidden sources are created fresh each iteration in Phase 6
     // and merged into active_chunk there; they do not need a permanent slot here.
     for (SlotId slot_id : _active_hidden_slot_ids) {
         auto hidden_column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_VARIANT), true);
