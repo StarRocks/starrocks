@@ -16,6 +16,7 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
+#include <string_view>
 
 #include "arrow/type.h"
 #include "base/utility/pred_guard.h"
@@ -48,6 +49,7 @@ M_ArrowTypeIdToTypeStruct(ArrowTypeId::STRING, arrow::StringType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::FIXED_SIZE_BINARY, arrow::FixedSizeBinaryType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_STRING, arrow::LargeStringType);
+M_ArrowTypeIdToTypeStruct(ArrowTypeId::STRING_VIEW, arrow::StringViewType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DECIMAL32, arrow::Decimal32Type);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DECIMAL64, arrow::Decimal64Type);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::DECIMAL, arrow::Decimal128Type);
@@ -78,9 +80,15 @@ struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::BOOL, guard::Guard> {
 VALUE_GUARD(ArrowTypeId, BinaryATGuard, at_is_binary, ArrowTypeId::BINARY, ArrowTypeId::STRING,
             ArrowTypeId::FIXED_SIZE_BINARY, ArrowTypeId::LARGE_BINARY, ArrowTypeId::LARGE_STRING)
 
+VALUE_GUARD(ArrowTypeId, StringViewATGuard, at_is_string_view, ArrowTypeId::STRING_VIEW)
+
 template <ArrowTypeId AT>
 struct ArrowTypeIdToCppTypeStruct<AT, BinaryATGuard<AT>> {
     using type = const uint8_t*;
+};
+template <>
+struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::STRING_VIEW, guard::Guard> {
+    using type = std::string_view;
 };
 template <>
 struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::DECIMAL, guard::Guard> {
