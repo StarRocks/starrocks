@@ -174,7 +174,7 @@ TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsLocalFilterAndTracksWaiters) {
     EXPECT_EQ(right_desc.runtime_filter(-1), rf);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilterAndExposesHooks) {
+TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
     RuntimeFilterRegistry registry;
 
     auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
@@ -188,49 +188,6 @@ TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilterAndExposesHooks) {
     shared_rf->insert(10);
     registry.install_shared(37, std::static_pointer_cast<const RuntimeFilter>(shared_rf));
 
-    EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
-
-    bool lookup_called = false;
-    registry.set_cached_lookup([&](int32_t filter_id) -> std::shared_ptr<const RuntimeFilter> {
-        lookup_called = true;
-        EXPECT_EQ(filter_id, 37);
-        return std::static_pointer_cast<const RuntimeFilter>(shared_rf);
-    });
-    EXPECT_EQ(registry.lookup_cached(37).get(), shared_rf.get());
-    EXPECT_TRUE(lookup_called);
-
-    bool traced = false;
-    registry.set_trace_sink([&](int32_t filter_id, std::string_view network, std::string_view msg) {
-        traced = true;
-        EXPECT_EQ(filter_id, 37);
-        EXPECT_EQ(network, "local-be");
-        EXPECT_EQ(msg, "REGISTER_GRF");
-    });
-    registry.trace_event(37, "local-be", "REGISTER_GRF");
-    EXPECT_TRUE(traced);
-}
-
-TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitInstallsCachedFilterFromRegistry) {
-    RuntimeFilterRegistry registry;
-    runtime_state._runtime_filter_registry = &registry;
-
-    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
-    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
-    RuntimeFilterProbeDescriptor desc;
-    ASSERT_OK(desc.init(41, probe_ctx));
-
-    RuntimeFilterProbeCollector collector;
-    collector._runtime_state = &runtime_state;
-    collector.add_descriptor(&desc);
-
-    auto shared_rf = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
-    shared_rf->insert(10);
-    registry.set_cached_lookup([&](int32_t filter_id) -> std::shared_ptr<const RuntimeFilter> {
-        EXPECT_EQ(filter_id, 41);
-        return std::static_pointer_cast<const RuntimeFilter>(shared_rf);
-    });
-
-    collector.wait(false);
     EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
 }
 

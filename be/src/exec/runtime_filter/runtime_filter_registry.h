@@ -15,14 +15,10 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <list>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <string_view>
-#include <vector>
 
 namespace starrocks {
 
@@ -31,28 +27,13 @@ class RuntimeFilterProbeDescriptor;
 
 class RuntimeFilterRegistry {
 public:
-    using RuntimeFilterPtr = std::shared_ptr<const RuntimeFilter>;
-    using CachedLookup = std::function<RuntimeFilterPtr(int32_t)>;
-    using TraceSink = std::function<void(int32_t, std::string_view, std::string_view)>;
-
     void register_descriptor(RuntimeFilterProbeDescriptor* desc);
     void install_local(int32_t filter_id, const RuntimeFilter* rf);
-    void install_shared(int32_t filter_id, const RuntimeFilterPtr& rf);
+    void install_shared(int32_t filter_id, const std::shared_ptr<const RuntimeFilter>& rf);
     std::string waiters(int32_t filter_id) const;
 
-    RuntimeFilterPtr lookup_cached(int32_t filter_id) const;
-    void trace_event(int32_t filter_id, std::string_view network, std::string_view msg) const;
-
-    void set_cached_lookup(CachedLookup lookup);
-    void set_trace_sink(TraceSink sink);
-
 private:
-    std::vector<RuntimeFilterProbeDescriptor*> _snapshot_descriptors(int32_t filter_id) const;
-
-    mutable std::mutex _mutex;
     std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _descriptors;
-    CachedLookup _cached_lookup;
-    TraceSink _trace_sink;
 };
 
 } // namespace starrocks

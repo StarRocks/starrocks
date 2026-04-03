@@ -15,7 +15,6 @@
 #include "exec/runtime_filter/runtime_filter_registry.h"
 
 #include <sstream>
-#include <utility>
 
 #include "exec/runtime_filter/runtime_filter_probe.h"
 
@@ -25,75 +24,43 @@ void RuntimeFilterRegistry::register_descriptor(RuntimeFilterProbeDescriptor* de
     if (desc == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> l(_mutex);
     _descriptors[desc->filter_id()].push_back(desc);
 }
 
 void RuntimeFilterRegistry::install_local(int32_t filter_id, const RuntimeFilter* rf) {
-    for (auto* desc : _snapshot_descriptors(filter_id)) {
+    auto it = _descriptors.find(filter_id);
+    if (it == _descriptors.end()) {
+        return;
+    }
+    for (auto* desc : it->second) {
         desc->set_runtime_filter(rf);
     }
 }
 
-void RuntimeFilterRegistry::install_shared(int32_t filter_id, const RuntimeFilterPtr& rf) {
-    for (auto* desc : _snapshot_descriptors(filter_id)) {
+void RuntimeFilterRegistry::install_shared(int32_t filter_id, const std::shared_ptr<const RuntimeFilter>& rf) {
+    auto it = _descriptors.find(filter_id);
+    if (it == _descriptors.end()) {
+        return;
+    }
+    for (auto* desc : it->second) {
         desc->set_shared_runtime_filter(rf);
     }
 }
 
 std::string RuntimeFilterRegistry::waiters(int32_t filter_id) const {
     std::stringstream ss;
-    auto descriptors = _snapshot_descriptors(filter_id);
-    if (descriptors.empty()) {
+    auto it = _descriptors.find(filter_id);
+    if (it == _descriptors.end() || it->second.empty()) {
         return "[]";
     }
 
-    auto it = descriptors.begin();
-    ss << "[" << (*it)->probe_plan_node_id();
-    while (++it != descriptors.end()) {
-        ss << ", " << (*it)->probe_plan_node_id();
+    auto waiter = it->second.begin();
+    ss << "[" << (*waiter)->probe_plan_node_id();
+    while (++waiter != it->second.end()) {
+        ss << ", " << (*waiter)->probe_plan_node_id();
     }
     ss << "]";
     return ss.str();
-}
-
-RuntimeFilterRegistry::RuntimeFilterPtr RuntimeFilterRegistry::lookup_cached(int32_t filter_id) const {
-    CachedLookup lookup;
-    {
-        std::lock_guard<std::mutex> l(_mutex);
-        lookup = _cached_lookup;
-    }
-    return lookup ? lookup(filter_id) : nullptr;
-}
-
-void RuntimeFilterRegistry::trace_event(int32_t filter_id, std::string_view network, std::string_view msg) const {
-    TraceSink sink;
-    {
-        std::lock_guard<std::mutex> l(_mutex);
-        sink = _trace_sink;
-    }
-    if (sink) {
-        sink(filter_id, network, msg);
-    }
-}
-
-void RuntimeFilterRegistry::set_cached_lookup(CachedLookup lookup) {
-    std::lock_guard<std::mutex> l(_mutex);
-    _cached_lookup = std::move(lookup);
-}
-
-void RuntimeFilterRegistry::set_trace_sink(TraceSink sink) {
-    std::lock_guard<std::mutex> l(_mutex);
-    _trace_sink = std::move(sink);
-}
-
-std::vector<RuntimeFilterProbeDescriptor*> RuntimeFilterRegistry::_snapshot_descriptors(int32_t filter_id) const {
-    std::lock_guard<std::mutex> l(_mutex);
-    auto it = _descriptors.find(filter_id);
-    if (it == _descriptors.end()) {
-        return {};
-    }
-    return {it->second.begin(), it->second.end()};
 }
 
 } // namespace starrocks
