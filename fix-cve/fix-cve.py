@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 
-io_netty_clean_version = "4.1.128.Final"
+io_netty_clean_version = "4.1.132.Final"
 
 fixed_poms = [
     ("com.fasterxml.jackson.core:jackson-core", "2.21.1"),
