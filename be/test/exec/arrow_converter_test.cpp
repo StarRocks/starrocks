@@ -22,6 +22,7 @@
 #include <base/utility/guard.h>
 #include <gtest/gtest.h>
 
+#include <type_traits>
 #include <utility>
 
 #include "arrow/array/builder_base.h"
@@ -41,6 +42,19 @@
     } while (0)
 
 namespace starrocks {
+
+// Compile-time verification of StringView type traits (Phase 1: TYPR-01, TYPR-02)
+static_assert(std::is_same_v<ArrowTypeIdToArrayType<ArrowTypeId::STRING_VIEW>, arrow::StringViewArray>,
+              "ArrowTypeIdToArrayType<STRING_VIEW> must resolve to arrow::StringViewArray");
+
+static_assert(std::is_same_v<ArrowTypeIdToCppType<ArrowTypeId::STRING_VIEW>, std::string_view>,
+              "ArrowTypeIdToCppType<STRING_VIEW> must resolve to std::string_view");
+
+static_assert(at_is_string_view<ArrowTypeId::STRING_VIEW>,
+              "at_is_string_view must be true for STRING_VIEW");
+
+static_assert(!at_is_binary<ArrowTypeId::STRING_VIEW>,
+              "at_is_binary must be false for STRING_VIEW (guard isolation)");
 
 class ArrowConverterTest : public ::testing::Test {
 public:
