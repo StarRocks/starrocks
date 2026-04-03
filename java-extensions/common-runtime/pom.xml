@@ -12,6 +12,7 @@
     <artifactId>common-runtime</artifactId>
 
     <properties>
+        <!-- trigger ci scan -->
         <java-extensions.home>${basedir}/../</java-extensions.home>
     </properties>
 
