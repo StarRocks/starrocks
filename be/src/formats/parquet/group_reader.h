@@ -177,7 +177,7 @@ private:
     // is_active: false → backs only projection-only virtual columns; can be read after
     //                    conjunct evaluation, avoiding reads for rows that are filtered out.
     struct HiddenVariantSource {
-        SlotId slot_id;                       // synthetic negative id (-1, -2, ...) in _read_chunk
+        SlotId slot_id;                       // synthetic negative id (-1, -2, ...) that identifies this source
         std::unique_ptr<ColumnReader> reader; // reader for the underlying VARIANT column
         bool is_active = false;               // active (pre-conjunct) vs lazy (post-conjunct)
     };
@@ -194,7 +194,9 @@ private:
 
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
     // Evaluates deferred variant virtual conjuncts against active_chunk.
-    // Returns the filter that was applied (active_chunk is already filtered on return).
+    // Returns the filter to be applied by the caller; active_chunk is NOT filtered
+    // by this method — the caller merges it with chunk_filter and applies the combined
+    // result once after Phase 4 (in get_next).
     // An empty filter means there were no deferred conjuncts (all rows pass).
     // A non-empty all-zero filter means every row was filtered out.
     StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count);
@@ -208,8 +210,9 @@ private:
     VariantShreddedReadHints _get_variant_shredded_hints(const std::string& column_name) const;
     Status _prepare_column_readers() const;
     // Creates a lightweight VIEW chunk of _read_chunk containing the given slot_ids.
-    // Each entry in slot_ids must already exist as a column in _read_chunk (all physical
-    // and hidden variant source slots are pre-allocated there by _init_read_chunk).
+    // Each entry in slot_ids must already exist as a column in _read_chunk. _init_read_chunk()
+    // pre-allocates physical slots and active hidden variant source slots; lazy hidden sources
+    // are allocated separately during Phase 6 of the variant read pipeline.
     // When include_reserved_fields is true, reserved_field_slots are appended after slot_ids.
     ChunkPtr _create_read_chunk(const std::vector<SlotId>& slot_ids, bool include_reserved_fields = true);
     // Extract dict filter columns and conjuncts
@@ -262,8 +265,8 @@ private:
     // Unified slot id lists for _create_read_chunk.  Populated by
     // _process_columns_and_conjunct_ctxs() after the column/conjunct classification.
     //   _active_slot_ids = physical active slots  +  active hidden variant sources
-    //   _lazy_slot_ids   = physical lazy slots   (hidden lazy sources are read directly
-    //                      into _read_chunk in Phase 4.5, not via _create_read_chunk)
+    //   _lazy_slot_ids   = physical lazy slots   (hidden lazy sources are read into a
+    //                      temporary chunk in Phase 6, not via _create_read_chunk)
     std::vector<SlotId> _active_slot_ids;
     std::vector<SlotId> _lazy_slot_ids;
 
@@ -292,8 +295,9 @@ private:
     //     _create_read_chunk), so filtering those view-chunks also modifies _read_chunk.
     //   • Active hidden variant sources – included in active_chunk via _active_slot_ids.
     //     Filtered automatically by active_chunk->filter() in Phase 4.
-    //   • Lazy hidden variant sources – only in _read_chunk.  Read directly in Phase 4.5
-    //     (after variant conjunct eval); found by _fill_dst_chunk via the _read_chunk arg.
+    //   • Lazy hidden variant sources – read into a temporary chunk in Phase 6 (after
+    //     variant conjunct eval) and merged into active_chunk.  _fill_dst_chunk then
+    //     consumes them from active_chunk; they are not accessed via _read_chunk directly.
     ChunkPtr _read_chunk;
 
     // param for read row group
