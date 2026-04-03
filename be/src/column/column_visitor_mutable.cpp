@@ -14,8 +14,6 @@
 
 #include "column/column_visitor_mutable.h"
 
-#include "adaptive_nullable_column.h"
-
 namespace starrocks {
 
 #define VISIT_IMPL(ClassName) \
