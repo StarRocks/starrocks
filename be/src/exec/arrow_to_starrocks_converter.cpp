@@ -347,6 +347,61 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     }
 };
 
+// StringView converter: uses per-element GetView(i) instead of bulk offset copy.
+// StringView out-of-line strings (>12 bytes) may span multiple variadic buffers,
+// so offset-based optimize_non_fixed_size_binary is NOT safe here.
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, StringOrBinaryGuard<LT>> {
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ColumnType = RunTimeColumnType<LT>;
+
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
+        auto* concrete_array = down_cast<const ArrowArrayType*>(array);
+        auto* concrete_column = down_cast<ColumnType*>(column);
+        auto* filter_data = (&chunk_filter->front()) + column_start_idx;
+        size_t max_length = binary_max_length<LT>;
+        if (ctx != nullptr) {
+            size_t type_len = ctx->current_slot->type().len;
+            if (type_len > 0) {
+                max_length = type_len;
+            }
+        }
+
+        concrete_column->reserve(concrete_column->size() + num_elements);
+        bool reported = false;
+        for (size_t i = 0; i < num_elements; ++i) {
+            size_t array_idx = array_start_idx + i;
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    concrete_column->append_default();
+                    continue;
+                }
+            }
+            auto sv = concrete_array->GetView(array_idx);
+            Slice s{sv.data(), sv.size()};
+            if (s.size > max_length) {
+                concrete_column->append_default();
+                if constexpr (is_nullable && !is_strict) {
+                    null_data[i] = DATUM_NULL;
+                } else {
+                    filter_data[i] = 0;
+                    if (ctx != nullptr && !reported) {
+                        reported = true;
+                        std::string reason = strings::Substitute(
+                                "string length $0 exceeds max length $1", sv.size(), max_length);
+                        ctx->report_error_message(reason, std::string(sv));
+                    }
+                }
+            } else {
+                concrete_column->append(s);
+            }
+        }
+        return Status::OK();
+    }
+};
+
 template <typename T>
 struct RectifyDecimalType {
     using type = T;
