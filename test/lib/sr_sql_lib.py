@@ -3301,17 +3301,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         tools.assert_equal(
             int(expected_prepare_len),
             prepare_column.normalized_length,
-            "prepare metadata length mismatch, sql=%s, prepare_type=%s, prepare_len=%s(raw=%s), "
-            "execute_type=%s, execute_len=%s(raw=%s)"
-            % (query, prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+            "prepare metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
                execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
         )
         tools.assert_equal(
             int(expected_execute_len),
             execute_column.normalized_length,
-            "execute metadata length mismatch, sql=%s, prepare_type=%s, prepare_len=%s(raw=%s), "
-            "execute_type=%s, execute_len=%s(raw=%s)"
-            % (query, prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+            "execute metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
                execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
         )
 

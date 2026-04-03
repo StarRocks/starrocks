@@ -32,11 +32,11 @@ function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metad
 -- result:
 None
 -- !result
-function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select left(v_1m, 230) as c from t_string_meta where id = 1', 65533, 65533)
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select left(v_1m, 230) as c from t_string_meta where id = 1', 64, 64)
 -- result:
 None
 -- !result
-function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select concat(left(v_1m, 220), \"=====12345\") as c from t_string_meta where id = 1', 65533, 65533)
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select concat(left(v_1m, 220), \"=====12345\") as c from t_string_meta where id = 1', 64, 64)
 -- result:
 None
 -- !result
@@ -52,11 +52,35 @@ function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metad
 -- result:
 None
 -- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select left(cast(v_1m as varchar(250)), 230) as c from t_string_meta where id = 1', 64, 64)
+-- result:
+None
+-- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select concat(cast(v_1m as varchar(250)), "=====12345") as c from t_string_meta where id = 1', 64, 64)
+-- result:
+None
+-- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select concat(left(cast(v_1m as varchar(250)), 240), "=====12345") as c from t_string_meta where id = 1', 64, 64)
+-- result:
+None
+-- !result
 function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select cast(concat(left(v_1m, 240), \"=====12345\") as varchar(255)) as c from t_string_meta where id = 1', 255, 255)
 -- result:
 None
 -- !result
 function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select cast(concat(\"1234\", cast(v_1m as varchar(250))) as varchar(255)) as c from t_string_meta where id = 1', 255, 255)
+-- result:
+None
+-- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select cast(left(cast(v_1m as varchar(250)), 250) as varchar(250)) as c from t_string_meta where id = 1', 250, 250)
+-- result:
+None
+-- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select cast(concat(cast(v_1m as varchar(250)), "=====12345") as varchar(255)) as c from t_string_meta where id = 1', 255, 255)
+-- result:
+None
+-- !result
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select cast(concat(left(cast(v_1m as varchar(250)), 240), "=====12345") as varchar(255)) as c from t_string_meta where id = 1', 255, 255)
 -- result:
 None
 -- !result
@@ -104,7 +128,7 @@ function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metad
 -- result:
 None
 -- !result
-function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select left(v_1m, 8000) as c from t_string_meta where id = 1', 65533, 65533)
+function: assert_prepare_execute_varchar_metadata('db_prepare_stmt_varchar_metadata_on_${uuid0}', 'select left(v_1m, 8000) as c from t_string_meta where id = 1', 64, 64)
 -- result:
 None
 -- !result
