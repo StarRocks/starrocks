@@ -316,9 +316,20 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        Map<BaseTableInfo, TvrVersionRange> pendingBaseTableTvrVersionRangeMap =
-                getPendingBaseTableTvrVersionRangeMap();
-        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions,
-                pendingBaseTableTvrVersionRangeMap);
+        // Only promote TVR checkpoint on the last batch. Intermediate batches pass empty map
+        // to avoid committing TVR before all partitions are refreshed.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap;
+        if (mvContext.hasNextBatchPartition()) {
+            tvrMap = Maps.newHashMap();
+        } else {
+            tvrMap = mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        }
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tvrMap);
+        // Clear temp map after the last batch promotes TVR, preventing stale data from being
+        // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
+        // explain-time planning that populates the temp map without executing).
+        if (!mvContext.hasNextBatchPartition()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaMap();
+        }
     }
 }
