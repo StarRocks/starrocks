@@ -43,7 +43,7 @@
 
 namespace starrocks {
 
-// Compile-time verification of StringView type traits (Phase 1: TYPR-01, TYPR-02)
+// Compile-time verification that STRING_VIEW type traits resolve correctly.
 static_assert(std::is_same_v<ArrowTypeIdToArrayType<ArrowTypeId::STRING_VIEW>, arrow::StringViewArray>,
               "ArrowTypeIdToArrayType<STRING_VIEW> must resolve to arrow::StringViewArray");
 
@@ -1682,6 +1682,174 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     ASSERT_EQ(down_cast<NullableColumn*>(st_col.get())->null_count(), 0);
     ASSERT_EQ(st_col->debug_item(0), "{col1:0,col2:'char-0'}");
     ASSERT_EQ(st_col->debug_item(8), "{col1:8,col2:'char-8'}");
+}
+
+
+// Helper: builds a StringViewArray from a vector of strings.
+// When with_nulls=true, even-indexed positions are null.
+static std::shared_ptr<arrow::Array> create_string_view_array(const std::vector<std::string>& values,
+                                                               bool with_nulls = false) {
+    arrow::StringViewBuilder builder(arrow::default_memory_pool());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (with_nulls && i % 2 == 0) {
+            ARROW_EXPECT_OK(builder.AppendNull());
+        } else {
+            ARROW_EXPECT_OK(builder.Append(values[i]));
+        }
+    }
+    std::shared_ptr<arrow::Array> array;
+    ARROW_EXPECT_OK(builder.Finish(&array));
+    return array;
+}
+
+// Inline strings: all values <= 12 bytes, stored entirely within the view struct.
+PARALLEL_TEST(ArrowConverterTest, test_string_view_inline_varchar) {
+    std::vector<std::string> values = {"", "a", std::string(11, 'b'), std::string(12, 'c'), "!@#$%^"};
+    auto array = create_string_view_array(values);
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_VARCHAR, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), col.get(), 0, nullptr, &filter, nullptr, nullptr));
+    ASSERT_EQ(col->size(), values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(col->get_slice(i).to_string(), values[i]);
+        ASSERT_EQ(filter[i], 1);
+    }
+}
+
+// Out-of-line strings: all values > 12 bytes, stored in variadic data buffers.
+PARALLEL_TEST(ArrowConverterTest, test_string_view_outofline_varchar) {
+    std::vector<std::string> values = {
+            std::string(13, 'd'),
+            std::string(20, 'e'),
+            std::string(50, 'f'),
+            std::string(100, 'g'),
+    };
+    auto array = create_string_view_array(values);
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_VARCHAR, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), col.get(), 0, nullptr, &filter, nullptr, nullptr));
+    ASSERT_EQ(col->size(), values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(col->get_slice(i).to_string(), values[i]);
+        ASSERT_EQ(filter[i], 1);
+    }
+}
+
+// Multi-buffer batch: total data exceeds 32KB, forcing multiple variadic buffers.
+PARALLEL_TEST(ArrowConverterTest, test_string_view_multi_buffer_varchar) {
+    // kDefaultBlocksize = 32KB (32 << 10 = 32768). 600 x 64-byte strings = 38,400 bytes > 32KB.
+    const std::string value(64, 'M');
+    const size_t count = 600;
+    arrow::StringViewBuilder builder(arrow::default_memory_pool());
+    for (size_t i = 0; i < count; ++i) {
+        ARROW_EXPECT_OK(builder.Append(value));
+    }
+    std::shared_ptr<arrow::Array> array;
+    ARROW_EXPECT_OK(builder.Finish(&array));
+    // buffers[0] = validity bitmap, buffers[1] = views, buffers[2..N] = variadic data buffers
+    ASSERT_GE(array->data()->buffers.size(), 4u);
+
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_VARCHAR, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(count, 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, count, col.get(), 0, nullptr, &filter, nullptr, nullptr));
+    ASSERT_EQ(col->size(), count);
+    for (size_t i = 0; i < count; ++i) {
+        ASSERT_EQ(col->get_slice(i).to_string(), value);
+        ASSERT_EQ(filter[i], 1);
+    }
+}
+
+// Nullable StringView array with nulls at even indices.
+PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_varchar) {
+    // Even indices -> null, odd indices -> value.
+    // Mix of inline (<= 12 bytes) and out-of-line (> 12 bytes) strings.
+    std::vector<std::string> values = {
+            "short",                      // index 0 -> null
+            "hello world!",               // index 1 -> value (12 bytes, inline)
+            "out-of-line-string-here",    // index 2 -> null
+            "x",                          // index 3 -> value (1 byte, inline)
+            "twelve_chars",               // index 4 -> null
+            std::string(50, 'z'),         // index 5 -> value (50 bytes, out-of-line)
+    };
+    auto array = create_string_view_array(values, /*with_nulls=*/true);
+
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_VARCHAR, true, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto data_col = BinaryColumn::create();
+    auto null_col = NullColumn::create();
+    auto col = NullableColumn::create(std::move(data_col), std::move(null_col));
+
+    auto* nullable = down_cast<NullableColumn*>(col.get());
+    auto* bin_col = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+    auto* nul_col = nullable->null_column_raw_ptr();
+    fill_null_column(array.get(), 0, array->length(), nul_col, 0);
+    auto* null_data = &nul_col->get_data().front();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), bin_col, 0, null_data, &filter, nullptr, nullptr));
+    ASSERT_EQ(bin_col->size(), values.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(null_data[i], DATUM_NULL);
+        } else {
+            ASSERT_EQ(null_data[i], DATUM_NOT_NULL);
+            ASSERT_EQ(bin_col->get_slice(i).to_string(), values[i]);
+        }
+    }
+}
+
+// StringView -> CHAR conversion with MAX_CHAR_LENGTH=255 boundary.
+PARALLEL_TEST(ArrowConverterTest, test_string_view_char) {
+    // Strings <= 255 bytes: stored verbatim, filter = 1.
+    // Strings > 255 bytes: rejected (append_default + filter = 0 in strict mode).
+    std::vector<std::string> pass_values = {
+            "a",                        // 1 byte (inline)
+            std::string(254, 'p'),      // 254 bytes (just under limit, out-of-line)
+            std::string(255, 'q'),      // 255 bytes (at limit, out-of-line)
+    };
+    auto pass_array = create_string_view_array(pass_values);
+
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(pass_array->length(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(pass_array.get(), 0, pass_array->length(), col.get(), 0, nullptr, &filter, nullptr, nullptr));
+    ASSERT_EQ(col->size(), pass_values.size());
+    for (size_t i = 0; i < pass_values.size(); ++i) {
+        ASSERT_EQ(col->get_slice(i).to_string(), pass_values[i]);
+        ASSERT_EQ(filter[i], 1);
+    }
+
+    // Test failing values (exceed MAX_CHAR_LENGTH=255) in strict mode
+    std::vector<std::string> fail_values = {
+            std::string(256, 'r'),      // 1 over limit
+            std::string(512, 's'),      // well over limit
+    };
+    auto fail_array = create_string_view_array(fail_values);
+    auto fail_conv = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
+    ASSERT_TRUE(fail_conv != nullptr);
+    auto fail_col = BinaryColumn::create();
+    Filter fail_filter;
+    fail_filter.resize(fail_array->length(), 1);
+    ASSERT_STATUS_OK(fail_conv(fail_array.get(), 0, fail_array->length(), fail_col.get(), 0, nullptr, &fail_filter,
+                               nullptr, nullptr));
+    ASSERT_EQ(fail_col->size(), fail_values.size());
+    for (size_t i = 0; i < fail_values.size(); ++i) {
+        ASSERT_EQ(fail_filter[i], 0);
+        ASSERT_EQ(fail_col->get_slice(i).size, 0u);
+    }
 }
 
 } // namespace starrocks
