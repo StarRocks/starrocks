@@ -23,25 +23,32 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TKeysType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -1247,5 +1254,1729 @@ public class ExecExprTest {
         assertEquals(TExprOpcode.MATCH_ALL,
                 ExprOpcodeRegistry.getMatchOpcode(
                         com.starrocks.sql.ast.expression.MatchExpr.MatchOperator.MATCH_ALL));
+    }
+
+    // ======================================================================
+    // 7. ExecCompoundPredicate
+    // ======================================================================
+
+    @Test
+    public void testExecCompoundPredicateAndConstruction() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+
+        assertEquals(CompoundPredicate.Operator.AND, pred.getCompoundType());
+        assertEquals(BooleanType.BOOLEAN, pred.getType());
+        assertEquals(2, pred.getNumChildren());
+        assertEquals(TExprNodeType.COMPOUND_PRED, pred.getNodeType());
+    }
+
+    @Test
+    public void testExecCompoundPredicateOrConstruction() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.OR, left, right);
+        assertEquals(CompoundPredicate.Operator.OR, pred.getCompoundType());
+    }
+
+    @Test
+    public void testExecCompoundPredicateNotConstruction() {
+        ExecSlotRef child = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(
+                CompoundPredicate.Operator.NOT, new ArrayList<>(List.of(child)));
+
+        assertEquals(CompoundPredicate.Operator.NOT, pred.getCompoundType());
+        assertEquals(1, pred.getNumChildren());
+    }
+
+    @Test
+    public void testExecCompoundPredicateNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, BooleanType.BOOLEAN, true);
+        ExecSlotRef nonNullable = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+
+        ExecCompoundPredicate withNullable = new ExecCompoundPredicate(
+                CompoundPredicate.Operator.AND, nullable, nonNullable);
+        assertTrue(withNullable.isNullable());
+
+        ExecCompoundPredicate withoutNullable = new ExecCompoundPredicate(
+                CompoundPredicate.Operator.AND, nonNullable, nonNullable.clone());
+        assertFalse(withoutNullable.isNullable());
+    }
+
+    @Test
+    public void testExecCompoundPredicateToThrift() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+
+        ExecCompoundPredicate andPred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+        TExprNode node = new TExprNode();
+        andPred.toThrift(node);
+        assertEquals(TExprOpcode.COMPOUND_AND, node.opcode);
+
+        ExecCompoundPredicate orPred = new ExecCompoundPredicate(CompoundPredicate.Operator.OR, left, right);
+        TExprNode node2 = new TExprNode();
+        orPred.toThrift(node2);
+        assertEquals(TExprOpcode.COMPOUND_OR, node2.opcode);
+    }
+
+    @Test
+    public void testExecCompoundPredicateVisitorDispatch() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecCompoundPredicate(ExecCompoundPredicate expr, Void context) {
+                return "CompoundPredicate";
+            }
+        };
+        assertEquals("CompoundPredicate", pred.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecCompoundPredicateClone() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate original = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+        original.setIsIndexOnlyFilter(true);
+
+        ExecCompoundPredicate cloned = original.clone();
+        assertEquals(original.getCompoundType(), cloned.getCompoundType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+        assertTrue(cloned.isIndexOnlyFilter());
+    }
+
+    // ======================================================================
+    // 8. ExecLikePredicate
+    // ======================================================================
+
+    @Test
+    public void testExecLikePredicateConstruction() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        assertFalse(pred.isRegexp());
+        assertEquals(fn, pred.getFn());
+        assertEquals(BooleanType.BOOLEAN, pred.getType());
+        assertEquals(2, pred.getNumChildren());
+        assertEquals(TExprNodeType.FUNCTION_CALL, pred.getNodeType());
+    }
+
+    @Test
+    public void testExecLikePredicateRegexp() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("^test.*$");
+        ScalarFunction fn = makeScalarFunction("regexp", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+
+        ExecLikePredicate pred = new ExecLikePredicate(true, fn, new ArrayList<>(List.of(col, pattern)));
+        assertTrue(pred.isRegexp());
+    }
+
+    @Test
+    public void testExecLikePredicateNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, VarcharType.VARCHAR, true);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(nullable, pattern)));
+        assertTrue(pred.isNullable());
+    }
+
+    @Test
+    public void testExecLikePredicateToThrift() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+        assertNotNull(node.getFn());
+    }
+
+    @Test
+    public void testExecLikePredicateToThriftNullFn() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+
+        ExecLikePredicate pred = new ExecLikePredicate(false, null, new ArrayList<>(List.of(col, pattern)));
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+        // Should not throw; fn is null so no function is set
+        assertNull(node.getFn());
+    }
+
+    @Test
+    public void testExecLikePredicateVisitorDispatch() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecLikePredicate(ExecLikePredicate expr, Void context) {
+                return "LikePredicate";
+            }
+        };
+        assertEquals("LikePredicate", pred.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecLikePredicateClone() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate original = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        ExecLikePredicate cloned = original.clone();
+        assertEquals(original.isRegexp(), cloned.isRegexp());
+        assertEquals(original.getFn(), cloned.getFn());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 9. ExecInPredicate
+    // ======================================================================
+
+    @Test
+    public void testExecInPredicateConstruction() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecLiteral v2 = makeIntLiteral(2);
+        ExecLiteral v3 = makeIntLiteral(3);
+
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1, v2, v3)));
+
+        assertFalse(pred.isNotIn());
+        assertEquals(BooleanType.BOOLEAN, pred.getType());
+        assertEquals(4, pred.getNumChildren());
+        assertEquals(TExprNodeType.IN_PRED, pred.getNodeType());
+    }
+
+    @Test
+    public void testExecInPredicateNotIn() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+
+        ExecInPredicate pred = new ExecInPredicate(true, new ArrayList<>(List.of(col, v1)));
+        assertTrue(pred.isNotIn());
+    }
+
+    @Test
+    public void testExecInPredicateNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecLiteral v1 = makeIntLiteral(1);
+
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(nullable, v1)));
+        assertTrue(pred.isNullable());
+
+        ExecSlotRef nonNullable = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecInPredicate pred2 = new ExecInPredicate(false, new ArrayList<>(List.of(nonNullable, v1)));
+        assertFalse(pred2.isNullable());
+    }
+
+    @Test
+    public void testExecInPredicateToThrift() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecLiteral v2 = makeIntLiteral(2);
+
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1, v2)));
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+
+        assertNotNull(node.in_predicate);
+        assertFalse(node.in_predicate.is_not_in);
+        assertEquals(TExprOpcode.FILTER_IN, node.opcode);
+    }
+
+    @Test
+    public void testExecInPredicateToThriftNotIn() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+
+        ExecInPredicate pred = new ExecInPredicate(true, new ArrayList<>(List.of(col, v1)));
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+
+        assertTrue(node.in_predicate.is_not_in);
+        assertEquals(TExprOpcode.FILTER_NOT_IN, node.opcode);
+    }
+
+    @Test
+    public void testExecInPredicateVisitorDispatch() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecInPredicate(ExecInPredicate expr, Void context) {
+                return "InPredicate";
+            }
+        };
+        assertEquals("InPredicate", pred.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecInPredicateClone() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecInPredicate original = new ExecInPredicate(true, new ArrayList<>(List.of(col, v1)));
+
+        ExecInPredicate cloned = original.clone();
+        assertEquals(original.isNotIn(), cloned.isNotIn());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 10. ExecIsNullPredicate
+    // ======================================================================
+
+    @Test
+    public void testExecIsNullPredicateIsNull() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(false, col);
+
+        assertFalse(pred.isNotNull());
+        assertEquals(BooleanType.BOOLEAN, pred.getType());
+        assertEquals(1, pred.getNumChildren());
+        assertEquals(TExprNodeType.FUNCTION_CALL, pred.getNodeType());
+        // IS NULL predicate is never nullable itself
+        assertFalse(pred.isNullable());
+    }
+
+    @Test
+    public void testExecIsNullPredicateIsNotNull() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(true, col);
+
+        assertTrue(pred.isNotNull());
+        assertFalse(pred.isNullable());
+    }
+
+    @Test
+    public void testExecIsNullPredicateToThriftIsNull() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(false, col);
+
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+        assertNotNull(node.getFn());
+        assertEquals("is_null_pred", node.getFn().getName().getFunction_name());
+    }
+
+    @Test
+    public void testExecIsNullPredicateToThriftIsNotNull() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(true, col);
+
+        TExprNode node = new TExprNode();
+        pred.toThrift(node);
+        assertNotNull(node.getFn());
+        assertEquals("is_not_null_pred", node.getFn().getName().getFunction_name());
+    }
+
+    @Test
+    public void testExecIsNullPredicateVisitorDispatch() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(false, col);
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecIsNullPredicate(ExecIsNullPredicate expr, Void context) {
+                return "IsNullPredicate";
+            }
+        };
+        assertEquals("IsNullPredicate", pred.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecIsNullPredicateClone() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate original = new ExecIsNullPredicate(true, col);
+
+        ExecIsNullPredicate cloned = original.clone();
+        assertEquals(original.isNotNull(), cloned.isNotNull());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 11. ExecMatchExpr
+    // ======================================================================
+
+    @Test
+    public void testExecMatchExprConstruction() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals(MatchExpr.MatchOperator.MATCH, expr.getMatchOp());
+        assertEquals(BooleanType.BOOLEAN, expr.getType());
+        assertEquals(2, expr.getNumChildren());
+        assertEquals(TExprNodeType.MATCH_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecMatchExprMatchAny() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_ANY,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals(MatchExpr.MatchOperator.MATCH_ANY, expr.getMatchOp());
+    }
+
+    @Test
+    public void testExecMatchExprNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, VarcharType.VARCHAR, true);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(nullable, pattern)));
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecMatchExprToThrift() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        assertEquals(TExprOpcode.MATCH, node.opcode);
+    }
+
+    @Test
+    public void testExecMatchExprToThriftMatchAll() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_ALL,
+                new ArrayList<>(List.of(col, pattern)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        assertEquals(TExprOpcode.MATCH_ALL, node.opcode);
+    }
+
+    @Test
+    public void testExecMatchExprVisitorDispatch() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr2, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecMatchExpr(ExecMatchExpr expr2, Void context) {
+                return "MatchExpr";
+            }
+        };
+        assertEquals("MatchExpr", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecMatchExprClone() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr original = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        ExecMatchExpr cloned = original.clone();
+        assertEquals(original.getMatchOp(), cloned.getMatchOp());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 12. ExecArithmetic
+    // ======================================================================
+
+    @Test
+    public void testExecArithmeticConstruction() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+
+        ExecArithmetic expr = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+
+        assertEquals(ArithmeticExpr.Operator.ADD, expr.getOp());
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(2, expr.getNumChildren());
+        assertEquals(TExprNodeType.ARITHMETIC_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecArithmeticNullabilityDivide() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+
+        // DIVIDE is always nullable (division by zero)
+        ExecArithmetic divide = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.DIVIDE,
+                new ArrayList<>(List.of(left, right)));
+        assertTrue(divide.isNullable());
+
+        // INT_DIVIDE is always nullable
+        ExecArithmetic intDivide = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.INT_DIVIDE,
+                new ArrayList<>(List.of(left, right)));
+        assertTrue(intDivide.isNullable());
+
+        // MOD is always nullable
+        ExecArithmetic mod = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.MOD,
+                new ArrayList<>(List.of(left, right)));
+        assertTrue(mod.isNullable());
+    }
+
+    @Test
+    public void testExecArithmeticNullabilityAdd() {
+        ExecSlotRef nonNullable = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral literal = makeIntLiteral(10);
+
+        // ADD with non-nullable children -> not nullable
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(nonNullable, literal)));
+        assertFalse(add.isNullable());
+
+        // ADD with nullable child -> nullable
+        ExecSlotRef nullable = makeSlotRef(2, 0, IntegerType.INT, true);
+        ExecArithmetic addNullable = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(nullable, literal)));
+        assertTrue(addNullable.isNullable());
+    }
+
+    @Test
+    public void testExecArithmeticSelfMonotonic() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+        assertTrue(add.isSelfMonotonic());
+    }
+
+    @Test
+    public void testExecArithmeticToThrift() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+        TExprNode node = new TExprNode();
+        add.toThrift(node);
+        assertEquals(TExprOpcode.ADD, node.opcode);
+
+        ExecArithmetic sub = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.SUBTRACT,
+                new ArrayList<>(List.of(left, right)));
+        TExprNode node2 = new TExprNode();
+        sub.toThrift(node2);
+        assertEquals(TExprOpcode.SUBTRACT, node2.opcode);
+    }
+
+    @Test
+    public void testExecArithmeticVisitorDispatch() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic expr = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecArithmetic(ExecArithmetic e, Void context) {
+                return "Arithmetic";
+            }
+        };
+        assertEquals("Arithmetic", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecArithmeticClone() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic original = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.MULTIPLY,
+                new ArrayList<>(List.of(left, right)));
+
+        ExecArithmetic cloned = original.clone();
+        assertEquals(original.getOp(), cloned.getOp());
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 13. ExecCaseWhen
+    // ======================================================================
+
+    @Test
+    public void testExecCaseWhenConstruction() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecLiteral elseVal = makeIntLiteral(0);
+
+        ExecCaseWhen expr = new ExecCaseWhen(IntegerType.INT, false, true,
+                new ArrayList<>(List.of(cond, thenVal, elseVal)));
+
+        assertFalse(expr.hasCase());
+        assertTrue(expr.hasElse());
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(3, expr.getNumChildren());
+        assertEquals(TExprNodeType.CASE_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecCaseWhenWithCaseExpr() {
+        ExecSlotRef caseExpr = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral when1 = makeIntLiteral(1);
+        ExecLiteral then1 = makeIntLiteral(100);
+
+        ExecCaseWhen expr = new ExecCaseWhen(IntegerType.INT, true, false,
+                new ArrayList<>(List.of(caseExpr, when1, then1)));
+
+        assertTrue(expr.hasCase());
+        assertFalse(expr.hasElse());
+    }
+
+    @Test
+    public void testExecCaseWhenAlwaysNullable() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecCaseWhen expr = new ExecCaseWhen(IntegerType.INT, false, false,
+                new ArrayList<>(List.of(cond, thenVal)));
+
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecCaseWhenToThrift() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecLiteral elseVal = makeIntLiteral(0);
+
+        ExecCaseWhen expr = new ExecCaseWhen(IntegerType.INT, true, true,
+                new ArrayList<>(List.of(cond, thenVal, elseVal)));
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertNotNull(node.case_expr);
+        assertTrue(node.case_expr.has_case_expr);
+        assertTrue(node.case_expr.has_else_expr);
+    }
+
+    @Test
+    public void testExecCaseWhenVisitorDispatch() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecCaseWhen expr = new ExecCaseWhen(IntegerType.INT, false, false,
+                new ArrayList<>(List.of(cond, thenVal)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecCaseWhen(ExecCaseWhen e, Void context) {
+                return "CaseWhen";
+            }
+        };
+        assertEquals("CaseWhen", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecCaseWhenClone() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecCaseWhen original = new ExecCaseWhen(IntegerType.INT, true, true,
+                new ArrayList<>(List.of(cond, thenVal)));
+
+        ExecCaseWhen cloned = original.clone();
+        assertEquals(original.hasCase(), cloned.hasCase());
+        assertEquals(original.hasElse(), cloned.hasElse());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 14. ExecBetweenPredicate
+    // ======================================================================
+
+    @Test
+    public void testExecBetweenPredicateConstruction() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        assertFalse(pred.isNotBetween());
+        assertEquals(BooleanType.BOOLEAN, pred.getType());
+        assertEquals(3, pred.getNumChildren());
+    }
+
+    @Test
+    public void testExecBetweenPredicateNotBetween() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(true,
+                new ArrayList<>(List.of(col, low, high)));
+        assertTrue(pred.isNotBetween());
+    }
+
+    @Test
+    public void testExecBetweenPredicateNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(nullable, low, high)));
+        assertTrue(pred.isNullable());
+    }
+
+    @Test
+    public void testExecBetweenPredicateThrowsOnGetNodeType() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        assertThrows(IllegalStateException.class, pred::getNodeType);
+    }
+
+    @Test
+    public void testExecBetweenPredicateThrowsOnToThrift() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        assertThrows(IllegalStateException.class, () -> pred.toThrift(new TExprNode()));
+    }
+
+    @Test
+    public void testExecBetweenPredicateVisitorDispatch() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecBetweenPredicate(ExecBetweenPredicate e, Void context) {
+                return "BetweenPredicate";
+            }
+        };
+        assertEquals("BetweenPredicate", pred.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecBetweenPredicateClone() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate original = new ExecBetweenPredicate(true,
+                new ArrayList<>(List.of(col, low, high)));
+
+        ExecBetweenPredicate cloned = original.clone();
+        assertEquals(original.isNotBetween(), cloned.isNotBetween());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 15. ExecArrayExpr
+    // ======================================================================
+
+    @Test
+    public void testExecArrayExprConstruction() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecLiteral e2 = makeIntLiteral(2);
+
+        ExecArrayExpr expr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1, e2)));
+
+        assertEquals(arrayType, expr.getType());
+        assertEquals(2, expr.getNumChildren());
+        assertEquals(TExprNodeType.ARRAY_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecArrayExprToThrift() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecArrayExpr expr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        // ARRAY_EXPR has no extra fields -- just verify it doesn't throw
+    }
+
+    @Test
+    public void testExecArrayExprVisitorDispatch() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecArrayExpr expr = new ExecArrayExpr(arrayType, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecArrayExpr(ExecArrayExpr e, Void context) {
+                return "ArrayExpr";
+            }
+        };
+        assertEquals("ArrayExpr", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecArrayExprClone() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecArrayExpr original = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1)));
+
+        ExecArrayExpr cloned = original.clone();
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 16. ExecArraySlice
+    // ======================================================================
+
+    @Test
+    public void testExecArraySliceConstruction() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral offset = makeIntLiteral(1);
+        ExecLiteral length = makeIntLiteral(3);
+
+        ExecArraySlice expr = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, offset, length)));
+
+        assertEquals(arrayType, expr.getType());
+        assertEquals(3, expr.getNumChildren());
+        assertEquals(TExprNodeType.ARRAY_SLICE_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecArraySliceNullability() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef nullableArr = makeSlotRef(1, 0, arrayType, true);
+        ExecLiteral offset = makeIntLiteral(1);
+
+        ExecArraySlice expr = new ExecArraySlice(arrayType, new ArrayList<>(List.of(nullableArr, offset)));
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecArraySliceToThrift() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral offset = makeIntLiteral(1);
+        ExecArraySlice expr = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, offset)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        // No extra fields -- just verify it doesn't throw
+    }
+
+    @Test
+    public void testExecArraySliceVisitorDispatch() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecArraySlice expr = new ExecArraySlice(arrayType, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecArraySlice(ExecArraySlice e, Void context) {
+                return "ArraySlice";
+            }
+        };
+        assertEquals("ArraySlice", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecArraySliceClone() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral offset = makeIntLiteral(1);
+        ExecArraySlice original = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, offset)));
+
+        ExecArraySlice cloned = original.clone();
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 17. ExecMapExpr
+    // ======================================================================
+
+    @Test
+    public void testExecMapExprConstruction() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key = makeVarcharLiteral("key1");
+        ExecLiteral val = makeIntLiteral(1);
+
+        ExecMapExpr expr = new ExecMapExpr(mapType, new ArrayList<>(List.of(key, val)));
+
+        assertEquals(mapType, expr.getType());
+        assertEquals(2, expr.getNumChildren());
+        assertEquals(TExprNodeType.MAP_EXPR, expr.getNodeType());
+        assertFalse(expr.isNullable());
+    }
+
+    @Test
+    public void testExecMapExprToThrift() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecMapExpr expr = new ExecMapExpr(mapType, new ArrayList<>());
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        // No extra fields
+    }
+
+    @Test
+    public void testExecMapExprVisitorDispatch() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecMapExpr expr = new ExecMapExpr(mapType, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecMapExpr(ExecMapExpr e, Void context) {
+                return "MapExpr";
+            }
+        };
+        assertEquals("MapExpr", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecMapExprClone() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key = makeVarcharLiteral("key1");
+        ExecLiteral val = makeIntLiteral(1);
+        ExecMapExpr original = new ExecMapExpr(mapType, new ArrayList<>(List.of(key, val)));
+
+        ExecMapExpr cloned = original.clone();
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 18. ExecClone
+    // ======================================================================
+
+    @Test
+    public void testExecCloneConstruction() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone expr = new ExecClone(IntegerType.INT, child);
+
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(1, expr.getNumChildren());
+        assertEquals(TExprNodeType.CLONE_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecCloneNullability() {
+        ExecSlotRef nullable = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecClone cloneNullable = new ExecClone(IntegerType.INT, nullable);
+        assertTrue(cloneNullable.isNullable());
+
+        ExecSlotRef nonNullable = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecClone cloneNonNullable = new ExecClone(IntegerType.INT, nonNullable);
+        assertFalse(cloneNonNullable.isNullable());
+    }
+
+    @Test
+    public void testExecCloneToThrift() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone expr = new ExecClone(IntegerType.INT, child);
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        // No extra fields
+    }
+
+    @Test
+    public void testExecCloneVisitorDispatch() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone expr = new ExecClone(IntegerType.INT, child);
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecClone(ExecClone e, Void context) {
+                return "Clone";
+            }
+        };
+        assertEquals("Clone", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecCloneClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone original = new ExecClone(IntegerType.INT, child);
+
+        ExecClone cloned = original.clone();
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 19. ExecDictMapping
+    // ======================================================================
+
+    @Test
+    public void testExecDictMappingConstruction() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictMapping expr = new ExecDictMapping(VarcharType.VARCHAR, new ArrayList<>(List.of(child)));
+
+        assertEquals(VarcharType.VARCHAR, expr.getType());
+        assertEquals(1, expr.getNumChildren());
+        assertEquals(TExprNodeType.DICT_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecDictMappingToThrift() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictMapping expr = new ExecDictMapping(VarcharType.VARCHAR, new ArrayList<>(List.of(child)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        // No extra fields
+    }
+
+    @Test
+    public void testExecDictMappingVisitorDispatch() {
+        ExecDictMapping expr = new ExecDictMapping(VarcharType.VARCHAR, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecDictMapping(ExecDictMapping e, Void context) {
+                return "DictMapping";
+            }
+        };
+        assertEquals("DictMapping", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecDictMappingClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictMapping original = new ExecDictMapping(VarcharType.VARCHAR, new ArrayList<>(List.of(child)));
+
+        ExecDictMapping cloned = original.clone();
+        assertEquals(original.getType(), cloned.getType());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 20. ExecDictQuery
+    // ======================================================================
+
+    @Test
+    public void testExecDictQueryConstruction() {
+        TDictQueryExpr tDictQueryExpr = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery expr = new ExecDictQuery(VarcharType.VARCHAR, tDictQueryExpr,
+                new ArrayList<>(List.of(child)));
+
+        assertEquals(VarcharType.VARCHAR, expr.getType());
+        assertEquals(tDictQueryExpr, expr.getDictQueryExpr());
+        assertEquals(1, expr.getNumChildren());
+        assertEquals(TExprNodeType.DICT_QUERY_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecDictQueryToThrift() {
+        TDictQueryExpr tDictQueryExpr = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery expr = new ExecDictQuery(VarcharType.VARCHAR, tDictQueryExpr,
+                new ArrayList<>(List.of(child)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+        assertEquals(tDictQueryExpr, node.getDict_query_expr());
+    }
+
+    @Test
+    public void testExecDictQueryVisitorDispatch() {
+        TDictQueryExpr tDictQueryExpr = new TDictQueryExpr();
+        ExecDictQuery expr = new ExecDictQuery(VarcharType.VARCHAR, tDictQueryExpr, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecDictQuery(ExecDictQuery e, Void context) {
+                return "DictQuery";
+            }
+        };
+        assertEquals("DictQuery", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecDictQueryClone() {
+        TDictQueryExpr tDictQueryExpr = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery original = new ExecDictQuery(VarcharType.VARCHAR, tDictQueryExpr,
+                new ArrayList<>(List.of(child)));
+
+        ExecDictQuery cloned = original.clone();
+        assertEquals(original.getDictQueryExpr(), cloned.getDictQueryExpr());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 21. ExecDictionaryGet
+    // ======================================================================
+
+    @Test
+    public void testExecDictionaryGetConstruction() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet expr = new ExecDictionaryGet(VarcharType.VARCHAR,
+                100L, 200L, 1, true, new ArrayList<>(List.of(key)));
+
+        assertEquals(VarcharType.VARCHAR, expr.getType());
+        assertEquals(100L, expr.getDictionaryId());
+        assertEquals(200L, expr.getTxnId());
+        assertEquals(1, expr.getKeySize());
+        assertTrue(expr.isNullIfNotExist());
+        assertEquals(1, expr.getNumChildren());
+        assertEquals(TExprNodeType.DICTIONARY_GET_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecDictionaryGetNotNullIfNotExist() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet expr = new ExecDictionaryGet(VarcharType.VARCHAR,
+                50L, 60L, 2, false, new ArrayList<>(List.of(key)));
+
+        assertFalse(expr.isNullIfNotExist());
+        assertEquals(50L, expr.getDictionaryId());
+        assertEquals(60L, expr.getTxnId());
+        assertEquals(2, expr.getKeySize());
+    }
+
+    @Test
+    public void testExecDictionaryGetToThrift() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet expr = new ExecDictionaryGet(VarcharType.VARCHAR,
+                100L, 200L, 1, true, new ArrayList<>(List.of(key)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertNotNull(node.getDictionary_get_expr());
+        assertEquals(100L, node.getDictionary_get_expr().getDict_id());
+        assertEquals(200L, node.getDictionary_get_expr().getTxn_id());
+        assertEquals(1, node.getDictionary_get_expr().getKey_size());
+        assertTrue(node.getDictionary_get_expr().isNull_if_not_exist());
+    }
+
+    @Test
+    public void testExecDictionaryGetVisitorDispatch() {
+        ExecDictionaryGet expr = new ExecDictionaryGet(VarcharType.VARCHAR,
+                1L, 2L, 1, false, new ArrayList<>());
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecDictionaryGet(ExecDictionaryGet e, Void context) {
+                return "DictionaryGet";
+            }
+        };
+        assertEquals("DictionaryGet", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecDictionaryGetClone() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet original = new ExecDictionaryGet(VarcharType.VARCHAR,
+                100L, 200L, 1, true, new ArrayList<>(List.of(key)));
+
+        ExecDictionaryGet cloned = original.clone();
+        assertEquals(original.getDictionaryId(), cloned.getDictionaryId());
+        assertEquals(original.getTxnId(), cloned.getTxnId());
+        assertEquals(original.getKeySize(), cloned.getKeySize());
+        assertEquals(original.isNullIfNotExist(), cloned.isNullIfNotExist());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 22. ExecSubfield
+    // ======================================================================
+
+    @Test
+    public void testExecSubfieldConstruction() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        List<String> fieldNames = List.of("a", "b", "c");
+
+        ExecSubfield expr = new ExecSubfield(IntegerType.INT, fieldNames, false,
+                new ArrayList<>(List.of(structCol)));
+
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(fieldNames, expr.getFieldNames());
+        assertFalse(expr.isCopyFlag());
+        assertEquals(1, expr.getNumChildren());
+        assertEquals(TExprNodeType.SUBFIELD_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecSubfieldWithCopyFlag() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield expr = new ExecSubfield(IntegerType.INT, List.of("x"), true,
+                new ArrayList<>(List.of(structCol)));
+
+        assertTrue(expr.isCopyFlag());
+    }
+
+    @Test
+    public void testExecSubfieldToThrift() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        List<String> fieldNames = List.of("field1", "field2");
+        ExecSubfield expr = new ExecSubfield(IntegerType.INT, fieldNames, true,
+                new ArrayList<>(List.of(structCol)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertEquals(fieldNames, node.getUsed_subfield_names());
+        assertTrue(node.isCopy_flag());
+    }
+
+    @Test
+    public void testExecSubfieldVisitorDispatch() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield expr = new ExecSubfield(IntegerType.INT, List.of("a"), false,
+                new ArrayList<>(List.of(structCol)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecSubfield(ExecSubfield e, Void context) {
+                return "Subfield";
+            }
+        };
+        assertEquals("Subfield", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecSubfieldClone() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield original = new ExecSubfield(IntegerType.INT, List.of("a", "b"), true,
+                new ArrayList<>(List.of(structCol)));
+
+        ExecSubfield cloned = original.clone();
+        assertEquals(original.getFieldNames(), cloned.getFieldNames());
+        assertEquals(original.isCopyFlag(), cloned.isCopyFlag());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 23. ExecLambdaFunction
+    // ======================================================================
+
+    @Test
+    public void testExecLambdaFunctionConstruction() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+
+        ExecLambdaFunction expr = new ExecLambdaFunction(IntegerType.INT, 3, false,
+                new ArrayList<>(List.of(body, arg)));
+
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(3, expr.getCommonSubOperatorNum());
+        assertFalse(expr.isNondeterministic());
+        assertEquals(2, expr.getNumChildren());
+        assertEquals(TExprNodeType.LAMBDA_FUNCTION_EXPR, expr.getNodeType());
+        assertTrue(expr.isNullable());
+    }
+
+    @Test
+    public void testExecLambdaFunctionNondeterministic() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLambdaFunction expr = new ExecLambdaFunction(IntegerType.INT, 0, true,
+                new ArrayList<>(List.of(body)));
+
+        assertTrue(expr.isNondeterministic());
+    }
+
+    @Test
+    public void testExecLambdaFunctionToThrift() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLambdaFunction expr = new ExecLambdaFunction(IntegerType.INT, 5, true,
+                new ArrayList<>(List.of(body)));
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertEquals(5, node.getOutput_column());
+        assertTrue(node.isIs_nondeterministic());
+    }
+
+    @Test
+    public void testExecLambdaFunctionVisitorDispatch() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLambdaFunction expr = new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(body)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecLambdaFunction(ExecLambdaFunction e, Void context) {
+                return "LambdaFunction";
+            }
+        };
+        assertEquals("LambdaFunction", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecLambdaFunctionClone() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLambdaFunction original = new ExecLambdaFunction(IntegerType.INT, 3, true,
+                new ArrayList<>(List.of(body)));
+
+        ExecLambdaFunction cloned = original.clone();
+        assertEquals(original.getCommonSubOperatorNum(), cloned.getCommonSubOperatorNum());
+        assertEquals(original.isNondeterministic(), cloned.isNondeterministic());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+    }
+
+    // ======================================================================
+    // 24. ExecPlaceHolder
+    // ======================================================================
+
+    @Test
+    public void testExecPlaceHolderConstruction() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(42, true, IntegerType.INT);
+
+        assertEquals(42, expr.getSlotId());
+        assertTrue(expr.isNullable());
+        assertEquals(IntegerType.INT, expr.getType());
+        assertEquals(0, expr.getNumChildren());
+        assertEquals(TExprNodeType.PLACEHOLDER_EXPR, expr.getNodeType());
+    }
+
+    @Test
+    public void testExecPlaceHolderNonNullable() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(10, false, VarcharType.VARCHAR);
+
+        assertFalse(expr.isNullable());
+        assertEquals(10, expr.getSlotId());
+    }
+
+    @Test
+    public void testExecPlaceHolderIsNotConstant() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(1, false, IntegerType.INT);
+        assertFalse(expr.isConstant());
+    }
+
+    @Test
+    public void testExecPlaceHolderToThrift() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(42, true, IntegerType.INT);
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertNotNull(node.getVslot_ref());
+        assertEquals(42, node.getVslot_ref().getSlot_id());
+        assertTrue(node.getVslot_ref().isNullable());
+    }
+
+    @Test
+    public void testExecPlaceHolderToThriftNonNullable() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(7, false, IntegerType.INT);
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertEquals(7, node.getVslot_ref().getSlot_id());
+        assertFalse(node.getVslot_ref().isNullable());
+    }
+
+    @Test
+    public void testExecPlaceHolderVisitorDispatch() {
+        ExecPlaceHolder expr = new ExecPlaceHolder(1, false, IntegerType.INT);
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecPlaceHolder(ExecPlaceHolder e, Void context) {
+                return "PlaceHolder";
+            }
+        };
+        assertEquals("PlaceHolder", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecPlaceHolderClone() {
+        ExecPlaceHolder original = new ExecPlaceHolder(42, true, IntegerType.INT);
+
+        ExecPlaceHolder cloned = original.clone();
+        assertEquals(original.getSlotId(), cloned.getSlotId());
+        assertEquals(original.isNullable(), cloned.isNullable());
+        assertEquals(original.getType(), cloned.getType());
+    }
+
+    // ======================================================================
+    // 25. ExecInformationFunction
+    // ======================================================================
+
+    @Test
+    public void testExecInformationFunctionConstruction() {
+        ExecInformationFunction expr = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "mydb", 0L);
+
+        assertEquals(VarcharType.VARCHAR, expr.getType());
+        assertEquals("database", expr.getFuncName());
+        assertEquals("mydb", expr.getStrValue());
+        assertEquals(0L, expr.getIntValue());
+        assertEquals(0, expr.getNumChildren());
+        assertEquals(TExprNodeType.INFO_FUNC, expr.getNodeType());
+        assertFalse(expr.isNullable());
+        assertTrue(expr.isConstant());
+    }
+
+    @Test
+    public void testExecInformationFunctionWithIntValue() {
+        ExecInformationFunction expr = new ExecInformationFunction(
+                IntegerType.BIGINT, "connection_id", "", 12345L);
+
+        assertEquals("connection_id", expr.getFuncName());
+        assertEquals(12345L, expr.getIntValue());
+    }
+
+    @Test
+    public void testExecInformationFunctionToThrift() {
+        ExecInformationFunction expr = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "testdb", 0L);
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertNotNull(node.info_func);
+        assertEquals("testdb", node.info_func.getStr_value());
+        assertEquals(0L, node.info_func.getInt_value());
+    }
+
+    @Test
+    public void testExecInformationFunctionToThriftCurrentWarehouse() {
+        ExecInformationFunction expr = new ExecInformationFunction(
+                VarcharType.VARCHAR, "current_warehouse", "wh1", 0L);
+
+        TExprNode node = new TExprNode();
+        expr.toThrift(node);
+
+        assertNotNull(node.info_func);
+        assertEquals("wh1", node.info_func.getStr_value());
+    }
+
+    @Test
+    public void testExecInformationFunctionVisitorDispatch() {
+        ExecInformationFunction expr = new ExecInformationFunction(
+                VarcharType.VARCHAR, "user", "root", 0L);
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecInformationFunction(ExecInformationFunction e, Void context) {
+                return "InformationFunction";
+            }
+        };
+        assertEquals("InformationFunction", expr.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecInformationFunctionClone() {
+        ExecInformationFunction original = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "mydb", 0L);
+
+        ExecInformationFunction cloned = original.clone();
+        assertEquals(original.getFuncName(), cloned.getFuncName());
+        assertEquals(original.getStrValue(), cloned.getStrValue());
+        assertEquals(original.getIntValue(), cloned.getIntValue());
+        assertEquals(original.getType(), cloned.getType());
+    }
+
+    // ======================================================================
+    // 26. ExecExprUtils
+    // ======================================================================
+
+    @Test
+    public void testExecExprUtilsCollectSlotRefs() {
+        ExecSlotRef slot1 = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef slot2 = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecLiteral literal = makeIntLiteral(10);
+
+        ScalarFunction fn = makeScalarFunction("add", new Type[]{IntegerType.INT, IntegerType.INT}, IntegerType.INT);
+        ExecFunctionCall funcCall = makeFunctionCall("add", IntegerType.INT, fn,
+                new ArrayList<>(List.of(slot1, literal)));
+
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, funcCall, slot2);
+
+        List<ExecSlotRef> slotRefs = ExecExprUtils.collectSlotRefs(pred);
+        assertEquals(2, slotRefs.size());
+    }
+
+    @Test
+    public void testExecExprUtilsCollectSlotRefsNoSlots() {
+        ExecLiteral literal = makeIntLiteral(42);
+        List<ExecSlotRef> slotRefs = ExecExprUtils.collectSlotRefs(literal);
+        assertTrue(slotRefs.isEmpty());
+    }
+
+    @Test
+    public void testExecExprUtilsGetUsedSlotIdsSingleExpr() {
+        ExecSlotRef slot1 = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef slot2 = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, slot1, slot2);
+
+        Set<SlotId> slotIds = ExecExprUtils.getUsedSlotIds(pred);
+        assertEquals(2, slotIds.size());
+        assertTrue(slotIds.contains(new SlotId(1)));
+        assertTrue(slotIds.contains(new SlotId(2)));
+    }
+
+    @Test
+    public void testExecExprUtilsGetUsedSlotIdsList() {
+        ExecSlotRef slot1 = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef slot2 = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecSlotRef slot3 = makeSlotRef(3, 0, IntegerType.INT, false);
+
+        Set<SlotId> slotIds = ExecExprUtils.getUsedSlotIds(List.of(slot1, slot2, slot3));
+        assertEquals(3, slotIds.size());
+    }
+
+    @Test
+    public void testExecExprUtilsIsBoundByTupleIds() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral literal = makeIntLiteral(10);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, slot, literal);
+
+        assertTrue(ExecExprUtils.isBoundByTupleIds(pred, List.of(new TupleId(0))));
+        assertFalse(ExecExprUtils.isBoundByTupleIds(pred, List.of(new TupleId(1))));
+    }
+
+    @Test
+    public void testExecExprUtilsIsBoundByTupleIdsLiteralOnly() {
+        ExecLiteral literal = makeIntLiteral(42);
+        // A literal is bound by any tuple
+        assertTrue(ExecExprUtils.isBoundByTupleIds(literal, List.of(new TupleId(999))));
+    }
+
+    @Test
+    public void testExecExprUtilsCloneList() {
+        ExecLiteral lit1 = makeIntLiteral(1);
+        ExecLiteral lit2 = makeIntLiteral(2);
+        ExecLiteral lit3 = makeIntLiteral(3);
+
+        List<ExecLiteral> originals = List.of(lit1, lit2, lit3);
+        List<ExecLiteral> clones = ExecExprUtils.cloneList(originals);
+
+        assertEquals(3, clones.size());
+        for (int i = 0; i < originals.size(); i++) {
+            assertEquals(originals.get(i).getValue().getInt(), clones.get(i).getValue().getInt());
+            assertTrue(originals.get(i) != clones.get(i)); // Different objects
+        }
+    }
+
+    @Test
+    public void testExecExprUtilsCompoundAndEmpty() {
+        assertNull(ExecExprUtils.compoundAnd(List.of()));
+        assertNull(ExecExprUtils.compoundAnd(null));
+    }
+
+    @Test
+    public void testExecExprUtilsCompoundAndSingle() {
+        ExecSlotRef slot = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecExpr result = ExecExprUtils.compoundAnd(List.of(slot));
+
+        // Single element should be returned as-is
+        assertEquals(slot, result);
+    }
+
+    @Test
+    public void testExecExprUtilsCompoundAndMultiple() {
+        ExecSlotRef slot1 = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef slot2 = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef slot3 = makeSlotRef(3, 0, BooleanType.BOOLEAN, false);
+
+        ExecExpr result = ExecExprUtils.compoundAnd(List.of(slot1, slot2, slot3));
+
+        // Should be a left-deep AND tree: AND(AND(slot1, slot2), slot3)
+        assertTrue(result instanceof ExecCompoundPredicate);
+        ExecCompoundPredicate outerAnd = (ExecCompoundPredicate) result;
+        assertEquals(CompoundPredicate.Operator.AND, outerAnd.getCompoundType());
+        assertTrue(outerAnd.getChild(0) instanceof ExecCompoundPredicate);
+    }
+
+    @Test
+    public void testExecExprUtilsContainsDictMappingExprFalse() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral literal = makeIntLiteral(10);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, slot, literal);
+
+        assertFalse(ExecExprUtils.containsDictMappingExpr(pred));
+        assertFalse(ExecExprUtils.containsDictMappingExpr(null));
+    }
+
+    @Test
+    public void testExecExprUtilsContainsDictMappingExprTrue() {
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, IntegerType.INT, false))));
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, dictMapping, makeIntLiteral(1));
+
+        assertTrue(ExecExprUtils.containsDictMappingExpr(pred));
+    }
+
+    @Test
+    public void testExecExprUtilsContainsDictMappingExprNested() {
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, IntegerType.INT, false))));
+        ExecCast cast = new ExecCast(IntegerType.INT, dictMapping, false);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, cast, makeIntLiteral(1));
+
+        assertTrue(ExecExprUtils.containsDictMappingExpr(pred));
+    }
+
+    @Test
+    public void testExecExprUtilsUnwrapSlotRefDirect() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef unwrapped = ExecExprUtils.unwrapSlotRef(slot);
+        assertEquals(slot, unwrapped);
+    }
+
+    @Test
+    public void testExecExprUtilsUnwrapSlotRefThroughCast() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecCast cast = new ExecCast(IntegerType.BIGINT, slot, false);
+
+        ExecSlotRef unwrapped = ExecExprUtils.unwrapSlotRef(cast);
+        assertNotNull(unwrapped);
+        assertEquals(1, unwrapped.getSlotId().asInt());
+    }
+
+    @Test
+    public void testExecExprUtilsUnwrapSlotRefNestedCasts() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecCast cast1 = new ExecCast(IntegerType.BIGINT, slot, false);
+        ExecCast cast2 = new ExecCast(VarcharType.VARCHAR, cast1, false);
+
+        ExecSlotRef unwrapped = ExecExprUtils.unwrapSlotRef(cast2);
+        assertNotNull(unwrapped);
+        assertEquals(1, unwrapped.getSlotId().asInt());
+    }
+
+    @Test
+    public void testExecExprUtilsUnwrapSlotRefNonSlot() {
+        ExecLiteral literal = makeIntLiteral(42);
+        assertNull(ExecExprUtils.unwrapSlotRef(literal));
+    }
+
+    @Test
+    public void testExecExprUtilsUnwrapSlotRefCastOfNonSlot() {
+        ExecLiteral literal = makeIntLiteral(42);
+        ExecCast cast = new ExecCast(IntegerType.BIGINT, literal, false);
+
+        assertNull(ExecExprUtils.unwrapSlotRef(cast));
     }
 }
