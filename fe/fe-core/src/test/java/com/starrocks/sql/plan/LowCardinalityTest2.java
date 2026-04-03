@@ -2823,7 +2823,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
                 "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
     }
-  
+
     @Test
     public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
         String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
@@ -2853,7 +2853,6 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testPhysicalFilter() throws Exception {
         String sql = """
                   SELECT *
@@ -2888,9 +2887,9 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  Global Dict Exprs:\n" +
                 "    36: DictDefine(35: c_user, [upper(<place-holder>)])\n" +
+                "    37: DictDefine(35: c_user, [<place-holder>])\n" +
                 "\n" +
                 "  10:Decode\n" +
-                "  |  <dict id 35> : <string id 2>\n" +
                 "  |  <dict id 36> : <string id 34>\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +

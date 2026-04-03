@@ -203,8 +203,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private final ColumnRefSet scanColumnRefSet = new ColumnRefSet();
 
-    private final ColumnRefSet cteProduceOutputColumns = new ColumnRefSet();
-
     // check if there is a blocking node in plan
     private boolean canBlockingOutput = false;
 
@@ -348,10 +346,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 context.allStringColumns.add(cid);
                 continue;
             }
-            if (cteProduceOutputColumns.contains(cid)) {
-                context.allStringColumns.add(cid);
-                continue;
-            }
             List<ScalarOperator> dictExprList = stringExpressions.getOrDefault(cid, Collections.emptyList());
             long allExprNum = dictExprList.size();
             // only query original string-column
@@ -382,9 +376,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 return;
             }
             // Structs which pass checkDependOnExpr have at least one encoded field. We keep the structs encoded.
-            if (globalDicts.containsKey(cid) || cteProduceOutputColumns.contains(cid) ||
-                    expressionStringRefCounter.getOrDefault(cid, 0) != 0 ||
-                    defineExpr.getType().isStructType()) {
+            if (globalDicts.containsKey(cid) || expressionStringRefCounter.getOrDefault(cid, 0) != 0
+                    || defineExpr.getType().isStructType()) {
                 context.allStringColumns.add(cid);
             }
         });
@@ -531,12 +524,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         expressionStringRefCounter.put(col.getId(), counter);
     }
 
-    void maybeRecordCTEDecodeInfo(Operator operator, DecodeInfo decodeInfo) {
-        if (operator instanceof PhysicalCTEProduceOperator produce) {
-            cteDecodeInfo.put(produce.getCteId(), decodeInfo);
-        }
-    }
-
     private DecodeInfo collectImpl(OptExpression optExpression, OptExpression parent) {
         DecodeInfo context;
         if (optExpression.arity() == 1) {
@@ -546,7 +533,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             context = DecodeInfo.create();
             for (int i = 0; i < optExpression.arity(); ++i) {
                 OptExpression child = optExpression.inputAt(i);
-                context.addChildInfo(collectImpl(child, optExpression));
+                DecodeInfo info = collectImpl(child, optExpression);
+                if (child.getOp() instanceof PhysicalCTEProduceOperator produce) {
+                    cteDecodeInfo.put(produce.getCteId(), info);
+                } else {
+                    context.addChildInfo(info);
+                }
             }
         }
 
@@ -554,7 +546,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         DecodeInfo info = optExpression.getOp().accept(this, optExpression, context);
         if (info.isEmpty()) {
             collectProjection(optExpression.getOp(), info);
-            maybeRecordCTEDecodeInfo(optExpression.getOp(), info);
             return info;
         }
 
@@ -578,7 +569,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         allOperatorDecodeInfo.put(optExpression.getOp(), info);
         collectPredicate(optExpression.getOp(), info);
         collectProjection(optExpression.getOp(), info);
-        maybeRecordCTEDecodeInfo(optExpression.getOp(), info);
         return info;
     }
 
@@ -611,7 +601,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 setDefineExpr(consumerCol, producerCol, 1);
                 info.outputStringColumns.union(consumerCol);
                 info.usedStringColumns.union(producerCol);
-                cteProduceOutputColumns.union(producerCol);
             }
         }
         return info;

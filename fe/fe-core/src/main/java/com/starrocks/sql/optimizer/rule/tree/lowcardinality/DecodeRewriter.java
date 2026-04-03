@@ -721,7 +721,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 newMap,
                 consume.getLimit(),
                 rewritePredicate(consume.getPredicate(), info.outputStringColumns),
-                rewriteProjection(consume.getProjection(), info.outputStringColumns)
+                rewriteProjection(consume.getProjection(), info.outputStringColumns),
+                computeDictExpr(fragmentUseDictExprs)
         );
         return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
     }
