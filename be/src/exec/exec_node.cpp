@@ -56,6 +56,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
