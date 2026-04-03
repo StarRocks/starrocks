@@ -24,15 +24,15 @@ Review the information in this section before downgrading. Perform any recommend
 
 - **For major version downgrade**
 
-  You can only downgrade your StarRocks v4.1 cluster to v4.0.5 and later versions.
+  You can only downgrade your StarRocks v4.1 cluster to v4.0.6 and later versions.
 
   :::warning
 
   **Downgrade Notes**
 
-  - After upgrading StarRocks to v4.1, DO NOT downgrade to any v4.0 version below v4.0.5.
+  - After upgrading StarRocks to v4.1, DO NOT downgrade to any v4.0 version below v4.0.6.
 
-    Due to internal changes in data layout introduced in v4.1 (related to tablet splitting and distribution mechanisms), clusters upgraded to v4.1 may generate metadata and storage structures that are not fully compatible with earlier versions. As a result, downgrade from v4.1 is only supported to v4.0.5 or later. Downgrading to versions prior to v4.0.5 is not supported. This limitation is due to backward compatibility constraints in how earlier versions interpret tablet layout and distribution metadata.
+    Due to internal changes in data layout introduced in v4.1 (related to tablet splitting and distribution mechanisms), clusters upgraded to v4.1 may generate metadata and storage structures that are not fully compatible with earlier versions. As a result, downgrade from v4.1 is only supported to v4.0.6 or later. Downgrading to versions prior to v4.0.6 is not supported. This limitation is due to backward compatibility constraints in how earlier versions interpret tablet layout and distribution metadata.
 
   :::
 
