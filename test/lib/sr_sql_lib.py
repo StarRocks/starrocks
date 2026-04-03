@@ -69,6 +69,7 @@ from lib.connection_base_lib import BaseConnectionLib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
+from lib.mysql_stmt_metadata_lib import MySQLStmtMetadataClient
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
@@ -164,6 +165,7 @@ class StarrocksSQLApiLib(object):
         self.starrocks_sql_lib = MysqlLib()
         self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
+        self.mysql_stmt_metadata_client_class = MySQLStmtMetadataClient
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
@@ -3202,6 +3204,70 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         finally:
             cursor.close()
             conn.close()
+
+    def assert_prepare_execute_varchar_metadata(self, db, query, expected_prepare_len, expected_execute_len=None,
+                                                session_vars=None):
+        client = self.mysql_stmt_metadata_client_class(
+            host=self.mysql_host,
+            port=int(self.mysql_port),
+            user=self.mysql_user,
+            password=self.mysql_password,
+            database=db,
+        )
+        client.connect()
+        try:
+            for assignment in session_vars or []:
+                client.query(f"SET {assignment}")
+            statement_id, num_params, prepare_columns = client.prepare(query)
+            execute_columns = client.execute_and_fetch_metadata(statement_id, num_params)
+            client.close_statement(statement_id)
+        finally:
+            client.close()
+        tools.assert_true(prepare_columns, "prepared statement returns no prepare metadata columns")
+        tools.assert_true(execute_columns, "prepared statement returns no execute metadata columns")
+
+        prepare_column = prepare_columns[0]
+        execute_column = execute_columns[0]
+        if expected_execute_len is None:
+            expected_execute_len = expected_prepare_len
+
+        summary = (
+            "prepare[%s raw=%s normalized=%s charset=%s; expected_prepare=%s] "
+            "execute[%s raw=%s normalized=%s charset=%s; expected_execute=%s]"
+            % (
+                prepare_column.type_name,
+                prepare_column.column_length,
+                prepare_column.normalized_length,
+                prepare_column.charset,
+                int(expected_prepare_len),
+                execute_column.type_name,
+                execute_column.column_length,
+                execute_column.normalized_length,
+                execute_column.charset,
+                int(expected_execute_len),
+            )
+        )
+        self_print("[PREPARE_EXECUTE_VARCHAR_METADATA] %s" % summary)
+        log.info("[PREPARE_EXECUTE_VARCHAR_METADATA] sql=%s %s" % (query, summary))
+
+        tools.assert_equal(
+            int(expected_prepare_len),
+            prepare_column.normalized_length,
+            "prepare metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
+        tools.assert_equal(
+            int(expected_execute_len),
+            execute_column.normalized_length,
+            "execute metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
 
     def execute_prepared_sql(self, sql, params):
         return self.mysql_prepared_stmt_lib.execute_prepared(sql, params)

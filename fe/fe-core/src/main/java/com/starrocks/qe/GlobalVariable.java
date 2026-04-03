@@ -80,6 +80,10 @@ public final class GlobalVariable {
     public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE =
+            "enable_reduce_cast_varchar_length_inheritance";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE =
+            "enable_reduce_cast_varchar_expr_sync_type";
 
     // cngroup
     public static final String CNGROUP_SCHEDULE_MODE = "cngroup_schedule_mode";
@@ -238,6 +242,26 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharLengthInheritance = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharExprSyncType = false;
+
+    @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
+    public static boolean enableEtlExecQueueAllWorkloads = true;
+    @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
+    private static double cngroupResourceUsageFreshRatio = 0.5;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT)
+    private static long cngroupLowWatermarkRunningQueryCount = 8;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE)
+    private static long cngroupLowWatermarkCPUUsedPermille = 600;
+
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
     @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
     private static String cngroupScheduleMode = "standard";
 
@@ -420,12 +444,59 @@ public final class GlobalVariable {
         return maxUnknownStringMetaLength;
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isEnableEtlExecQueueAllWorkloads() {
+        return enableEtlExecQueueAllWorkloads;
+    }
+
+    public static void setCngroupResourceUsageFreshRatio(double value) {
+        cngroupResourceUsageFreshRatio = value;
+    }
+
+    public static boolean isEnableReduceCastVarcharLengthInheritance() {
+        return enableReduceCastVarcharLengthInheritance;
+    }
+
+    public static void setEnableReduceCastVarcharLengthInheritance(boolean enableReduceCastVarcharLengthInheritance) {
+        GlobalVariable.enableReduceCastVarcharLengthInheritance = enableReduceCastVarcharLengthInheritance;
+    }
+
+    public static double getCngroupResourceUsageFreshRatio() {
+        return cngroupResourceUsageFreshRatio;
+    }
+
+    public static void setCngroupLowWatermarkRunningQueryCount(long value) {
+        cngroupLowWatermarkRunningQueryCount = value;
+    }
+
+    public static long getCngroupLowWatermarkRunningQueryCount() {
+        return cngroupLowWatermarkRunningQueryCount;
+    }
+
+    public static void setCngroupLowWatermarkCPUUsedPermille(long value) {
+        cngroupLowWatermarkCPUUsedPermille = value;
+    }
+
+    public static long getCngroupLowWatermarkCPUUsedPermille() {
+        return cngroupLowWatermarkCPUUsedPermille;
+    }
+
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
     public static void setCngroupScheduleMode(String mode) {
         cngroupScheduleMode = mode;
     }
 
     public static String getCngroupScheduleMode() {
         return cngroupScheduleMode;
+    }
+
+    public static boolean isEnableReduceCastVarcharExprSyncType() {
+        return enableReduceCastVarcharExprSyncType;
+    }
+
+    public static void setEnableReduceCastVarcharExprSyncType(boolean enableReduceCastVarcharExprSyncType) {
+        GlobalVariable.enableReduceCastVarcharExprSyncType = enableReduceCastVarcharExprSyncType;
     }
 
     // Don't allow create instance.
