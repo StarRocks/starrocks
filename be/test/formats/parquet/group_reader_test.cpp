@@ -2667,7 +2667,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
 
     // With the new design, _fill_dst_chunk looks up all sources in active_chunk only.
     // The hidden source column (slot -1) must be in the active_chunk argument, not in
-    // _read_chunk.  This matches the runtime flow where Phase 4.5 merges lazy hidden
+    // _read_chunk.  This matches the runtime flow where Phase 6 merges lazy hidden
     // sources into active_chunk before _fill_dst_chunk is called.
     auto read_chunk = std::make_shared<Chunk>();
     read_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-1));
