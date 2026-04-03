@@ -25,6 +25,7 @@
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/schema.h"
+#include "column/storage_column_traits.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
@@ -34,76 +35,9 @@
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
-
-// NOTE(zc): now CppColumnTraits is only used for this class, so I move it here.
-// Someday if it is used by others, please move it into a single file.
-// CppColumnTraits
-// Infer ColumnType from LogicalType
-template <LogicalType ftype>
-struct CppColumnTraits {
-    using CppType = StorageCppType<ftype>;
-    using ColumnType = typename ColumnTraits<CppType>::ColumnType;
-};
-
-template <>
-struct CppColumnTraits<TYPE_BOOLEAN> {
-    using ColumnType = UInt8Column;
-};
-
-// deprecated
-template <>
-struct CppColumnTraits<TYPE_DATE_V1> {
-    using ColumnType = FixedLengthColumn<uint24_t>;
-};
-
-template <>
-struct CppColumnTraits<TYPE_DATE> {
-    using ColumnType = DateColumn;
-};
-
-template <>
-struct CppColumnTraits<TYPE_DATETIME> {
-    using ColumnType = TimestampColumn;
-};
-
-// deprecated
-template <>
-struct CppColumnTraits<TYPE_DECIMAL> {
-    using ColumnType = FixedLengthColumn<decimal12_t>;
-};
-
-template <>
-struct CppColumnTraits<TYPE_HLL> {
-    using ColumnType = HyperLogLogColumn;
-};
-
-template <>
-struct CppColumnTraits<TYPE_PERCENTILE> {
-    using ColumnType = PercentileColumn;
-};
-
-template <>
-struct CppColumnTraits<TYPE_OBJECT> {
-    using ColumnType = BitmapColumn;
-};
-
-template <>
-struct CppColumnTraits<TYPE_UNSIGNED_INT> {
-    using ColumnType = UInt32Column;
-};
-
-template <>
-struct CppColumnTraits<TYPE_JSON> {
-    using ColumnType = JsonColumn;
-};
-
-template <>
-struct CppColumnTraits<TYPE_VARBINARY> {
-    using ColumnType = BinaryColumn;
-};
 
 Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     LogicalType type = c.type();
@@ -274,18 +208,16 @@ struct ColumnPtrBuilder {
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
             return NullableIfNeed(std::move(struct_column));
         } else {
-            switch (ftype) {
-            case TYPE_DECIMAL32:
+            if constexpr (ftype == TYPE_DECIMAL32) {
                 return NullableIfNeed(get_decimal_column_ptr<Decimal32Column>(precision, scale));
-            case TYPE_DECIMAL64:
+            } else if constexpr (ftype == TYPE_DECIMAL64) {
                 return NullableIfNeed(get_decimal_column_ptr<Decimal64Column>(precision, scale));
-            case TYPE_DECIMAL128:
+            } else if constexpr (ftype == TYPE_DECIMAL128) {
                 return NullableIfNeed(get_decimal_column_ptr<Decimal128Column>(precision, scale));
-            case TYPE_DECIMAL256:
+            } else if constexpr (ftype == TYPE_DECIMAL256) {
                 return NullableIfNeed(get_decimal_column_ptr<Decimal256Column>(precision, scale));
-            default: {
-                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType>());
-            }
+            } else {
+                return NullableIfNeed(get_column_ptr<StorageColumnType<ftype>>());
             }
         }
     }
@@ -388,7 +320,7 @@ struct ColumnBuilder {
             CHECK(false) << "array not supported";
             return nullptr;
         } else {
-            return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
+            return NullableIfNeed(StorageColumnType<ftype>::create());
         }
     }
 };

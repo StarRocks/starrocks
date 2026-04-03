@@ -54,7 +54,7 @@
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
