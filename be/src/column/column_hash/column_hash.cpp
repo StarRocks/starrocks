@@ -27,6 +27,7 @@
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
@@ -384,6 +385,10 @@ public:
     }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+    }
 
     template <typename ObjectType>
     Status do_visit(const ObjectColumn<ObjectType>& column) {
