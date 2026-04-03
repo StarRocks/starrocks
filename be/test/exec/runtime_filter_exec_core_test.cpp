@@ -17,10 +17,10 @@
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_layout.h"
-#include "runtime/runtime_filter_port_types.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -147,39 +147,47 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter
     EXPECT_EQ(desc.runtime_filter(-1), rf);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExportsLocalReadyListener) {
-    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
-    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsLocalFilterAndTracksWaiters) {
+    RuntimeFilterRegistry registry;
 
-    RuntimeFilterProbeDescriptor desc;
-    ASSERT_OK(desc.init(31, probe_ctx));
-    desc.set_probe_plan_node_id(13);
+    auto* left_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* left_ctx = pool.add(new ExprContext(left_expr));
+    RuntimeFilterProbeDescriptor left_desc;
+    ASSERT_OK(left_desc.init(31, left_ctx));
+    left_desc.set_probe_plan_node_id(13);
 
-    auto listener = desc.to_listener();
+    auto* right_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 10));
+    auto* right_ctx = pool.add(new ExprContext(right_expr));
+    RuntimeFilterProbeDescriptor right_desc;
+    ASSERT_OK(right_desc.init(31, right_ctx));
+    right_desc.set_probe_plan_node_id(17);
+
+    registry.register_descriptor(&left_desc);
+    registry.register_descriptor(&right_desc);
+
     auto* rf = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     rf->insert(10);
-    listener.on_local_ready(rf);
+    registry.install_local(31, rf);
 
-    EXPECT_EQ(listener.filter_id, 31);
-    EXPECT_EQ(listener.probe_plan_node_id, 13);
-    EXPECT_EQ(desc.runtime_filter(-1), rf);
+    EXPECT_EQ(registry.waiters(31), "[13, 17]");
+    EXPECT_EQ(left_desc.runtime_filter(-1), rf);
+    EXPECT_EQ(right_desc.runtime_filter(-1), rf);
 }
 
-TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExportsSharedReadyListener) {
+TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
+    RuntimeFilterRegistry registry;
+
     auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
     auto* probe_ctx = pool.add(new ExprContext(probe_expr));
-
     RuntimeFilterProbeDescriptor desc;
     ASSERT_OK(desc.init(37, probe_ctx));
     desc.set_probe_plan_node_id(17);
+    registry.register_descriptor(&desc);
 
-    auto listener = desc.to_listener();
     auto shared_rf = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
     shared_rf->insert(10);
-    listener.on_shared_ready(shared_rf);
+    registry.install_shared(37, std::static_pointer_cast<const RuntimeFilter>(shared_rf));
 
-    EXPECT_EQ(listener.filter_id, 37);
-    EXPECT_EQ(listener.probe_plan_node_id, 17);
     EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
 }
 

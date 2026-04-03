@@ -33,7 +33,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/runtime_filter_port_types.h"
 #include "runtime/runtime_filter_serde.h"
 namespace starrocks {
 struct TypeDescriptor;
@@ -51,7 +50,6 @@ using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
-    void add_listener(RuntimeFilterProbeListener listener);
     void publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
 
     void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs,
@@ -71,7 +69,6 @@ private:
                                                  bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
-    std::map<int32_t, std::list<RuntimeFilterProbeListener>> _listeners;
     RuntimeState* _state;
 };
 

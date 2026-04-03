@@ -70,6 +70,7 @@ class LoadErrorHub;
 class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
+class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
@@ -151,6 +152,10 @@ public:
     RuntimeFilterPort* runtime_filter_port() {
         DCHECK(_runtime_filter_port != nullptr);
         return _runtime_filter_port;
+    }
+    RuntimeFilterRegistry* runtime_filter_registry() {
+        DCHECK(_runtime_filter_registry != nullptr);
+        return _runtime_filter_registry;
     }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
@@ -663,6 +668,7 @@ private:
     std::vector<TSinkCommitInfo> _sink_commit_infos;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
+    RuntimeFilterRegistry* _runtime_filter_registry = nullptr;
 
     FragmentDictState* _fragment_dict_state = nullptr;
 

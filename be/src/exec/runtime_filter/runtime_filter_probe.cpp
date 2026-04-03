@@ -15,9 +15,7 @@
 #include "exec/runtime_filter/runtime_filter_probe.h"
 
 #include <algorithm>
-#include <chrono>
 #include <sstream>
-#include <thread>
 
 #include "base/simd/simd.h"
 #include "base/time/time.h"
@@ -563,17 +561,6 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
     }
-}
-
-RuntimeFilterProbeListener RuntimeFilterProbeDescriptor::to_listener() {
-    RuntimeFilterProbeListener listener;
-    listener.filter_id = _filter_id;
-    listener.probe_plan_node_id = _probe_plan_node_id;
-    listener.on_local_ready = [this](const RuntimeFilter* rf) { set_runtime_filter(rf); };
-    listener.on_shared_ready = [this](const std::shared_ptr<const RuntimeFilter>& rf) {
-        set_shared_runtime_filter(rf);
-    };
-    return listener;
 }
 
 } // namespace starrocks
