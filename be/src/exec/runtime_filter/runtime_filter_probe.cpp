@@ -565,4 +565,13 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     }
 }
 
+RuntimeFilterProbeListener RuntimeFilterProbeDescriptor::to_listener() {
+    RuntimeFilterProbeListener listener;
+    listener.filter_id = _filter_id;
+    listener.probe_plan_node_id = _probe_plan_node_id;
+    listener.on_local_ready = [this](const RuntimeFilter* rf) { set_runtime_filter(rf); };
+    listener.on_shared_ready = [this](const std::shared_ptr<const RuntimeFilter>& rf) { set_shared_runtime_filter(rf); };
+    return listener;
+}
+
 } // namespace starrocks

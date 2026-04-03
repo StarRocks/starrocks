@@ -20,6 +20,7 @@
 #include "exprs/column_ref.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_layout.h"
+#include "runtime/runtime_filter_port_types.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
 
@@ -144,6 +145,42 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter
     rf->insert(10);
     desc.set_runtime_filter(rf);
     EXPECT_EQ(desc.runtime_filter(-1), rf);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExportsLocalReadyListener) {
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(31, probe_ctx));
+    desc.set_probe_plan_node_id(13);
+
+    auto listener = desc.to_listener();
+    auto* rf = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    rf->insert(10);
+    listener.on_local_ready(rf);
+
+    EXPECT_EQ(listener.filter_id, 31);
+    EXPECT_EQ(listener.probe_plan_node_id, 13);
+    EXPECT_EQ(desc.runtime_filter(-1), rf);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExportsSharedReadyListener) {
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(37, probe_ctx));
+    desc.set_probe_plan_node_id(17);
+
+    auto listener = desc.to_listener();
+    auto shared_rf = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    shared_rf->insert(10);
+    listener.on_shared_ready(shared_rf);
+
+    EXPECT_EQ(listener.filter_id, 37);
+    EXPECT_EQ(listener.probe_plan_node_id, 17);
+    EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
 }
 
 TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {

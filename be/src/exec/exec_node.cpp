@@ -134,7 +134,7 @@ void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFi
     _runtime_filter_collector.add_descriptor(rf_desc);
     ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
                                           strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
-    state->runtime_filter_port()->add_listener(rf_desc);
+    state->runtime_filter_port()->add_listener(rf_desc->to_listener());
 }
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {

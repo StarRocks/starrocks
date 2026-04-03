@@ -35,6 +35,7 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_layout.h"
+#include "runtime/runtime_filter_port_types.h"
 #include "runtime/runtime_fwd.h"
 #include "types/logical_type.h"
 
@@ -103,6 +104,7 @@ public:
     void set_runtime_filter(const RuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
     void add_observer(RuntimeState* state, ReadyObserver observer);
+    RuntimeFilterProbeListener to_listener();
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
