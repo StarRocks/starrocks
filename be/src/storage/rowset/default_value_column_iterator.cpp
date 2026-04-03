@@ -427,7 +427,24 @@ private:
     MemPool* _mem_pool;
 };
 
+void DefaultValueColumnIterator::_cleanup_initialized_value() {
+    // For complex types (ARRAY/MAP/STRUCT), a Datum is placement-new'd into _mem_value.
+    // MemPool only frees raw memory without calling destructors, so we must explicitly
+    // destroy the Datum to avoid leaking its internal heap-allocated containers.
+    if (_has_complex_datum && _mem_value != nullptr) {
+        reinterpret_cast<Datum*>(_mem_value)->~Datum();
+    }
+    _has_complex_datum = false;
+    _mem_value = nullptr;
+    _type_size = 0;
+    _is_default_value_null = false;
+    _pool.clear();
+}
+
 Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
+    // Some call paths initialize the returned iterator again. Make init idempotent by
+    // cleaning up previous initialized value and rebuilding from scratch.
+    _cleanup_initialized_value();
     _opts = opts;
 
     // be consistent with segment v1
@@ -508,6 +525,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                         _is_default_value_null = true;
                     } else {
                         new (_mem_value) Datum(std::move(datum_or.value()));
+                        _has_complex_datum = true;
                         if (_path != nullptr) {
                             _project_default_datum_by_path_if_needed(reinterpret_cast<Datum*>(_mem_value),
                                                                      _type_info.get(), _path);
