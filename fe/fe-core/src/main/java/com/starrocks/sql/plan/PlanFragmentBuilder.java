@@ -49,6 +49,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -1825,10 +1826,12 @@ public class PlanFragmentBuilder {
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
-                                scanNode.setSchemaDb(constantOperator.getVarchar());
+                                scanNode.setSchemaDb(
+                                        PatternMatcher.escapeLikeValue(constantOperator.getVarchar()));
                                 break;
                             case "TABLE_NAME":
-                                scanNode.setSchemaTable(constantOperator.getVarchar());
+                                scanNode.setSchemaTable(
+                                        PatternMatcher.escapeLikeValue(constantOperator.getVarchar()));
                                 break;
                             case "BE_ID":
                                 scanNode.setBeId(constantOperator.getBigint());
