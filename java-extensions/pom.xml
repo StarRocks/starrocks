@@ -63,10 +63,18 @@
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
+        <zookeeper.version>3.8.6</zookeeper.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+
+            <!-- CVE-2026-24281 / CVE-2026-24308: pin zookeeper to fix version -->
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>${zookeeper.version}</version>
+            </dependency>
             <!-- jni connector -->
             <dependency>
                 <groupId>com.starrocks</groupId>
