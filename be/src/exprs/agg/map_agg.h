@@ -22,7 +22,7 @@
 #include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/map_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"

@@ -21,7 +21,7 @@
 #include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
@@ -546,12 +546,12 @@ public:
     }
 
     static Column* get_data_column(Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<ConstColumn*>(column);
+            return get_data_column(const_column->data_column_raw_ptr());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(column);
             return nullable_column->data_column_raw_ptr();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column);
-            return const_column->data_column_raw_ptr();
         } else {
             return column;
         }
@@ -560,12 +560,12 @@ public:
     template <LogicalType LT>
     static const RunTimeColumnType<LT>* get_data_column_by_type(const Column* column) {
         using ColumnType = RunTimeColumnType<LT>;
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column_by_type<LT>(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
             return down_cast<const ColumnType*>(&nullable_column->data_column_ref());
-        } else if (column->is_constant()) {
-            const auto* const_column = down_cast<const ConstColumn*>(column);
-            return down_cast<const ColumnType*>(const_column->data_column().get());
         } else {
             return reinterpret_cast<const ColumnType*>(column);
         }
@@ -602,12 +602,12 @@ public:
     }
 
     static const Column* get_data_column(const Column* column) {
-        if (column->is_nullable()) {
+        if (column->is_constant()) {
+            auto* const_column = down_cast<const ConstColumn*>(column);
+            return get_data_column(const_column->data_column().get());
+        } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
             return nullable_column->data_column().get();
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<const ConstColumn*>(column);
-            return const_column->data_column().get();
         } else {
             return column;
         }
@@ -624,72 +624,18 @@ public:
     // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
     static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
 
-    static inline void append_binary_value(Column* column, const Slice& value) {
-        Column* data_column = get_data_column(column);
-        if (data_column->is_large_binary()) {
-            down_cast<LargeBinaryColumn*>(data_column)->append(value);
+    template <LogicalType LT>
+    static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
+        using ColumnType = RunTimeColumnType<LT>;
+        if constexpr (lt_is_string_or_binary<LT>) {
+            using LargeColumnType = RunTimeLargeColumnType<LT>;
+            if (column->is_large_binary()) {
+                down_cast<LargeColumnType*>(column)->append(value);
+            } else {
+                down_cast<ColumnType*>(column)->append(value);
+            }
         } else {
-            down_cast<BinaryColumn*>(data_column)->append(value);
-        }
-    }
-
-    template <typename ColumnPtrType>
-    static inline void ensure_large_binary_column(ColumnPtrType& column) {
-        Column* data_column = get_data_column(column->as_mutable_raw_ptr());
-        if (!data_column->is_binary()) {
-            return;
-        }
-        auto* binary_column = down_cast<BinaryColumn*>(data_column);
-        auto large_column = LargeBinaryColumn::create();
-        large_column->get_bytes().swap(binary_column->get_bytes());
-        auto& src_offsets = binary_column->get_offset();
-        auto& dst_offsets = large_column->get_offset();
-        dst_offsets.resize(src_offsets.size());
-        for (size_t i = 0; i < src_offsets.size(); ++i) {
-            dst_offsets[i] = src_offsets[i];
-        }
-        // Reset to valid empty state (offsets must have at least one element)
-        src_offsets.resize(1);
-        src_offsets[0] = 0;
-        if (column->is_nullable()) {
-            auto* nullable_column = down_cast<NullableColumn*>(column->as_mutable_raw_ptr());
-            nullable_column->data_column() = std::move(large_column);
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
-            const_column->data_column() = std::move(large_column);
-        } else {
-            column = std::move(large_column);
-        }
-    }
-
-    static inline size_t get_binary_bytes_size(const Column* column) {
-        if (column->is_large_binary()) {
-            return down_cast<const LargeBinaryColumn*>(column)->get_immutable_bytes().size();
-        }
-        return down_cast<const BinaryColumn*>(column)->get_immutable_bytes().size();
-    }
-
-    template <typename Func>
-    static inline void with_binary_column_bytes(Column* column, Func&& func) {
-        if (column->is_large_binary()) {
-            auto* col = down_cast<LargeBinaryColumn*>(column);
-            func(col->get_bytes(), col->get_offset());
-        } else {
-            auto* col = down_cast<BinaryColumn*>(column);
-            func(col->get_bytes(), col->get_offset());
-        }
-    }
-
-    // Dispatch on the concrete binary column type once, then invoke the lambda
-    // with a typed pointer (const BinaryColumn* or const LargeBinaryColumn*).
-    // Use this to hoist the type check out of hot loops.
-    template <typename Func>
-    static inline void with_binary_data_column(const Column* column, Func&& func) {
-        const Column* data_column = get_data_column(column);
-        if (data_column->is_large_binary()) {
-            func(down_cast<const LargeBinaryColumn*>(data_column));
-        } else {
-            func(down_cast<const BinaryColumn*>(data_column));
+            down_cast<ColumnType*>(column)->append(value);
         }
     }
 

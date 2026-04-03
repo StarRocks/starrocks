@@ -53,7 +53,7 @@ private:
     // for schema changed
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                   bool case_sensitive, const TIcebergSchemaField* lake_schema_field,
-                                                  std::vector<int32_t>& pos,
+                                                  bool parquet_has_field_id, std::vector<int32_t>& pos,
                                                   std::vector<const TIcebergSchemaField*>& lake_schema_subfield);
 };
 

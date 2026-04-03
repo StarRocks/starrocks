@@ -26,6 +26,66 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.15
+
+Release Date: March 26, 2026
+
+### Behavior Changes
+
+- Improved `sql_mode` handling: when `DIVISION_BY_ZERO` or `FAIL_PARSE_DATE` mode is set, division by zero and date parse failures in `str_to_date`/`str2date` now return an error instead of being silently ignored. [#70004](https://github.com/StarRocks/starrocks/pull/70004)
+- When `sql_mode` is set to `FORBID_INVALID_DATE`, invalid dates in `INSERT VALUES` clauses are now correctly rejected instead of being bypassed. [#69803](https://github.com/StarRocks/starrocks/pull/69803)
+- Expression partition generated columns are now hidden from `DESC` and `SHOW CREATE TABLE` output. [#69793](https://github.com/StarRocks/starrocks/pull/69793)
+- Client ID is no longer included in audit logs. [#69383](https://github.com/StarRocks/starrocks/pull/69383)
+- The `FORCE` option for `REFRESH EXTERNAL TABLE` has been reverted and is no longer supported. [#70428](https://github.com/StarRocks/starrocks/pull/70428)
+
+### Improvements
+
+- Allowed disabling split and reverse scan ranges for descending TopN by setting `desc_hint_split_range` to `0` or less. [#70307](https://github.com/StarRocks/starrocks/pull/70307)
+- `information_schema` now shows comments for external catalog tables. [#70197](https://github.com/StarRocks/starrocks/pull/70197)
+- Added `EXPLAIN` and `EXPLAIN ANALYZE` support for `INSERT` statements in Trino dialect. [#70174](https://github.com/StarRocks/starrocks/pull/70174)
+- Added configurable parameters for `CatalogRecycleBin` to control recycle bin behavior. [#69838](https://github.com/StarRocks/starrocks/pull/69838)
+- Improved `ADMIN REPAIR TABLE` and `SHOW TABLET STATUS` to provide better repair and status information. [#69656](https://github.com/StarRocks/starrocks/pull/69656)
+- Blacklisted queries are now excluded from error metrics. [#69621](https://github.com/StarRocks/starrocks/pull/69621)
+- Added support for `SHOW TABLET STATUS` for cloud-native tablets in shared-data deployments. [#69616](https://github.com/StarRocks/starrocks/pull/69616)
+- Reduced overhead of Primary Key tablet statistics collection in shared-data clusters. [#69548](https://github.com/StarRocks/starrocks/pull/69548)
+- Added support for dynamic configuration of the execution state report thread pool size. [#69142](https://github.com/StarRocks/starrocks/pull/69142)
+
+### Bug Fixes
+
+Fixed the following bugs:
+
+- Data version not set when restoring a tablet. [#70373](https://github.com/StarRocks/starrocks/pull/70373)
+- Table comment not set when creating a Hive table. [#70318](https://github.com/StarRocks/starrocks/pull/70318)
+- Constant folding with double precision arithmetic producing `INF` instead of returning an error. [#70309](https://github.com/StarRocks/starrocks/pull/70309)
+- Iceberg materialized view refresh failing when snapshot timestamps are non-monotonic. [#70382](https://github.com/StarRocks/starrocks/pull/70382)
+- `toIcebergTable` function using `common` instead of `comment` in property mapping. [#70267](https://github.com/StarRocks/starrocks/pull/70267)
+- Root user not correctly bypassing Ranger permission checks in all scenarios. [#70254](https://github.com/StarRocks/starrocks/pull/70254)
+- `AuditEventProcessor` thread exiting unexpectedly when an `OutOfMemoryException` occurs. [#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- Out-of-bounds access in `cal_new_base_version` during schema change publish. [#70132](https://github.com/StarRocks/starrocks/pull/70132)
+- Partition predicates pruned unexpectedly due to type mismatch in boundary comparison. [#70097](https://github.com/StarRocks/starrocks/pull/70097)
+- `str_to_date` losing microsecond precision in BE runtime. [#70068](https://github.com/StarRocks/starrocks/pull/70068)
+- Crash in join spill process when `set_callback_function` is called. [#70030](https://github.com/StarRocks/starrocks/pull/70030)
+- DCHECK failure in `DeltaWriter::close()` when called from a bthread context. [#69960](https://github.com/StarRocks/starrocks/pull/69960)
+- Use-after-free race condition in `AsyncDeltaWriter` close/finish lifecycle. [#69940](https://github.com/StarRocks/starrocks/pull/69940)
+- Journal replay not awaited in `changeCatalogDb` on follower FE, causing consistency issues. [#69834](https://github.com/StarRocks/starrocks/pull/69834)
+- Race condition causing missed write transaction finished editlog. [#69899](https://github.com/StarRocks/starrocks/pull/69899)
+- Several known CVEs addressed. [#69863](https://github.com/StarRocks/starrocks/pull/69863)
+- Incorrect LIKE pattern matching with backslash escape sequences. [#69775](https://github.com/StarRocks/starrocks/pull/69775)
+- Expression analysis failing after renaming a partition column. [#69771](https://github.com/StarRocks/starrocks/pull/69771)
+- Use-after-free crash in `AsyncDeltaWriter::close`. [#69770](https://github.com/StarRocks/starrocks/pull/69770)
+- Potential bugs in `PartitionColumnMinMaxRewriteRule` caused by incorrect `Partition.hasStorageData` results. [#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- Duplicated CSV compression suffix in file sink output file names. [#69749](https://github.com/StarRocks/starrocks/pull/69749)
+- Lake `capture_tablet_and_rowsets` operation accessible without experimental config flag. [#69748](https://github.com/StarRocks/starrocks/pull/69748)
+- Corrupted cache for Primary Key SST tables. [#69693](https://github.com/StarRocks/starrocks/pull/69693)
+- Use-after-free in `AsyncFlushOutputStream`. [#69688](https://github.com/StarRocks/starrocks/pull/69688)
+- Incorrect retention clock reset and incomplete scan in `disableRecoverPartitionWithSameName`. [#69677](https://github.com/StarRocks/starrocks/pull/69677)
+- Tablet info not fetched correctly based on run mode in `SchemaBeTabletsScanner`. [#69645](https://github.com/StarRocks/starrocks/pull/69645)
+- Incorrect minimum partition pruning with shadow partitions. [#69641](https://github.com/StarRocks/starrocks/pull/69641)
+- Different transactions publishing the same version after graceful exit. [#69639](https://github.com/StarRocks/starrocks/pull/69639)
+- Iterator undefined behavior in `get_column_values` when `rssid` is not found. [#69617](https://github.com/StarRocks/starrocks/pull/69617)
+- `KILL ANALYZE` statement sometimes not stopping a running `ANALYZE TABLE` operation. [#69592](https://github.com/StarRocks/starrocks/pull/69592)
+- Materialized view force refresh bugs for partition tables. [#69488](https://github.com/StarRocks/starrocks/pull/69488)
+
 ## 3.5.14
 
 Release Date: March 5, 2026

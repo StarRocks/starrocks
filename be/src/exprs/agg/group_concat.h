@@ -20,8 +20,8 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -116,22 +116,17 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
+        auto val_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[0]).immutable_bytes_size();
         if (ctx->get_num_args() > 1) {
-            const Column* column_val = ColumnHelper::get_data_column(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
-                const Column* column_sep = ColumnHelper::get_data_column(columns[1]);
-                auto val_bytes = ColumnHelper::get_binary_bytes_size(column_val);
-                auto sep_bytes = ColumnHelper::get_binary_bytes_size(column_sep);
+                auto sep_bytes = GetContainer<TYPE_VARCHAR>::get_data(columns[1]).immutable_bytes_size();
                 this->data(state).intermediate_string.reserve(val_bytes + sep_bytes);
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                auto val_bytes = ColumnHelper::get_binary_bytes_size(column_val);
                 this->data(state).intermediate_string.reserve(val_bytes + sep.get_size() * chunk_size);
             }
         } else {
-            const Column* column_val = ColumnHelper::get_data_column(columns[0]);
-            auto val_bytes = ColumnHelper::get_binary_bytes_size(column_val);
             this->data(state).intermediate_string.reserve(val_bytes + 2 * chunk_size);
         }
 

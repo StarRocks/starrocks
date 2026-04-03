@@ -56,17 +56,17 @@ public:
     ~BitShufflePageTest() override = default;
 
     template <LogicalType type, class PageDecoderType>
-    void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
+    void copy_one(PageDecoderType* decoder, StorageCppType<type>* ret) {
         auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
+        *ret = *reinterpret_cast<const StorageCppType<type>*>(column->raw_data());
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_encode_decode_page_template(StorageCppType<Type>* src, size_t size) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);
@@ -132,7 +132,7 @@ public:
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_vectorized() {
-        using CppType = typename CppTypeTraits<Type>::CppType;
+        using CppType = StorageCppType<Type>;
         auto src = ChunkHelper::column_from_field_type(Type, false);
         CppType value = 0;
         size_t count = 64 * 1024 / sizeof(CppType);
@@ -246,10 +246,10 @@ public:
 
     // The values inserted should be sorted.
     template <LogicalType Type, class PageBuilderType, class PageDecoderType>
-    void test_seek_at_or_after_value_template(typename TypeTraits<Type>::CppType* src, size_t size,
-                                              typename TypeTraits<Type>::CppType* small_than_smallest,
-                                              typename TypeTraits<Type>::CppType* bigger_than_biggest) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    void test_seek_at_or_after_value_template(StorageCppType<Type>* src, size_t size,
+                                              StorageCppType<Type>* small_than_smallest,
+                                              StorageCppType<Type>* bigger_than_biggest) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions options;
         options.data_page_size = 256 * 1024;
         PageBuilderType page_builder(options);

@@ -21,7 +21,8 @@
 #include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "common/statusor.h"
 #include "exec/except_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/operator.h"
@@ -50,7 +51,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     void close(RuntimeState* state) override;
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     int64_t mem_usage() const {
         int64_t usage = 0;

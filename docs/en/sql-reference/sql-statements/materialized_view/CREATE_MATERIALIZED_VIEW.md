@@ -486,7 +486,7 @@ The following operators are currently supported for incremental refresh:
 | Operator                   | Incremental Refresh Support                                                                                               |
 |----------------------------|--------------------------------------------------------------------------------------------------------------------------|
 | Select                     | Supported                                                                                                                |
-| From `<Table>`             | Supported only for Iceberg/Paimon tables; not yet available for other table types.                                              |
+| From `<Table>`             | Supported only for Iceberg tables; not yet available for other table types.                                              |
 | Filter                     | Supported                                                                                                                |
 | Aggregate with Group By    | Supported  <ul><li>Aggregation functions with `distinct` are not yet supported.</li><li>Aggregation without GROUP BY is not supported yet.</li></ul> |
 | Inner Join                 | Supported                                                                                                                |

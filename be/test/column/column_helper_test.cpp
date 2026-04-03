@@ -151,4 +151,44 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
     EXPECT_EQ(GetContainer<TYPE_INT>::get_data(col.get(), 2), 30);
 }
 
+TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
+    auto data_column = BinaryColumn::create();
+    data_column->append(Slice("v1"));
+    auto null_column = NullColumn::create();
+    null_column->append(0);
+    ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    ColumnPtr const_nullable_column = ConstColumn::create(nullable_column, 4);
+
+    const Column* const_data = ColumnHelper::get_data_column(const_nullable_column.get());
+    ASSERT_FALSE(const_data->is_nullable());
+    ASSERT_FALSE(const_data->is_constant());
+    ASSERT_TRUE(const_data->is_binary());
+
+    const auto* typed_data = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(const_nullable_column.get());
+    ASSERT_TRUE(typed_data->is_binary());
+    ASSERT_EQ(typed_data->get_slice(0).to_string(), "v1");
+}
+
+// ColumnHelper::append_column_value
+TEST_F(ColumnHelperTest, append_column_value_int32) {
+    auto col = Int32Column::create();
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 42);
+    ColumnHelper::append_column_value<TYPE_INT>(col.get(), 99);
+    EXPECT_EQ(col->debug_string(), "[42, 99]");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_varchar) {
+    auto col = BinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("hello"));
+    ColumnHelper::append_column_value<TYPE_VARCHAR>(col.get(), Slice("world"));
+    EXPECT_EQ(col->debug_string(), "['hello', 'world']");
+}
+
+TEST_F(ColumnHelperTest, append_column_value_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
+    ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
+    EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
+}
+
 } // namespace starrocks

@@ -1255,7 +1255,7 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
 #define M(logical_type)                                                                                   \
     case logical_type: {                                                                                  \
         Datum data;                                                                                       \
-        data.set<TypeTraits<logical_type>::CppType>(*(TypeTraits<logical_type>::CppType*)(tmp_mem));      \
+        data.set<StorageCppType<logical_type>>(*(StorageCppType<logical_type>*)(tmp_mem));                \
         result->append(" key");                                                                           \
         result->append(std::to_string(idx));                                                              \
         result->append("(");                                                                              \

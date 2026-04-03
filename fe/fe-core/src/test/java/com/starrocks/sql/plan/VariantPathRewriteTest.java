@@ -111,4 +111,93 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         String verbose = getVerboseExplain(sql);
         assertContains(verbose, "ExtendedColumnAccessPath: [/v(bigint(20))/metrics(bigint(20))/views(bigint(20))]");
     }
+
+    @Test
+    public void testPrefixAndDescendantPathBothRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select cast(variant_query(v, '$.a.b') as bigint), get_variant_int(v, '$.a.b.c') from "
+                + VARIANT_TABLE;
+        String plan = getFragmentPlan(sql);
+        // Both paths are rewritten as virtual columns
+        assertContains(plan, "v.a.b");
+        assertContains(plan, "v.a.b.c");
+
+        String verbose = getVerboseExplain(sql);
+        // Both virtual columns appear in the extended access path list
+        assertContains(verbose, "/v(bigint(20))/a(bigint(20))/b(bigint(20))/c(bigint(20))");
+        assertContains(verbose, "/v(bigint(20))/a(bigint(20))/b(bigint(20))");
+    }
+
+    @Test
+    public void testSiblingLeafPathsRewriteIndependently() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select get_variant_int(v, '$.metrics.views'), get_variant_string(v, '$.profile.department') from "
+                + VARIANT_TABLE;
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "v.metrics.views");
+        assertContains(plan, "v.profile.department");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ColumnAccessPath:");
+        assertContains(verbose, "/v(bigint(20))/metrics(bigint(20))/views(bigint(20))");
+        assertContains(verbose, "/v(varchar)/profile(varchar)/department(varchar)");
+    }
+
+    @Test
+    public void testRootVariantAndVirtualColumnCoexist() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select v, get_variant_int(v, '$.id') from " + VARIANT_TABLE;
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "v.id");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ExtendedColumnAccessPath: [/v(bigint(20))/id(bigint(20))]");
+    }
+
+    @Test
+    public void testRootVariantAndVirtualPredicateCoexist() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select v from " + VARIANT_TABLE + " where get_variant_int(v, '$.id') = 1000";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES:");
+        assertContains(plan, "v.id = 1000");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ExtendedColumnAccessPath: [/v(bigint(20))/id(bigint(20))]");
+    }
+
+    @Test
+    public void testCastRewriteRequiresDirectVariantQueryChild() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select cast(ifnull(variant_query(v, '$.a'), variant_query(v, '$.b')) as bigint) from "
+                + VARIANT_TABLE;
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(ifnull");
+        assertNotContains(plan, "v.a");
+        assertNotContains(plan, "v.b");
+
+        String verbose = getVerboseExplain(sql);
+        assertNotContains(verbose, "ExtendedColumnAccessPath:");
+    }
+
+    @Test
+    public void testNonRewritableCastDoesNotBlockSiblingLeafRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+        String sql = "select cast(ifnull(variant_query(v, '$.a.b.c'), variant_query(v, '$.x')) as bigint), "
+                + "get_variant_int(v, '$.a.b') from " + VARIANT_TABLE;
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(ifnull");
+        assertContains(plan, "v.a.b");
+        assertNotContains(plan, "v.a.b.c");
+
+        String verbose = getVerboseExplain(sql);
+        assertContains(verbose, "ExtendedColumnAccessPath: [/v(bigint(20))/a(bigint(20))/b(bigint(20))]");
+        assertNotContains(verbose,
+                "ExtendedColumnAccessPath: [/v(bigint(20))/a(bigint(20))/b(bigint(20))/c(bigint(20))]");
+    }
 }

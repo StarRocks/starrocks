@@ -16,6 +16,7 @@
 
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/pipeline_node.h"
 
@@ -41,7 +42,7 @@ public:
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
     bool can_generate_global_runtime_filter() const;
     TJoinDistributionMode::type distribution_mode() const;
     const std::list<RuntimeFilterBuildDescriptor*>& build_runtime_filters() const;
@@ -49,7 +50,7 @@ public:
 
 private:
     template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
-    pipeline::OpFactories _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     friend ExecNode;
     // _hash_join_node is used to construct HashJoiner, the reference is sound since

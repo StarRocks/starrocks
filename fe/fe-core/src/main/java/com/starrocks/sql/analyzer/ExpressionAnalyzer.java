@@ -1971,7 +1971,7 @@ public class ExpressionAnalyzer {
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
                     session, dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
-                throw new SemanticException("dict table %s is not found", table.getName());
+                throw new SemanticException("dict table %s is not found", dictionary.getQueryableObject());
             }
 
             List<Column> schema = table.getFullSchema();

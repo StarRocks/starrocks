@@ -137,6 +137,7 @@
       "configs": [
         "compress_rowbatches",
         "rpc_compress_ratio_threshold",
+        "enable_rpc_compress_overflow_skip",
         "exchg_node_buffer_size_bytes",
         "result_buffer_cancelled_interval_time",
         "es_scroll_keepalive",
@@ -826,7 +827,8 @@
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
         "lake_enable_publish_version_trace_log",
-        "lake_service_max_concurrency"
+        "lake_service_max_concurrency",
+        "lake_enable_orphan_delvec_cleanup_on_compaction"
       ]
     },
     {

@@ -42,12 +42,13 @@
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 
@@ -187,7 +188,7 @@ public:
     virtual void debug_string(int indentation_level, std::stringstream* out) const;
 
     // Convert old exec node tree to new pipeline
-    virtual OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
+    virtual StatusOr<OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     const std::vector<ExprContext*>& conjunct_ctxs() const { return _conjunct_ctxs; }
 

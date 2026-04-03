@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
 #include "exprs/arithmetic_operation.h"

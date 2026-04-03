@@ -1317,14 +1317,18 @@ build_benchmark() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    # https://github.com/google/benchmark/issues/773
+    # benchmark 1.9.5 switched CXX feature checks to HAVE_* cache variables.
+    # Force the POSIX regex backend to avoid CentOS7 try_run failures when the
+    # probe binaries pick up the system libstdc++ instead of the toolchain one.
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
           -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+          -DBENCHMARK_INSTALL_DOCS=OFF \
+          -DBENCHMARK_INSTALL_TOOLS=OFF \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
           -DCMAKE_INSTALL_LIBDIR=lib64 \
-          -DRUN_HAVE_STD_REGEX=0 \
-          -DRUN_HAVE_POSIX_REGEX=0 \
-          -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_STD_REGEX=0 \
+          -DHAVE_GNU_POSIX_REGEX=0 \
+          -DHAVE_POSIX_REGEX=1 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install

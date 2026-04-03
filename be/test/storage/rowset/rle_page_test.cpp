@@ -46,6 +46,7 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
+#include "types/storage_type_traits.h"
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
@@ -56,19 +57,19 @@ class RlePageTest : public testing::Test {
 public:
     ~RlePageTest() override = default;
 
-    template <LogicalType type, class PageDecoderType>
-    void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
+    template <LogicalType type, class PageDecoderType, class CppType = StorageCppType<type>>
+    void copy_one(PageDecoderType* decoder, CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, false);
 
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
+        *ret = *reinterpret_cast<const CppType*>(column->raw_data());
     }
 
     template <LogicalType Type, class PageBuilderType = RlePageBuilder<Type>>
-    OwnedSlice rle_encode(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    OwnedSlice rle_encode(StorageCppType<Type>* src, size_t size) {
+        using CppType = StorageCppType<Type>;
         PageBuilderOptions builder_options;
         builder_options.data_page_size = 256 * 1024;
         PageBuilderType rle_page_builder(builder_options);
@@ -86,9 +87,8 @@ public:
         return s;
     }
 
-    template <LogicalType Type>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    template <LogicalType Type, class CppType = StorageCppType<Type>>
+    void test_encode_decode_page_template(CppType* src, size_t size) {
         OwnedSlice s = rle_encode<Type>(src, size);
 
         RlePageDecoder<Type> rle_page_decoder(s.slice());
@@ -121,9 +121,8 @@ public:
         }
     }
 
-    template <LogicalType Type>
-    void test_encode_decode_page_vectorized(typename TypeTraits<Type>::CppType* src, size_t size) {
-        typedef typename TypeTraits<Type>::CppType CppType;
+    template <LogicalType Type, class CppType = StorageCppType<Type>>
+    void test_encode_decode_page_vectorized(CppType* src, size_t size) {
         OwnedSlice s = rle_encode<Type>(src, size);
 
         RlePageDecoder<Type> rle_page_decoder(s.slice());
@@ -173,7 +172,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderRandom) {
 
     // TYPE_INT
     {
-        using CppType = TypeTraits<TYPE_INT>::CppType;
+        using CppType = StorageCppType<TYPE_INT>;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
         test_encode_decode_page_template<TYPE_INT>(ints.data(), size);
@@ -181,7 +180,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderRandom) {
     }
     // TYPE_BIGINT
     {
-        using CppType = TypeTraits<TYPE_BIGINT>::CppType;
+        using CppType = StorageCppType<TYPE_BIGINT>;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
         test_encode_decode_page_template<TYPE_BIGINT>(ints.data(), size);

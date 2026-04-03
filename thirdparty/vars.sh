@@ -344,10 +344,10 @@ OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
 OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
 
 # benchmark
-BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.5.5.tar.gz"
-BENCHMARK_NAME=google_benchmark-1.5.5.tar.gz
-BENCHMARK_SOURCE=benchmark-1.5.5
-BENCHMARK_MD5SUM="6f852815d48db788f5bb87e2e561dc5e"
+BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
+BENCHMARK_NAME=google_benchmark-1.9.5.tar.gz
+BENCHMARK_SOURCE=benchmark-1.9.5
+BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
 FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
@@ -476,10 +476,10 @@ FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
 FLAMEGRAPH_SOURCE="FlameGraph"
 FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
-HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-src.tar.gz"
-HADOOPSRC_NAME="hadoop-3.4.2-src.tar.gz"
-HADOOPSRC_SOURCE="hadoop-3.4.2-src"
-HADOOPSRC_MD5SUM="7fa559909899a2e45bcd2e192358d93b"
+HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.3/hadoop-3.4.3-src.tar.gz"
+HADOOPSRC_NAME="hadoop-3.4.3-src.tar.gz"
+HADOOPSRC_SOURCE="hadoop-3.4.3-src"
+HADOOPSRC_MD5SUM="c5ac53ca70cc667189ec824c6048914a"
 
 # xxhash
 XXHASH_DOWNLOAD="https://github.com/Cyan4973/xxHash/archive/refs/tags/v0.8.3.tar.gz"

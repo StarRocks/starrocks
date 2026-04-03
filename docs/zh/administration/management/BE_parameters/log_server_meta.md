@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "日志、服务器和元数据"
 keywords: ['Canshu']
 ---
 
@@ -9,7 +10,7 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE 配置项
+# BE 配置项 - 日志、服务器和元数据
 
 <BEConfigMethod />
 
@@ -18,7 +19,7 @@ import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_
 您可以通过以下命令查看 BE 配置项：
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## 配置 BE 参数
@@ -468,6 +469,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：在决定是否以压缩形式通过网络发送序列化的 row-batches 时使用的阈值（uncompressed_size / compressed_size）。当尝试压缩时（例如在 DataStreamSender、exchange sink、tablet sink 的索引通道、dictionary cache writer 中），StarRocks 会计算 compress_ratio = uncompressed_size / compressed_size；仅当 compress_ratio `>` rpc_compress_ratio_threshold 时才使用压缩后的负载。默认值 1.1 意味着压缩数据必须至少比未压缩小约 9.1% 才会被使用。将该值调低以偏好压缩（以更多 CPU 换取更小的带宽）；将其调高以避免压缩开销，除非压缩能带来更大的尺寸缩减。注意：此项适用于 RPC/shuffle 序列化，仅在启用 row-batch 压缩（compress_rowbatches）时生效。
 - 引入版本：v3.2.0
+
+### enable_rpc_compress_overflow_skip
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制序列化的 chunk 大小超过压缩 codec 允许的最大输入大小时的行为。设置为 `true`（默认）时，StarRocks 记录一条警告日志并跳过压缩，以未压缩形式发送数据。设置为 `false` 时，StarRocks 返回 `InternalError` 并中止 RPC。
+- 引入版本：-
 
 ### ssl_private_key_path
 

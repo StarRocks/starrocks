@@ -30,8 +30,8 @@ Release Date: February 28, 2026
   Supports writing position delete files for Iceberg tables, enabling DELETE operations on Iceberg tables directly from StarRocks. The support covers the full pipeline of Plan, Sink, Commit, and Audit. [#67259](https://github.com/StarRocks/starrocks/pull/67259) [#67277](https://github.com/StarRocks/starrocks/pull/67277) [#67421](https://github.com/StarRocks/starrocks/pull/67421) [#67567](https://github.com/StarRocks/starrocks/pull/67567)
 - **TRUNCATE for Hive and Iceberg Tables**
   Supports TRUNCATE TABLE on external Hive and Iceberg tables. [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
-- **Incremental materialized view on Iceberg and Paimon**
-  Extends the support for incremental materialized view refresh to Iceberg append-only tables and Paimon tables, enabling query acceleration without full table refresh. [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **Incremental materialized view on Iceberg**
+  Extends the support for incremental materialized view refresh to Iceberg append-only tables tables, enabling query acceleration without full table refresh. [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
 - **VARIANT Type for Semi-Structured Data in Iceberg**
   Supports the VARIANT data type in Iceberg Catalog for flexible, schema-on-read storage and querying of semi-structured data. Supports read, write, type casting, and Parquet integration. [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - Supports reading file path and row position metadata columns from Iceberg tables. [#67003](https://github.com/StarRocks/starrocks/pull/67003)
