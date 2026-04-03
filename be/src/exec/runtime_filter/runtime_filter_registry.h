@@ -15,30 +15,25 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
+#include <list>
+#include <map>
 #include <memory>
+#include <string>
 
 namespace starrocks {
 
 class RuntimeFilter;
+class RuntimeFilterProbeDescriptor;
 
-struct RuntimeFilterProbeListener {
-    int32_t filter_id = -1;
-    int32_t probe_plan_node_id = -1;
-    std::function<void(const RuntimeFilter*)> on_local_ready;
-    std::function<void(const std::shared_ptr<const RuntimeFilter>&)> on_shared_ready;
+class RuntimeFilterRegistry {
+public:
+    void register_descriptor(RuntimeFilterProbeDescriptor* desc);
+    void install_local(int32_t filter_id, const RuntimeFilter* rf);
+    void install_shared(int32_t filter_id, const std::shared_ptr<const RuntimeFilter>& rf);
+    std::string waiters(int32_t filter_id) const;
 
-    void notify_local(const RuntimeFilter* rf) const {
-        if (on_local_ready) {
-            on_local_ready(rf);
-        }
-    }
-
-    void notify_shared(const std::shared_ptr<const RuntimeFilter>& rf) const {
-        if (on_shared_ready) {
-            on_shared_ready(rf);
-        }
-    }
+private:
+    std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _descriptors;
 };
 
 } // namespace starrocks

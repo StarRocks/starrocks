@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/util/debug_util.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -56,7 +57,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -134,7 +134,7 @@ void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFi
     _runtime_filter_collector.add_descriptor(rf_desc);
     ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
                                           strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
-    state->runtime_filter_port()->add_listener(rf_desc->to_listener());
+    state->runtime_filter_registry()->register_descriptor(rf_desc);
 }
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {
