@@ -132,10 +132,17 @@ public class BinaryPredicateStatisticCalculator {
             } else {
                 // The constant was not found in the column histogram.
                 Long mostCommonValuesCount = columnHist.getMCV().values().stream().reduce(Long::sum).orElse(0L);
-                double f = 1 / Math.max(columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size(),
-                        columnHist.getBuckets().size());
-                double predicateFactor = (columnHist.getTotalRows() - mostCommonValuesCount) * f / columnHist.getTotalRows();
-                rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
+                double remainingDistinctValues =
+                        columnStatistic.getDistinctValuesCount() - columnHist.getMCV().size();
+                double remainingHistogramRows = columnHist.getTotalRows() - mostCommonValuesCount;
+                double denominator = Math.max(remainingDistinctValues, columnHist.getBuckets().size());
+                if (remainingHistogramRows <= 0 || denominator <= 0) {
+                    rows = 0;
+                } else {
+                    double f = 1 / denominator;
+                    double predicateFactor = remainingHistogramRows * f / columnHist.getTotalRows();
+                    rows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;
+                }
             }
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics).setOutputRowCount(rows)
@@ -219,7 +226,8 @@ public class BinaryPredicateStatisticCalculator {
         } else {
             ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
             double rowCount = statistics.getOutputRowCount() -
-                    estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics).getOutputRowCount();
+                    estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
+                            .getOutputRowCount();
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                             .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
