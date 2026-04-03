@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "column/append_with_mask.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/nullable_column.h"
@@ -152,6 +153,11 @@ public:
 
     Status do_visit(const MapColumn& column) {
         return Status::NotSupported("Unsupported map column in column wise comparator");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("Unsupported AdaptiveNullableColumn in column wise comparator");
     }
 
     Status do_visit(const StructColumn& column) {
