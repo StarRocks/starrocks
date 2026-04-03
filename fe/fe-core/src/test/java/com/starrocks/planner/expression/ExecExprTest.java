@@ -26,19 +26,32 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.ast.AssertNumRowsElement;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.thrift.TAssertion;
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
+import com.starrocks.thrift.TJoinOp;
 import com.starrocks.thrift.TKeysType;
+import com.starrocks.thrift.TVarType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.LocalDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -2978,5 +2991,1712 @@ public class ExecExprTest {
         ExecCast cast = new ExecCast(IntegerType.BIGINT, literal, false);
 
         assertNull(ExecExprUtils.unwrapSlotRef(cast));
+    }
+
+    // ======================================================================
+    // 27. ExecExprExplain - verbose() and toSql() coverage
+    // ======================================================================
+
+    @Test
+    public void testVerboseExplainFunctionCall() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, true);
+        List<ExecExpr> children = new ArrayList<>(List.of(slot));
+        ScalarFunction fn = makeScalarFunction("sum", new Type[]{IntegerType.INT}, IntegerType.BIGINT);
+        ExecFunctionCall funcCall = new ExecFunctionCall(
+                IntegerType.BIGINT, fn, "sum", children,
+                false, false, true, false);
+
+        String verbose = ExecExprExplain.verboseExplain(funcCall);
+        // Verbose format includes function name, args, result type, nullable info
+        assertTrue(verbose.contains("sum"));
+        assertTrue(verbose.contains("args:"));
+        assertTrue(verbose.contains("result:"));
+        assertTrue(verbose.contains("args nullable:"));
+        assertTrue(verbose.contains("result nullable:"));
+    }
+
+    @Test
+    public void testVerboseExplainFunctionCallDistinct() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, true);
+        List<ExecExpr> children = new ArrayList<>(List.of(slot));
+        ScalarFunction fn = makeScalarFunction("count", new Type[]{IntegerType.INT}, IntegerType.BIGINT);
+        ExecFunctionCall funcCall = new ExecFunctionCall(
+                IntegerType.BIGINT, fn, "count", children,
+                true, false, true, false);
+
+        String verbose = ExecExprExplain.verboseExplain(funcCall);
+        assertTrue(verbose.contains("DISTINCT"));
+    }
+
+    @Test
+    public void testVerboseExplainFunctionCallCountStar() {
+        ScalarFunction fn = makeScalarFunction("count", new Type[]{}, IntegerType.BIGINT);
+        ExecFunctionCall countStar = new ExecFunctionCall(
+                IntegerType.BIGINT, fn, "count", List.of(),
+                false, false, true, false, true);
+
+        String verbose = ExecExprExplain.verboseExplain(countStar);
+        assertTrue(verbose.contains("count"));
+        assertTrue(verbose.contains("*"));
+    }
+
+    @Test
+    public void testVerboseExplainFunctionCallNoFn() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, true);
+        List<ExecExpr> children = new ArrayList<>(List.of(slot));
+        ExecFunctionCall funcCall = new ExecFunctionCall(
+                IntegerType.BIGINT, null, "my_func", children,
+                false, false, false, false);
+
+        String verbose = ExecExprExplain.verboseExplain(funcCall);
+        assertTrue(verbose.contains("my_func"));
+        // Without fn, no "args:" section
+        assertFalse(verbose.contains("args: "));
+    }
+
+    @Test
+    public void testVerboseExplainCastNoOp() {
+        // When child type matches target type, verbose should skip the cast display
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecCast cast = new ExecCast(IntegerType.INT, slot, false);
+
+        String verbose = ExecExprExplain.verboseExplain(cast);
+        // No-op cast should just show the child
+        assertFalse(verbose.contains("cast("));
+    }
+
+    @Test
+    public void testVerboseExplainCastWithTypeChange() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecCast cast = new ExecCast(IntegerType.BIGINT, slot, false);
+
+        String verbose = ExecExprExplain.verboseExplain(cast);
+        assertTrue(verbose.contains("cast("));
+        assertTrue(verbose.contains("BIGINT"));
+    }
+
+    @Test
+    public void testVerboseExplainBinaryPredicate() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.EQ, left, right);
+
+        String verbose = ExecExprExplain.verboseExplain(pred);
+        assertTrue(verbose.contains("="));
+        assertTrue(verbose.contains("10"));
+    }
+
+    @Test
+    public void testVerboseExplainCompoundPredicate() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+
+        ExecCompoundPredicate andPred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+        String verbose = ExecExprExplain.verboseExplain(andPred);
+        assertTrue(verbose.contains("AND"));
+
+        ExecCompoundPredicate orPred = new ExecCompoundPredicate(CompoundPredicate.Operator.OR, left, right);
+        verbose = ExecExprExplain.verboseExplain(orPred);
+        assertTrue(verbose.contains("OR"));
+
+        ExecCompoundPredicate notPred = new ExecCompoundPredicate(
+                CompoundPredicate.Operator.NOT, new ArrayList<>(List.of(left)));
+        verbose = ExecExprExplain.verboseExplain(notPred);
+        assertTrue(verbose.contains("NOT"));
+    }
+
+    @Test
+    public void testVerboseExplainInPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecLiteral v2 = makeIntLiteral(2);
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1, v2)));
+
+        String verbose = ExecExprExplain.verboseExplain(pred);
+        assertTrue(verbose.contains("IN"));
+
+        ExecInPredicate notIn = new ExecInPredicate(true, new ArrayList<>(List.of(col, v1)));
+        verbose = ExecExprExplain.verboseExplain(notIn);
+        assertTrue(verbose.contains("NOT"));
+        assertTrue(verbose.contains("IN"));
+    }
+
+    @Test
+    public void testVerboseExplainIsNullPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate isNull = new ExecIsNullPredicate(false, col);
+        String verbose = ExecExprExplain.verboseExplain(isNull);
+        assertTrue(verbose.contains("IS NULL"));
+
+        ExecIsNullPredicate isNotNull = new ExecIsNullPredicate(true, col);
+        verbose = ExecExprExplain.verboseExplain(isNotNull);
+        assertTrue(verbose.contains("IS NOT NULL"));
+    }
+
+    @Test
+    public void testVerboseExplainLikePredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate like = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        String verbose = ExecExprExplain.verboseExplain(like);
+        assertTrue(verbose.contains("LIKE"));
+
+        ExecLikePredicate regexp = new ExecLikePredicate(true, fn, new ArrayList<>(List.of(col, pattern)));
+        verbose = ExecExprExplain.verboseExplain(regexp);
+        assertTrue(verbose.contains("REGEXP"));
+    }
+
+    @Test
+    public void testVerboseExplainArithmetic() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+
+        String verbose = ExecExprExplain.verboseExplain(add);
+        assertTrue(verbose.contains("+"));
+    }
+
+    @Test
+    public void testVerboseExplainArithmeticUnary() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecArithmetic bitnot = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.BITNOT,
+                new ArrayList<>(List.of(child)));
+
+        String verbose = ExecExprExplain.verboseExplain(bitnot);
+        assertNotNull(verbose);
+    }
+
+    @Test
+    public void testVerboseExplainCaseWhen() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecLiteral elseVal = makeIntLiteral(0);
+        ExecCaseWhen caseWhen = new ExecCaseWhen(IntegerType.INT, false, true,
+                new ArrayList<>(List.of(cond, thenVal, elseVal)));
+
+        String verbose = ExecExprExplain.verboseExplain(caseWhen);
+        assertTrue(verbose.contains("CASE"));
+        assertTrue(verbose.contains("WHEN"));
+        assertTrue(verbose.contains("THEN"));
+        assertTrue(verbose.contains("ELSE"));
+        assertTrue(verbose.contains("END"));
+    }
+
+    @Test
+    public void testVerboseExplainCaseWhenWithCaseExpr() {
+        ExecSlotRef caseExpr = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral when1 = makeIntLiteral(1);
+        ExecLiteral then1 = makeIntLiteral(100);
+        ExecCaseWhen caseWhen = new ExecCaseWhen(IntegerType.INT, true, false,
+                new ArrayList<>(List.of(caseExpr, when1, then1)));
+
+        String verbose = ExecExprExplain.verboseExplain(caseWhen);
+        assertTrue(verbose.contains("CASE"));
+    }
+
+    @Test
+    public void testVerboseExplainBetweenPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate between = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        String verbose = ExecExprExplain.verboseExplain(between);
+        assertTrue(verbose.contains("BETWEEN"));
+        assertTrue(verbose.contains("AND"));
+
+        ExecBetweenPredicate notBetween = new ExecBetweenPredicate(true,
+                new ArrayList<>(List.of(col, low, high)));
+        verbose = ExecExprExplain.verboseExplain(notBetween);
+        assertTrue(verbose.contains("NOT"));
+        assertTrue(verbose.contains("BETWEEN"));
+    }
+
+    @Test
+    public void testVerboseExplainArrayExpr() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecLiteral e2 = makeIntLiteral(2);
+        ExecArrayExpr arr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1, e2)));
+
+        String verbose = ExecExprExplain.verboseExplain(arr);
+        assertTrue(verbose.contains("["));
+        assertTrue(verbose.contains("]"));
+    }
+
+    @Test
+    public void testVerboseExplainMapExpr() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key = makeVarcharLiteral("k");
+        ExecLiteral val = makeIntLiteral(1);
+        ExecMapExpr mapExpr = new ExecMapExpr(mapType, new ArrayList<>(List.of(key, val)));
+
+        String verbose = ExecExprExplain.verboseExplain(mapExpr);
+        assertTrue(verbose.contains("map{"));
+        assertTrue(verbose.contains("}"));
+    }
+
+    @Test
+    public void testVerboseExplainArraySlice() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral lower = makeIntLiteral(1);
+        ExecLiteral upper = makeIntLiteral(3);
+        ExecArraySlice slice = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, lower, upper)));
+
+        String verbose = ExecExprExplain.verboseExplain(slice);
+        assertTrue(verbose.contains("["));
+        assertTrue(verbose.contains(":"));
+    }
+
+    @Test
+    public void testVerboseExplainCollectionElement() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(arr, index)));
+
+        String verbose = ExecExprExplain.verboseExplain(elem);
+        assertTrue(verbose.contains("["));
+        assertTrue(verbose.contains("]"));
+    }
+
+    @Test
+    public void testVerboseExplainClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone clone = new ExecClone(IntegerType.INT, child);
+
+        String verbose = ExecExprExplain.verboseExplain(clone);
+        assertTrue(verbose.contains("clone("));
+    }
+
+    @Test
+    public void testVerboseExplainLambdaFunction() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(body, arg)));
+
+        String verbose = ExecExprExplain.verboseExplain(lambda);
+        assertTrue(verbose.contains("->"));
+    }
+
+    @Test
+    public void testVerboseExplainLambdaFunctionMultipleArgs() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg1 = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecSlotRef arg2 = makeSlotRef(3, 0, IntegerType.INT, false);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(body, arg1, arg2)));
+
+        String verbose = ExecExprExplain.verboseExplain(lambda);
+        assertTrue(verbose.contains("->"));
+        assertTrue(verbose.contains("("));
+    }
+
+    @Test
+    public void testVerboseExplainLambdaFunctionWithCommonSubExpr() {
+        // layout: [body, arg1, commonSlot1, commonExpr1]
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecSlotRef commonSlot = makeSlotRef(3, 0, IntegerType.INT, false);
+        ExecLiteral commonExpr = makeIntLiteral(42);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 1, false,
+                new ArrayList<>(List.of(body, arg, commonSlot, commonExpr)));
+
+        String verbose = ExecExprExplain.verboseExplain(lambda);
+        assertTrue(verbose.contains("lambda common expressions:"));
+        assertTrue(verbose.contains("<->"));
+    }
+
+    @Test
+    public void testVerboseExplainSubfield() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield subfield = new ExecSubfield(IntegerType.INT, List.of("a", "b"), true,
+                new ArrayList<>(List.of(structCol)));
+
+        String verbose = ExecExprExplain.verboseExplain(subfield);
+        assertTrue(verbose.contains("a.b"));
+        assertTrue(verbose.contains("[true]"));
+    }
+
+    @Test
+    public void testVerboseExplainDictMapping() {
+        // DictDecode when type matches child type
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef inner = makeSlotRef(2, 0, VarcharType.VARCHAR, false);
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(slot, inner)));
+
+        String verbose = ExecExprExplain.verboseExplain(dictMapping);
+        assertTrue(verbose.contains("DictDecode") || verbose.contains("DictDefine"));
+    }
+
+    @Test
+    public void testVerboseExplainDictMappingWithThreeChildren() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef inner = makeSlotRef(2, 0, VarcharType.VARCHAR, false);
+        ExecLiteral third = makeIntLiteral(0);
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(slot, inner, third)));
+
+        String verbose = ExecExprExplain.verboseExplain(dictMapping);
+        assertNotNull(verbose);
+    }
+
+    @Test
+    public void testVerboseExplainMatchExpr() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+
+        for (MatchExpr.MatchOperator op : MatchExpr.MatchOperator.values()) {
+            ExecMatchExpr expr = new ExecMatchExpr(op, new ArrayList<>(List.of(col, pattern)));
+            String verbose = ExecExprExplain.verboseExplain(expr);
+            assertTrue(verbose.contains("MATCH"));
+        }
+    }
+
+    @Test
+    public void testVerboseExplainPlaceHolder() {
+        ExecPlaceHolder ph = new ExecPlaceHolder(42, true, IntegerType.INT);
+        String verbose = ExecExprExplain.verboseExplain(ph);
+        assertEquals("<place-holder>", verbose);
+    }
+
+    @Test
+    public void testVerboseExplainInformationFunction() {
+        ExecInformationFunction info = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "mydb", 0L);
+        String verbose = ExecExprExplain.verboseExplain(info);
+        assertEquals("database()", verbose);
+    }
+
+    @Test
+    public void testVerboseExplainDictionaryGet() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet dictGet = new ExecDictionaryGet(VarcharType.VARCHAR,
+                100L, 200L, 1, true, new ArrayList<>(List.of(key)));
+
+        String verbose = ExecExprExplain.verboseExplain(dictGet);
+        assertTrue(verbose.contains("dictionary_get("));
+    }
+
+    @Test
+    public void testVerboseExplainDictQuery() {
+        TDictQueryExpr tDict = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery dictQuery = new ExecDictQuery(VarcharType.VARCHAR, tDict,
+                new ArrayList<>(List.of(child)));
+
+        String verbose = ExecExprExplain.verboseExplain(dictQuery);
+        assertTrue(verbose.contains("dict_query("));
+    }
+
+    @Test
+    public void testVerboseExplainList() {
+        ExecLiteral lit1 = makeIntLiteral(1);
+        ExecLiteral lit2 = makeIntLiteral(2);
+        String result = ExecExprExplain.verboseExplainList(List.of(lit1, lit2));
+        assertEquals("1, 2", result);
+    }
+
+    @Test
+    public void testToSqlNullLiteral() {
+        ExecLiteral nullLit = makeNullLiteral();
+        assertEquals("NULL", ExecExprExplain.toSql(nullLit));
+    }
+
+    @Test
+    public void testToSqlIntLiteral() {
+        ExecLiteral lit = makeIntLiteral(42);
+        assertEquals("42", ExecExprExplain.toSql(lit));
+    }
+
+    @Test
+    public void testToSqlVarcharLiteralNoTruncation() {
+        // toSql should not truncate long strings (unlike explain which does)
+        String longStr = "a".repeat(100);
+        ExecLiteral literal = makeVarcharLiteral(longStr);
+        String sql = ExecExprExplain.toSql(literal);
+        // toSql does NOT truncate
+        assertEquals("'" + longStr + "'", sql);
+    }
+
+    @Test
+    public void testToSqlVarcharWithEscapes() {
+        ExecLiteral literal = makeVarcharLiteral("it's a \\test");
+        String sql = ExecExprExplain.toSql(literal);
+        assertTrue(sql.contains("\\'"));
+        assertTrue(sql.contains("\\\\"));
+    }
+
+    @Test
+    public void testToSqlFunctionCall() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        List<ExecExpr> children = new ArrayList<>(List.of(slot));
+        ScalarFunction fn = makeScalarFunction("abs", new Type[]{IntegerType.INT}, IntegerType.INT);
+        ExecFunctionCall funcCall = makeFunctionCall("abs", IntegerType.INT, fn, children);
+
+        String sql = ExecExprExplain.toSql(funcCall);
+        assertTrue(sql.contains("abs("));
+    }
+
+    @Test
+    public void testToSqlBinaryPredicate() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecBinaryPredicate pred = new ExecBinaryPredicate(BinaryType.LT, left, right);
+
+        String sql = ExecExprExplain.toSql(pred);
+        assertTrue(sql.contains("<"));
+    }
+
+    @Test
+    public void testToSqlCast() {
+        ExecLiteral child = makeIntLiteral(42);
+        ExecCast cast = new ExecCast(IntegerType.BIGINT, child, false);
+        String sql = ExecExprExplain.toSql(cast);
+        assertTrue(sql.contains("CAST("));
+        assertTrue(sql.contains("BIGINT"));
+    }
+
+    @Test
+    public void testToSqlCompoundPredicate() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+        String sql = ExecExprExplain.toSql(pred);
+        assertTrue(sql.contains("AND"));
+    }
+
+    @Test
+    public void testToSqlInPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1)));
+        String sql = ExecExprExplain.toSql(pred);
+        assertTrue(sql.contains("IN"));
+    }
+
+    @Test
+    public void testToSqlIsNullPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(false, col);
+        String sql = ExecExprExplain.toSql(pred);
+        assertTrue(sql.contains("IS NULL"));
+    }
+
+    @Test
+    public void testToSqlLikePredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+        String sql = ExecExprExplain.toSql(pred);
+        assertTrue(sql.contains("LIKE"));
+    }
+
+    @Test
+    public void testToSqlArithmetic() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+        String sql = ExecExprExplain.toSql(add);
+        assertTrue(sql.contains("+"));
+    }
+
+    @Test
+    public void testToSqlCaseWhen() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecCaseWhen caseWhen = new ExecCaseWhen(IntegerType.INT, false, false,
+                new ArrayList<>(List.of(cond, thenVal)));
+        String sql = ExecExprExplain.toSql(caseWhen);
+        assertTrue(sql.contains("CASE"));
+        assertTrue(sql.contains("END"));
+    }
+
+    @Test
+    public void testToSqlBetweenPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate between = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+        String sql = ExecExprExplain.toSql(between);
+        assertTrue(sql.contains("BETWEEN"));
+    }
+
+    @Test
+    public void testToSqlArrayExpr() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecArrayExpr arr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1)));
+        String sql = ExecExprExplain.toSql(arr);
+        assertTrue(sql.contains("["));
+    }
+
+    @Test
+    public void testToSqlMapExpr() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key = makeVarcharLiteral("k");
+        ExecLiteral val = makeIntLiteral(1);
+        ExecMapExpr mapExpr = new ExecMapExpr(mapType, new ArrayList<>(List.of(key, val)));
+        String sql = ExecExprExplain.toSql(mapExpr);
+        assertTrue(sql.contains("map{"));
+    }
+
+    @Test
+    public void testToSqlCollectionElement() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(arr, index)));
+        String sql = ExecExprExplain.toSql(elem);
+        assertTrue(sql.contains("["));
+    }
+
+    @Test
+    public void testToSqlClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone clone = new ExecClone(IntegerType.INT, child);
+        String sql = ExecExprExplain.toSql(clone);
+        assertTrue(sql.contains("clone("));
+    }
+
+    @Test
+    public void testToSqlSubfield() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield subfield = new ExecSubfield(IntegerType.INT, List.of("a"), false,
+                new ArrayList<>(List.of(structCol)));
+        String sql = ExecExprExplain.toSql(subfield);
+        assertTrue(sql.contains(".a"));
+    }
+
+    @Test
+    public void testToSqlMatchExpr() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_ANY,
+                new ArrayList<>(List.of(col, pattern)));
+        String sql = ExecExprExplain.toSql(expr);
+        assertTrue(sql.contains("MATCH_ANY"));
+    }
+
+    @Test
+    public void testToSqlInformationFunction() {
+        ExecInformationFunction info = new ExecInformationFunction(
+                VarcharType.VARCHAR, "user", "root", 0L);
+        String sql = ExecExprExplain.toSql(info);
+        assertEquals("user()", sql);
+    }
+
+    @Test
+    public void testToSqlDictionaryGet() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet dictGet = new ExecDictionaryGet(VarcharType.VARCHAR,
+                1L, 2L, 1, false, new ArrayList<>(List.of(key)));
+        String sql = ExecExprExplain.toSql(dictGet);
+        assertTrue(sql.contains("dictionary_get("));
+    }
+
+    @Test
+    public void testToSqlDictQuery() {
+        TDictQueryExpr tDict = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery dictQuery = new ExecDictQuery(VarcharType.VARCHAR, tDict,
+                new ArrayList<>(List.of(child)));
+        String sql = ExecExprExplain.toSql(dictQuery);
+        assertTrue(sql.contains("dict_query("));
+    }
+
+    @Test
+    public void testToSqlPlaceHolder() {
+        ExecPlaceHolder ph = new ExecPlaceHolder(1, false, IntegerType.INT);
+        String sql = ExecExprExplain.toSql(ph);
+        assertEquals("<place-holder>", sql);
+    }
+
+    @Test
+    public void testToSqlLambdaFunction() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(body, arg)));
+        String sql = ExecExprExplain.toSql(lambda);
+        assertTrue(sql.contains("->"));
+    }
+
+    @Test
+    public void testToSqlArraySlice() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral lower = makeIntLiteral(1);
+        ExecLiteral upper = makeIntLiteral(3);
+        ExecArraySlice slice = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, lower, upper)));
+        String sql = ExecExprExplain.toSql(slice);
+        assertTrue(sql.contains("["));
+        assertTrue(sql.contains(":"));
+    }
+
+    @Test
+    public void testExplainLargeStringTruncation() {
+        // Strings over 50 chars should be truncated in explain()
+        String longStr = "a".repeat(100);
+        ExecLiteral literal = makeVarcharLiteral(longStr);
+        String explain = ExecExprExplain.explain(literal);
+        assertTrue(explain.length() < 60); // Truncated
+        assertTrue(explain.endsWith("...'"));
+    }
+
+    @Test
+    public void testExplainDefaultVisitExecExpr() {
+        // The base visitExecExpr returns "<unknown-exec-expr>"
+        // We trigger it by passing an unknown expr type or using explain directly
+        String result = ExecExprExplain.explain(new ExecExpr(IntegerType.INT) {
+            @Override
+            public boolean isNullable() { return false; }
+
+            @Override
+            public TExprNodeType getNodeType() { return TExprNodeType.NULL_LITERAL; }
+
+            @Override
+            public void toThrift(TExprNode node) {}
+
+            @Override
+            public <R, C> R accept(ExecExprVisitor<R, C> visitor, C context) {
+                return visitor.visitExecExpr(this, context);
+            }
+
+            @Override
+            public ExecExpr clone() { return this; }
+        });
+        assertEquals("<unknown-exec-expr>", result);
+    }
+
+    // ======================================================================
+    // 28. ExecCollectionElement - 0% coverage
+    // ======================================================================
+
+    @Test
+    public void testExecCollectionElementConstructionArray() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, true,
+                new ArrayList<>(List.of(arr, index)));
+
+        assertEquals(IntegerType.INT, elem.getType());
+        assertTrue(elem.isCheckOutOfBounds());
+        assertTrue(elem.isNullable());
+        assertEquals(2, elem.getNumChildren());
+        assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR, elem.getNodeType());
+    }
+
+    @Test
+    public void testExecCollectionElementConstructionMap() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecSlotRef map = makeSlotRef(1, 0, mapType, false);
+        ExecLiteral key = makeVarcharLiteral("key1");
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(map, key)));
+
+        assertFalse(elem.isCheckOutOfBounds());
+        assertEquals(TExprNodeType.MAP_ELEMENT_EXPR, elem.getNodeType());
+    }
+
+    @Test
+    public void testExecCollectionElementToThrift() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, true,
+                new ArrayList<>(List.of(arr, index)));
+
+        TExprNode node = new TExprNode();
+        elem.toThrift(node);
+        assertTrue(node.isCheck_is_out_of_bounds());
+    }
+
+    @Test
+    public void testExecCollectionElementClone() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement original = new ExecCollectionElement(IntegerType.INT, true,
+                new ArrayList<>(List.of(arr, index)));
+        original.setIsIndexOnlyFilter(true);
+
+        ExecCollectionElement cloned = original.clone();
+        assertEquals(original.isCheckOutOfBounds(), cloned.isCheckOutOfBounds());
+        assertEquals(original.getNumChildren(), cloned.getNumChildren());
+        assertTrue(cloned.isIndexOnlyFilter());
+    }
+
+    @Test
+    public void testExecCollectionElementVisitorDispatch() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(arr, index)));
+
+        ExecExprVisitor<String, Void> visitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr e, Void context) {
+                return "default";
+            }
+
+            @Override
+            public String visitExecCollectionElement(ExecCollectionElement e, Void context) {
+                return "CollectionElement";
+            }
+        };
+        assertEquals("CollectionElement", elem.accept(visitor, null));
+    }
+
+    @Test
+    public void testExecCollectionElementSerialization() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, true,
+                new ArrayList<>(List.of(arr, index)));
+
+        TExpr texpr = ExecExprSerializer.serialize(elem);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    // ======================================================================
+    // 29. ThriftEnumConverter - joinOperatorToThrift, assertionToThrift
+    // ======================================================================
+
+    @Test
+    public void testJoinOperatorToThriftAllValues() {
+        assertEquals(TJoinOp.INNER_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.INNER_JOIN));
+        assertEquals(TJoinOp.LEFT_OUTER_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.LEFT_OUTER_JOIN));
+        assertEquals(TJoinOp.LEFT_SEMI_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.LEFT_SEMI_JOIN));
+        assertEquals(TJoinOp.LEFT_ANTI_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.LEFT_ANTI_JOIN));
+        assertEquals(TJoinOp.RIGHT_SEMI_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.RIGHT_SEMI_JOIN));
+        assertEquals(TJoinOp.RIGHT_ANTI_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.RIGHT_ANTI_JOIN));
+        assertEquals(TJoinOp.RIGHT_OUTER_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.RIGHT_OUTER_JOIN));
+        assertEquals(TJoinOp.FULL_OUTER_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.FULL_OUTER_JOIN));
+        assertEquals(TJoinOp.CROSS_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.CROSS_JOIN));
+        assertEquals(TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN,
+                ThriftEnumConverter.joinOperatorToThrift(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN));
+        assertEquals(TJoinOp.ASOF_INNER_JOIN, ThriftEnumConverter.joinOperatorToThrift(JoinOperator.ASOF_INNER_JOIN));
+        assertEquals(TJoinOp.ASOF_LEFT_OUTER_JOIN,
+                ThriftEnumConverter.joinOperatorToThrift(JoinOperator.ASOF_LEFT_OUTER_JOIN));
+    }
+
+    @Test
+    public void testAssertionToThriftAllValues() {
+        assertEquals(TAssertion.EQ, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.EQ));
+        assertEquals(TAssertion.NE, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.NE));
+        assertEquals(TAssertion.LT, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.LT));
+        assertEquals(TAssertion.LE, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.LE));
+        assertEquals(TAssertion.GT, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.GT));
+        assertEquals(TAssertion.GE, ThriftEnumConverter.assertionToThrift(AssertNumRowsElement.Assertion.GE));
+    }
+
+    @Test
+    public void testSetTypeToThriftAndBack() {
+        assertEquals(TVarType.GLOBAL, ThriftEnumConverter.setTypeToThrift(SetType.GLOBAL));
+        assertEquals(TVarType.SESSION, ThriftEnumConverter.setTypeToThrift(SetType.SESSION));
+        assertEquals(TVarType.VERBOSE, ThriftEnumConverter.setTypeToThrift(SetType.VERBOSE));
+
+        assertEquals(SetType.GLOBAL, ThriftEnumConverter.setTypeFromThrift(TVarType.GLOBAL));
+        assertEquals(SetType.SESSION, ThriftEnumConverter.setTypeFromThrift(TVarType.SESSION));
+        assertEquals(SetType.VERBOSE, ThriftEnumConverter.setTypeFromThrift(TVarType.VERBOSE));
+    }
+
+    // ======================================================================
+    // 30. ExecExprSerializer - serialize less-common types
+    // ======================================================================
+
+    @Test
+    public void testSerializeCompoundPredicate() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+
+        TExpr texpr = ExecExprSerializer.serialize(pred);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.COMPOUND_PRED, texpr.getNodes().get(0).node_type);
+        assertEquals(TExprOpcode.COMPOUND_AND, texpr.getNodes().get(0).opcode);
+    }
+
+    @Test
+    public void testSerializeInPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecLiteral v2 = makeIntLiteral(2);
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1, v2)));
+
+        TExpr texpr = ExecExprSerializer.serialize(pred);
+        assertEquals(4, texpr.getNodes().size());
+        assertEquals(TExprNodeType.IN_PRED, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeIsNullPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate pred = new ExecIsNullPredicate(false, col);
+
+        TExpr texpr = ExecExprSerializer.serialize(pred);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.FUNCTION_CALL, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeLikePredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate pred = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        TExpr texpr = ExecExprSerializer.serialize(pred);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.FUNCTION_CALL, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeArithmetic() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+
+        TExpr texpr = ExecExprSerializer.serialize(add);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.ARITHMETIC_EXPR, texpr.getNodes().get(0).node_type);
+        assertEquals(TExprOpcode.ADD, texpr.getNodes().get(0).opcode);
+    }
+
+    @Test
+    public void testSerializeCaseWhen() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecLiteral elseVal = makeIntLiteral(0);
+        ExecCaseWhen caseWhen = new ExecCaseWhen(IntegerType.INT, false, true,
+                new ArrayList<>(List.of(cond, thenVal, elseVal)));
+
+        TExpr texpr = ExecExprSerializer.serialize(caseWhen);
+        assertEquals(4, texpr.getNodes().size());
+        assertEquals(TExprNodeType.CASE_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeMatchExpr() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr expr = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        TExpr texpr = ExecExprSerializer.serialize(expr);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.MATCH_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeNullTypeExpr() {
+        // When type is NULL_TYPE, serializer should emit a null literal with boolean type
+        ConstantOperator nullOp = ConstantOperator.createNull(com.starrocks.type.NullType.NULL);
+        ExecLiteral nullLit = new ExecLiteral(nullOp, com.starrocks.type.NullType.NULL);
+
+        TExpr texpr = ExecExprSerializer.serialize(nullLit);
+        assertEquals(1, texpr.getNodes().size());
+        assertEquals(TExprNodeType.NULL_LITERAL, texpr.getNodes().get(0).node_type);
+    }
+
+    // ======================================================================
+    // 31. ExecLiteral - BigInt, Float, Double, Decimal, Date, DateTime
+    // ======================================================================
+
+    @Test
+    public void testExecLiteralBigint() {
+        ConstantOperator constOp = ConstantOperator.createBigint(9876543210L);
+        ExecLiteral literal = new ExecLiteral(constOp, IntegerType.BIGINT);
+
+        assertEquals(TExprNodeType.INT_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.INT_LITERAL, node.node_type);
+        assertEquals(9876543210L, node.int_literal.value);
+
+        assertEquals("9876543210", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralFloat() {
+        ConstantOperator constOp = ConstantOperator.createFloat(3.14);
+        ExecLiteral literal = new ExecLiteral(constOp, FloatType.FLOAT);
+
+        assertEquals(TExprNodeType.FLOAT_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.FLOAT_LITERAL, node.node_type);
+        assertEquals(3.14, node.float_literal.value, 0.001);
+
+        String explain = ExecExprExplain.explain(literal);
+        assertTrue(explain.contains("3.14"));
+    }
+
+    @Test
+    public void testExecLiteralDouble() {
+        ConstantOperator constOp = ConstantOperator.createDouble(2.718281828);
+        ExecLiteral literal = new ExecLiteral(constOp, FloatType.DOUBLE);
+
+        assertEquals(TExprNodeType.FLOAT_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.FLOAT_LITERAL, node.node_type);
+    }
+
+    @Test
+    public void testExecLiteralDecimal() {
+        BigDecimal decVal = new BigDecimal("123.456");
+        DecimalType decType = new DecimalType(com.starrocks.type.PrimitiveType.DECIMAL64, 18, 6);
+        ConstantOperator constOp = ConstantOperator.createDecimal(decVal, decType);
+        ExecLiteral literal = new ExecLiteral(constOp, decType);
+
+        assertEquals(TExprNodeType.DECIMAL_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.DECIMAL_LITERAL, node.node_type);
+        assertNotNull(node.decimal_literal);
+        assertEquals("123.456", node.decimal_literal.value);
+
+        assertEquals("123.456", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralDecimal32() {
+        BigDecimal decVal = new BigDecimal("12.34");
+        DecimalType decType = new DecimalType(com.starrocks.type.PrimitiveType.DECIMAL32, 9, 2);
+        ConstantOperator constOp = ConstantOperator.createDecimal(decVal, decType);
+        ExecLiteral literal = new ExecLiteral(constOp, decType);
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.DECIMAL_LITERAL, node.node_type);
+        assertNotNull(node.decimal_literal.getInteger_value());
+    }
+
+    @Test
+    public void testExecLiteralDecimal128() {
+        BigDecimal decVal = new BigDecimal("123456789012345.678901234");
+        DecimalType decType = new DecimalType(com.starrocks.type.PrimitiveType.DECIMAL128, 38, 9);
+        ConstantOperator constOp = ConstantOperator.createDecimal(decVal, decType);
+        ExecLiteral literal = new ExecLiteral(constOp, decType);
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.DECIMAL_LITERAL, node.node_type);
+    }
+
+    @Test
+    public void testExecLiteralDate() {
+        LocalDateTime dateTime = LocalDateTime.of(2024, 3, 15, 0, 0, 0);
+        ConstantOperator constOp = ConstantOperator.createDate(dateTime);
+        ExecLiteral literal = new ExecLiteral(constOp, DateType.DATE);
+
+        assertEquals(TExprNodeType.DATE_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.DATE_LITERAL, node.node_type);
+        assertNotNull(node.date_literal);
+        assertEquals("2024-03-15", node.date_literal.value);
+
+        assertEquals("'2024-03-15'", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralDatetime() {
+        LocalDateTime dateTime = LocalDateTime.of(2024, 3, 15, 10, 30, 45);
+        ConstantOperator constOp = ConstantOperator.createDatetime(dateTime);
+        ExecLiteral literal = new ExecLiteral(constOp, DateType.DATETIME);
+
+        assertEquals(TExprNodeType.DATE_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.DATE_LITERAL, node.node_type);
+        assertEquals("2024-03-15 10:30:45", node.date_literal.value);
+
+        assertEquals("'2024-03-15 10:30:45'", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralDatetimeWithMicroseconds() {
+        LocalDateTime dateTime = LocalDateTime.of(2024, 3, 15, 10, 30, 45, 123456000);
+        ConstantOperator constOp = ConstantOperator.createDatetime(dateTime);
+        ExecLiteral literal = new ExecLiteral(constOp, DateType.DATETIME);
+
+        String explain = ExecExprExplain.explain(literal);
+        assertTrue(explain.contains("123456"));
+    }
+
+    @Test
+    public void testExecLiteralLargeInt() {
+        BigInteger largeInt = new BigInteger("123456789012345678901234567890");
+        ConstantOperator constOp = ConstantOperator.createLargeInt(largeInt);
+        ExecLiteral literal = new ExecLiteral(constOp, IntegerType.LARGEINT);
+
+        assertEquals(TExprNodeType.LARGE_INT_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(TExprNodeType.LARGE_INT_LITERAL, node.node_type);
+        assertNotNull(node.large_int_literal);
+
+        assertEquals("123456789012345678901234567890", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralTinyint() {
+        ConstantOperator constOp = ConstantOperator.createTinyInt((byte) 42);
+        ExecLiteral literal = new ExecLiteral(constOp, IntegerType.TINYINT);
+
+        assertEquals(TExprNodeType.INT_LITERAL, literal.getNodeType());
+
+        TExpr texpr = ExecExprSerializer.serialize(literal);
+        TExprNode node = texpr.getNodes().get(0);
+        assertEquals(42, node.int_literal.value);
+
+        assertEquals("42", ExecExprExplain.explain(literal));
+    }
+
+    @Test
+    public void testExecLiteralSmallint() {
+        ConstantOperator constOp = ConstantOperator.createSmallInt((short) 1024);
+        ExecLiteral literal = new ExecLiteral(constOp, IntegerType.SMALLINT);
+
+        assertEquals(TExprNodeType.INT_LITERAL, literal.getNodeType());
+        assertEquals("1024", ExecExprExplain.explain(literal));
+    }
+
+    // ======================================================================
+    // 32. ExprOpcodeRegistry - getExprOpcode for various expression types
+    // ======================================================================
+
+    @Test
+    public void testGetExprOpcodeBinaryPredicate() {
+        // BinaryPredicate needs actual AST Expr, skip if too complex.
+        // But we can test getMatchOpcode for all values explicitly
+        assertEquals(TExprOpcode.MATCH, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH));
+        assertEquals(TExprOpcode.MATCH_ANY, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH_ANY));
+        assertEquals(TExprOpcode.MATCH_ALL, ExprOpcodeRegistry.getMatchOpcode(MatchExpr.MatchOperator.MATCH_ALL));
+    }
+
+    // ======================================================================
+    // 33. ExecExprVisitor - default fallback chains for all types
+    // ======================================================================
+
+    @Test
+    public void testVisitorDefaultFallbackAllTypes() {
+        // A minimal visitor that only overrides visitExecExpr.
+        // All specific types should fall back to visitExecExpr.
+        ExecExprVisitor<String, Void> defaultVisitor = new ExecExprVisitor<>() {
+            @Override
+            public String visitExecExpr(ExecExpr expr, Void context) {
+                return "fallback";
+            }
+        };
+
+        // Test each ExecExpr subclass falls back to visitExecExpr
+        assertEquals("fallback", makeSlotRef(1, 0, IntegerType.INT, false).accept(defaultVisitor, null));
+        assertEquals("fallback", makeIntLiteral(1).accept(defaultVisitor, null));
+
+        ScalarFunction fn = makeScalarFunction("abs", new Type[]{IntegerType.INT}, IntegerType.INT);
+        assertEquals("fallback", makeFunctionCall("abs", IntegerType.INT, fn, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecCast(IntegerType.BIGINT, makeIntLiteral(1), false)
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecBinaryPredicate(BinaryType.EQ,
+                makeSlotRef(1, 0, IntegerType.INT, false), makeIntLiteral(1))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecCompoundPredicate(CompoundPredicate.Operator.AND,
+                makeSlotRef(1, 0, BooleanType.BOOLEAN, false),
+                makeSlotRef(2, 0, BooleanType.BOOLEAN, false))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecInPredicate(false,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, IntegerType.INT, false), makeIntLiteral(1))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecIsNullPredicate(false,
+                makeSlotRef(1, 0, IntegerType.INT, true))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecLikePredicate(false, null,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, VarcharType.VARCHAR, false), makeVarcharLiteral("x"))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(makeIntLiteral(5), makeIntLiteral(1), makeIntLiteral(10))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecCaseWhen(IntegerType.INT, false, false,
+                new ArrayList<>(List.of(makeIntLiteral(1), makeIntLiteral(2))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, VarcharType.VARCHAR, false), makeVarcharLiteral("x"))))
+                .accept(defaultVisitor, null));
+
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        assertEquals("fallback", new ExecArrayExpr(arrayType, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        assertEquals("fallback", new ExecMapExpr(mapType, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, arrayType, false), makeIntLiteral(0))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecArraySlice(arrayType, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecSubfield(IntegerType.INT, List.of("a"), false,
+                new ArrayList<>(List.of(makeSlotRef(1, 0, IntegerType.INT, false))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(makeIntLiteral(1))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecDictMapping(VarcharType.VARCHAR, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecClone(IntegerType.INT, makeIntLiteral(1))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecDictQuery(VarcharType.VARCHAR, new TDictQueryExpr(),
+                new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecDictionaryGet(VarcharType.VARCHAR,
+                1L, 2L, 1, false, new ArrayList<>())
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecPlaceHolder(1, false, IntegerType.INT)
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(makeIntLiteral(1), makeIntLiteral(2))))
+                .accept(defaultVisitor, null));
+
+        assertEquals("fallback", new ExecInformationFunction(VarcharType.VARCHAR, "user", "root", 0L)
+                .accept(defaultVisitor, null));
+    }
+
+    // ======================================================================
+    // 34. ExecSlotRef - additional coverage for setNullable and label constructor
+    // ======================================================================
+
+    @Test
+    public void testExecSlotRefSetNullable() {
+        ExecSlotRef slotRef = makeSlotRef(1, 0, IntegerType.INT, true);
+        assertTrue(slotRef.isNullable());
+
+        // setNullable should propagate to the descriptor
+        slotRef.setNullable(false);
+        assertFalse(slotRef.isNullable());
+        assertFalse(slotRef.getDesc().getIsNullable());
+
+        slotRef.setNullable(true);
+        assertTrue(slotRef.isNullable());
+        assertTrue(slotRef.getDesc().getIsNullable());
+    }
+
+    @Test
+    public void testExecSlotRefLabelConstructorClone() {
+        SlotDescriptor desc = makeSlotDescriptor(7, 3, IntegerType.INT, true);
+        ExecSlotRef original = new ExecSlotRef("my_column", desc);
+
+        ExecSlotRef cloned = original.clone();
+        assertEquals("my_column", cloned.getLabel());
+        assertEquals(7, cloned.getSlotId().asInt());
+        assertEquals(original.isNullable(), cloned.isNullable());
+    }
+
+    @Test
+    public void testExecSlotRefCharToVarcharConversion() {
+        // CHAR types should be converted to VARCHAR in constructor
+        com.starrocks.type.ScalarType charType = new com.starrocks.type.ScalarType(
+                com.starrocks.type.PrimitiveType.CHAR);
+        SlotDescriptor desc = makeSlotDescriptor(1, 0, charType, false);
+        ExecSlotRef slotRef = new ExecSlotRef(desc);
+
+        // Type should have been converted to VARCHAR
+        assertTrue(slotRef.getType().isVarchar());
+    }
+
+    @Test
+    public void testExecSlotRefCharToVarcharLabelConstructor() {
+        com.starrocks.type.ScalarType charType = new com.starrocks.type.ScalarType(
+                com.starrocks.type.PrimitiveType.CHAR);
+        SlotDescriptor desc = makeSlotDescriptor(1, 0, charType, false);
+        ExecSlotRef slotRef = new ExecSlotRef("char_col", desc);
+
+        assertTrue(slotRef.getType().isVarchar());
+    }
+
+    // ======================================================================
+    // 35. ExecExprExplain - explain for CompoundPredicate, InPredicate etc.
+    // ======================================================================
+
+    @Test
+    public void testExplainCompoundPredicateAnd() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.AND, left, right);
+
+        String explain = ExecExprExplain.explain(pred);
+        assertTrue(explain.contains("AND"));
+        assertTrue(explain.contains("("));
+    }
+
+    @Test
+    public void testExplainCompoundPredicateOr() {
+        ExecSlotRef left = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecSlotRef right = makeSlotRef(2, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(CompoundPredicate.Operator.OR, left, right);
+
+        String explain = ExecExprExplain.explain(pred);
+        assertTrue(explain.contains("OR"));
+    }
+
+    @Test
+    public void testExplainCompoundPredicateNot() {
+        ExecSlotRef child = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecCompoundPredicate pred = new ExecCompoundPredicate(
+                CompoundPredicate.Operator.NOT, new ArrayList<>(List.of(child)));
+
+        String explain = ExecExprExplain.explain(pred);
+        assertTrue(explain.contains("NOT"));
+    }
+
+    @Test
+    public void testExplainInPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecLiteral v2 = makeIntLiteral(2);
+        ExecInPredicate pred = new ExecInPredicate(false, new ArrayList<>(List.of(col, v1, v2)));
+
+        String explain = ExecExprExplain.explain(pred);
+        assertTrue(explain.contains("IN"));
+        assertTrue(explain.contains("1"));
+        assertTrue(explain.contains("2"));
+    }
+
+    @Test
+    public void testExplainInPredicateNotIn() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral v1 = makeIntLiteral(1);
+        ExecInPredicate pred = new ExecInPredicate(true, new ArrayList<>(List.of(col, v1)));
+
+        String explain = ExecExprExplain.explain(pred);
+        assertTrue(explain.contains("NOT"));
+        assertTrue(explain.contains("IN"));
+    }
+
+    @Test
+    public void testExplainIsNullPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, true);
+        ExecIsNullPredicate isNull = new ExecIsNullPredicate(false, col);
+        String explain = ExecExprExplain.explain(isNull);
+        assertTrue(explain.contains("IS NULL"));
+
+        ExecIsNullPredicate isNotNull = new ExecIsNullPredicate(true, col);
+        explain = ExecExprExplain.explain(isNotNull);
+        assertTrue(explain.contains("IS NOT NULL"));
+    }
+
+    @Test
+    public void testExplainLikePredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("%test%");
+        ScalarFunction fn = makeScalarFunction("like", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate like = new ExecLikePredicate(false, fn, new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals("<slot 1> LIKE '%test%'", ExecExprExplain.explain(like));
+    }
+
+    @Test
+    public void testExplainRegexpPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("^test.*$");
+        ScalarFunction fn = makeScalarFunction("regexp", new Type[]{VarcharType.VARCHAR, VarcharType.VARCHAR},
+                BooleanType.BOOLEAN);
+        ExecLikePredicate regexp = new ExecLikePredicate(true, fn, new ArrayList<>(List.of(col, pattern)));
+
+        String explain = ExecExprExplain.explain(regexp);
+        assertTrue(explain.contains("REGEXP"));
+    }
+
+    @Test
+    public void testExplainArithmetic() {
+        ExecSlotRef left = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral right = makeIntLiteral(10);
+        ExecArithmetic add = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.ADD,
+                new ArrayList<>(List.of(left, right)));
+
+        String explain = ExecExprExplain.explain(add);
+        assertTrue(explain.contains("+"));
+    }
+
+    @Test
+    public void testExplainArithmeticUnary() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecArithmetic bitnot = new ExecArithmetic(IntegerType.INT, ArithmeticExpr.Operator.BITNOT,
+                new ArrayList<>(List.of(child)));
+
+        String explain = ExecExprExplain.explain(bitnot);
+        assertNotNull(explain);
+        assertTrue(explain.contains("~"));
+    }
+
+    @Test
+    public void testExplainCaseWhen() {
+        ExecSlotRef cond = makeSlotRef(1, 0, BooleanType.BOOLEAN, false);
+        ExecLiteral thenVal = makeIntLiteral(1);
+        ExecLiteral elseVal = makeIntLiteral(0);
+        ExecCaseWhen caseWhen = new ExecCaseWhen(IntegerType.INT, false, true,
+                new ArrayList<>(List.of(cond, thenVal, elseVal)));
+
+        String explain = ExecExprExplain.explain(caseWhen);
+        assertTrue(explain.contains("CASE"));
+        assertTrue(explain.contains("WHEN"));
+        assertTrue(explain.contains("THEN"));
+        assertTrue(explain.contains("ELSE"));
+        assertTrue(explain.contains("END"));
+    }
+
+    @Test
+    public void testExplainBetweenPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate between = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        String explain = ExecExprExplain.explain(between);
+        assertEquals("<slot 1> BETWEEN 1 AND 10", explain);
+    }
+
+    @Test
+    public void testExplainNotBetweenPredicate() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate notBetween = new ExecBetweenPredicate(true,
+                new ArrayList<>(List.of(col, low, high)));
+
+        String explain = ExecExprExplain.explain(notBetween);
+        assertEquals("<slot 1> NOT BETWEEN 1 AND 10", explain);
+    }
+
+    @Test
+    public void testExplainArrayExpr() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecLiteral e2 = makeIntLiteral(2);
+        ExecLiteral e3 = makeIntLiteral(3);
+        ExecArrayExpr arr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1, e2, e3)));
+
+        assertEquals("[1,2,3]", ExecExprExplain.explain(arr));
+    }
+
+    @Test
+    public void testExplainMapExpr() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key1 = makeVarcharLiteral("a");
+        ExecLiteral val1 = makeIntLiteral(1);
+        ExecLiteral key2 = makeVarcharLiteral("b");
+        ExecLiteral val2 = makeIntLiteral(2);
+        ExecMapExpr mapExpr = new ExecMapExpr(mapType, new ArrayList<>(List.of(key1, val1, key2, val2)));
+
+        String explain = ExecExprExplain.explain(mapExpr);
+        assertEquals("map{'a':1,'b':2}", explain);
+    }
+
+    @Test
+    public void testExplainArraySlice() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral lower = makeIntLiteral(1);
+        ExecLiteral upper = makeIntLiteral(3);
+        ExecArraySlice slice = new ExecArraySlice(arrayType, new ArrayList<>(List.of(arr, lower, upper)));
+
+        String explain = ExecExprExplain.explain(slice);
+        assertEquals("<slot 1>[1:3]", explain);
+    }
+
+    @Test
+    public void testExplainCollectionElement() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecSlotRef arr = makeSlotRef(1, 0, arrayType, false);
+        ExecLiteral index = makeIntLiteral(0);
+        ExecCollectionElement elem = new ExecCollectionElement(IntegerType.INT, false,
+                new ArrayList<>(List.of(arr, index)));
+
+        String explain = ExecExprExplain.explain(elem);
+        assertEquals("<slot 1>[0]", explain);
+    }
+
+    @Test
+    public void testExplainClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone clone = new ExecClone(IntegerType.INT, child);
+
+        assertEquals("clone(<slot 1>)", ExecExprExplain.explain(clone));
+    }
+
+    @Test
+    public void testExplainSubfield() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield subfield = new ExecSubfield(IntegerType.INT, List.of("a", "b"), true,
+                new ArrayList<>(List.of(structCol)));
+
+        String explain = ExecExprExplain.explain(subfield);
+        assertEquals("<slot 1>.a.b[true]", explain);
+    }
+
+    @Test
+    public void testExplainDictMapping() {
+        ExecSlotRef slot = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef inner = makeSlotRef(2, 0, VarcharType.VARCHAR, false);
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(slot, inner)));
+
+        String explain = ExecExprExplain.explain(dictMapping);
+        assertTrue(explain.contains("DictDecode") || explain.contains("DictDefine"));
+        assertTrue(explain.contains("["));
+    }
+
+    @Test
+    public void testExplainDictQuery() {
+        TDictQueryExpr tDict = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery dictQuery = new ExecDictQuery(VarcharType.VARCHAR, tDict,
+                new ArrayList<>(List.of(child)));
+
+        String explain = ExecExprExplain.explain(dictQuery);
+        assertTrue(explain.contains("dict_query("));
+    }
+
+    @Test
+    public void testExplainDictionaryGet() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet dictGet = new ExecDictionaryGet(VarcharType.VARCHAR,
+                1L, 2L, 1, false, new ArrayList<>(List.of(key)));
+
+        String explain = ExecExprExplain.explain(dictGet);
+        assertTrue(explain.contains("dictionary_get("));
+    }
+
+    @Test
+    public void testExplainPlaceHolder() {
+        ExecPlaceHolder ph = new ExecPlaceHolder(42, true, IntegerType.INT);
+        assertEquals("<place-holder>", ExecExprExplain.explain(ph));
+    }
+
+    @Test
+    public void testExplainInformationFunction() {
+        ExecInformationFunction info = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "mydb", 0L);
+        assertEquals("database()", ExecExprExplain.explain(info));
+    }
+
+    @Test
+    public void testExplainMatchExpr() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr match = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals("<slot 1> MATCH 'test'", ExecExprExplain.explain(match));
+    }
+
+    @Test
+    public void testExplainMatchExprAny() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr match = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_ANY,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals("<slot 1> MATCH_ANY 'test'", ExecExprExplain.explain(match));
+    }
+
+    @Test
+    public void testExplainMatchExprAll() {
+        ExecSlotRef col = makeSlotRef(1, 0, VarcharType.VARCHAR, false);
+        ExecLiteral pattern = makeVarcharLiteral("test");
+        ExecMatchExpr match = new ExecMatchExpr(MatchExpr.MatchOperator.MATCH_ALL,
+                new ArrayList<>(List.of(col, pattern)));
+
+        assertEquals("<slot 1> MATCH_ALL 'test'", ExecExprExplain.explain(match));
+    }
+
+    @Test
+    public void testExplainLambdaFunction() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 0, false,
+                new ArrayList<>(List.of(body, arg)));
+
+        String explain = ExecExprExplain.explain(lambda);
+        assertTrue(explain.contains("->"));
+    }
+
+    // ======================================================================
+    // 36. Additional serialization edge cases
+    // ======================================================================
+
+    @Test
+    public void testSerializeArrayExpr() {
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
+        ExecLiteral e1 = makeIntLiteral(1);
+        ExecArrayExpr arr = new ExecArrayExpr(arrayType, new ArrayList<>(List.of(e1)));
+
+        TExpr texpr = ExecExprSerializer.serialize(arr);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.ARRAY_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeMapExpr() {
+        MapType mapType = new MapType(VarcharType.VARCHAR, IntegerType.INT);
+        ExecLiteral key = makeVarcharLiteral("k");
+        ExecLiteral val = makeIntLiteral(1);
+        ExecMapExpr mapExpr = new ExecMapExpr(mapType, new ArrayList<>(List.of(key, val)));
+
+        TExpr texpr = ExecExprSerializer.serialize(mapExpr);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.MAP_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeClone() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecClone clone = new ExecClone(IntegerType.INT, child);
+
+        TExpr texpr = ExecExprSerializer.serialize(clone);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.CLONE_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeSubfield() {
+        ExecSlotRef structCol = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSubfield subfield = new ExecSubfield(IntegerType.INT, List.of("a", "b"), true,
+                new ArrayList<>(List.of(structCol)));
+
+        TExpr texpr = ExecExprSerializer.serialize(subfield);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.SUBFIELD_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeLambdaFunction() {
+        ExecSlotRef body = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecSlotRef arg = makeSlotRef(2, 0, IntegerType.INT, false);
+        ExecLambdaFunction lambda = new ExecLambdaFunction(IntegerType.INT, 3, true,
+                new ArrayList<>(List.of(body, arg)));
+
+        TExpr texpr = ExecExprSerializer.serialize(lambda);
+        assertEquals(3, texpr.getNodes().size());
+        assertEquals(TExprNodeType.LAMBDA_FUNCTION_EXPR, texpr.getNodes().get(0).node_type);
+        assertEquals(3, texpr.getNodes().get(0).getOutput_column());
+        assertTrue(texpr.getNodes().get(0).isIs_nondeterministic());
+    }
+
+    @Test
+    public void testSerializePlaceHolder() {
+        ExecPlaceHolder ph = new ExecPlaceHolder(42, true, IntegerType.INT);
+
+        TExpr texpr = ExecExprSerializer.serialize(ph);
+        assertEquals(1, texpr.getNodes().size());
+        assertEquals(TExprNodeType.PLACEHOLDER_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeInformationFunction() {
+        ExecInformationFunction info = new ExecInformationFunction(
+                VarcharType.VARCHAR, "database", "mydb", 0L);
+
+        TExpr texpr = ExecExprSerializer.serialize(info);
+        assertEquals(1, texpr.getNodes().size());
+        assertEquals(TExprNodeType.INFO_FUNC, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeDictionaryGet() {
+        ExecSlotRef key = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictionaryGet dictGet = new ExecDictionaryGet(VarcharType.VARCHAR,
+                100L, 200L, 1, true, new ArrayList<>(List.of(key)));
+
+        TExpr texpr = ExecExprSerializer.serialize(dictGet);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.DICTIONARY_GET_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeDictQuery() {
+        TDictQueryExpr tDict = new TDictQueryExpr();
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictQuery dictQuery = new ExecDictQuery(VarcharType.VARCHAR, tDict,
+                new ArrayList<>(List.of(child)));
+
+        TExpr texpr = ExecExprSerializer.serialize(dictQuery);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.DICT_QUERY_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeDictMapping() {
+        ExecSlotRef child = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecDictMapping dictMapping = new ExecDictMapping(VarcharType.VARCHAR,
+                new ArrayList<>(List.of(child)));
+
+        TExpr texpr = ExecExprSerializer.serialize(dictMapping);
+        assertEquals(2, texpr.getNodes().size());
+        assertEquals(TExprNodeType.DICT_EXPR, texpr.getNodes().get(0).node_type);
+    }
+
+    @Test
+    public void testSerializeBetweenPredicateThrows() {
+        ExecSlotRef col = makeSlotRef(1, 0, IntegerType.INT, false);
+        ExecLiteral low = makeIntLiteral(1);
+        ExecLiteral high = makeIntLiteral(10);
+        ExecBetweenPredicate pred = new ExecBetweenPredicate(false,
+                new ArrayList<>(List.of(col, low, high)));
+
+        // BetweenPredicate throws on toThrift/getNodeType since it should be rewritten
+        assertThrows(IllegalStateException.class, () -> ExecExprSerializer.serialize(pred));
     }
 }
