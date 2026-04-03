@@ -15,8 +15,14 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.qe.GlobalVariable;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.TypeManager;
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -25,6 +31,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -50,7 +62,6 @@ import java.util.Optional;
 //   a(String)
 //
 public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
-
     @Override
     public ScalarOperator visitCastOperator(CastOperator operator, ScalarOperatorRewriteContext context) {
         if (SPMFunctions.isSPMFunctions(operator.getChild(0))) {
@@ -80,10 +91,10 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         if (operator.getType().isDecimalOfAnyVersion()) {
             if (operator.getType().getPrimitiveType().equals(operator.getChild(0).getType().getPrimitiveType())
                     && operator.getType().equals(operator.getChild(0).getType())) {
-                return operator.getChild(0);
+                return inheritVarcharLengthAfterReduceCast(operator);
             }
         } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
-            return operator.getChild(0);
+            return inheritVarcharLengthAfterReduceCast(operator);
         }
 
         return operator;
@@ -165,6 +176,26 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         Type childCompatibleType = Type.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = Type.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != Type.INVALID && parentCompatibleType != Type.INVALID;
+    }
+
+    private ScalarOperator inheritVarcharLengthAfterReduceCast(CastOperator operator) {
+        ScalarOperator child = operator.getChild(0);
+        if (!shouldInheritVarcharLength(operator.getType(), child.getType())) {
+            return child;
+        }
+
+        child.setType(operator.getType().clone());
+        return child;
+    }
+
+    private boolean shouldInheritVarcharLength(Type castType, Type childType) {
+        if (!GlobalVariable.isEnableReduceCastVarcharLengthInheritance()) {
+            return false;
+        }
+        if (!castType.isVarchar() || !childType.isVarchar()) {
+            return false;
+        }
+        return ((ScalarType) castType).getLength() != ((ScalarType) childType).getLength();
     }
 
     private ScalarOperator reduceDateToDatetimeCast(BinaryPredicateOperator operator) {

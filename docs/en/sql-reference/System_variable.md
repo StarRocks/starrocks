@@ -69,6 +69,14 @@ The following variables only take effect globally. They cannot take effect for a
 * activate_all_roles_on_login
 * character_set_database
 * default_rowset_type
+<<<<<<< HEAD
+=======
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
+* enable_group_level_query_queue
+* enable_query_history
+* enable_query_queue_load
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
 * enable_query_queue_select
 * enable_query_queue_statistic
 * enable_query_queue_load
@@ -223,7 +231,26 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
 * **Default**: 64
+<<<<<<< HEAD
 * **Introduced in**: v3.1.9, v3.2.5
+=======
+* **Data Type**: int
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
 
 ### cbo_prune_subfield
 

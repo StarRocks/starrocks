@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -56,6 +57,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.qe.GlobalVariable;
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -153,6 +161,26 @@ public class ScalarOperatorToExpr {
             }
         }
 
+        private static void syncVarcharExprType(Type rewrittenType, Expr expr) {
+            expr.setType(rewrittenType);
+            expr.setOriginType(rewrittenType.clone());
+            if (expr instanceof SlotRef) {
+                SlotDescriptor desc = ((SlotRef) expr).getSlotDescriptorWithoutCheck();
+                if (desc != null) {
+                    desc.setOriginType(rewrittenType.clone());
+                }
+            }
+        }
+
+        private static boolean needSyncVarcharExprType(ColumnRefOperator node, Expr expr) {
+            if (!node.getType().isVarchar() || !expr.getType().isVarchar()) {
+                return false;
+            }
+            if (node.getType().toSql().equalsIgnoreCase(expr.getType().toSql())) {
+                return false;
+            }
+            return GlobalVariable.isEnableReduceCastVarcharExprSyncType();
+        }
         @Override
         public Expr visit(ScalarOperator scalarOperator, FormatterContext context) {
             throw new UnsupportedOperationException(
@@ -173,6 +201,9 @@ public class ScalarOperatorToExpr {
                         "please check the input expression: " + node);
             }
 
+            if (needSyncVarcharExprType(node, expr)) {
+                syncVarcharExprType(node.getType().clone(), expr);
+            }
             hackTypeNull(expr);
             return expr;
         }

@@ -80,6 +80,10 @@ public final class GlobalVariable {
     public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
     public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE =
+            "enable_reduce_cast_varchar_length_inheritance";
+    public static final String ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE =
+            "enable_reduce_cast_varchar_expr_sync_type";
 
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
@@ -193,6 +197,51 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharLengthInheritance = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_EXPR_SYNC_TYPE, flag = VariableMgr.GLOBAL)
+    private static boolean enableReduceCastVarcharExprSyncType = false;
+
+    @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
+    public static boolean enableEtlExecQueueAllWorkloads = true;
+    @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
+    private static double cngroupResourceUsageFreshRatio = 0.5;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT)
+    private static long cngroupLowWatermarkRunningQueryCount = 8;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE)
+    private static long cngroupLowWatermarkCPUUsedPermille = 600;
+
+    @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
+    private static String cngroupScheduleMode = "standard";
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_HISTORY, flag = VariableMgr.GLOBAL)
+    public static boolean enableQueryHistory = false;
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_KEEP_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryKeepSeconds = 86400 * 3; // 3 days
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_LOAD_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryLoadIntervalSeconds = 60 * 15; // 15min
+
+    @VariableMgr.VarAttr(name = ENABLE_SPM_CAPTURE, flag = VariableMgr.GLOBAL)
+    public static boolean enableSPMCapture = false;
+
+    @VariableMgr.VarAttr(name = SPM_CAPTURE_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long spmCaptureIntervalSeconds = 60 * 60 * 3; // 3 hour
+
+    @VariableMgr.VarAttr(name = SPM_CAPTURE_INCLUDE_TABLE_PATTERN, flag = VariableMgr.GLOBAL)
+    public static String spmCaptureIncludeTablePattern = ".*";
+
+    public static boolean isEnableQueryHistory() {
+        return enableQueryHistory;
+    }
+
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
     }
@@ -350,6 +399,61 @@ public final class GlobalVariable {
         return maxUnknownStringMetaLength;
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isEnableEtlExecQueueAllWorkloads() {
+        return enableEtlExecQueueAllWorkloads;
+    }
+
+    public static void setCngroupResourceUsageFreshRatio(double value) {
+        cngroupResourceUsageFreshRatio = value;
+    }
+
+    public static boolean isEnableReduceCastVarcharLengthInheritance() {
+        return enableReduceCastVarcharLengthInheritance;
+    }
+
+    public static void setEnableReduceCastVarcharLengthInheritance(boolean enableReduceCastVarcharLengthInheritance) {
+        GlobalVariable.enableReduceCastVarcharLengthInheritance = enableReduceCastVarcharLengthInheritance;
+    }
+
+    public static double getCngroupResourceUsageFreshRatio() {
+        return cngroupResourceUsageFreshRatio;
+    }
+
+    public static void setCngroupLowWatermarkRunningQueryCount(long value) {
+        cngroupLowWatermarkRunningQueryCount = value;
+    }
+
+    public static long getCngroupLowWatermarkRunningQueryCount() {
+        return cngroupLowWatermarkRunningQueryCount;
+    }
+
+    public static void setCngroupLowWatermarkCPUUsedPermille(long value) {
+        cngroupLowWatermarkCPUUsedPermille = value;
+    }
+
+    public static long getCngroupLowWatermarkCPUUsedPermille() {
+        return cngroupLowWatermarkCPUUsedPermille;
+    }
+
+    public static void setCngroupScheduleMode(String mode) {
+        cngroupScheduleMode = mode;
+    }
+
+    public static String getCngroupScheduleMode() {
+        return cngroupScheduleMode;
+    }
+
+    public static boolean isEnableReduceCastVarcharExprSyncType() {
+        return enableReduceCastVarcharExprSyncType;
+    }
+
+    public static void setEnableReduceCastVarcharExprSyncType(boolean enableReduceCastVarcharExprSyncType) {
+        GlobalVariable.enableReduceCastVarcharExprSyncType = enableReduceCastVarcharExprSyncType;
+    }
+
+>>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
     // Don't allow create instance.
     private GlobalVariable() {
 
