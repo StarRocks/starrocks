@@ -23,12 +23,11 @@
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -414,10 +413,11 @@ void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
         if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
             continue;
         }
-        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
-        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
-                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
-                                                                  this->_plan_node_id, grf != nullptr)});
+        auto* registry = state->runtime_filter_registry();
+        auto grf = registry->lookup_cached(filter_id);
+        registry->trace_event(filter_id, BackendOptions::get_localhost(),
+                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1", this->_plan_node_id,
+                                                  grf != nullptr));
 
         if (grf == nullptr) {
             continue;

@@ -25,6 +25,7 @@
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -32,6 +33,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
@@ -49,6 +51,14 @@ void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
     if (state->_runtime_filter_port != nullptr) {
         return;
     }
+    state->_runtime_filter_registry = state->_obj_pool->add(new RuntimeFilterRegistry());
+    state->_runtime_filter_registry->set_cached_lookup([state](int32_t filter_id) {
+        return state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+    });
+    state->_runtime_filter_registry->set_trace_sink(
+            [state](int32_t filter_id, std::string_view network, std::string_view msg) {
+                state->exec_env()->add_rf_event({state->query_id(), filter_id, std::string(network), std::string(msg)});
+            });
     state->_runtime_filter_port = state->_obj_pool->add(new RuntimeFilterPort(state));
 }
 

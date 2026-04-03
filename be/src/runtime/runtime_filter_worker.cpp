@@ -28,6 +28,7 @@
 #include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
@@ -86,31 +87,8 @@ static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRp
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
 }
 
-void RuntimeFilterPort::add_listener(RuntimeFilterProbeListener listener) {
-    int32_t rf_id = listener.filter_id;
-    if (_listeners.find(rf_id) == _listeners.end()) {
-        _listeners.insert({rf_id, std::list<RuntimeFilterProbeListener>()});
-    }
-    auto& wait_list = _listeners.find(rf_id)->second;
-    wait_list.emplace_back(std::move(listener));
-}
-
 std::string RuntimeFilterPort::listeners(int32_t filter_id) {
-    std::stringstream ss;
-    if (!_listeners.count(filter_id)) {
-        return "[]";
-    }
-    auto& listener_list = _listeners[filter_id];
-    if (listener_list.empty()) {
-        return "[]";
-    }
-    auto it = listener_list.begin();
-    ss << "[" << it->probe_plan_node_id;
-    while (++it != listener_list.end()) {
-        ss << ", " << it->probe_plan_node_id;
-    }
-    ss << "]";
-    return ss.str();
+    return _state->runtime_filter_registry()->waiters(filter_id);
 }
 
 void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
@@ -300,26 +278,18 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const RuntimeF
             "",
             "LOCAL_PUBLISH",
     });
-    auto it = _listeners.find(filter_id);
-    if (it == _listeners.end()) return;
-    auto& wait_list = it->second;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id=" << filter_id
-              << ", wait_list_size=" << wait_list.size() << ", filter=" << rf->debug_string();
-    for (const auto& listener : wait_list) {
-        listener.notify_local(rf);
-    }
+              << ", waiters=" << _state->runtime_filter_registry()->waiters(filter_id)
+              << ", filter=" << rf->debug_string();
+    _state->runtime_filter_registry()->install_local(filter_id, rf);
 }
 
 void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
                                                       const std::shared_ptr<const RuntimeFilter>& rf) {
-    auto it = _listeners.find(filter_id);
-    if (it == _listeners.end()) return;
-    auto& wait_list = it->second;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id=" << filter_id
-              << ", wait_list_size=" << wait_list.size() << ", filter=" << rf->debug_string();
-    for (const auto& listener : wait_list) {
-        listener.notify_shared(rf);
-    }
+              << ", waiters=" << _state->runtime_filter_registry()->waiters(filter_id)
+              << ", filter=" << rf->debug_string();
+    _state->runtime_filter_registry()->install_shared(filter_id, rf);
 }
 
 Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(RuntimeFilter* out) {

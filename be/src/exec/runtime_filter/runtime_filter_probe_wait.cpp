@@ -16,8 +16,7 @@
 #include <thread>
 
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_filter_cache.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -45,16 +44,14 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
         auto it = wait_list.begin();
         while (it != wait_list.end()) {
             auto* rf = (*it)->runtime_filter(-1);
-            // find runtime filter in cache.
-            if (rf == nullptr) {
-                RuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(_runtime_state->query_id(),
-                                                                                             (*it)->filter_id());
-                if (t != nullptr) {
+            if (rf == nullptr && _runtime_state != nullptr) {
+                auto shared_rf = _runtime_state->runtime_filter_registry()->lookup_cached((*it)->filter_id());
+                if (shared_rf != nullptr) {
                     VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
                               << ", plan_node_id = " << _plan_node_id
                               << ", finst_id  = " << _runtime_state->fragment_instance_id();
-                    (*it)->set_shared_runtime_filter(t);
-                    rf = t.get();
+                    _runtime_state->runtime_filter_registry()->install_shared((*it)->filter_id(), shared_rf);
+                    rf = shared_rf.get();
                 }
             }
             if (rf != nullptr) {
