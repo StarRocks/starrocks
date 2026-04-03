@@ -14,12 +14,15 @@
 
 #include "column/column_visitor_mutable.h"
 
+#include "adaptive_nullable_column.h"
+
 namespace starrocks {
 
 #define VISIT_IMPL(ClassName) \
     Status ColumnVisitorMutable::visit(ClassName* column) { return Status::NotSupported(#ClassName); }
 
 VISIT_IMPL(NullableColumn)
+VISIT_IMPL(AdaptiveNullableColumn)
 VISIT_IMPL(ConstColumn)
 VISIT_IMPL(ArrayColumn)
 VISIT_IMPL(MapColumn)
