@@ -574,9 +574,9 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
 void RuntimeFilterProbeDescriptor::set_runtime_filter_instances(
         const std::shared_ptr<const RuntimeFilterInstanceSet>& instances) {
     std::shared_ptr<const RuntimeFilterInstanceSet> old_value = nullptr;
-    if (std::atomic_compare_exchange_strong(&_runtime_filter_instances, &old_value, instances)) {
-        _notify_runtime_filter_ready(instances != nullptr ? instances->runtime_filter(-1) : nullptr);
-    }
+    std::atomic_compare_exchange_strong(&_runtime_filter_instances, &old_value, instances);
+    auto installed_instances = std::atomic_load(&_runtime_filter_instances);
+    _notify_runtime_filter_ready(installed_instances != nullptr ? installed_instances->runtime_filter(-1) : nullptr);
 }
 
 } // namespace starrocks

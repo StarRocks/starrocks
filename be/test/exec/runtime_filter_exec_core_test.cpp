@@ -181,6 +181,36 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorCanInstallInstanceSet) {
     EXPECT_EQ(desc.runtime_filter(1), colocate1.get());
 }
 
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorRepeatedInstanceInstallCanWakeAfterFragmentPrepared) {
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(23, probe_ctx));
+
+    runtime_state.set_enable_event_scheduler(true);
+    RuntimeProfile profile("rf");
+    ASSERT_OK(desc.prepare(&runtime_state, &profile));
+
+    int observer_calls = 0;
+    desc.add_observer(&runtime_state, [&observer_calls]() { ++observer_calls; });
+
+    auto instances = std::make_shared<RuntimeFilterInstanceSet>(2);
+    auto colocate0 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    auto colocate1 = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    colocate0->insert(101);
+    colocate1->insert(202);
+    instances->set_local_colocate_runtime_filter(colocate0, 0);
+    instances->set_local_colocate_runtime_filter(colocate1, 1);
+
+    desc.set_runtime_filter_instances(instances);
+    EXPECT_EQ(observer_calls, 0);
+
+    runtime_state.set_fragment_prepared(true);
+    desc.set_runtime_filter_instances(instances);
+    EXPECT_EQ(observer_calls, 1);
+}
+
 TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {
     auto* numeric_filter = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
     numeric_filter->insert(10);
