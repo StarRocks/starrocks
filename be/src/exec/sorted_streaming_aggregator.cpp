@@ -19,8 +19,8 @@
 #include <utility>
 #include <vector>
 
-#include "column/append_with_mask.h"
 #include "column/adaptive_nullable_column.h"
+#include "column/append_with_mask.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/nullable_column.h"
