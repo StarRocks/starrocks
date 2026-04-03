@@ -2280,3 +2280,143 @@ The following metrics are exposed on the BE Prometheus endpoint (`/metrics`):
 - Unit: Bytes
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
+
+### Tablet Reshard Metrics
+
+Tablet reshard metrics provide visibility into tablet split and merge operations in shared-data mode with range distribution tables.
+
+#### FE Metrics
+
+##### starrocks_fe_job{job="tablet_reshard"}
+
+- Unit: Count
+- Type: Gauge
+- Labels: `job=tablet_reshard`, `type=SPLIT_TABLET|MERGE_TABLET`, `state=PENDING|PREPARING|RUNNING|CLEANING|FINISHED|ABORTING|ABORTED`
+- Description: Number of tablet reshard jobs in each state.
+
+##### starrocks_fe_tablet_reshard_parallel_tablets
+
+- Unit: Count
+- Type: Gauge
+- Description: Total number of tablets currently being resharded across all active jobs.
+
+##### starrocks_fe_tablet_reshard_job_total
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs created.
+
+##### starrocks_fe_tablet_reshard_job_finished
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs that finished successfully.
+
+##### starrocks_fe_tablet_reshard_job_aborted
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs that were aborted.
+
+##### starrocks_fe_tablet_reshard_job_duration_ms
+
+- Unit: ms
+- Type: Histogram
+- Description: Duration distribution (in milliseconds) of completed tablet reshard jobs.
+
+#### BE Metrics (bvar)
+
+The following metrics are exposed on the BE `/vars` HTTP endpoint with the `tablet_reshard_` prefix.
+
+##### tablet_reshard_total
+
+- Type: Counter
+- Description: Total number of reshard operations executed (one per `publish_resharding_tablet` call).
+
+##### tablet_reshard_failed
+
+- Type: Counter
+- Description: Number of reshard operations that failed.
+
+##### tablet_reshard_latency
+
+- Type: LatencyRecorder (us)
+- Description: End-to-end latency of reshard operations in microseconds.
+
+##### tablet_reshard_split_total
+
+- Type: Counter
+- Description: Total number of tablet split operations.
+
+##### tablet_reshard_split_failed
+
+- Type: Counter
+- Description: Number of tablet split operations that failed.
+
+##### tablet_reshard_split_latency
+
+- Type: LatencyRecorder (us)
+- Description: Latency of the `split_tablet` computation in microseconds.
+
+##### tablet_reshard_split_output_tablet_count
+
+- Type: Counter
+- Description: Cumulative number of output tablets produced by split operations.
+
+##### tablet_reshard_split_fallback_total
+
+- Type: Counter
+- Description: Number of split operations that fell back to identical (copy) because split boundaries could not be computed.
+
+##### tablet_reshard_merge_total
+
+- Type: Counter
+- Description: Total number of tablet merge operations.
+
+##### tablet_reshard_merge_failed
+
+- Type: Counter
+- Description: Number of tablet merge operations that failed.
+
+##### tablet_reshard_merge_latency
+
+- Type: LatencyRecorder (us)
+- Description: Latency of the `merge_tablet` computation in microseconds.
+
+##### tablet_reshard_merge_input_tablet_count
+
+- Type: Counter
+- Description: Cumulative number of input tablets consumed by merge operations.
+
+##### tablet_reshard_identical_total
+
+- Type: Counter
+- Description: Total number of identical (metadata copy) operations.
+
+##### tablet_reshard_identical_failed
+
+- Type: Counter
+- Description: Number of identical operations that failed.
+
+##### tablet_reshard_cross_publish_total
+
+- Type: Counter
+- Description: Total number of cross-publish operations (txn log conversions during reshard).
+
+##### tablet_reshard_cross_publish_splitting_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for splitting tablets (1 txn log applied to N tablets).
+
+##### tablet_reshard_cross_publish_merging_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for merging tablets (N txn logs applied to 1 tablet).
+
+##### tablet_reshard_cross_publish_identical_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for identical tablets (1 txn log applied to another tablet).
