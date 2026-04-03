@@ -67,6 +67,14 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- https://nvd.nist.gov/vuln/detail/CVE-2026-24281 -->
+            <!-- https://nvd.nist.gov/vuln/detail/CVE-2026-24308 -->
+            <dependency>
+                <groupId>org.apache.zookeeper</groupId>
+                <artifactId>zookeeper</artifactId>
+                <version>3.8.6</version>
+            </dependency>
+
             <!-- jni connector -->
             <dependency>
                 <groupId>com.starrocks</groupId>

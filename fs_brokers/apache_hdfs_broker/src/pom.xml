@@ -42,7 +42,8 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <hadoop.version>3.4.3</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
-        <zookeeper.version>3.9.3</zookeeper.version>
+        <!-- CVE-2026-24281, CVE-2026-24308: upgrade from 3.9.3 to 3.9.5 -->
+        <zookeeper.version>3.9.5</zookeeper.version>
         <protobuf.version>3.25.5</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
         <tomcat.version>9.0.106</tomcat.version>
