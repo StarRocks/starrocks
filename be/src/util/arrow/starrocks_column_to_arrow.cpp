@@ -24,7 +24,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"

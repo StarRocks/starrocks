@@ -18,7 +18,7 @@
 
 #include <cstdint>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/statusor.h"
 #include "exprs/jit/expr_jit_types.h"
 #include "types/type_descriptor.h"

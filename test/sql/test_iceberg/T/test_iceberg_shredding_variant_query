@@ -16,8 +16,13 @@ use iceberg_shredding_test_${uuid0}.zya;
 set cbo_variant_path_rewrite = false;
 
 -- 1. Create Shredding table and load data
+-- id/age/city are top-level physical columns mirroring the same fields inside the
+-- variant, used for Phase-2 predicate-filter testing and cross-validation.
 CREATE TABLE test_shredding_variant (
-    data VARIANT
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
 ) properties(
   'format-version' = '3',
   'iceberg.enableVariantShredding' = 'true'
@@ -31,7 +36,10 @@ alter table test_shredding_variant execute add_files(location='oss://${oss_bucke
 
 -- 2. Create No-Shredding table and load data
 CREATE TABLE test_noshredding_variant (
-    data VARIANT
+    data VARIANT,
+    id BIGINT,
+    age INT,
+    city VARCHAR
 ) properties(
   'format-version' = '3'
 );
@@ -199,6 +207,62 @@ SELECT '--- Full Variant Comparison ---' as label;
 UNION ALL
 (SELECT get_variant_int(data, '$.id') as id, 'noshred' as label, data FROM test_noshredding_variant)
 ORDER BY id, label;
+
+-- ========================================
+-- Query 8: Cross-validation — physical columns match variant sub-fields
+-- id/age/city are stored both as top-level columns and inside the variant.
+-- Results must be identical.
+-- ========================================
+SELECT id, age, city,
+       get_variant_int(data, '$.id') as v_id,
+       get_variant_int(data, '$.age') as v_age,
+       get_variant_string(data, '$.city') as v_city
+FROM test_shredding_variant
+ORDER BY id;
+
+SELECT id, age, city,
+       get_variant_int(data, '$.id') as v_id,
+       get_variant_int(data, '$.age') as v_age,
+       get_variant_string(data, '$.city') as v_city
+FROM test_noshredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 9: Combined filter — physical column predicate (Phase 2, has_filter=true)
+--          + variant conjunct (Phase 4)
+-- age >= 22 (physical, triggers Phase 2 filter) selects id=1002,1003,1004
+-- get_variant_int(score) IS NOT NULL (variant conjunct, Phase 4) selects id=1002,1004
+--   because score is INT on even rows and STRING on odd rows.
+-- ========================================
+SELECT id, age, cast(variant_query(data, '$.score') as string) as score
+FROM test_shredding_variant
+WHERE age >= 22
+  AND get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY id;
+
+-- Same query on noshredding table — results must match.
+SELECT id, age, cast(variant_query(data, '$.score') as string) as score
+FROM test_noshredding_variant
+WHERE age >= 22
+  AND get_variant_int(data, '$.score') IS NOT NULL
+ORDER BY id;
+
+-- ========================================
+-- Query 10: Combined filter — city (dict-encoded STRING, Phase 2)
+--           + variant conjunct on views (Phase 4)
+-- city = 'city_1' OR 'city_3' selects id=1001,1003; views > 115 selects id=1003
+-- ========================================
+SELECT id, city, get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_shredding_variant
+WHERE city IN ('city_1', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 115
+ORDER BY id;
+
+SELECT id, city, get_variant_int(data, '$.profile.metrics.views') as views
+FROM test_noshredding_variant
+WHERE city IN ('city_1', 'city_3')
+  AND get_variant_int(data, '$.profile.metrics.views') > 115
+ORDER BY id;
 
 -- Cleanup environment
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/ > /dev/null

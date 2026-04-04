@@ -57,7 +57,7 @@ function: assert_explain_verbose_contains("select sum(get_variant_int(data, '$.p
 -- result:
 True
 -- !result
-set cbo_variant_path_rewrite = false;
+set cbo_variant_path_rewrite = true;
 -- result:
 -- !result
 select get_variant_int(data, '$.id') as id

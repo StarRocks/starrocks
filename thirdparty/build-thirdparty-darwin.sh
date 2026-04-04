@@ -1425,6 +1425,12 @@ build_formula_aws_cpp_sdk() {
     link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    if [[ -L "${TP_INCLUDE_DIR}/smithy" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/smithy"
+    fi
+    mkdir -p "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${prefix}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
@@ -1470,13 +1476,73 @@ build_formula_jansson() {
     sync_lib64_links
 }
 
-build_formula_poco() {
-    ensure_formula poco
-    local prefix
-    prefix="$(formula_prefix poco)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libPoco"*.a "${prefix}/lib/libPoco"*.dylib
-    link_formula_metadata "${prefix}"
+clean_poco_install_artifacts() {
+    rm -rf "${TP_INCLUDE_DIR}/Poco" \
+        "${TP_INSTALL_DIR}/lib/cmake/Poco" \
+        "${TP_INSTALL_DIR}/share/cmake/Poco"
+    safe_remove_glob "${TP_INSTALL_DIR}/lib/libPoco"* "${TP_INSTALL_DIR}/lib64/libPoco"*
+}
+
+remove_stale_homebrew_poco_symlinks() {
+    find "${TP_INSTALL_DIR}/lib" "${TP_INSTALL_DIR}/lib64" \
+        -maxdepth 1 \
+        -type l \
+        -name 'libPoco*' \
+        -lname "${HOMEBREW_PREFIX%/}/*" \
+        -exec rm -f {} +
+}
+
+build_poco() {
+    remove_stale_homebrew_poco_symlinks
+    if [[ -f "${TP_INSTALL_DIR}/lib/libPocoNet.a" &&
+          -f "${TP_INSTALL_DIR}/lib/libPocoNetSSL.a" &&
+          -f "${TP_INCLUDE_DIR}/Poco/Net/HTTPResponse.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${POCO_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${POCO_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    clean_poco_install_artifacts
+    cd "${BUILD_DIR}"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DPOCO_UNBUNDLED=ON \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DZLIB_ROOT="${TP_INSTALL_DIR}" \
+        -DPCRE2_ROOT_DIR="${HOMEBREW_PREFIX}/opt/pcre2" \
+        -DENABLE_XML=OFF \
+        -DENABLE_JSON=OFF \
+        -DENABLE_NET=ON \
+        -DENABLE_NETSSL=ON \
+        -DENABLE_CRYPTO=OFF \
+        -DENABLE_JWT=OFF \
+        -DENABLE_DATA=OFF \
+        -DENABLE_DATA_SQLITE=OFF \
+        -DENABLE_DATA_MYSQL=OFF \
+        -DENABLE_DATA_POSTGRESQL=OFF \
+        -DENABLE_DATA_ODBC=OFF \
+        -DENABLE_MONGODB=OFF \
+        -DENABLE_REDIS=OFF \
+        -DENABLE_UTIL=OFF \
+        -DENABLE_ZIP=OFF \
+        -DENABLE_APACHECONNECTOR=OFF \
+        -DENABLE_ENCODINGS=OFF \
+        -DENABLE_PAGECOMPILER=OFF \
+        -DENABLE_PAGECOMPILER_FILE2PAGE=OFF \
+        -DENABLE_ACTIVERECORD=OFF \
+        -DENABLE_ACTIVERECORD_COMPILER=OFF \
+        -DENABLE_PROMETHEUS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
     sync_lib64_links
 }
 
@@ -2121,7 +2187,7 @@ for package in "${packages[@]}"; do
             build_formula_llvm
             ;;
         poco)
-            build_formula_poco
+            build_poco
             ;;
         xsimd)
             build_formula_xsimd

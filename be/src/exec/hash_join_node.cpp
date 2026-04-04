@@ -38,13 +38,13 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "runtime/runtime_filter/runtime_filter_descriptor.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {

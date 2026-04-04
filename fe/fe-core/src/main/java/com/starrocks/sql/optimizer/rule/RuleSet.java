@@ -433,6 +433,11 @@ public class RuleSet {
                     new MinMaxOptOnScanRule()
             ));
 
+    // Unified IVM delta/version rewrite rules.
+    // Concrete scan rules for each table type will be added in subsequent PRs.
+    public static final Rule IVM_DELTA_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of());
+
     public static final Rule TVR_REWRITE_RULES =
             new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(
                     new TvrTableScanRule(),

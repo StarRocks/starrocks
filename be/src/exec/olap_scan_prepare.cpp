@@ -18,7 +18,7 @@
 #include <variant>
 
 #include "base/orlp/pdqsort.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"

@@ -12,18 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/type_traits.h"
+#pragma once
 
-#include <velocypack/Slice.h>
+#include_next <thrift/Thrift.h>
 
-namespace starrocks {
+#ifdef __APPLE__
+namespace apache {
+namespace thrift {
 
-JsonValue RunTimeTypeLimits<TYPE_JSON>::min_value() {
-    return JsonValue{vpack::Slice::minKeySlice()};
+// thrift 0.20.0's iterator only defines operator!=, but newer libc++ map
+// constructors compare the range endpoints with operator==.
+inline bool operator==(TEnumIterator lhs, TEnumIterator rhs) {
+    return !(lhs != rhs);
 }
 
-JsonValue RunTimeTypeLimits<TYPE_JSON>::max_value() {
-    return JsonValue{vpack::Slice::maxKeySlice()};
-}
-
-} // namespace starrocks
+} // namespace thrift
+} // namespace apache
+#endif

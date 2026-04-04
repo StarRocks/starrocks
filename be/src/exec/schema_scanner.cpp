@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/schema_scanner/schema_analyze_status.h"

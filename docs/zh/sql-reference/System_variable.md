@@ -67,6 +67,8 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -563,7 +565,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
 * 默认值：64
 * 数据类型：Int
-* 引入版本：v3.5.12
+* 引入版本：v3.5.16、v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 时，是否保留目标 `VARCHAR(N)` 的长度信息。开启后，可使 `CAST(col AS VARCHAR(N))` 这类语句在 prepare 和 execute 阶段返回一致的结果集元数据。
+* 默认值：false
+* 数据类型：Boolean
+* 引入版本：v3.5.16、v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 后，是否将复用的 planner `Expr` 的 `type` 和 `originType` 同步为改写后的 `VARCHAR(N)` 类型。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v3.5.16、v4.0.9
 
 ### enable_lake_tablet_internal_parallel
 

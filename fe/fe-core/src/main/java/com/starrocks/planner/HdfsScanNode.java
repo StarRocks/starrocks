@@ -202,6 +202,8 @@ public class HdfsScanNode extends ScanNode {
         if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {
             tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
         }
+
+        setConnectorCatalogType(msg);
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {

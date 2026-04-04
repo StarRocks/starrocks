@@ -64,6 +64,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
+        ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
@@ -303,7 +304,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/type_checker_test.cpp
-        ./types/type_checker_xml_loader_test.cpp 
+        ./types/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/block_compression_test.cpp
@@ -318,6 +319,7 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
+        ./util/metrics/catalog_scan_metrics_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp
@@ -363,6 +365,7 @@ add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
+add_subdirectory(exec)
 add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
@@ -475,6 +478,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp

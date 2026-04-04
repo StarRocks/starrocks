@@ -26,7 +26,7 @@
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/aggregate/agg_hash_set.h"

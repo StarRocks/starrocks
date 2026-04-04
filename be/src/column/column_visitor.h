@@ -29,6 +29,7 @@ public:
 
     // The default implementation of `visit` will return `Status::NotSupported`
     virtual Status visit(const NullableColumn& column);
+    virtual Status visit(const AdaptiveNullableColumn& column);
     virtual Status visit(const ConstColumn& column);
     virtual Status visit(const ArrayColumn& column);
     virtual Status visit(const MapColumn& column);

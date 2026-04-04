@@ -167,7 +167,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #ifdef FIU_ENABLE
                     FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
 #endif
-                    desc->add_observer(_runtime_state, &_observer);
+                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
                 }
             }
 

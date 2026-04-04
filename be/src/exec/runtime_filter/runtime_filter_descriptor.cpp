@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
 
 #include "exprs/expr_factory.h"
 
@@ -63,7 +63,7 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _runtime_filter_type = desc.filter_type;
     }
 
-    WithLayoutMixin::init(desc);
+    init_runtime_filter_layout(desc, &_layout);
     RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
