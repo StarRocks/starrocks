@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -38,8 +39,10 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
@@ -75,11 +78,15 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -375,12 +382,25 @@ public class HiveMetadata implements ConnectorMetadata {
         return fileOps.getRemoteFilesAsync(table, params, (p) -> this.buildGetRemoteFilesPartitions(table, p));
     }
 
-    @Override
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        ImmutableList.Builder<Partition> partitionBuilder = ImmutableList.builder();
-        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
-        partitionBuilder.addAll(existingPartitions.values());
-        return fileOps.getRemotePartitions(partitionBuilder.build());
+    public Optional<Map<String, Optional<HivePartitionDataInfo>>> getHivePartitionDataInfos(
+            HiveTable table, List<String> partitionNames, int partitionLimit) {
+        String scheme = Optional.ofNullable(URI.create(table.getTableLocation()).getScheme())
+                .orElse("")
+                .toUpperCase(Locale.ROOT);
+        List<String> partitionNamesToFetch = partitionNames;
+        if (partitionLimit >= 0 && partitionLimit < partitionNames.size()) {
+            partitionNamesToFetch = partitionNames.subList(partitionNames.size() - partitionLimit, partitionNames.size());
+        }
+
+        switch (scheme) {
+            case "HDFS":
+                return Optional.of(getPartitionDataInfosByDirectoryMtime(table, partitionNamesToFetch));
+            case "OSS":
+            case "S3":
+                return Optional.of(getPartitionDataInfosByRemoteFiles(table, partitionNamesToFetch));
+            default:
+                return Optional.empty();
+        }
     }
 
     @Override
@@ -394,6 +414,66 @@ public class HiveMetadata implements ConnectorMetadata {
             partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
             return partitions.build();
         }
+    }
+
+    private Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfosByDirectoryMtime(
+            Table table, List<String> partitionNames) {
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newLinkedHashMap();
+        partitionNames.forEach(partitionName -> partitionDataInfos.put(partitionName, Optional.empty()));
+
+        Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionNames);
+        List<String> existingPartitionNames = new ArrayList<>();
+        List<Path> paths = new ArrayList<>();
+        for (String partitionName : partitionNames) {
+            Partition partition = existingPartitions.get(partitionName);
+            if (partition != null) {
+                existingPartitionNames.add(partitionName);
+                paths.add(new Path(partition.getFullPath()));
+            }
+        }
+        if (paths.isEmpty()) {
+            return partitionDataInfos;
+        }
+
+        // HDFS exposes directory-level modification time, so MV repair can cheaply detect changes
+        // without listing every file under each partition directory.
+        FileStatus[] fileStatuses = fileOps.getFileStatus(paths.toArray(new Path[0]));
+        for (int i = 0; i < existingPartitionNames.size() && i < fileStatuses.length; i++) {
+            partitionDataInfos.put(existingPartitionNames.get(i),
+                    Optional.of(new HivePartitionDataInfo(fileStatuses[i].getModificationTime(), 1)));
+        }
+        return partitionDataInfos;
+    }
+
+    private Map<String, Optional<HivePartitionDataInfo>> getPartitionDataInfosByRemoteFiles(
+            Table table, List<String> partitionNames) {
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = Maps.newLinkedHashMap();
+        if (partitionNames.isEmpty()) {
+            return partitionDataInfos;
+        }
+
+        // Object stores do not provide a stable directory mtime signal, so derive change tokens
+        // from the partition's current file listing instead.
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setPartitionNames(partitionNames)
+                .setCheckPartitionExistence(false)
+                .build();
+        List<RemoteFileInfo> remoteFileInfos = getRemoteFiles(table, params);
+        for (int i = 0; i < partitionNames.size(); i++) {
+            Optional<HivePartitionDataInfo> partitionDataInfo = Optional.empty();
+            if (i < remoteFileInfos.size()) {
+                List<RemoteFileDesc> remoteFileDescs = remoteFileInfos.get(i).getFiles();
+                if (remoteFileDescs != null) {
+                    long lastFileModifiedTime = Long.MIN_VALUE;
+                    for (RemoteFileDesc remoteFileDesc : remoteFileDescs) {
+                        lastFileModifiedTime = Math.max(lastFileModifiedTime, remoteFileDesc.getModificationTime());
+                    }
+                    partitionDataInfo = Optional.of(new HivePartitionDataInfo(lastFileModifiedTime, remoteFileDescs.size()));
+                }
+            }
+            partitionDataInfos.put(partitionNames.get(i), partitionDataInfo);
+        }
+        return partitionDataInfos;
     }
 
     @Override

@@ -14,11 +14,13 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
@@ -405,5 +407,90 @@ public class QueryDetailTest {
 
         starRocksAssert.dropDatabase(dbName);
 
+    }
+
+    @Test
+    public void testAuditAfterExecWithCatalogMetricsAndBigQueryLog(@Mocked StmtExecutor mockExecutor) throws Exception {
+        String sql = "SELECT 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+        testContext.getState().setIsQuery(true);
+        testContext.getSessionVariable().setEnableBigQueryLog(true);
+        testContext.getSessionVariable().setBigQueryLogCpuSecondThreshold(11L);
+        testContext.getSessionVariable().setBigQueryLogScanBytesThreshold(22L);
+        testContext.getSessionVariable().setBigQueryLogScanRowsThreshold(33L);
+
+        new mockit.Expectations() {
+            {
+                mockExecutor.getCatalogTypesInvolved();
+                result = Sets.newHashSet("hive");
+                minTimes = 0;
+            }
+        };
+
+        long oldSlowLogMs = Config.qe_slow_log_ms;
+        try {
+            Config.qe_slow_log_ms = 0;
+            ConnectProcessor processor = new ConnectProcessor(testContext);
+            Deencapsulation.setField(processor, "executor", mockExecutor);
+            processor.auditAfterExec(sql, statement, null);
+        } finally {
+            Config.qe_slow_log_ms = oldSlowLogMs;
+        }
+
+        AuditEvent event = testContext.getAuditEventBuilder().build();
+        Assertions.assertTrue(event.isQuery);
+        Assertions.assertEquals(11L, event.bigQueryLogCPUSecondThreshold);
+        Assertions.assertEquals(22L, event.bigQueryLogScanBytesThreshold);
+        Assertions.assertEquals(33L, event.bigQueryLogScanRowsThreshold);
+    }
+
+    @Test
+    public void testAuditAfterExecWithCatalogMetricsErrorType(@Mocked StmtExecutor mockExecutor) throws Exception {
+        String sql = "SELECT 1";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        ConnectContext testContext = new ConnectContext();
+        testContext.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        testContext.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
+        testContext.setQualifiedUser(connectContext.getQualifiedUser());
+        testContext.setDatabase("test_db");
+        testContext.setCurrentCatalog("default_catalog");
+        testContext.setQueryId(UUIDUtil.genUUID());
+        testContext.setStartTime();
+        testContext.getState().setIsQuery(true);
+        testContext.getState().setStateType(QueryState.MysqlStateType.ERR);
+
+        new mockit.Expectations() {
+            {
+                mockExecutor.getCatalogTypesInvolved();
+                result = Sets.newHashSet("hive");
+                minTimes = 0;
+            }
+        };
+
+        ConnectProcessor processor = new ConnectProcessor(testContext);
+        Deencapsulation.setField(processor, "executor", mockExecutor);
+
+        long timeoutBefore = MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric("hive").getValue();
+        long internalBefore = MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric("hive").getValue();
+
+        testContext.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
+        processor.auditAfterExec(sql, statement, null);
+        Assertions.assertEquals(timeoutBefore + 1,
+                MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric("hive").getValue());
+
+        testContext.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+        processor.auditAfterExec(sql, statement, null);
+        Assertions.assertEquals(internalBefore + 1,
+                MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric("hive").getValue());
     }
 }

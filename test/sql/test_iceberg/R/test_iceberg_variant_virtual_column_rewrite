@@ -57,6 +57,75 @@ function: assert_explain_verbose_contains("select sum(get_variant_int(data, '$.p
 -- result:
 True
 -- !result
+set cbo_variant_path_rewrite = true;
+-- result:
+-- !result
+select get_variant_int(data, '$.id') as id
+from test_variant_virtual_column
+order by id;
+-- result:
+1000
+1001
+1002
+1003
+1004
+-- !result
+select get_variant_string(data, '$.profile.department') as dept
+from test_variant_virtual_column
+order by dept;
+-- result:
+dept_0
+dept_1
+dept_2
+dept_3
+dept_4
+-- !result
+select get_variant_int(data, '$.id') as id,
+       get_variant_string(data, '$.profile.department') as dept
+from test_variant_virtual_column
+order by id;
+-- result:
+1000	dept_0
+1001	dept_1
+1002	dept_2
+1003	dept_3
+1004	dept_4
+-- !result
+select get_variant_int(data, '$.id') as id,
+       data
+from test_variant_virtual_column
+where get_variant_int(data, '$.id') = 1000
+order by id;
+-- result:
+1000	{"age":20,"city":"city_0","email":"user0@example.com","events":[{"count":1,"detail":"detail_view_0","type":"view"},{"count":2,"detail":"detail_click_0","type":"click"}],"groups":[{"name":"group_0","note":"note_0_0","scores":[10,20,30]},{"name":"group_1","note":"note_0_1","scores":[40,50,60]}],"id":1000,"name":"name_0","numbers":[1,2,3],"profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
+-- !result
+select cast(variant_query(data, '$.profile.rank') as bigint) as rank_val
+from test_variant_virtual_column
+order by rank_val;
+-- result:
+None
+None
+1
+3
+5
+-- !result
+select get_variant_string(data, '$.profile.department') as dept,
+       sum(get_variant_int(data, '$.profile.metrics.views')) as total_views
+from test_variant_virtual_column
+group by 1
+order by 1;
+-- result:
+dept_0	100
+dept_1	110
+dept_2	120
+dept_3	130
+dept_4	140
+-- !result
+select sum(get_variant_int(data, '$.profile.metrics.views'))
+from test_variant_virtual_column;
+-- result:
+600
+-- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_virtual_column_rewrite/${uuid0}/ > /dev/null
 -- result:
 0

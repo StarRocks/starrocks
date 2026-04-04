@@ -57,7 +57,7 @@
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
 #include "types/date_value.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -100,7 +100,7 @@ std::string bitshuffle_error_msg(int64_t err);
 //
 template <LogicalType Type>
 class BitshufflePageBuilder final : public PageBuilder {
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
 public:
     explicit BitshufflePageBuilder(const PageBuilderOptions& options)
@@ -227,7 +227,7 @@ private:
         return &_compressed_data;
     }
 
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     uint8_t _reserved_head_size{0};
     uint32_t _max_count;
     uint32_t _count{0};
@@ -240,7 +240,7 @@ private:
 
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
@@ -376,7 +376,7 @@ private:
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     uint32_t _num_elements{0};

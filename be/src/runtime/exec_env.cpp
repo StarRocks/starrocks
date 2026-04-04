@@ -714,12 +714,6 @@ std::string ExecEnv::token() const {
     return get_master_token();
 }
 
-void ExecEnv::add_rf_event(const RfTracePoint& pt) {
-    std::string msg =
-            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
-    _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
-}
-
 void ExecEnv::stop() {
     int64_t total_start = MonotonicMillis();
     int64_t start;

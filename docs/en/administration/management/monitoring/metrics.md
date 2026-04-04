@@ -555,6 +555,45 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: The number of incorrect queries for each resource group.
 
+### Catalog-type Query Metrics
+
+These metrics provide per-catalog-type query observability. Each metric has a `catalog_type` label
+with values: `default`, `hive`, `iceberg`, `jdbc`, `deltalake`, `hudi`, `paimon`, `odps`, `kudu`, `elasticsearch`.
+
+The `default` value represents internal StarRocks tables (OLAP/Cloud Native).
+
+| Metric | Type | Unit | Description |
+|--------|------|------|-------------|
+| `starrocks_fe_catalog_query_total` | Counter | Requests | Total queries by catalog type |
+| `starrocks_fe_catalog_query_success` | Counter | Requests | Successful queries by catalog type |
+| `starrocks_fe_catalog_query_err` | Counter | Requests | Failed queries by catalog type |
+| `starrocks_fe_catalog_query_timeout` | Counter | Requests | Timeout queries by catalog type |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | Requests | Analysis error queries by catalog type |
+| `starrocks_fe_catalog_query_internal_err` | Counter | Requests | Internal error queries by catalog type |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | Error rate by catalog type |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | Timeout rate by catalog type |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | Analysis error rate by catalog type |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | Internal error rate by catalog type |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | Query latency by catalog type |
+| `starrocks_fe_catalog_slow_query` | Counter | Requests | Slow queries by catalog type |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | Bytes | Scan bytes by catalog type |
+| `starrocks_be_catalog_query_scan_rows` | Counter | Rows | Scan rows by catalog type |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | Bytes | File scan bytes read by catalog type |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | Rows | File scan rows returned by catalog type |
+
+**Example Prometheus queries:**
+
+```promql
+# Total queries for Hive catalog
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# Error rate comparison across all catalog types
+starrocks_fe_catalog_query_err_rate
+
+# Scan bytes for external tables only (exclude default)
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
+
 ### starrocks_be_resource_group_cpu_limit_ratio
 
 - Unit: -
@@ -2241,3 +2280,143 @@ The following metrics are exposed on the BE Prometheus endpoint (`/metrics`):
 - Unit: Bytes
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
+
+### Tablet Reshard Metrics
+
+Tablet reshard metrics provide visibility into tablet split and merge operations in shared-data mode with range distribution tables.
+
+#### FE Metrics
+
+##### starrocks_fe_job{job="tablet_reshard"}
+
+- Unit: Count
+- Type: Gauge
+- Labels: `job=tablet_reshard`, `type=SPLIT_TABLET|MERGE_TABLET`, `state=PENDING|PREPARING|RUNNING|CLEANING|FINISHED|ABORTING|ABORTED`
+- Description: Number of tablet reshard jobs in each state.
+
+##### starrocks_fe_tablet_reshard_parallel_tablets
+
+- Unit: Count
+- Type: Gauge
+- Description: Total number of tablets currently being resharded across all active jobs.
+
+##### starrocks_fe_tablet_reshard_job_total
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs created.
+
+##### starrocks_fe_tablet_reshard_job_finished
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs that finished successfully.
+
+##### starrocks_fe_tablet_reshard_job_aborted
+
+- Unit: Count
+- Type: Counter
+- Labels: `type=split|merge`
+- Description: Cumulative number of tablet reshard jobs that were aborted.
+
+##### starrocks_fe_tablet_reshard_job_duration_ms
+
+- Unit: ms
+- Type: Histogram
+- Description: Duration distribution (in milliseconds) of completed tablet reshard jobs.
+
+#### BE Metrics (bvar)
+
+The following metrics are exposed on the BE `/vars` HTTP endpoint with the `tablet_reshard_` prefix.
+
+##### tablet_reshard_total
+
+- Type: Counter
+- Description: Total number of reshard operations executed (one per `publish_resharding_tablet` call).
+
+##### tablet_reshard_failed
+
+- Type: Counter
+- Description: Number of reshard operations that failed.
+
+##### tablet_reshard_latency
+
+- Type: LatencyRecorder (us)
+- Description: End-to-end latency of reshard operations in microseconds.
+
+##### tablet_reshard_split_total
+
+- Type: Counter
+- Description: Total number of tablet split operations.
+
+##### tablet_reshard_split_failed
+
+- Type: Counter
+- Description: Number of tablet split operations that failed.
+
+##### tablet_reshard_split_latency
+
+- Type: LatencyRecorder (us)
+- Description: Latency of the `split_tablet` computation in microseconds.
+
+##### tablet_reshard_split_output_tablet_count
+
+- Type: Counter
+- Description: Cumulative number of output tablets produced by split operations.
+
+##### tablet_reshard_split_fallback_total
+
+- Type: Counter
+- Description: Number of split operations that fell back to identical (copy) because split boundaries could not be computed.
+
+##### tablet_reshard_merge_total
+
+- Type: Counter
+- Description: Total number of tablet merge operations.
+
+##### tablet_reshard_merge_failed
+
+- Type: Counter
+- Description: Number of tablet merge operations that failed.
+
+##### tablet_reshard_merge_latency
+
+- Type: LatencyRecorder (us)
+- Description: Latency of the `merge_tablet` computation in microseconds.
+
+##### tablet_reshard_merge_input_tablet_count
+
+- Type: Counter
+- Description: Cumulative number of input tablets consumed by merge operations.
+
+##### tablet_reshard_identical_total
+
+- Type: Counter
+- Description: Total number of identical (metadata copy) operations.
+
+##### tablet_reshard_identical_failed
+
+- Type: Counter
+- Description: Number of identical operations that failed.
+
+##### tablet_reshard_cross_publish_total
+
+- Type: Counter
+- Description: Total number of cross-publish operations (txn log conversions during reshard).
+
+##### tablet_reshard_cross_publish_splitting_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for splitting tablets (1 txn log applied to N tablets).
+
+##### tablet_reshard_cross_publish_merging_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for merging tablets (N txn logs applied to 1 tablet).
+
+##### tablet_reshard_cross_publish_identical_total
+
+- Type: Counter
+- Description: Number of cross-publish operations for identical tablets (1 txn log applied to another tablet).

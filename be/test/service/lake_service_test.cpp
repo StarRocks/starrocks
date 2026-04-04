@@ -1032,6 +1032,61 @@ TEST_F(LakeServiceTest, test_publish_splitting_tablet) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_splitting_tablet_clears_inherited_garbage) {
+    auto txn_log = generate_write_txn_log(2, 100, 100);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    PublishVersionRequest publish_request;
+    publish_request.set_base_version(1);
+    publish_request.set_new_version(2);
+    publish_request.add_tablet_ids(_tablet_id);
+    publish_request.add_txn_ids(txn_log.txn_id());
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+    ASSERT_EQ(0, response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("split_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
+    splitting_tablet_info->set_old_tablet_id(_tablet_id);
+    std::vector<int64_t> new_tablet_ids{next_id(), next_id()};
+    for (auto new_tablet_id : new_tablet_ids) {
+        splitting_tablet_info->add_new_tablet_ids(new_tablet_id);
+    }
+
+    PublishVersionRequest reshard_request;
+    reshard_request.set_base_version(2);
+    reshard_request.set_new_version(3);
+    auto* txn_info = reshard_request.add_txn_infos();
+    txn_info->set_txn_id(next_id());
+    txn_info->set_txn_type(TXN_TABLET_RESHARD);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_commit_time(12345);
+    txn_info->set_force_publish(false);
+    reshard_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+    PublishVersionResponse reshard_response;
+    _lake_service.publish_version(nullptr, &reshard_request, &reshard_response, nullptr);
+    ASSERT_EQ(0, reshard_response.status().status_code());
+
+    for (auto new_tablet_id : new_tablet_ids) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+        EXPECT_EQ(0, metadata->compaction_inputs_size());
+        EXPECT_EQ(0, metadata->orphan_files_size());
+        EXPECT_FALSE(metadata->has_prev_garbage_version());
+    }
+}
+
 TEST_F(LakeServiceTest, test_splitting_tablet_split_count_three_with_tail_stats) {
     auto txn_log = generate_write_txn_log_with_segments({0, 100, 200, 300}, {100, 200, 300, 400}, {34, 34, 34, 1},
                                                         {100, 100, 100, 10});
@@ -1244,6 +1299,16 @@ TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
     _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
     ASSERT_EQ(0, response.status().status_code());
 
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("split_fallback_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
+
     ReshardingTabletInfoPB resharding_tablet_info;
     auto* splitting_tablet_info = resharding_tablet_info.mutable_splitting_tablet_info();
     splitting_tablet_info->set_old_tablet_id(_tablet_id);
@@ -1270,6 +1335,9 @@ TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {
 
     ASSIGN_OR_ABORT(auto metadata_first, _tablet_mgr->get_tablet_metadata(new_tablet_ids.front(), 3));
     EXPECT_EQ(new_tablet_ids.front(), metadata_first->id());
+    EXPECT_EQ(0, metadata_first->compaction_inputs_size());
+    EXPECT_EQ(0, metadata_first->orphan_files_size());
+    EXPECT_FALSE(metadata_first->has_prev_garbage_version());
     auto metadata_second = _tablet_mgr->get_tablet_metadata(new_tablet_ids[1], 3);
     EXPECT_TRUE(metadata_second.status().is_not_found());
     auto metadata_third = _tablet_mgr->get_tablet_metadata(new_tablet_ids[2], 3);
@@ -1669,6 +1737,57 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             ASSERT_EQ(0, response.tablet_ranges_size());
         }
     }
+}
+
+TEST_F(LakeServiceTest, test_publish_identical_tablet_clears_inherited_garbage) {
+    auto txn_log = generate_write_txn_log(1, 100, 100);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+    PublishVersionRequest publish_request;
+    publish_request.set_base_version(1);
+    publish_request.set_new_version(2);
+    publish_request.add_tablet_ids(_tablet_id);
+    publish_request.add_txn_ids(txn_log.txn_id());
+
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+    ASSERT_EQ(0, response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    auto dirty_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+    dirty_metadata->add_compaction_inputs()->CopyFrom(base_metadata->rowsets(0));
+    auto* orphan_file = dirty_metadata->add_orphan_files();
+    orphan_file->set_name("identical_orphan.dat");
+    orphan_file->set_size(1);
+    dirty_metadata->set_prev_garbage_version(1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(dirty_metadata));
+
+    ReshardingTabletInfoPB resharding_tablet_info;
+    auto* identical_tablet_info = resharding_tablet_info.mutable_identical_tablet_info();
+    identical_tablet_info->set_old_tablet_id(_tablet_id);
+    const int64_t new_tablet_id = next_id();
+    identical_tablet_info->set_new_tablet_id(new_tablet_id);
+
+    PublishVersionRequest reshard_request;
+    reshard_request.set_base_version(2);
+    reshard_request.set_new_version(3);
+    auto* txn_info = reshard_request.add_txn_infos();
+    txn_info->set_txn_id(next_id());
+    txn_info->set_txn_type(TXN_TABLET_RESHARD);
+    txn_info->set_combined_txn_log(false);
+    txn_info->set_commit_time(12345);
+    txn_info->set_force_publish(false);
+    reshard_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
+
+    PublishVersionResponse reshard_response;
+    _lake_service.publish_version(nullptr, &reshard_request, &reshard_response, nullptr);
+    ASSERT_EQ(0, reshard_response.status().status_code());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
+    EXPECT_EQ(0, metadata->compaction_inputs_size());
+    EXPECT_EQ(0, metadata->orphan_files_size());
+    EXPECT_FALSE(metadata->has_prev_garbage_version());
 }
 
 TEST_F(LakeServiceTest, test_abort) {

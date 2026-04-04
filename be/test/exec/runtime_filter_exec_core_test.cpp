@@ -1,0 +1,246 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <gtest/gtest.h>
+
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_helper.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec/runtime_filter/runtime_filter_registry.h"
+#include "exprs/column_ref.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_layout.h"
+#include "runtime/runtime_state.h"
+#include "testutil/exprs_test_helper.h"
+
+namespace starrocks {
+namespace {
+
+TRuntimeFilterLayout make_layout(int32_t filter_id) {
+    TRuntimeFilterLayout layout;
+    layout.__set_filter_id(filter_id);
+    layout.__set_local_layout(TRuntimeFilterLayoutMode::SINGLETON);
+    layout.__set_global_layout(TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_1L);
+    layout.__set_pipeline_level_multi_partitioned(false);
+    layout.__set_num_instances(1);
+    layout.__set_num_drivers_per_instance(1);
+    return layout;
+}
+
+TRuntimeFilterDescription make_build_desc() {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(7);
+    desc.__set_expr_order(1);
+    desc.__set_has_remote_targets(true);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(TRuntimeFilterBuildType::JOIN_FILTER);
+    desc.__set_build_expr(ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(2, true));
+    desc.__set_layout(make_layout(7));
+    desc.__set_plan_node_id_to_target_expr({{11, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(3, true)}});
+    return desc;
+}
+
+TRuntimeFilterDescription make_probe_desc(int32_t filter_id, TPlanNodeId node_id, TRuntimeFilterBuildType::type type) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(filter_id);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(5);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(type);
+    desc.__set_layout(make_layout(filter_id));
+    desc.__set_plan_node_id_to_target_expr({{node_id, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(9, true)}});
+    return desc;
+}
+
+TRuntimeFilterDescription make_bucket_fallback_desc(int32_t filter_id) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(filter_id);
+    desc.__set_bucketseq_to_instance({2, 0, 1});
+    return desc;
+}
+
+} // namespace
+
+class RuntimeFilterExecCoreTest : public ::testing::Test {
+protected:
+    ObjectPool pool;
+    RuntimeState runtime_state;
+};
+
+TEST_F(RuntimeFilterExecCoreTest, LayoutHelperInitializesFromExplicitLayout) {
+    RuntimeFilterLayout layout;
+    init_runtime_filter_layout(make_build_desc(), &layout);
+
+    EXPECT_EQ(layout.filter_id(), 7);
+    EXPECT_EQ(layout.local_layout(), TRuntimeFilterLayoutMode::SINGLETON);
+    EXPECT_EQ(layout.global_layout(), TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_1L);
+    EXPECT_FALSE(layout.pipeline_level_multi_partitioned());
+    EXPECT_EQ(layout.num_instances(), 1);
+    EXPECT_EQ(layout.num_drivers_per_instance(), 1);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, LayoutHelperFallsBackToBucketSequence) {
+    RuntimeFilterLayout layout;
+    init_runtime_filter_layout(make_bucket_fallback_desc(29), &layout);
+
+    EXPECT_EQ(layout.filter_id(), 29);
+    EXPECT_EQ(layout.local_layout(), TRuntimeFilterLayoutMode::SINGLETON);
+    EXPECT_EQ(layout.global_layout(), TRuntimeFilterLayoutMode::GLOBAL_BUCKET_1L);
+    EXPECT_EQ(layout.bucketseq_to_instance(), std::vector<int32_t>({2, 0, 1}));
+}
+
+TEST_F(RuntimeFilterExecCoreTest, BuildDescriptorInitCapturesPlannerMetadata) {
+    RuntimeFilterBuildDescriptor desc;
+    ASSERT_OK(desc.init(&pool, make_build_desc(), &runtime_state));
+
+    EXPECT_EQ(desc.filter_id(), 7);
+    EXPECT_EQ(desc.build_expr_order(), 1);
+    EXPECT_EQ(desc.type(), TRuntimeFilterBuildType::JOIN_FILTER);
+    EXPECT_TRUE(desc.has_remote_targets());
+    EXPECT_TRUE(desc.has_consumer());
+    EXPECT_EQ(desc.join_mode(), TRuntimeFilterBuildJoinMode::BROADCAST);
+    EXPECT_EQ(desc.layout().filter_id(), 7);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorInitDistinguishesJoinAndStreamFilters) {
+    RuntimeFilterProbeDescriptor join_desc;
+    ASSERT_OK(join_desc.init(&pool, make_probe_desc(17, 11, TRuntimeFilterBuildType::JOIN_FILTER), 11, &runtime_state));
+    EXPECT_FALSE(join_desc.is_stream_build_filter());
+    EXPECT_TRUE(join_desc.can_push_down_runtime_filter());
+
+    auto topn_desc = make_probe_desc(19, 11, TRuntimeFilterBuildType::TOPN_FILTER);
+    topn_desc.__set_plan_node_id_to_partition_by_exprs(
+            {{11, std::vector<TExpr>{ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(10, true)}}});
+
+    RuntimeFilterProbeDescriptor stream_desc;
+    ASSERT_OK(stream_desc.init(&pool, topn_desc, 11, &runtime_state));
+    EXPECT_TRUE(stream_desc.is_stream_build_filter());
+    EXPECT_FALSE(stream_desc.can_push_down_runtime_filter());
+    EXPECT_EQ(stream_desc.num_partition_by_exprs(), 1);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeDescriptorExposesSlotRefAndAttachedFilter) {
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(23, probe_ctx));
+
+    SlotId slot_id = -1;
+    ASSERT_TRUE(desc.is_probe_slot_ref(&slot_id));
+    EXPECT_EQ(slot_id, 9);
+
+    auto* rf = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    rf->insert(10);
+    desc.set_runtime_filter(rf);
+    EXPECT_EQ(desc.runtime_filter(-1), rf);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsLocalFilterAndTracksWaiters) {
+    RuntimeFilterRegistry registry;
+
+    auto* left_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* left_ctx = pool.add(new ExprContext(left_expr));
+    RuntimeFilterProbeDescriptor left_desc;
+    ASSERT_OK(left_desc.init(31, left_ctx));
+    left_desc.set_probe_plan_node_id(13);
+
+    auto* right_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 10));
+    auto* right_ctx = pool.add(new ExprContext(right_expr));
+    RuntimeFilterProbeDescriptor right_desc;
+    ASSERT_OK(right_desc.init(31, right_ctx));
+    right_desc.set_probe_plan_node_id(17);
+
+    registry.register_descriptor(&left_desc);
+    registry.register_descriptor(&right_desc);
+
+    auto* rf = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    rf->insert(10);
+    registry.install_local(31, rf);
+
+    EXPECT_EQ(registry.waiters(31), "[13, 17]");
+    EXPECT_EQ(left_desc.runtime_filter(-1), rf);
+    EXPECT_EQ(right_desc.runtime_filter(-1), rf);
+}
+
+TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
+    RuntimeFilterRegistry registry;
+
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(37, probe_ctx));
+    desc.set_probe_plan_node_id(17);
+    registry.register_descriptor(&desc);
+
+    auto shared_rf = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    shared_rf->insert(10);
+    registry.install_shared(37, std::static_pointer_cast<const RuntimeFilter>(shared_rf));
+
+    EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitLoadsCachedFilter) {
+    TUniqueId query_id;
+    query_id.hi = 1;
+    query_id.lo = 2;
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.hi = 3;
+    fragment_instance_id.lo = 4;
+    RuntimeState state(query_id, fragment_instance_id, TQueryOptions(), TQueryGlobals(), nullptr);
+
+    RuntimeFilterCache cache(2);
+    ASSERT_OK(cache.init());
+
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(41, probe_ctx));
+
+    RuntimeFilterProbeCollector collector;
+    collector.add_descriptor(&desc);
+    collector.set_runtime_filter_cache(&cache);
+    ASSERT_OK(collector.prepare(&state, state.runtime_profile()));
+
+    auto bloom = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    bloom->membership_filter().init(32);
+    bloom->insert(10);
+    cache.put_if_absent(query_id, 41, std::static_pointer_cast<const RuntimeFilter>(bloom));
+
+    collector.wait(false);
+
+    ASSERT_NE(desc.runtime_filter(-1), nullptr);
+    EXPECT_EQ(desc.runtime_filter(-1), bloom.get());
+}
+
+TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {
+    auto* numeric_filter = pool.add(new ComposedRuntimeBloomFilter<TYPE_INT>());
+    numeric_filter->insert(10);
+    numeric_filter->insert(20);
+
+    Expr* min_max_predicate = nullptr;
+    RuntimeFilterHelper::create_min_max_value_predicate(&pool, 1, TYPE_INT, numeric_filter, &min_max_predicate);
+    ASSERT_NE(min_max_predicate, nullptr);
+
+    auto* string_filter = pool.add(new ComposedRuntimeBloomFilter<TYPE_VARCHAR>());
+    string_filter->insert(Slice("aa"));
+    string_filter->insert(Slice("bb"));
+
+    Expr* varchar_predicate = reinterpret_cast<Expr*>(0x1);
+    RuntimeFilterHelper::create_min_max_value_predicate(&pool, 2, TYPE_VARCHAR, string_filter, &varchar_predicate);
+    EXPECT_EQ(varchar_predicate, nullptr);
+}
+
+} // namespace starrocks

@@ -38,16 +38,20 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.thrift.TConnectorScanNode;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
@@ -279,5 +283,15 @@ public abstract class ScanNode extends PlanNode {
 
     public void prepareRetry() {
         // default no-op: subclasses that maintain streaming scan state should override
+    }
+
+    protected void setConnectorCatalogType(TPlanNode msg) {
+        Table table = desc.getTable();
+        if (table != null) {
+            TConnectorScanNode connectorScanNode = msg.isSetConnector_scan_node()
+                    ? msg.getConnector_scan_node() : new TConnectorScanNode();
+            connectorScanNode.setCatalog_type(StmtExecutor.toCatalogType(table.getType()));
+            msg.setConnector_scan_node(connectorScanNode);
+        }
     }
 }

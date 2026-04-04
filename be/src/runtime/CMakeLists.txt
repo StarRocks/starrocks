@@ -112,9 +112,6 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    runtime_filter/runtime_filter_descriptor.cpp
-    runtime_filter/runtime_filter_probe.cpp
-    runtime_filter/runtime_filter_helper.cpp
     global_dict/decoder.cpp
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
@@ -147,4 +144,4 @@ ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore)
+target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore)

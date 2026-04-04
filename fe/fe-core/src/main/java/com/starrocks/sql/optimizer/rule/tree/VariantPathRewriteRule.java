@@ -157,7 +157,7 @@ public class VariantPathRewriteRule extends TransformationRule {
                 }
             }
 
-            Column extendedColumn = createExtendedColumn(targetTable, path, variantPath);
+            Column extendedColumn = createExtendedColumn(targetTable, targetColumn, path, variantPath);
             ColumnRefOperator newColumnRef = columnRefFactory.create(path, variantPath.getValueType(), true);
             newColumnRef.setHints(List.of(COLUMN_REF_HINT));
             columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, targetTable);
@@ -166,11 +166,13 @@ public class VariantPathRewriteRule extends TransformationRule {
             return Pair.create(false, newColumnRef);
         }
 
-        private Column createExtendedColumn(Table table, String path, ColumnAccessPath variantPath) {
+        private Column createExtendedColumn(Table table, Column sourceColumn, String path, ColumnAccessPath variantPath) {
             if (table.containColumn(path)) {
                 return table.getColumn(path);
             }
-            return new Column(path, variantPath.getValueType(), true);
+            String sourcePhysicalName = sourceColumn != null ? sourceColumn.getPhysicalName() : null;
+            return new Column(path, variantPath.getValueType(), false, null, null, true, null, "",
+                    Column.COLUMN_UNIQUE_ID_INIT_VALUE, sourcePhysicalName == null ? "" : sourcePhysicalName);
         }
 
         public static ColumnAccessPath pathFromColumn(Column column) {
@@ -227,7 +229,15 @@ public class VariantPathRewriteRule extends TransformationRule {
                     mapping.put(entry.getKey(), rewriteScalar(entry.getValue(), context, rewriter));
                 }
                 builder.getProjection().getColumnRefMap().putAll(mapping);
+
+                Map<ColumnRefOperator, ScalarOperator> commonSubMapping = Maps.newHashMap();
+                for (var entry : scanOperator.getProjection().getCommonSubOperatorMap().entrySet()) {
+                    commonSubMapping.put(entry.getKey(), rewriteScalar(entry.getValue(), context, rewriter));
+                }
+                builder.getProjection().getCommonSubOperatorMap().putAll(commonSubMapping);
+
                 mapping.values().forEach(x -> requiredColumnSet.union(x.getUsedColumns()));
+                commonSubMapping.values().forEach(x -> requiredColumnSet.union(x.getUsedColumns()));
             } else {
                 scanOperator.getOutputColumns().forEach(requiredColumnSet::union);
             }
@@ -255,6 +265,7 @@ public class VariantPathRewriteRule extends TransformationRule {
             Operator newOp = builder.build();
             return OptExpression.builder().with(optExpr).setOp(newOp).build();
         }
+
     }
 
     private static ScalarOperator rewriteScalar(ScalarOperator scalar,
@@ -280,7 +291,7 @@ public class VariantPathRewriteRule extends TransformationRule {
 
         @Override
         public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {
-            if (isSupportedVariantFunction(call)) {
+            if (isRewriteCandidate(call)) {
                 return rewriteVariantFunction(call);
             }
             return call;
@@ -288,11 +299,10 @@ public class VariantPathRewriteRule extends TransformationRule {
 
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, ScalarOperatorRewriteContext context) {
-            ScalarOperator child = operator.getChild(0);
-            if (!(child instanceof CallOperator call)) {
+            if (!(operator.getChild(0) instanceof CallOperator call)) {
                 return operator;
             }
-            if (!isSupportedVariantQuery(call)) {
+            if (!isRewriteCandidate(operator, call)) {
                 return operator;
             }
 
@@ -320,19 +330,19 @@ public class VariantPathRewriteRule extends TransformationRule {
             }
         }
 
-        private boolean isSupportedVariantFunction(CallOperator call) {
+        static boolean isSupportedVariantFunction(CallOperator call) {
             return SUPPORTED_VARIANT_FUNCTIONS.contains(call.getFnName())
                     && call.getArguments().size() == 2
                     && call.getChild(0).getType().isVariantType();
         }
 
-        private boolean isSupportedVariantQuery(CallOperator call) {
+        static boolean isSupportedVariantQuery(CallOperator call) {
             return FunctionSet.VARIANT_QUERY.equals(call.getFnName())
                     && call.getArguments().size() == 2
                     && call.getChild(0).getType().isVariantType();
         }
 
-        private boolean isSupportedCastTarget(Type type) {
+        static boolean isSupportedCastTarget(Type type) {
             return type.isBoolean()
                     || type.isIntegerType()
                     || type.isFloatingPointType()
@@ -340,6 +350,14 @@ public class VariantPathRewriteRule extends TransformationRule {
                     || type.isDate()
                     || type.isDatetime()
                     || type.isTime();
+        }
+
+        static boolean isRewriteCandidate(CallOperator call) {
+            return isSupportedVariantFunction(call);
+        }
+
+        static boolean isRewriteCandidate(CastOperator operator, CallOperator call) {
+            return isSupportedVariantQuery(call) && isSupportedCastTarget(operator.getType());
         }
 
         private ScalarOperator rewriteVariantFunction(CallOperator call) {
@@ -382,12 +400,12 @@ public class VariantPathRewriteRule extends TransformationRule {
             return columnResult.second;
         }
 
-        private static List<String> parseVariantPath(String path) {
+        static List<String> parseVariantPath(String path) {
             List<String> result = SubfieldAccessPathNormalizer.parseSimpleJsonPath(path);
             return result.isEmpty() ? null : result;
         }
 
-        private static boolean isValidVariantPath(List<String> variantPath) {
+        static boolean isValidVariantPath(List<String> variantPath) {
             if (CollectionUtils.isEmpty(variantPath)) {
                 return false;
             }

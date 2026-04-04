@@ -20,11 +20,14 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_column.h"
+#include "column/variant_converter.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
 #include "types/decimalv2_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -186,6 +189,49 @@ static void assert_variant_row_json(const VariantColumn* col, size_t row, std::s
     ASSERT_EQ(expected_json, json.value());
 }
 
+static MutableColumnPtr build_nullable_variant_column_from_json(const std::vector<std::string>& json_rows,
+                                                                const std::vector<uint8_t>& is_null) {
+    DCHECK_EQ(json_rows.size(), is_null.size());
+    ColumnBuilder<TYPE_VARIANT> builder(json_rows.size());
+    for (size_t i = 0; i < json_rows.size(); ++i) {
+        if (is_null[i]) {
+            builder.append_null();
+            continue;
+        }
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json_rows[i]);
+        DCHECK(encoded.ok()) << encoded.status().to_string();
+        builder.append(std::move(encoded).value());
+    }
+    return builder.build(false);
+}
+
+static MutableColumnPtr build_nullable_variant_column_from_timestamp_ntz_micros(const std::vector<int64_t>& values,
+                                                                                const std::vector<uint8_t>& is_null) {
+    DCHECK_EQ(values.size(), is_null.size());
+    auto datetime_data = TimestampColumn::create();
+    auto datetime_null = NullColumn::create();
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i]) {
+            datetime_data->append_default();
+            datetime_null->append(1);
+            continue;
+        }
+        TimestampValue ts;
+        ts.from_unix_second(values[i] / USECS_PER_SEC, values[i] % USECS_PER_SEC);
+        datetime_data->append(ts);
+        datetime_null->append(0);
+    }
+
+    auto datetime_col = NullableColumn::create(std::move(datetime_data), std::move(datetime_null));
+    ColumnBuilder<TYPE_VARIANT> builder(values.size());
+    auto st = VariantEncoder::encode_column(datetime_col, TypeDescriptor(TYPE_DATETIME), &builder, false);
+    DCHECK(st.ok()) << st.to_string();
+    if (!st.ok()) {
+        return nullptr;
+    }
+    return builder.build(false);
+}
+
 PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
     auto numeric = VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_DOUBLE));
     ASSERT_TRUE(numeric.ok());
@@ -201,6 +247,90 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_ca
             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)), TypeDescriptor(TYPE_BIGINT));
     ASSERT_TRUE(array_conflict.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_bigint_preserves_query_cast_semantics) {
+    auto src = build_nullable_variant_column_from_json({"1", "\"L2\"", "3", "null"}, {0, 0, 0, 0});
+    auto casted =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_BIGINT));
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
+    ASSERT_EQ(4, nullable->size());
+    EXPECT_EQ(1, nullable->get(0).get_int64());
+    EXPECT_TRUE(nullable->get(1).is_null());
+    EXPECT_EQ(3, nullable->get(2).get_int64());
+    EXPECT_TRUE(nullable->get(3).is_null());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_outer_constness) {
+    auto data = build_nullable_variant_column_from_json({"1"}, {0});
+    auto src = ConstColumn::create(std::move(data), 3);
+    auto casted =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_BIGINT));
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const Column* result = casted.value().get();
+    ASSERT_EQ(3, result->size());
+    EXPECT_EQ(1, result->get(0).get_int64());
+    EXPECT_EQ(1, result->get(1).get_int64());
+    EXPECT_EQ(1, result->get(2).get_int64());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_formats_rows) {
+    auto src = build_nullable_variant_column_from_json({"\"dept_0\"", "100", "null"}, {0, 0, 0});
+    auto casted =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_VARCHAR));
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
+    ASSERT_EQ(3, nullable->size());
+    EXPECT_EQ("dept_0", nullable->get(0).get_slice().to_string());
+    EXPECT_EQ("100", nullable->get(1).get_slice().to_string());
+    EXPECT_TRUE(nullable->get(2).is_null());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_requires_explicit_timezone_context) {
+    auto src = build_nullable_variant_column_from_json({"1711497600"}, {0});
+    auto casted =
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_DATETIME));
+    ASSERT_FALSE(casted.ok());
+    ASSERT_TRUE(casted.status().is_not_supported());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_with_timezone_context) {
+    TimestampValue expected;
+    expected.from_unix_second(1711497600L, 0);
+
+    auto src = build_nullable_variant_column_from_timestamp_ntz_micros({1711497600L * USECS_PER_SEC}, {0});
+    const auto* variant = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(src.get()));
+    ASSERT_NE(nullptr, variant);
+    VariantRowValue row_buffer;
+    const VariantRowValue* row = variant->get_row_value(0, &row_buffer);
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ(VariantType::TIMESTAMP_NTZ, row->as_ref().get_value().type());
+    ASSERT_TRUE(row->as_ref().get_value().get_timestamp_micros_ntz().ok());
+    EXPECT_EQ(1711497600L * USECS_PER_SEC, row->as_ref().get_value().get_timestamp_micros_ntz().value());
+
+    ColumnBuilder<TYPE_DATETIME> direct_builder(1);
+    auto direct_status =
+            VariantRowConverter::cast_to<TYPE_DATETIME, true>(row->as_ref(), cctz::utc_time_zone(), direct_builder);
+    ASSERT_TRUE(direct_status.ok()) << direct_status.to_string();
+    auto direct_column = direct_builder.build(false);
+    const auto* direct_data = ColumnHelper::cast_to_raw<TYPE_DATETIME>(direct_column.get());
+    ASSERT_NE(nullptr, direct_data);
+    EXPECT_EQ(expected, direct_data->get_data()[0]);
+
+    auto casted = VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT),
+                                                         TypeDescriptor(TYPE_DATETIME), cctz::utc_time_zone());
+    ASSERT_TRUE(casted.ok()) << casted.status().to_string();
+
+    const Column* result = casted.value().get();
+    ASSERT_EQ(1, result->size());
+    EXPECT_FALSE(result->is_null(0));
+    const auto* data = ColumnHelper::cast_to_raw<TYPE_DATETIME>(ColumnHelper::get_data_column(result));
+    ASSERT_NE(nullptr, data);
+    EXPECT_EQ(expected, data->get_data()[0]);
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_schema_union) {
