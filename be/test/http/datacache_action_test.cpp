@@ -152,4 +152,12 @@ TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     ASSERT_STREQ("Cache system is not ready", doc["error"].GetString());
 }
 
+TEST_F(DataCacheActionTest, prometheus_action_returns_not_found) {
+    auto request = create_request("prometheus");
+    _action->on_header(request.get());
+    _action->handle(request.get());
+
+    EXPECT_EQ(k_response_str, "Not Found");
+}
+
 } // namespace starrocks

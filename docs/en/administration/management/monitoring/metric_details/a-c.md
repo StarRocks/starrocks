@@ -305,6 +305,120 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
 
+## `block_cache_hit_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache hits.
+
+## `block_cache_miss_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache misses.
+
+## `block_cache_hit_count_last_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of block cache hits in the last minute.
+
+## `block_cache_miss_count_last_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of block cache misses in the last minute.
+
+## `block_cache_hit_bytes_last_minute`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes of block cache hits in the last minute.
+
+## `block_cache_miss_bytes_last_minute`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes of block cache misses in the last minute.
+
+## `block_cache_read_mem_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes read from the memory tier of block cache.
+
+## `block_cache_read_disk_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes read from the disk tier of block cache.
+
+## `block_cache_write_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes written to block cache.
+
+## `block_cache_write_success_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of successful block cache write operations.
+
+## `block_cache_write_fail_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of failed block cache write operations.
+
+## `block_cache_remove_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes removed (evicted) from block cache.
+
+## `block_cache_remove_success_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of successful block cache remove operations.
+
+## `block_cache_remove_fail_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of failed block cache remove operations.
+
+## `block_cache_current_reading_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of in-flight block cache read operations.
+
+## `block_cache_current_writing_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of in-flight block cache write operations.
+
+## `block_cache_current_removing_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of in-flight block cache remove operations.
+
+## `block_cache_buffer_item_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of items in the block cache write buffer.
+
+## `block_cache_buffer_item_bytes`
+
+- Unit: Bytes
+- Type: Gauge
+- Description: Bytes of items in the block cache write buffer.
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`
