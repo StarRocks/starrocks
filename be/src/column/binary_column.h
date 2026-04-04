@@ -344,7 +344,7 @@ public:
         return ImmBytes(_bytes.data(), _bytes.size());
     }
 
-    const uint8_t* continuous_data() const override { return _data_base(); }
+    const uint8_t* raw_bytes() const { return _data_base(); }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
