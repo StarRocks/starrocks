@@ -73,11 +73,6 @@ public:
         return nullptr;
     }
 
-    uint8_t* mutable_raw_data() override {
-        DCHECK(false) << "Don't support object column mutable_raw_data";
-        return nullptr;
-    }
-
     size_t size() const override { return _pool.size(); }
 
     size_t capacity() const override { return _pool.capacity(); }
