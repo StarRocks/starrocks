@@ -37,6 +37,8 @@ void DataCacheMetrics::install(MetricRegistry* registry) {
     registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
     registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
     registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
+    registry->register_metric("block_cache_hit_count", &block_cache_hit_count);
+    registry->register_metric("block_cache_miss_count", &block_cache_miss_count);
 }
 
 void DataCacheMetrics::update(const DataCacheMetricsSnapshot& snapshot) {
@@ -47,6 +49,8 @@ void DataCacheMetrics::update(const DataCacheMetricsSnapshot& snapshot) {
     datacache_meta_used_bytes.set_value(snapshot.meta_used_bytes);
     block_cache_hit_bytes.set_value(snapshot.block_cache_hit_bytes);
     block_cache_miss_bytes.set_value(snapshot.block_cache_miss_bytes);
+    block_cache_hit_count.set_value(snapshot.block_cache_hit_count);
+    block_cache_miss_count.set_value(snapshot.block_cache_miss_count);
 }
 
 } // namespace starrocks

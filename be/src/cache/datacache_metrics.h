@@ -28,6 +28,8 @@ struct DataCacheMetricsSnapshot {
     int64_t meta_used_bytes = 0;
     int64_t block_cache_hit_bytes = 0;
     int64_t block_cache_miss_bytes = 0;
+    int64_t block_cache_hit_count = 0;
+    int64_t block_cache_miss_count = 0;
 };
 
 // Data Cache process-level metrics for memory, disk, metadata, and app-observed
@@ -50,6 +52,8 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_meta_used_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(block_cache_miss_count, MetricUnit::NOUNIT);
 
 private:
     MetricRegistry* _registry = nullptr;

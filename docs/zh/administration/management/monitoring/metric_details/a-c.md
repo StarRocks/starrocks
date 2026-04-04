@@ -305,6 +305,18 @@ description: "Alphabetical a - c"
 - 类型：计数器
 - 描述：块缓存未命中累计字节数。目前，仅计算外部表的缓存未命中字节数。
 
+## `block_cache_hit_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存命中累计次数。
+
+## `block_cache_miss_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存未命中累计次数。
+
 ## `blocks_created_total (Deprecated)`
 
 ## `blocks_deleted_total (Deprecated)`
