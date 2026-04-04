@@ -43,6 +43,7 @@ namespace starrocks {
 class HashJoinNode;
 class RowDescriptor;
 class RuntimeProfile;
+class RuntimeFilterCache;
 
 class RuntimeFilterProbeDescriptor {
 public:
@@ -198,6 +199,7 @@ public:
     int wait_timeout_ms() const { return _wait_timeout_ms; }
     void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
     long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
+    void set_runtime_filter_cache(RuntimeFilterCache* cache) { _runtime_filter_cache = cache; }
     // wait for all runtime filters are ready.
     void wait(bool on_scan_node);
 
@@ -225,6 +227,7 @@ private:
     RuntimeMembershipFilterEvalContext _eval_context;
     int _plan_node_id = -1;
     RuntimeState* _runtime_state = nullptr;
+    RuntimeFilterCache* _runtime_filter_cache = nullptr;
 };
 
 } // namespace starrocks

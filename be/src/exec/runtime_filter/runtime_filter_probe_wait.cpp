@@ -16,7 +16,6 @@
 #include <thread>
 
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 
@@ -46,9 +45,8 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
         while (it != wait_list.end()) {
             auto* rf = (*it)->runtime_filter(-1);
             // find runtime filter in cache.
-            if (rf == nullptr) {
-                RuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(_runtime_state->query_id(),
-                                                                                             (*it)->filter_id());
+            if (rf == nullptr && _runtime_filter_cache != nullptr) {
+                RuntimeFilterPtr t = _runtime_filter_cache->get(_runtime_state->query_id(), (*it)->filter_id());
                 if (t != nullptr) {
                     VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
                               << ", plan_node_id = " << _plan_node_id

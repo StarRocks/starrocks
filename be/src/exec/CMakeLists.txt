@@ -23,6 +23,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXEC_CORE_FILES
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
+    runtime_filter/runtime_filter_probe_wait.cpp
     runtime_filter/runtime_filter_registry.cpp
     runtime_filter/runtime_filter_helper.cpp
 )
@@ -31,7 +32,7 @@ ADD_BE_LIB(ExecCore
     ${EXEC_CORE_FILES}
 )
 
-target_link_libraries(ExecCore PUBLIC ExprCore)
+target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
 
 set(EXEC_FILES
     fetch_node.cpp

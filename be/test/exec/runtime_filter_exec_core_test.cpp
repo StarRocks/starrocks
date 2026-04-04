@@ -20,6 +20,7 @@
 #include "exec/runtime_filter/runtime_filter_registry.h"
 #include "exprs/column_ref.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_layout.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
@@ -189,6 +190,39 @@ TEST_F(RuntimeFilterExecCoreTest, RegistryInstallsSharedFilter) {
     registry.install_shared(37, std::static_pointer_cast<const RuntimeFilter>(shared_rf));
 
     EXPECT_EQ(desc.runtime_filter(-1), shared_rf.get());
+}
+
+TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitLoadsCachedFilter) {
+    TUniqueId query_id;
+    query_id.hi = 1;
+    query_id.lo = 2;
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.hi = 3;
+    fragment_instance_id.lo = 4;
+    RuntimeState state(query_id, fragment_instance_id, TQueryOptions(), TQueryGlobals(), nullptr);
+
+    RuntimeFilterCache cache(2);
+    ASSERT_OK(cache.init());
+
+    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_ctx = pool.add(new ExprContext(probe_expr));
+    RuntimeFilterProbeDescriptor desc;
+    ASSERT_OK(desc.init(41, probe_ctx));
+
+    RuntimeFilterProbeCollector collector;
+    collector.add_descriptor(&desc);
+    collector.set_runtime_filter_cache(&cache);
+    ASSERT_OK(collector.prepare(&state, state.runtime_profile()));
+
+    auto bloom = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    bloom->membership_filter().init(32);
+    bloom->insert(10);
+    cache.put_if_absent(query_id, 41, std::static_pointer_cast<const RuntimeFilter>(bloom));
+
+    collector.wait(false);
+
+    ASSERT_NE(desc.runtime_filter(-1), nullptr);
+    EXPECT_EQ(desc.runtime_filter(-1), bloom.get());
 }
 
 TEST_F(RuntimeFilterExecCoreTest, HelperCreatesMinMaxPredicateForNumericButNotString) {
