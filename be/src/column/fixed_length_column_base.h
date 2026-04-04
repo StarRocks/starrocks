@@ -78,7 +78,7 @@ public:
 
     const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
 
-    uint8_t* mutable_raw_data() override {
+    uint8_t* mutable_raw_data() {
         get_data();
         return reinterpret_cast<uint8_t*>(_data.data());
     }

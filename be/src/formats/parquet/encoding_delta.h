@@ -24,6 +24,7 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 
@@ -269,7 +270,9 @@ public:
         }
         size_t cur_size = dst->size();
         dst->resize(count + cur_size);
-        T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+        MutableRawDataVisitor visitor;
+        RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+        T* data = reinterpret_cast<T*>(visitor.result()) + cur_size;
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
     }

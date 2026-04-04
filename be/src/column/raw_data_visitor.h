@@ -31,7 +31,11 @@ namespace starrocks {
 
 // MutableRawDataVisitor calls mutable_raw_data() on the visited column and stores
 // the resulting pointer for the caller to retrieve via result().
-// Supported: FixedLengthColumn<T>, DecimalV3Column<T>, AdaptiveNullableColumn.
+// Supported column types:
+//   - FixedLengthColumn<T>, DecimalV3Column<T>: returns raw data pointer directly
+//   - NullableColumn, ConstColumn: recurses into the inner data column
+//   - ArrayColumn: recurses into the elements column
+//   - AdaptiveNullableColumn: materializes first, then recurses into the data column
 // All other column types return NotSupported.
 class MutableRawDataVisitor final : public ColumnVisitorMutableAdapter<MutableRawDataVisitor> {
 public:

@@ -62,11 +62,6 @@ const uint8_t* StructColumn::raw_data() const {
     return nullptr;
 }
 
-uint8_t* StructColumn::mutable_raw_data() {
-    // TODO(SmithCruise)
-    DCHECK(false) << "Don't support struct column raw_data";
-    return nullptr;
-}
 size_t StructColumn::size() const {
     return _fields[0]->size();
 }

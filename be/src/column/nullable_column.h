@@ -106,8 +106,6 @@ public:
 
     const uint8_t* raw_data() const override { return _data_column->raw_data(); }
 
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data_column->mutable_raw_data()); }
-
     size_t size() const override {
         DCHECK_EQ(_data_column->size(), _null_column->size());
         return _data_column->size();

@@ -22,6 +22,7 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
@@ -108,6 +109,7 @@ template <tparquet::Type::type PT>
 class ByteStreamSplitDecoder : public Decoder {
 public:
     using T = typename PhysicalTypeTraits<PT>::CppType;
+    static_assert(PT != tparquet::Type::BYTE_ARRAY, "ByteStreamSplitDecoder does not support BYTE_ARRAY");
     static constexpr bool IS_FLBA = (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY);
 
     ByteStreamSplitDecoder() {
@@ -152,7 +154,9 @@ public:
         } else {
             size_t cur_size = dst->size();
             dst->resize(cur_size + count);
-            T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+            MutableRawDataVisitor visitor;
+            RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+            T* data = reinterpret_cast<T*>(visitor.result()) + cur_size;
             RETURN_IF_ERROR(Decode(data, count));
         }
         return Status::OK();

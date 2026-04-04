@@ -33,7 +33,6 @@ public:
     bool is_array() const override { return _is_array; }
 
     const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(_data.data()); }
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data.data()); }
 
     size_t size() const override { return _data.size(); }
     size_t capacity() const override { return _data.capacity(); }
