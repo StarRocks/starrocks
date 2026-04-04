@@ -481,11 +481,12 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                 TypeDescription orcSchema = orcReader.getSchema();
                 ColumnStatistics[] columnStats = orcReader.getStatistics();
 
-                // Extract statistics for each column
-                for (int colId = 0; colId < columnStats.length; colId++) {
-                    ColumnStatistics stats = columnStats[colId];
+                // columnStats[0] is file-level stats; column stats start at index 1
+                int numColumns = Math.min(orcSchema.getChildren().size(),
+                        columnStats.length - 1);
+                for (int colId = 0; colId < numColumns; colId++) {
+                    ColumnStatistics stats = columnStats[colId + 1];
 
-                    // Map ORC column to Iceberg field
                     String columnName = getColumnNameFromOrcSchema(orcSchema, colId);
                     if (columnName != null) {
                         Types.NestedField field = schema.findField(columnName);

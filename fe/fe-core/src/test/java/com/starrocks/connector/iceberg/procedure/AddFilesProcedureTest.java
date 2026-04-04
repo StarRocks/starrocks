@@ -31,6 +31,10 @@ import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.orc.ColumnStatistics;
+import org.apache.orc.OrcFile;
+import org.apache.orc.Reader;
+import org.apache.orc.TypeDescription;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
@@ -596,6 +600,75 @@ public class AddFilesProcedureTest {
         assertFalse(metrics.nullValueCounts().containsKey(2));
         assertTrue(metrics.lowerBounds().isEmpty());
         assertTrue(metrics.upperBounds().isEmpty());
+    }
+
+    @Test
+    public void testExtractOrcMetricsOffByOne(@Mocked Table table,
+                                              @Mocked IcebergHiveCatalog catalog,
+                                              @Mocked Reader orcReader) throws Exception {
+        AddFilesProcedure procedure = AddFilesProcedure.getInstance();
+        IcebergTableProcedureContext context =
+                new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null);
+
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "name", Types.StringType.get())
+        );
+
+        TypeDescription orcSchema = TypeDescription.createStruct()
+                .addField("id", TypeDescription.createInt())
+                .addField("name", TypeDescription.createString());
+
+        ColumnStatistics fileStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(fileStats.getNumberOfValues()).thenReturn(999L);
+        Mockito.when(fileStats.hasNull()).thenReturn(false);
+
+        ColumnStatistics idStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(idStats.getNumberOfValues()).thenReturn(100L);
+        Mockito.when(idStats.hasNull()).thenReturn(false);
+
+        ColumnStatistics nameStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(nameStats.getNumberOfValues()).thenReturn(90L);
+        Mockito.when(nameStats.hasNull()).thenReturn(true);
+
+        ColumnStatistics[] allStats = new ColumnStatistics[] {fileStats, idStats, nameStats};
+
+        FileStatus fileStatus = new FileStatus(1024L, false, 1, 0L, 0L, new Path("/tmp/data.orc"));
+
+        new Expectations() {
+            {
+                table.schema();
+                result = schema;
+
+                orcReader.getSchema();
+                result = orcSchema;
+
+                orcReader.getStatistics();
+                result = allStats;
+
+                orcReader.getNumberOfRows();
+                result = 100L;
+            }
+        };
+
+        new MockUp<OrcFile>() {
+            @Mock
+            public Reader createReader(Path path, OrcFile.ReaderOptions options) {
+                return orcReader;
+            }
+        };
+
+        java.lang.reflect.Method method = AddFilesProcedure.class.getDeclaredMethod("extractOrcMetrics",
+                IcebergTableProcedureContext.class, Table.class, FileStatus.class);
+        method.setAccessible(true);
+        Metrics metrics = (Metrics) method.invoke(procedure, context, table, fileStatus);
+
+        assertEquals(100L, metrics.recordCount());
+        assertEquals(100L, metrics.valueCounts().get(1));
+        assertEquals(90L, metrics.valueCounts().get(2));
+        assertFalse(metrics.nullValueCounts().containsKey(1));
+        assertTrue(metrics.nullValueCounts().containsKey(2));
+        assertEquals(10L, metrics.nullValueCounts().get(2));
     }
 
     private IcebergTableProcedureContext createMockContext(@Mocked Table table, @Mocked IcebergHiveCatalog catalog) {
