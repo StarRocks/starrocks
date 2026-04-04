@@ -5,6 +5,7 @@ Use this directory for repo-local execution plans that agents can read, update, 
 ## Active Plans
 
 - [Harness Engineering Roadmap](active/2026-03-27-harness-engineering-roadmap.md)
+- [ExecEnv Decomposition Multi-PR Rollout](active/2026-04-04-exec-env-decomposition-rollout.md)
 
 ## Templates
 

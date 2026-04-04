@@ -35,6 +35,64 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CheckBeModuleBoundariesTest(unittest.TestCase):
+    def test_load_path_allowlist_ignores_comments_and_blank_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowlist_path = Path(tmpdir) / "allowlist.txt"
+            allowlist_path.write_text(
+                textwrap.dedent(
+                    """\
+                    # comment
+
+                    src/runtime/exec_env.cpp
+                    src/storage/lake/update_manager.cpp
+                    """
+                )
+            )
+
+            self.assertEqual(
+                {
+                    "src/runtime/exec_env.cpp",
+                    "src/storage/lake/update_manager.cpp",
+                },
+                MODULE.load_path_allowlist(allowlist_path),
+            )
+
+    def test_collect_exec_env_include_paths_scans_header_files_in_src_and_test(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.h").write_text('#include "runtime/exec_env.h"\n')
+            (repo / "be" / "test" / "runtime" / "exec_env_helper.cpp").write_text('#include "runtime/exec_env.h"\n')
+
+            self.assertEqual(
+                {
+                    "src/column/hash_set.h",
+                    "test/runtime/exec_env_helper.h",
+                },
+                MODULE.collect_exec_env_include_paths(repo),
+            )
+
+    def test_collect_exec_env_singleton_paths_scans_be_src_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+            (repo / "be" / "test" / "runtime" / "runtime_test.cpp").write_text("void f() { (void)ExecEnv::GetInstance(); }\n")
+
+            self.assertEqual(
+                {"src/runtime/runtime.cpp"},
+                MODULE.collect_exec_env_singleton_paths(repo),
+            )
+
+    def test_diff_allowlist_reports_new_and_stale_paths(self) -> None:
+        extra_paths, stale_paths = MODULE.diff_path_allowlist(
+            current={"src/runtime/runtime.cpp", "src/column/hash_set.h"},
+            allowlist={"src/runtime/runtime.cpp", "src/exec/old.cpp"},
+        )
+
+        self.assertEqual({"src/column/hash_set.h"}, extra_paths)
+        self.assertEqual({"src/exec/old.cpp"}, stale_paths)
+
     def test_ci_architecture_filter_covers_checker_code_extensions(self) -> None:
         workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml"
         workflow_lines = workflow_path.read_text().splitlines()
@@ -77,6 +135,16 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
             'python3 build-support/check_be_module_boundaries.py --mode changed --base ${{ steps.merge_base.outputs.base }} --enforce-baseline-shrink',
             workflow_text,
         )
+
+    def test_ci_architecture_filter_includes_exec_env_guardrail_files(self) -> None:
+        workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
+
+        self.assertIn("- 'build-support/exec_env_header_include_allowlist.txt'", workflow_text)
+        self.assertIn("- 'build-support/exec_env_singleton_allowlist.txt'", workflow_text)
+
+    def test_changed_full_check_paths_include_exec_env_guardrail_files(self) -> None:
+        self.assertIn("build-support/exec_env_header_include_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
+        self.assertIn("build-support/exec_env_singleton_allowlist.txt", MODULE.DEFAULT_CHANGED_FULL_CHECK_PATHS)
 
     def test_ci_compute_merge_base_uses_fetched_base_head(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
