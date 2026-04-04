@@ -162,7 +162,8 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _wait_timeout_ms(that._wait_timeout_ms),
           _scan_wait_timeout_ms(that._scan_wait_timeout_ms),
           _eval_context(that._eval_context),
-          _plan_node_id(that._plan_node_id) {}
+          _plan_node_id(that._plan_node_id),
+          _runtime_filter_cache(that._runtime_filter_cache) {}
 
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, RuntimeProfile* profile) {
     _runtime_profile = profile;

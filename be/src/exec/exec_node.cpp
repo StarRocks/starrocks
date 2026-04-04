@@ -153,6 +153,9 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
     if (state != nullptr && state->query_options().__isset.runtime_filter_scan_wait_time_ms) {
         _runtime_filter_collector.set_scan_wait_timeout_ms(state->query_options().runtime_filter_scan_wait_time_ms);
     }
+    if (state != nullptr && state->exec_env() != nullptr) {
+        _runtime_filter_collector.set_runtime_filter_cache(state->exec_env()->runtime_filter_cache());
+    }
     if (tnode.__isset.filter_null_value_columns) {
         _filter_null_value_columns = tnode.filter_null_value_columns;
     }
