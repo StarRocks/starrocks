@@ -110,7 +110,6 @@ set(RUNTIME_FILES
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
-    runtime_filter_probe_wait.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
     global_dict/decoder.cpp
