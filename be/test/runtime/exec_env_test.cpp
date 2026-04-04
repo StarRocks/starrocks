@@ -28,6 +28,9 @@ TEST(GlobalEnvTest, calc_query_mem_limit) {
 TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ExecEnv env;
 
+    EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
+
     env._thread_pool = reinterpret_cast<PriorityThreadPool*>(0x1);
     env._driver_limiter = reinterpret_cast<pipeline::DriverLimiter*>(0x2);
     env._pipeline_timer = reinterpret_cast<pipeline::PipelineTimer*>(0x3);

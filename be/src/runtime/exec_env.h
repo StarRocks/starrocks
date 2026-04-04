@@ -453,11 +453,11 @@ private:
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    query_cache::CacheManagerRawPtr _cache_mgr;
+    query_cache::CacheManagerRawPtr _cache_mgr = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
-    LookUpDispatcherMgr* _lookup_dispatcher_mgr;
+    LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
     RpcServices _rpc_services;
     LakeServices _lake_services;
