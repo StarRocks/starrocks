@@ -145,7 +145,7 @@ class ReflectedMVState(ReflectedViewState):
 
 
 @add_cached_str_clause
-@dataclasses.dataclass
+@dataclasses.dataclass(unsafe_hash=True)
 class ReflectedRefreshInfo:
     """Stores structured reflection information about a materialized view's refresh scheme."""
     moment: Optional[str] = None
@@ -217,7 +217,7 @@ class ReflectedCKInfo(TypedDict):
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(**(dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {}))
 class ReflectedTableKeyInfo:
     """
     Stores structed reflection information about a table' key/type.
@@ -230,20 +230,23 @@ class ReflectedTableKeyInfo:
     type: str
     columns: Optional[Union[List[str], str]]
 
+    def __hash__(self) -> int:
+        cols = tuple(self.columns) if isinstance(self.columns, list) else self.columns
+        return hash((self.type, cols))
+
     def __str__(self) -> str:
-        self.type = self.type.upper() if self.type else self.type
-        if self.columns:
-            self.columns = self.columns.strip()
-        if isinstance(self.columns, list):
-            return f"{self.type} ({', '.join(self.columns)})"
-        return f"{self.type} ({self.columns})"
+        type_str = self.type.upper() if self.type else self.type
+        columns_str = self.columns.strip() if isinstance(self.columns, str) else self.columns
+        if isinstance(columns_str, list):
+            return f"{type_str} ({', '.join(columns_str)})"
+        return f"{type_str} ({columns_str})"
 
     def __repr__(self) -> str:
         return repr(str(self))
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(unsafe_hash=True, **(dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {}))
 class ReflectedPartitionInfo:
     """
     Stores structured reflection information about a table's partitioning scheme.
@@ -261,18 +264,17 @@ class ReflectedPartitionInfo:
     pre_created_partitions: Optional[str] = None
 
     def __str__(self) -> str:
-        self.type = self.type.upper() if self.type else self.type
-        self.partition_method = self.partition_method.strip() if self.partition_method else self.partition_method
+        method_str = self.partition_method.strip() if self.partition_method else self.partition_method
         if self.pre_created_partitions:
-            return f"{self.partition_method} {self.pre_created_partitions}"
-        return f"{self.partition_method}"
+            return f"{method_str} {self.pre_created_partitions}"
+        return f"{method_str}"
 
     def __repr__(self) -> str:
         return repr(str(self))
 
 
 @add_cached_str_clause
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
+@dataclasses.dataclass(**(dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {}))
 class ReflectedDistributionInfo:
     """Stores reflection information about a view."""
     type: Union[str, None]
@@ -285,14 +287,19 @@ class ReflectedDistributionInfo:
     buckets: Union[int, None]
     """The buckets count."""
 
+    def __hash__(self) -> int:
+        cols = tuple(self.columns) if isinstance(self.columns, list) else self.columns
+        return hash((self.type, cols, self.distribution_method, self.buckets))
+
     def __str__(self) -> str:
         """Convert to string representation of distribution option."""
         buckets_str = f' BUCKETS {self.buckets}' if self.buckets and str(self.buckets) != "0" else ""
-        if not self.distribution_method:
+        method = self.distribution_method
+        if not method:
             distribution_cols = ', '.join(self.columns) if isinstance(self.columns, list) else self.columns
             distribution_cols_str = f'({distribution_cols})' if distribution_cols else ""
-            self.distribution_method = f'{self.type}{distribution_cols_str}'
-        return f'{self.distribution_method}{buckets_str}'
+            method = f'{self.type}{distribution_cols_str}'
+        return f'{method}{buckets_str}'
 
     def __repr__(self) -> str:
         return repr(str(self))
