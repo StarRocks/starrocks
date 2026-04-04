@@ -14,15 +14,27 @@
 
 package com.starrocks.statistic;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.List;
 
 class StatisticUtilsTest extends PlanTestBase {
 
@@ -76,5 +88,72 @@ class StatisticUtilsTest extends PlanTestBase {
         Assertions.assertEquals("1",
                 starRocksAssert.getTable(StatsConstants.STATISTICS_DB_NAME, tableName).getProperties().get(
                         "replication_num"));
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeSimple() {
+        Table table = Mockito.mock(Table.class);
+        Column col = Mockito.mock(Column.class);
+        Mockito.when(col.getType()).thenReturn(IntegerType.INT);
+        Mockito.when(table.getColumn("id")).thenReturn(col);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "id");
+        Assertions.assertEquals(IntegerType.INT, result);
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeWithDotInName() {
+        Table table = Mockito.mock(Table.class);
+        Column col = Mockito.mock(Column.class);
+        Mockito.when(col.getType()).thenReturn(BooleanType.BOOLEAN);
+        Mockito.when(table.getColumn("customer.is_verified_email")).thenReturn(col);
+        Mockito.when(table.getColumn("customer")).thenReturn(null);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "customer.is_verified_email");
+        Assertions.assertEquals(BooleanType.BOOLEAN, result);
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeStructField() {
+        Table table = Mockito.mock(Table.class);
+        StructType structType = new StructType(List.of(
+                new StructField("city", VarcharType.VARCHAR)
+        ));
+        Column structCol = Mockito.mock(Column.class);
+        Mockito.when(structCol.getType()).thenReturn(structType);
+        Mockito.when(table.getColumn("address.city")).thenReturn(null);
+        Mockito.when(table.getColumn("address")).thenReturn(structCol);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "address.city");
+        Assertions.assertEquals(VarcharType.VARCHAR, result);
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeLiteralWinsOverStruct() {
+        Table table = Mockito.mock(Table.class);
+        Column literalCol = Mockito.mock(Column.class);
+        Mockito.when(literalCol.getType()).thenReturn(BooleanType.BOOLEAN);
+
+        StructType structType = new StructType(List.of(
+                new StructField("b", VarcharType.VARCHAR)
+        ));
+        Column structCol = Mockito.mock(Column.class);
+        Mockito.when(structCol.getType()).thenReturn(structType);
+
+        Mockito.when(table.getColumn("a.b")).thenReturn(literalCol);
+        Mockito.when(table.getColumn("a")).thenReturn(structCol);
+
+        Type result = StatisticUtils.getQueryStatisticsColumnType(table, "a.b");
+        Assertions.assertEquals(BooleanType.BOOLEAN, result);
+    }
+
+    @Test
+    void testGetQueryStatisticsColumnTypeNotFound() {
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.getColumn(Mockito.anyString())).thenReturn(null);
+        Mockito.when(table.getName()).thenReturn("test_table");
+
+        Assertions.assertThrows(SemanticException.class,
+                () -> StatisticUtils.getQueryStatisticsColumnType(table, "nonexistent"));
     }
 }

@@ -656,6 +656,15 @@ public class StatisticUtils {
     }
 
     public static Type getQueryStatisticsColumnType(Table table, String column) {
+        // Try the full column name first so that columns with dots in their
+        // names (e.g. "customer.is_verified_email") resolve correctly.
+        // If a table has both a literal column "a.b" AND a struct column "a"
+        // with field "b", the literal column takes priority.
+        Column directMatch = table.getColumn(column);
+        if (directMatch != null) {
+            return directMatch.getType();
+        }
+
         String[] parts = column.split("\\.");
         Preconditions.checkState(parts.length >= 1);
         Column base = table.getColumn(parts[0]);
