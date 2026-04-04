@@ -80,7 +80,6 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class GlobalSpillManager;
-struct RfTracePoint;
 
 class BackendServiceClient;
 class FrontendServiceClient;
@@ -328,8 +327,6 @@ public:
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
     ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
-
-    void add_rf_event(const RfTracePoint& pt);
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
