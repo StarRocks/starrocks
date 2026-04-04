@@ -39,7 +39,7 @@ public:
 
     Status visit(const PercentileColumn& column) override { return _impl->do_visit(column); }
 
-    Status visit(const Int8Column& column) override { return _impl->_impl->do_visit(column); }
+    Status visit(const Int8Column& column) override { return _impl->do_visit(column); }
 
     Status visit(const UInt8Column& column) override { return _impl->do_visit(column); }
 
@@ -118,7 +118,7 @@ public:
 
     Status visit(PercentileColumn* column) override { return _impl->do_visit(column); }
 
-    Status visit(Int8Column* column) override { return _impl->_impl->do_visit(column); }
+    Status visit(Int8Column* column) override { return _impl->do_visit(column); }
 
     Status visit(UInt8Column* column) override { return _impl->do_visit(column); }
 
