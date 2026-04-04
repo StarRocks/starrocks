@@ -45,6 +45,7 @@
 #include "exec/query_cache/cache_manager_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/mem_tracker_fwd.h"
+#include "runtime/service_contexts.h"
 #include "storage/options_fwd.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
@@ -316,6 +317,13 @@ public:
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
+    const ExecutionEnv& execution_services() const { return _execution_services; }
+    const RpcServices& rpc_services() const { return _rpc_services; }
+    const LakeServices& lake_services() const { return _lake_services; }
+    const RuntimeServices& runtime_services() const { return _runtime_services; }
+    const AgentServices& agent_services() const { return _agent_services; }
+    const QueryExecutionServices& query_execution_services() const { return _query_execution_services; }
+    const AdminServices& admin_services() const { return _admin_services; }
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
@@ -372,6 +380,7 @@ public:
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
 private:
+    void _refresh_service_contexts();
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
 
@@ -444,11 +453,18 @@ private:
     std::unique_ptr<ThreadPool> _pk_index_memtable_flush_thread_pool = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    query_cache::CacheManagerRawPtr _cache_mgr;
+    query_cache::CacheManagerRawPtr _cache_mgr = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
     std::shared_ptr<spill::GlobalSpillManager> _global_spill_manager;
     DiagnoseDaemon* _diagnose_daemon = nullptr;
-    LookUpDispatcherMgr* _lookup_dispatcher_mgr;
+    LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
+    ExecutionEnv _execution_services;
+    RpcServices _rpc_services;
+    LakeServices _lake_services;
+    RuntimeServices _runtime_services;
+    AgentServices _agent_services;
+    QueryExecutionServices _query_execution_services;
+    AdminServices _admin_services;
 };
 
 template <>

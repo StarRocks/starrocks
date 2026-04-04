@@ -356,8 +356,84 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() = default;
+ExecEnv::ExecEnv() {
+    _refresh_service_contexts();
+}
 ExecEnv::~ExecEnv() = default;
+
+void ExecEnv::_refresh_service_contexts() {
+    _execution_services.thread_pool = _thread_pool;
+    _execution_services.streaming_load_thread_pool = _streaming_load_thread_pool;
+    _execution_services.load_rowset_thread_pool = _load_rowset_thread_pool;
+    _execution_services.load_segment_thread_pool = _load_segment_thread_pool;
+    _execution_services.put_combined_txn_log_thread_pool = _put_combined_txn_log_thread_pool;
+    _execution_services.udf_call_pool = _udf_call_pool;
+    _execution_services.pipeline_prepare_pool = _pipeline_prepare_pool;
+    _execution_services.pipeline_sink_io_pool = _pipeline_sink_io_pool;
+    _execution_services.query_rpc_pool = _query_rpc_pool;
+    _execution_services.datacache_rpc_pool = _datacache_rpc_pool;
+    _execution_services.load_rpc_pool = _load_rpc_pool.get();
+    _execution_services.dictionary_cache_pool = _dictionary_cache_pool.get();
+    _execution_services.automatic_partition_pool = _automatic_partition_pool.get();
+    _execution_services.workgroup_manager = _workgroup_manager.get();
+    _execution_services.driver_limiter = _driver_limiter;
+    _execution_services.pipeline_timer = _pipeline_timer;
+    _execution_services.max_executor_threads = _max_executor_threads;
+
+    _rpc_services.backend_client_cache = _backend_client_cache;
+    _rpc_services.frontend_client_cache = _frontend_client_cache;
+    _rpc_services.broker_client_cache = _broker_client_cache;
+    _rpc_services.broker_mgr = _broker_mgr;
+    _rpc_services.brpc_stub_cache = _brpc_stub_cache;
+
+    _lake_services.lake_tablet_manager = _lake_tablet_manager;
+    _lake_services.lake_update_manager = _lake_update_manager;
+    _lake_services.lake_replication_txn_manager = _lake_replication_txn_manager;
+    _lake_services.put_aggregate_metadata_thread_pool = _put_aggregate_metadata_thread_pool.get();
+    _lake_services.lake_metadata_fetch_thread_pool = _lake_metadata_fetch_thread_pool.get();
+    _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
+    _lake_services.pk_index_execution_thread_pool = _pk_index_execution_thread_pool.get();
+    _lake_services.pk_index_memtable_flush_thread_pool = _pk_index_memtable_flush_thread_pool.get();
+
+    _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
+    _runtime_services.stream_mgr = _stream_mgr;
+    _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
+    _runtime_services.result_mgr = _result_mgr;
+    _runtime_services.result_queue_mgr = _result_queue_mgr;
+    _runtime_services.fragment_mgr = _fragment_mgr;
+    _runtime_services.load_path_mgr = _load_path_mgr;
+    _runtime_services.load_channel_mgr = _load_channel_mgr;
+    _runtime_services.load_stream_mgr = _load_stream_mgr;
+    _runtime_services.stream_context_mgr = _stream_context_mgr;
+    _runtime_services.transaction_mgr = _transaction_mgr;
+    _runtime_services.batch_write_mgr = _batch_write_mgr;
+    _runtime_services.stream_load_executor = _stream_load_executor;
+    _runtime_services.routine_load_task_executor = _routine_load_task_executor;
+    _runtime_services.small_file_mgr = _small_file_mgr;
+    _runtime_services.runtime_filter_worker = _runtime_filter_worker;
+    _runtime_services.runtime_filter_cache = _runtime_filter_cache;
+    _runtime_services.profile_report_worker = _profile_report_worker;
+    _runtime_services.query_context_mgr = _query_context_mgr;
+    _runtime_services.cache_mgr = _cache_mgr;
+    _runtime_services.spill_dir_mgr = _spill_dir_mgr.get();
+    _runtime_services.global_spill_manager = _global_spill_manager.get();
+    _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
+    _runtime_services.diagnose_daemon = _diagnose_daemon;
+
+    _agent_services.agent_server = _agent_server;
+    _agent_services.heartbeat_flags = _heartbeat_flags;
+
+    _query_execution_services.execution = &_execution_services;
+    _query_execution_services.rpc = &_rpc_services;
+    _query_execution_services.lake = &_lake_services;
+    _query_execution_services.runtime = &_runtime_services;
+
+    _admin_services.execution = &_execution_services;
+    _admin_services.rpc = &_rpc_services;
+    _admin_services.lake = &_lake_services;
+    _admin_services.runtime = &_runtime_services;
+    _admin_services.agent = &_agent_services;
+}
 
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
@@ -706,6 +782,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
+
+    _refresh_service_contexts();
 
     return Status::OK();
 }
