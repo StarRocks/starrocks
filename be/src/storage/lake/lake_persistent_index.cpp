@@ -16,12 +16,12 @@
 
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
-#include "column/raw_data_visitor.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
