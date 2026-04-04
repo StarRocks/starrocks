@@ -54,9 +54,12 @@ INTERNAL_INCLUDE_PREFIXES = {
     "util",
 }
 CODE_EXTENSIONS = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl"}
+HEADER_CODE_EXTENSIONS = {".h", ".hh", ".hpp", ".hxx", ".inl"}
 LINK_SCOPE_KEYWORDS = {"PUBLIC", "PRIVATE", "INTERFACE"}
 DEFAULT_MANIFEST = "be/module_boundary_manifest.json"
 DEFAULT_BASELINE = "build-support/be_module_boundary_baseline.json"
+DEFAULT_EXEC_ENV_HEADER_ALLOWLIST = "build-support/exec_env_header_include_allowlist.txt"
+DEFAULT_EXEC_ENV_SINGLETON_ALLOWLIST = "build-support/exec_env_singleton_allowlist.txt"
 BASELINE_VIOLATION_KEYS = ("include_violations", "target_link_violations", "test_link_violations")
 DEFAULT_CHANGED_FULL_CHECK_PATHS = {
     "AGENTS.md",
@@ -65,8 +68,13 @@ DEFAULT_CHANGED_FULL_CHECK_PATHS = {
     "be/module_boundary_manifest.json",
     "build-support/be_module_boundary_baseline.json",
     "build-support/check_be_module_boundaries.py",
+    "build-support/exec_env_header_include_allowlist.txt",
+    "build-support/exec_env_singleton_allowlist.txt",
     "build-support/render_be_agents.py",
+    "build-support/runtime_state_header_include_allowlist.txt",
 }
+EXEC_ENV_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]runtime/exec_env\.h[>"]')
+EXEC_ENV_SINGLETON_PATTERN = re.compile(r"\bExecEnv::GetInstance\s*\(")
 
 
 @dataclass(frozen=True)
@@ -148,6 +156,16 @@ def load_baseline(path: Path) -> dict[str, set[tuple[str, str, str]]]:
     if not path.exists():
         return _empty_baseline()
     return _normalize_baseline_payload(json.loads(path.read_text()))
+
+
+def load_path_allowlist(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    return {
+        line.strip()
+        for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
 
 
 def find_baseline_expansions(
@@ -425,6 +443,48 @@ def _normalize_baseline_payload(payload: dict) -> dict[str, set[tuple[str, str, 
     return normalized
 
 
+def collect_exec_env_include_paths(repo_root: Path) -> set[str]:
+    return _collect_matching_paths(
+        repo_root,
+        search_roots=("be/src", "be/test"),
+        extensions=HEADER_CODE_EXTENSIONS,
+        pattern=EXEC_ENV_INCLUDE_PATTERN,
+    )
+
+
+def collect_exec_env_singleton_paths(repo_root: Path) -> set[str]:
+    return _collect_matching_paths(
+        repo_root,
+        search_roots=("be/src",),
+        extensions=CODE_EXTENSIONS,
+        pattern=EXEC_ENV_SINGLETON_PATTERN,
+    )
+
+
+def diff_path_allowlist(current: set[str], allowlist: set[str]) -> tuple[set[str], set[str]]:
+    return current - allowlist, allowlist - current
+
+
+def _collect_matching_paths(
+    repo_root: Path,
+    search_roots: tuple[str, ...],
+    extensions: set[str],
+    pattern: re.Pattern[str],
+) -> set[str]:
+    matched_paths: set[str] = set()
+    be_root = repo_root / "be"
+    for relative_root in search_roots:
+        root = repo_root / relative_root
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in extensions:
+                continue
+            if pattern.search(path.read_text(errors="ignore")):
+                matched_paths.add(path.relative_to(be_root).as_posix())
+    return matched_paths
+
+
 def _iter_cmake_commands(path: Path) -> Iterable[tuple[str, list[str]]]:
     lines = path.read_text().splitlines()
     current: list[str] = []
@@ -592,6 +652,17 @@ def _print_baseline_expansions(expansions: dict[str, set[tuple[str, str, str]]])
             print(f"[baseline] kind={label} module={module} path={path} edge={edge}")
 
 
+def _print_path_allowlist_diff(label: str, extra_paths: set[str], stale_paths: set[str]) -> None:
+    if extra_paths:
+        print(f"New {label} paths require allowlist review:")
+        for path in sorted(extra_paths):
+            print(f"[{label}] new path={path}")
+    if stale_paths:
+        print(f"Remove stale {label} allowlist entries that no longer exist in code:")
+        for path in sorted(stale_paths):
+            print(f"[{label}] stale path={path}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check BE module boundary rules from the manifest.")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST, help="Path to be/module_boundary_manifest.json")
@@ -608,6 +679,8 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parent.parent
     manifest = load_manifest(repo_root / args.manifest)
     baseline = load_baseline(repo_root / args.baseline)
+    exec_env_header_allowlist = load_path_allowlist(repo_root / DEFAULT_EXEC_ENV_HEADER_ALLOWLIST)
+    exec_env_singleton_allowlist = load_path_allowlist(repo_root / DEFAULT_EXEC_ENV_SINGLETON_ALLOWLIST)
     cmake_state = parse_cmake_state(repo_root)
 
     selected_modules = None
@@ -628,12 +701,26 @@ def main(argv: list[str] | None = None) -> int:
 
     violations = collect_violations(repo_root, manifest, cmake_state, selected_modules=selected_modules)
     violations = apply_baseline(violations, baseline)
-    if violations.is_empty():
-        checked = "all modules" if selected_modules is None else ", ".join(sorted(selected_modules))
-        print(f"OK: BE module boundaries clean for {checked}.")
-        return 0
-    _print_violations(violations)
-    return 1
+    if not violations.is_empty():
+        _print_violations(violations)
+        return 1
+
+    exec_env_include_extra, exec_env_include_stale = diff_path_allowlist(
+        collect_exec_env_include_paths(repo_root),
+        exec_env_header_allowlist,
+    )
+    exec_env_singleton_extra, exec_env_singleton_stale = diff_path_allowlist(
+        collect_exec_env_singleton_paths(repo_root),
+        exec_env_singleton_allowlist,
+    )
+    if exec_env_include_extra or exec_env_include_stale or exec_env_singleton_extra or exec_env_singleton_stale:
+        _print_path_allowlist_diff("exec-env-include", exec_env_include_extra, exec_env_include_stale)
+        _print_path_allowlist_diff("exec-env-singleton", exec_env_singleton_extra, exec_env_singleton_stale)
+        return 1
+
+    checked = "all modules" if selected_modules is None else ", ".join(sorted(selected_modules))
+    print(f"OK: BE module boundaries clean for {checked}.")
+    return 0
 
 
 if __name__ == "__main__":
