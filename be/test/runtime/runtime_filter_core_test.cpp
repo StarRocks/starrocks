@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/uid_util.h"
@@ -310,10 +311,13 @@ TEST(RuntimeFilterCoreTest, RuntimeFilterCachePutGetRemoveAndTrace) {
     EXPECT_EQ(cache.get(query_id, filter_id + 1), nullptr);
 
     cache.set_enable_trace(true);
-    cache.add_rf_event(query_id, filter_id, std::string("core-test-event"));
+    cache.add_rf_event({query_id, filter_id, "test-network", "core-test-event"});
     auto events = cache.get_events();
     EXPECT_FALSE(events.empty());
-    EXPECT_NE(events.find(print_id(query_id)), events.end());
+    auto events_it = events.find(print_id(query_id));
+    ASSERT_NE(events_it, events.end());
+    ASSERT_FALSE(events_it->second.empty());
+    EXPECT_NE(events_it->second.front().find("core-test-event(test-network)"), std::string::npos);
 
     cache.remove(query_id);
     EXPECT_EQ(cache.get(query_id, filter_id), nullptr);
