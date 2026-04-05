@@ -25,6 +25,7 @@
 namespace starrocks {
 class DataSink;
 class ExecEnv;
+struct QueryExecutionServices;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
 class RuntimeState;
@@ -114,8 +115,10 @@ public:
     void _fail_cleanup(bool fragment_has_registed);
 
 private:
-    uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
-    uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_dop(const QueryExecutionServices& query_execution_services,
+                       const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_sink_dop(const QueryExecutionServices& query_execution_services,
+                            const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
     int _calc_query_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
 
@@ -126,13 +129,18 @@ private:
     // 4. runtime state
     // 5. exec plan
     // 6. pipeline driver
-    Status _prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_query_ctx(const QueryExecutionServices& query_execution_services,
+                              const UnifiedExecPlanFragmentParams& request);
     Status _prepare_fragment_ctx(const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_workgroup(const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_workgroup(const QueryExecutionServices& query_execution_services,
+                              const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_runtime_state(const QueryExecutionServices& query_execution_services, ExecEnv* exec_env,
+                                  const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_exec_plan(const QueryExecutionServices& query_execution_services,
+                              const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_pipeline_driver(const QueryExecutionServices& query_execution_services,
+                                    const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     std::unordered_map<int32_t, ExecutionGroupPtr> _colocate_exec_groups;

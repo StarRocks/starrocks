@@ -18,6 +18,7 @@
 #include <cstdlib>
 
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -49,6 +50,23 @@ TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
                 std::_Exit(0);
             }(),
             ::testing::ExitedWithCode(0), "");
+}
+
+TEST(RuntimeStateCoreTest, QueryExecutionServicesConstructorPreservesCompatibilityExecEnv) {
+    QueryExecutionServices query_execution_services;
+    auto* exec_env = reinterpret_cast<ExecEnv*>(static_cast<uintptr_t>(0x1234));
+    RuntimeState state(query_execution_services, exec_env);
+
+    EXPECT_EQ(&query_execution_services, state.query_execution_services());
+    EXPECT_EQ(exec_env, state.exec_env());
+}
+
+TEST(RuntimeStateCoreTest, ExecEnvCompatibilityConstructorKeepsExecEnv) {
+    auto* exec_env = reinterpret_cast<ExecEnv*>(static_cast<uintptr_t>(0x5678));
+    RuntimeState state(exec_env);
+
+    EXPECT_EQ(nullptr, state.query_execution_services());
+    EXPECT_EQ(exec_env, state.exec_env());
 }
 
 } // namespace starrocks

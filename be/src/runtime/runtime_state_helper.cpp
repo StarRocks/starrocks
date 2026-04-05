@@ -30,11 +30,11 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -44,7 +44,15 @@ namespace starrocks {
 
 namespace {
 constexpr int64_t kMaxErrorNum = 50;
+
+BaseLoadPathMgr* get_load_path_mgr(RuntimeState* state) {
+    const auto* query_execution_services = state->query_execution_services();
+    if (query_execution_services == nullptr || query_execution_services->runtime == nullptr) {
+        return nullptr;
+    }
+    return query_execution_services->runtime->load_path_mgr;
 }
+} // namespace
 
 void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
     if (state->_runtime_filter_port != nullptr) {
@@ -62,10 +70,13 @@ ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
 }
 
 Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
-    RETURN_IF_ERROR(state->_exec_env->load_path_mgr()->get_load_error_file_name(state->_fragment_instance_id,
-                                                                                &state->_error_log_file_path));
-    std::string error_log_absolute_path =
-            state->_exec_env->load_path_mgr()->get_load_error_absolute_path(state->_error_log_file_path);
+    auto* load_path_mgr = get_load_path_mgr(state);
+    if (load_path_mgr == nullptr) {
+        return Status::InternalError("QueryExecutionServices is missing load path manager");
+    }
+    RETURN_IF_ERROR(
+            load_path_mgr->get_load_error_file_name(state->_fragment_instance_id, &state->_error_log_file_path));
+    std::string error_log_absolute_path = load_path_mgr->get_load_error_absolute_path(state->_error_log_file_path);
     state->_error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
     if (!state->_error_log_file->is_open()) {
         std::stringstream error_msg;
@@ -77,7 +88,11 @@ Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
 }
 
 Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
-    auto rejected_record_absolute_path = state->_exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
+    auto* load_path_mgr = get_load_path_mgr(state);
+    if (load_path_mgr == nullptr) {
+        return Status::InternalError("QueryExecutionServices is missing load path manager");
+    }
+    auto rejected_record_absolute_path = load_path_mgr->get_load_rejected_record_absolute_path(
             "", state->_db, state->_load_label, state->_txn_id, state->_fragment_instance_id);
     RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
 

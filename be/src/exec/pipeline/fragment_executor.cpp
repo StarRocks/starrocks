@@ -97,7 +97,8 @@ FragmentExecutor::FragmentExecutor() {
     _fragment_start_time = MonotonicNanos();
 }
 
-Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_query_ctx(const QueryExecutionServices& query_execution_services,
+                                            const UnifiedExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
     const auto& params = request.common().params;
@@ -105,8 +106,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     const auto& fragment_instance_id = request.fragment_instance_id();
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
+    auto* query_context_mgr = query_execution_services.runtime->query_context_mgr;
 
-    auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
+    auto&& existing_query_ctx = query_context_mgr->get(query_id);
     if (existing_query_ctx) {
         auto&& existingfragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existingfragment_ctx) {
@@ -115,8 +117,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     }
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
-    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
-    _query_ctx->set_exec_env(exec_env);
+    ASSIGN_OR_RETURN(_query_ctx, query_context_mgr->get_or_register(query_id, query_ctx_should_exist));
+    _query_ctx->set_query_execution_services(&query_execution_services);
+    _query_ctx->set_query_context_mgr(query_context_mgr);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
@@ -191,15 +194,17 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_workgroup(const QueryExecutionServices& query_execution_services,
+                                            const UnifiedExecPlanFragmentParams& request) {
     WorkGroupPtr wg;
+    auto* workgroup_manager = query_execution_services.execution->workgroup_manager;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
-        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
+        wg = workgroup_manager->get_default_workgroup();
     } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
-        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_mv_workgroup();
+        wg = workgroup_manager->get_default_mv_workgroup();
     } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
-        wg = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg);
+        wg = workgroup_manager->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
 
@@ -218,7 +223,8 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_runtime_state(const QueryExecutionServices& query_execution_services,
+                                                ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto& params = request.common().params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
@@ -227,8 +233,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& t_desc_tbl = request.common().desc_tbl;
     auto& wg = _wg;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options,
+                                                                    query_globals, query_execution_services, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
@@ -284,7 +290,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     }
     if (runtime_filter_params != nullptr) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
+        query_execution_services.runtime->runtime_filter_worker->open_query(query_id, query_options,
+                                                                            *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
     _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
@@ -321,14 +328,23 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     return Status::OK();
 }
 
-uint32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_dop(const QueryExecutionServices& query_execution_services,
+                                     const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_dop();
-    return exec_env->calc_pipeline_dop(degree_of_parallelism);
+    if (degree_of_parallelism > 0) {
+        return degree_of_parallelism;
+    }
+    return std::max<uint32_t>(1, query_execution_services.execution->max_executor_threads / 2);
 }
 
-uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_sink_dop(const QueryExecutionServices& query_execution_services,
+                                          const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_sink_dop();
-    return exec_env->calc_pipeline_sink_dop(degree_of_parallelism);
+    if (degree_of_parallelism > 0) {
+        return degree_of_parallelism;
+    }
+    auto dop = std::max<uint32_t>(1, query_execution_services.execution->max_executor_threads);
+    return std::min<uint32_t>(dop, 64);
 }
 
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
@@ -440,13 +456,14 @@ static bool has_more_per_driver_seq_scan_ranges(const PerDriverScanRangesMap& ma
     return has_more;
 }
 
-Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_exec_plan(const QueryExecutionServices& query_execution_services,
+                                            const UnifiedExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.common().params;
     const auto& fragment = request.common().fragment;
-    const auto pipeline_dop = _calc_dop(exec_env, request);
+    const auto pipeline_dop = _calc_dop(query_execution_services, request);
     const int32_t group_execution_scan_dop = request.group_execution_scan_dop();
     const auto& query_options = request.common().query_options;
     const int chunk_size = runtime_state->chunk_size();
@@ -740,8 +757,9 @@ static void create_adaptive_group_initialize_events(RuntimeState* state, WorkGro
     }
 }
 
-Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto degree_of_parallelism = _calc_dop(exec_env, request);
+Status FragmentExecutor::_prepare_pipeline_driver(const QueryExecutionServices& query_execution_services,
+                                                  const UnifiedExecPlanFragmentParams& request) {
+    const auto degree_of_parallelism = _calc_dop(query_execution_services, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
 
@@ -751,7 +769,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     Drivers drivers;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     auto* runtime_state = _fragment_ctx->runtime_state();
-    size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
+    size_t sink_dop = _calc_sink_dop(query_execution_services, request);
     // Build pipelines
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
@@ -793,7 +811,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
-            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));
+            RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(query_execution_services.execution->pipeline_timer));
         }
     }
     runtime_state->set_enable_event_scheduler(_fragment_ctx->enable_event_scheduler());
@@ -827,7 +845,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     // Acquire driver token to avoid overload
-    ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    ASSIGN_OR_RETURN(auto driver_token,
+                     query_execution_services.execution->driver_limiter->try_acquire(_fragment_ctx->total_dop()));
     _fragment_ctx->set_driver_token(std::move(driver_token));
 
     return Status::OK();
@@ -858,7 +877,8 @@ Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlan
     bool prepare_success = false;
 
     UnifiedExecPlanFragmentParams request(common_request, common_request);
-    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+    const auto& query_execution_services = exec_env->query_execution_services();
+    RETURN_IF_ERROR(_prepare_query_ctx(query_execution_services, request));
 
     // make sure query context can be released
     // if _prepare_query_ctx return error, query context doesn't exist
@@ -892,6 +912,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
+    const auto& query_execution_services = exec_env->query_execution_services();
     struct {
         int64_t prepare_time = 0;
         int64_t prepare_query_ctx_time = 0;
@@ -900,8 +921,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_pipeline_driver_time = 0;
 
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
-        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
+        size_t num_process_drivers = 0;
     } profiler;
+    profiler.num_process_drivers = query_execution_services.execution->driver_limiter->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
@@ -952,7 +974,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
     {
         SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
-        RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+        RETURN_IF_ERROR(_prepare_query_ctx(query_execution_services, request));
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_fragment_ctx_time);
@@ -960,14 +982,14 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_runtime_state_time);
-        RETURN_IF_ERROR(_prepare_workgroup(request));
-        RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+        RETURN_IF_ERROR(_prepare_workgroup(query_execution_services, request));
+        RETURN_IF_ERROR(_prepare_runtime_state(query_execution_services, exec_env, request));
 
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
         RETURN_IF_ERROR(_prepare_global_dict(request));
-        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
+        RETURN_IF_ERROR(_prepare_exec_plan(query_execution_services, request));
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
@@ -975,7 +997,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
-        RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+        RETURN_IF_ERROR(_prepare_pipeline_driver(query_execution_services, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
     }
 
@@ -1040,7 +1062,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     const TUniqueId& query_id = params.query_id;
     const TUniqueId& instance_id = params.fragment_instance_id;
 
-    QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
+    QueryContextPtr query_ctx = exec_env->query_execution_services().runtime->query_context_mgr->get(query_id);
     if (query_ctx == nullptr) {
         // query can be cancelled because of timeout or short-circuited query like `limit`.
         // return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));

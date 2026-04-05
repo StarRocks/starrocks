@@ -194,7 +194,8 @@ FragmentExecState::~FragmentExecState() {
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
-                                                    params.query_options, params.query_globals, _exec_env);
+                                                    params.query_options, params.query_globals,
+                                                    _exec_env->query_execution_services(), _exec_env);
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;

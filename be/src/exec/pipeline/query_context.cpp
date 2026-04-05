@@ -81,17 +81,22 @@ QueryContext::~QueryContext() noexcept {
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
-    if (_exec_env != nullptr) {
+    if (_query_execution_services != nullptr && _query_execution_services->runtime != nullptr) {
         if (_is_runtime_filter_coordinator) {
-            _exec_env->runtime_filter_worker()->close_query(_query_id);
+            _query_execution_services->runtime->runtime_filter_worker->close_query(_query_id);
         }
-        _exec_env->runtime_filter_cache()->remove(_query_id);
+        _query_execution_services->runtime->runtime_filter_cache->remove(_query_id);
     }
 
     // Make sure all bytes are released back to parent trackers.
     if (_connector_scan_mem_tracker != nullptr) {
         _connector_scan_mem_tracker->release_without_root();
     }
+}
+
+void QueryContext::set_exec_env(ExecEnv* exec_env) {
+    _query_execution_services = exec_env != nullptr ? &exec_env->query_execution_services() : nullptr;
+    _query_context_mgr = exec_env != nullptr ? exec_env->query_context_mgr() : nullptr;
 }
 
 void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
@@ -114,7 +119,16 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 }
 
 void QueryContext::count_down_fragments() {
-    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
+    auto* query_context_mgr = _query_context_mgr;
+    if (query_context_mgr == nullptr && _query_execution_services != nullptr &&
+        _query_execution_services->runtime != nullptr) {
+        query_context_mgr = _query_execution_services->runtime->query_context_mgr;
+    }
+    DCHECK(query_context_mgr != nullptr);
+    if (query_context_mgr == nullptr) {
+        return;
+    }
+    return this->count_down_fragments(query_context_mgr);
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -196,7 +210,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
-        auto* g_spill_manager = ExecEnv::GetInstance()->global_spill_manager();
+        if (_query_execution_services == nullptr || _query_execution_services->runtime == nullptr ||
+            _query_execution_services->runtime->global_spill_manager == nullptr) {
+            st = Status::InternalError("QueryExecutionServices is missing global spill manager");
+            return;
+        }
+        auto* g_spill_manager = _query_execution_services->runtime->global_spill_manager;
         _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
         st = _spill_manager->init_block_manager(query_options);
     });
@@ -451,6 +470,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         // lookup query context in context_map
         auto it = context_map.find(query_id);
         if (it != context_map.end()) {
+            it->second->set_query_context_mgr(this);
             RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         }
@@ -461,6 +481,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         auto it = context_map.find(query_id);
         auto sc_it = sc_map.find(query_id);
         if (it != context_map.end()) {
+            it->second->set_query_context_mgr(this);
             RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         } else {
@@ -468,6 +489,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
                 auto* raw_ctx_ptr = ctx.get();
+                raw_ctx_ptr->set_query_context_mgr(this);
                 sc_map.erase(sc_it);
                 auto cancel_status = [ctx]() -> Status {
                     RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
@@ -493,6 +515,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         auto&& ctx = std::make_shared<QueryContext>();
         auto* ctx_raw_ptr = ctx.get();
         ctx_raw_ptr->set_query_id(query_id);
+        ctx_raw_ptr->set_query_context_mgr(this);
         ctx_raw_ptr->increment_num_fragments();
         context_map.emplace(query_id, std::move(ctx));
         return ctx_raw_ptr;

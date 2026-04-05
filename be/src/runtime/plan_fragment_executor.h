@@ -53,6 +53,7 @@ class ExecNode;
 class RowDescriptor;
 class DataSink;
 class DataStreamMgr;
+struct QueryExecutionServices;
 class RuntimeProfile;
 class RuntimeState;
 class TPlanFragment;
@@ -151,8 +152,8 @@ public:
 private:
     Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
 
-    ExecEnv* _exec_env;        // not owned
-    ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
+    const QueryExecutionServices* _query_execution_services; // not owned
+    ExecNode* _plan = nullptr;                               // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 

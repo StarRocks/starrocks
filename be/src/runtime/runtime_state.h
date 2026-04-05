@@ -60,6 +60,7 @@ class DescriptorTbl;
 class ObjectPool;
 class Status;
 class ExecEnv;
+struct QueryExecutionServices;
 class Expr;
 class DateTimeValue;
 class MemPool;
@@ -96,14 +97,21 @@ public:
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices& query_execution_services,
+                 ExecEnv* exec_env = nullptr);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices& query_execution_services,
+                 ExecEnv* exec_env = nullptr);
 
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
     explicit RuntimeState(ExecEnv* exec_env);
+    explicit RuntimeState(const QueryExecutionServices& query_execution_services, ExecEnv* exec_env = nullptr);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
@@ -141,6 +149,7 @@ public:
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     ExecEnv* exec_env() { return _exec_env; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
@@ -556,7 +565,8 @@ private:
 
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+               ExecEnv* exec_env);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -587,6 +597,7 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.

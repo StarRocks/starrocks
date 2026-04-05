@@ -41,6 +41,8 @@ namespace starrocks {
 
 class StreamEpochManager;
 class GlobalLateMaterilizationContextMgr;
+class ExecEnv;
+struct QueryExecutionServices;
 
 namespace pipeline {
 
@@ -56,8 +58,12 @@ class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
-    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
+    void set_exec_env(ExecEnv* exec_env);
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
+    void set_query_context_mgr(QueryContextManager* query_context_mgr) { _query_context_mgr = query_context_mgr; }
     TUniqueId query_id() const { return _query_id; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
@@ -318,7 +324,8 @@ public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
 private:
-    ExecEnv* _exec_env = nullptr;
+    const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextManager* _query_context_mgr = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
