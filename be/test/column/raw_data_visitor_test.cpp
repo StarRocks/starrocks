@@ -291,7 +291,7 @@ TEST(RawDataVisitorTest, VisitConstColumn) {
 
 TEST(RawDataVisitorTest, VisitArrayColumn) {
     RawDataVisitor visitor;
-    auto elements = ColumnTestHelper::build_column<int32_t>({42, 7});
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
     auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
     auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
 
