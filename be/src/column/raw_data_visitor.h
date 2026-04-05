@@ -119,7 +119,6 @@ public:
     Status do_visit(const NullableColumn& column) { return column.data_column_raw_ptr()->accept(this); }
 
     Status do_visit(const AdaptiveNullableColumn& column) {
-        column.materialized_nullable();
         return column.data_column()->accept(this);
     }
 

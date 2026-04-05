@@ -448,7 +448,6 @@ public:
     }
 
     const ColumnPtr& data_column() const {
-        DCHECK(false);
         materialized_nullable();
         return _data_column;
     }
