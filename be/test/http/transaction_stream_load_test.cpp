@@ -68,8 +68,11 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
+        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
+        ASSERT_OK(_pipeline_timer->start());
+        _env._pipeline_timer = _pipeline_timer.get();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(&_env);
+        _env._brpc_stub_cache = new BrpcStubCache(_pipeline_timer.get());
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -84,6 +87,8 @@ public:
         _env._stream_context_mgr = nullptr;
         delete _env._brpc_stub_cache;
         _env._brpc_stub_cache = nullptr;
+        _env._pipeline_timer = nullptr;
+        _pipeline_timer.reset();
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
@@ -97,6 +102,7 @@ public:
 protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
+    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
 };
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {

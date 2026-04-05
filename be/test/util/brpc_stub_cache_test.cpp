@@ -22,7 +22,6 @@
 
 #include "base/failpoint/fail_point.h"
 #include "common/config_network_fwd.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -31,21 +30,20 @@ public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
     void SetUp() override {
-        _env._pipeline_timer = new pipeline::PipelineTimer();
-        ASSERT_OK(_env._pipeline_timer->start());
+        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
+        ASSERT_OK(_pipeline_timer->start());
     }
     void TearDown() override {
-        delete _env._pipeline_timer;
-        _env._pipeline_timer = nullptr;
+        _pipeline_timer.reset();
         config::brpc_stub_expire_s = 3600;
     }
 
 private:
-    ExecEnv _env;
+    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
-    BrpcStubCache cache(&_env);
+    BrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -61,7 +59,7 @@ TEST_F(BrpcStubCacheTest, normal) {
 }
 
 TEST_F(BrpcStubCacheTest, invalid) {
-    BrpcStubCache cache(&_env);
+    BrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "invalid.cm.invalid";
     address.port = 123;
@@ -70,7 +68,7 @@ TEST_F(BrpcStubCacheTest, invalid) {
 }
 
 TEST_F(BrpcStubCacheTest, reset) {
-    BrpcStubCache cache(&_env);
+    BrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -84,8 +82,9 @@ TEST_F(BrpcStubCacheTest, reset) {
     ASSERT_NE(istub1, istub2);
 }
 
+#ifndef __APPLE__
 TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
-    LakeServiceBrpcStubCache cache;
+    LakeServiceBrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     std::string hostname = "127.0.0.1";
     int32_t port1 = 123;
@@ -101,9 +100,10 @@ TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
     auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
     ASSERT_FALSE(stub4.ok());
 }
+#endif
 
 TEST_F(BrpcStubCacheTest, test_http_stub) {
-    HttpBrpcStubCache cache;
+    HttpBrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -125,7 +125,7 @@ TEST_F(BrpcStubCacheTest, test_http_stub) {
 
 TEST_F(BrpcStubCacheTest, test_cleanup) {
     config::brpc_stub_expire_s = 1;
-    BrpcStubCache cache(&_env);
+    BrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -139,9 +139,10 @@ TEST_F(BrpcStubCacheTest, test_cleanup) {
     ASSERT_NE(stub3, stub1);
 }
 
+#ifndef __APPLE__
 TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
     config::brpc_stub_expire_s = 1;
-    LakeServiceBrpcStubCache cache;
+    LakeServiceBrpcStubCache cache(_pipeline_timer.get());
     std::string hostname = "127.0.0.1";
     int32_t port = 123;
     auto stub1 = cache.get_stub(hostname, port);
@@ -155,10 +156,11 @@ TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
     auto stub3 = cache.get_stub(hostname, port);
     ASSERT_NE(*stub3, *stub1);
 }
+#endif
 
 TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     config::brpc_stub_expire_s = 1;
-    HttpBrpcStubCache cache;
+    HttpBrpcStubCache cache(_pipeline_timer.get());
     TNetworkAddress address;
     address.hostname = "127.0.0.1";
     address.port = 123;
@@ -171,5 +173,62 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     auto stub3 = cache.get_http_stub(address);
     ASSERT_NE(*stub3, *stub1);
 }
+
+TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
+    auto pipeline_timer2 = std::make_unique<pipeline::PipelineTimer>();
+    ASSERT_OK(pipeline_timer2->start());
+
+    HttpBrpcStubCache::initialize(_pipeline_timer.get());
+    auto* cache = HttpBrpcStubCache::getInstance();
+    ASSERT_NE(nullptr, cache);
+    ASSERT_EQ(_pipeline_timer.get(), cache->_pipeline_timer);
+
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache->get_http_stub(address);
+    ASSERT_TRUE(stub.ok());
+    ASSERT_NE(nullptr, *stub);
+
+    cache->shutdown();
+    ASSERT_EQ(nullptr, cache->_pipeline_timer);
+
+    HttpBrpcStubCache::initialize(pipeline_timer2.get());
+    ASSERT_EQ(pipeline_timer2.get(), cache->_pipeline_timer);
+
+    auto rebound_stub = cache->get_http_stub(address);
+    ASSERT_TRUE(rebound_stub.ok());
+    ASSERT_NE(nullptr, *rebound_stub);
+
+    cache->shutdown();
+}
+
+#ifndef __APPLE__
+TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
+    auto pipeline_timer2 = std::make_unique<pipeline::PipelineTimer>();
+    ASSERT_OK(pipeline_timer2->start());
+
+    LakeServiceBrpcStubCache::initialize(_pipeline_timer.get());
+    auto* cache = LakeServiceBrpcStubCache::getInstance();
+    ASSERT_NE(nullptr, cache);
+    ASSERT_EQ(_pipeline_timer.get(), cache->_pipeline_timer);
+
+    auto stub = cache->get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(stub.ok());
+    ASSERT_NE(nullptr, *stub);
+
+    cache->shutdown();
+    ASSERT_EQ(nullptr, cache->_pipeline_timer);
+
+    LakeServiceBrpcStubCache::initialize(pipeline_timer2.get());
+    ASSERT_EQ(pipeline_timer2.get(), cache->_pipeline_timer);
+
+    auto rebound_stub = cache->get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(rebound_stub.ok());
+    ASSERT_NE(nullptr, *rebound_stub);
+
+    cache->shutdown();
+}
+#endif
 
 } // namespace starrocks

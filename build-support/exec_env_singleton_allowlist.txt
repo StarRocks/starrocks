@@ -27,7 +27,6 @@ src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/spill/query_spill_manager.cpp
 src/exec/workgroup/scan_task_queue.cpp
-src/exec/workgroup/work_group.cpp
 src/exec/write_combined_txn_log.cpp
 src/fs/fs_broker.cpp
 src/http/action/update_config_action.cpp
@@ -36,11 +35,9 @@ src/runtime/fragment_mgr.cpp
 src/runtime/hive_table_sink.cpp
 src/runtime/iceberg_table_sink.cpp
 src/runtime/load_channel.cpp
-src/runtime/load_channel_mgr.cpp
 src/runtime/local_tablets_channel.cpp
 src/runtime/logconfig.cpp
 src/runtime/plan_fragment_executor.cpp
-src/runtime/profile_report_worker.cpp
 src/runtime/runtime_filter_worker.cpp
 src/runtime/schema_table_sink.cpp
 src/runtime/table_function_table_sink.cpp
@@ -77,5 +74,4 @@ src/storage/task/engine_alter_tablet_task.cpp
 src/storage/task/engine_batch_load_task.cpp
 src/testutil/init_test_env.h
 src/udf/java/utils.cpp
-src/util/brpc_stub_cache.cpp
 src/util/system_metrics.cpp

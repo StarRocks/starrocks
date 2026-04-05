@@ -104,7 +104,7 @@ class StatusPB;
 //
 class LoadChannelMgr {
 public:
-    LoadChannelMgr();
+    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager);
     ~LoadChannelMgr();
 
     Status init(MemTracker* mem_tracker);
@@ -180,6 +180,7 @@ private:
 
     // Thread pool used to handle rpc request asynchronously
     std::unique_ptr<ThreadPool> _async_rpc_pool;
+    lake::TabletManager* _lake_tablet_manager;
 };
 
 } // namespace starrocks

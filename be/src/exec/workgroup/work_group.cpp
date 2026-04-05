@@ -712,18 +712,21 @@ void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds 
 // DefaultWorkGroupInitialization
 // ------------------------------------------------------------------------------------
 
-DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
+DefaultWorkGroupInitialization::DefaultWorkGroupInitialization(WorkGroupManager* workgroup_manager,
+                                                               int64_t max_executor_threads)
+        : _workgroup_manager(workgroup_manager), _max_executor_threads(max_executor_threads) {
+    DCHECK(_workgroup_manager != nullptr);
     auto default_wg = create_default_workgroup();
-    ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(default_wg);
+    _workgroup_manager->add_workgroup(default_wg);
 
     auto default_mv_wg = create_default_mv_workgroup();
-    ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(default_mv_wg);
+    _workgroup_manager->add_workgroup(default_mv_wg);
 }
 
 std::shared_ptr<WorkGroup> DefaultWorkGroupInitialization::create_default_workgroup() {
     // The default workgroup can use all the resources of CPU and memory,
     // so set cpu_limit to max_executor_threads and memory_limit to 100%.
-    int64_t cpu_limit = ExecEnv::GetInstance()->max_executor_threads();
+    int64_t cpu_limit = _max_executor_threads;
     const double memory_limit = 1.0;
     const double spill_mem_limit_threshold = 1.0; // not enable spill mem limit threshold
     return std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, cpu_limit,

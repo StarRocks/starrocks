@@ -38,11 +38,14 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "base/time/monotime.h"
 #include "common/config_runtime_fwd.h"
 #include "exec/data_sink.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/profile_report_worker.h"
 
 namespace starrocks {
 
@@ -145,6 +148,27 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
     params.params.fragment_instance_id.__set_hi(100);
     params.params.fragment_instance_id.__set_lo(200);
     ASSERT_TRUE(mgr.cancel(params.params.fragment_instance_id).ok());
+}
+
+TEST_F(FragmentMgrTest, ProfileReportWorkerUsesInjectedServices) {
+    FragmentMgr mgr(ExecEnv::GetInstance());
+    pipeline::QueryContextManager query_context_manager(1);
+    ASSERT_OK(query_context_manager.init());
+
+    TUniqueId query_id;
+    query_id.__set_hi(300);
+    query_id.__set_lo(400);
+
+    TUniqueId fragment_instance_id;
+    fragment_instance_id.__set_hi(500);
+    fragment_instance_id.__set_lo(600);
+
+    ProfileReportWorker worker(&mgr, &query_context_manager);
+    ASSERT_TRUE(worker.register_non_pipeline_load(fragment_instance_id).ok());
+    ASSERT_TRUE(worker.register_pipeline_load(query_id, fragment_instance_id).ok());
+    worker.unregister_pipeline_load(query_id, fragment_instance_id);
+    worker.unregister_non_pipeline_load(fragment_instance_id);
+    worker.close();
 }
 
 } // namespace starrocks

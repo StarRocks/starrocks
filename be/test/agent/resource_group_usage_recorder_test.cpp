@@ -35,7 +35,7 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     ASSERT_OK(exec_env._workgroup_manager->start());
 
-    workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    workgroup::DefaultWorkGroupInitialization default_workgroup_init(exec_env.workgroup_manager(), num_cores);
     auto default_wg = exec_env.workgroup_manager()->get_default_workgroup();
 
     ResourceGroupUsageRecorder recorder;

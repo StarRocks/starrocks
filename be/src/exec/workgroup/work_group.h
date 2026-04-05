@@ -349,12 +349,16 @@ private:
 
 class DefaultWorkGroupInitialization {
 public:
-    DefaultWorkGroupInitialization();
+    DefaultWorkGroupInitialization(WorkGroupManager* workgroup_manager, int64_t max_executor_threads);
 
     // create or renew default group
     std::shared_ptr<WorkGroup> create_default_workgroup();
     // create or renew default mv group
     std::shared_ptr<WorkGroup> create_default_mv_workgroup();
+
+private:
+    WorkGroupManager* _workgroup_manager;
+    int64_t _max_executor_threads;
 };
 
 } // namespace workgroup
