@@ -111,9 +111,9 @@ public:
             size_t nullCount = nullable_predicate_column->null_count();
 
             if (nullCount == 0) {
-                const uint8_t* __restrict nullable_predicate_data_col_raw_data;
-                nullable_predicate_data_col_raw_data =
-                        ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(nullable_predicate_column->data_column())->raw_data();
+                const auto& nullable_predicate_data_col_raw_data =
+                        ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(nullable_predicate_column->data_column())
+                                ->immutable_data();
                 for (size_t i = 0; i < chunk_size; ++i) {
                     // false is 0, but null is 1
                     fake_null_column_raw_data[i] = !nullable_predicate_data_col_raw_data[i];
@@ -132,8 +132,8 @@ public:
                 }
             }
         } else {
-            const uint8_t* __restrict predicate_column_raw_data =
-                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(predicate_column)->raw_data();
+            const auto& predicate_column_raw_data =
+                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(predicate_column)->immutable_data();
             for (size_t i = 0; i < chunk_size; ++i) {
                 fake_null_column_raw_data[i] = !predicate_column_raw_data[i];
             }
