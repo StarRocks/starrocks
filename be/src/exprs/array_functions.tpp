@@ -2228,7 +2228,7 @@ private:
         const auto& offsets_column = array_column->offsets_column();
 
         const auto& elements_data = GetContainer<LT>::get_data(elements_column);
-        const NullColumn::ValueType* null_data = null_column->raw_data();
+        const auto& null_data = null_column->immutable_data();
         const UInt32Column::ValueType* offsets_data = offsets_column->immutable_data().data();
         // column may be null
         size_t offset = offsets_data[0];
@@ -2259,7 +2259,7 @@ private:
         result_column->resize(is_const_target ? 1 : num_rows);
         size_t result_size = result_column->size();
 
-        const CppType* target_data = reinterpret_cast<const CppType*>(targets->raw_data());
+        const auto& target_data = GetContainer<LT>::get_data(targets);
         auto* result_data = result_column->get_data().data();
 
         for (size_t i = 0; i < result_size; i++) {
