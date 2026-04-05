@@ -411,6 +411,11 @@ public:
         return _data_column;
     }
 
+    const ColumnPtr& materialized_raw_data_column() const {
+        materialized_nullable();
+        return _data_column;
+    }
+
     const NullColumnPtr& materialized_raw_null_column() const {
         materialized_nullable();
         return _null_column;
