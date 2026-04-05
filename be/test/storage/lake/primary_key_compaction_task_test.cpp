@@ -1031,13 +1031,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
     });
 
     std::thread t2([&]() {
-        AbortTxnRequest request;
-        request.add_tablet_ids(tablet_id);
-        request.add_txn_ids(txn_id);
-        request.set_skip_cleanup(false);
-        AbortTxnResponse response;
-        auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
-        lake_service.abort_txn(nullptr, &request, &response, nullptr);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        std::vector<TxnInfoPB> txn_infos{txn_info};
+        abort_txn(_tablet_mgr.get(), tablet_id, txn_infos);
     });
 
     t1.join();
