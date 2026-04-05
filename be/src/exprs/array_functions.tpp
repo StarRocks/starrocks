@@ -2226,7 +2226,7 @@ private:
                 down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column();
         const auto& offsets_column = array_column->offsets_column();
 
-        const CppType* elements_data = reinterpret_cast<const CppType*>(elements_column->raw_data());
+        const auto& elements_data = GetContainer<LT>::get_data(elements_column);
         const NullColumn::ValueType* null_data = null_column->raw_data();
         const UInt32Column::ValueType* offsets_data = offsets_column->immutable_data().data();
         // column may be null
