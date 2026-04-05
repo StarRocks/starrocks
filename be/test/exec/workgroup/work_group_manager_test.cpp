@@ -14,8 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/mem_tracker.h"
 
@@ -127,7 +130,8 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
 }
 
 PARALLEL_TEST(WorkGroupManagerTest, default_workgroup_initialization_uses_injected_dependencies) {
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    auto metrics = std::make_unique<pipeline::PipelineExecutorMetrics>();
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, metrics.get()};
     auto manager = std::make_unique<WorkGroupManager>(config);
     ASSERT_OK(manager->start());
 
@@ -140,6 +144,7 @@ PARALLEL_TEST(WorkGroupManagerTest, default_workgroup_initialization_uses_inject
     EXPECT_EQ(7, default_wg->cpu_weight());
     EXPECT_EQ(2, manager->num_workgroups());
 
+    manager->close();
     manager->destroy();
 }
 } // namespace starrocks::workgroup
