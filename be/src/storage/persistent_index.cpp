@@ -3530,7 +3530,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     if (pkc->is_binary()) {
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
                     } else {
-                        //TODO: Refactor the code to remove tmp slice array.
+                        // TODO: Refactor the code to remove tmp slice array.
                         std::vector<Slice> keys;
                         TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
                         RawBytesVisitor visitor;

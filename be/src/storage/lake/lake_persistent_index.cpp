@@ -938,7 +938,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
                                          rowset_version, del_rebuild_rssid));
         } else {
-            //TODO: Refactor the code to remove tmp slice array.
+            // TODO: Refactor the code to remove tmp slice array.
             std::vector<Slice> keys;
             keys.reserve(pkc->size());
             RawBytesVisitor visitor;
@@ -1164,7 +1164,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
                                                values.data(), rowset_version));
                     } else {
-                        //TODO: Refactor the code to remove tmp slice array.
+                        // TODO: Refactor the code to remove tmp slice array.
                         std::vector<Slice> keys;
                         keys.reserve(pkc->size());
                         RawBytesVisitor visitor;
