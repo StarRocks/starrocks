@@ -239,4 +239,91 @@ TEST(RawBytesVisitorTest, FallbackNotSupported) {
     EXPECT_TRUE(st.message().find(col->get_name()) != std::string::npos);
 }
 
+// ---- RawDataVisitor tests ----
+
+TEST(RawDataVisitorTest, VisitInt32Column) {
+    RawDataVisitor visitor;
+    auto col = ColumnTestHelper::build_column<int32_t>({42, 7});
+
+    ASSERT_OK(col->accept(&visitor));
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 42);
+    EXPECT_EQ(data[1], 7);
+}
+
+TEST(RawDataVisitorTest, VisitDecimal32Column) {
+    RawDataVisitor visitor;
+    auto col = Decimal32Column::create(9, 2);
+    col->append(int32_t{100});
+    col->append(int32_t{200});
+
+    ASSERT_OK(col->accept(&visitor));
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 100);
+    EXPECT_EQ(data[1], 200);
+}
+
+TEST(RawDataVisitorTest, VisitNullableColumn) {
+    RawDataVisitor visitor;
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
+
+    ASSERT_OK(col->accept(&visitor));
+    ASSERT_NE(visitor.result(), nullptr);
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 42);
+    EXPECT_EQ(data[1], 7);
+}
+
+TEST(RawDataVisitorTest, VisitConstColumn) {
+    RawDataVisitor visitor;
+    auto inner = ColumnTestHelper::build_column<int32_t>({42});
+    auto col = ConstColumn::create(std::move(inner), 4);
+
+    ASSERT_OK(col->accept(&visitor));
+    ASSERT_NE(visitor.result(), nullptr);
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 42);
+}
+
+TEST(RawDataVisitorTest, VisitArrayColumn) {
+    RawDataVisitor visitor;
+    auto elements = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});
+    auto offsets = ColumnTestHelper::build_column<uint32_t>({0, 2});
+    auto col = ArrayColumn::create(std::move(elements), std::move(offsets));
+
+    ASSERT_OK(col->accept(&visitor));
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 42);
+    EXPECT_EQ(data[1], 7);
+}
+
+TEST(RawDataVisitorTest, VisitAdaptiveNullableColumn) {
+    RawDataVisitor visitor;
+    auto col = AdaptiveNullableColumn::create(Int32Column::create(), NullColumn::create());
+    col->append_datum(Datum(static_cast<int32_t>(42)));
+    col->append_datum(Datum(static_cast<int32_t>(7)));
+
+    ASSERT_OK(col->accept(&visitor));
+
+    const auto* data = reinterpret_cast<const int32_t*>(visitor.result());
+    EXPECT_EQ(data[0], 42);
+    EXPECT_EQ(data[1], 7);
+}
+
+// BinaryColumn is not supported by RawDataVisitor; use RawBytesVisitor instead.
+TEST(RawDataVisitorTest, FallbackNotSupported) {
+    RawDataVisitor visitor;
+    auto col = BinaryColumn::create();
+    col->append(Slice("hello"));
+
+    auto st = col->accept(&visitor);
+    EXPECT_TRUE(st.is_not_supported());
+    EXPECT_TRUE(st.message().find(col->get_name()) != std::string::npos);
+}
+
 } // namespace starrocks
