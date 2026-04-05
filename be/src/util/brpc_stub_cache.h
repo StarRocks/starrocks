@@ -105,6 +105,7 @@ public:
 private:
     explicit HttpBrpcStubCache(pipeline::PipelineTimer* pipeline_timer);
     ~HttpBrpcStubCache();
+    void bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer);
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
@@ -128,6 +129,7 @@ public:
 private:
     explicit LakeServiceBrpcStubCache(pipeline::PipelineTimer* pipeline_timer);
     ~LakeServiceBrpcStubCache();
+    void bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer);
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<LakeService_RecoverableStub>,

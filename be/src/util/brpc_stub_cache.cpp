@@ -34,9 +34,9 @@ Cache*& singleton_cache() {
 }
 
 template <typename Cache>
-std::once_flag& singleton_cache_once() {
-    static std::once_flag once;
-    return once;
+std::mutex& singleton_cache_mutex() {
+    static std::mutex mutex;
+    return mutex;
 }
 
 } // namespace
@@ -146,8 +146,13 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
 
 void HttpBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
     DCHECK(pipeline_timer != nullptr);
-    std::call_once(singleton_cache_once<HttpBrpcStubCache>(),
-                   [pipeline_timer] { singleton_cache<HttpBrpcStubCache>() = new HttpBrpcStubCache(pipeline_timer); });
+    std::lock_guard<std::mutex> l(singleton_cache_mutex<HttpBrpcStubCache>());
+    auto*& cache = singleton_cache<HttpBrpcStubCache>();
+    if (cache == nullptr) {
+        cache = new HttpBrpcStubCache(pipeline_timer);
+        return;
+    }
+    cache->bind_pipeline_timer(pipeline_timer);
 }
 
 HttpBrpcStubCache* HttpBrpcStubCache::getInstance() {
@@ -162,25 +167,31 @@ HttpBrpcStubCache::~HttpBrpcStubCache() {
     shutdown();
 }
 
+void HttpBrpcStubCache::bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer) {
+    DCHECK(pipeline_timer != nullptr);
+    std::lock_guard<SpinLock> l(_lock);
+    DCHECK(_stub_map.empty() || _pipeline_timer == pipeline_timer);
+    _pipeline_timer = pipeline_timer;
+}
+
 void HttpBrpcStubCache::shutdown() {
     std::vector<std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>> task_to_cleanup;
+    pipeline::PipelineTimer* pipeline_timer = nullptr;
 
     {
         std::lock_guard<SpinLock> l(_lock);
+        pipeline_timer = _pipeline_timer;
+        _pipeline_timer = nullptr;
         for (auto& stub : _stub_map) {
             task_to_cleanup.push_back(stub.second.second);
         }
-    }
-
-    if (_pipeline_timer != nullptr) {
-        for (auto& task : task_to_cleanup) {
-            _pipeline_timer->unschedule(task.get());
-        }
-    }
-
-    {
-        std::lock_guard<SpinLock> l(_lock);
         _stub_map.clear();
+    }
+
+    if (pipeline_timer != nullptr) {
+        for (auto& task : task_to_cleanup) {
+            pipeline_timer->unschedule(task.get());
+        }
     }
 }
 
@@ -203,6 +214,9 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
     }
     // get is exist
     std::lock_guard<SpinLock> l(_lock);
+    if (_pipeline_timer == nullptr) {
+        return Status::ServiceUnavailable("HttpBrpcStubCache is not initialized");
+    }
 
     auto stub_pair_ptr = _stub_map.seek(endpoint);
     if (stub_pair_ptr == nullptr) {
@@ -240,9 +254,13 @@ void HttpBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
 
 void LakeServiceBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
     DCHECK(pipeline_timer != nullptr);
-    std::call_once(singleton_cache_once<LakeServiceBrpcStubCache>(), [pipeline_timer] {
-        singleton_cache<LakeServiceBrpcStubCache>() = new LakeServiceBrpcStubCache(pipeline_timer);
-    });
+    std::lock_guard<std::mutex> l(singleton_cache_mutex<LakeServiceBrpcStubCache>());
+    auto*& cache = singleton_cache<LakeServiceBrpcStubCache>();
+    if (cache == nullptr) {
+        cache = new LakeServiceBrpcStubCache(pipeline_timer);
+        return;
+    }
+    cache->bind_pipeline_timer(pipeline_timer);
 }
 
 LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
@@ -258,25 +276,31 @@ LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {
     shutdown();
 }
 
+void LakeServiceBrpcStubCache::bind_pipeline_timer(pipeline::PipelineTimer* pipeline_timer) {
+    DCHECK(pipeline_timer != nullptr);
+    std::lock_guard<SpinLock> l(_lock);
+    DCHECK(_stub_map.empty() || _pipeline_timer == pipeline_timer);
+    _pipeline_timer = pipeline_timer;
+}
+
 void LakeServiceBrpcStubCache::shutdown() {
     std::vector<std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>> task_to_cleanup;
+    pipeline::PipelineTimer* pipeline_timer = nullptr;
 
     {
         std::lock_guard<SpinLock> l(_lock);
+        pipeline_timer = _pipeline_timer;
+        _pipeline_timer = nullptr;
         for (auto& stub : _stub_map) {
             task_to_cleanup.push_back(stub.second.second);
         }
-    }
-
-    if (_pipeline_timer != nullptr) {
-        for (auto& task : task_to_cleanup) {
-            _pipeline_timer->unschedule(task.get());
-        }
-    }
-
-    {
-        std::lock_guard<SpinLock> l(_lock);
         _stub_map.clear();
+    }
+
+    if (pipeline_timer != nullptr) {
+        for (auto& task : task_to_cleanup) {
+            pipeline_timer->unschedule(task.get());
+        }
     }
 }
 
@@ -296,6 +320,9 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
     }
     // get if exist
     std::lock_guard<SpinLock> l(_lock);
+    if (_pipeline_timer == nullptr) {
+        return Status::ServiceUnavailable("LakeServiceBrpcStubCache is not initialized");
+    }
 
     auto stub_pair_ptr = _stub_map.seek(endpoint);
     FAIL_POINT_TRIGGER_EXECUTE(get_stub_return_nullptr, { stub_pair_ptr = nullptr; });
