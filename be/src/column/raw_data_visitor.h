@@ -118,7 +118,9 @@ public:
 
     Status do_visit(const NullableColumn& column) { return column.data_column_raw_ptr()->accept(this); }
 
-    Status do_visit(const AdaptiveNullableColumn& column) { return column.data_column()->accept(this); }
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        return column.materialized_raw_data_column()->accept(this);
+    }
 
     // Fallback for all unsupported column types.
     template <typename T>
