@@ -36,6 +36,8 @@ Add the internal owner groups `ExecutionEnv`, `RpcServices`, `LakeServices`, `Ru
 
 Convert shared infra leaves to exact dependencies instead of `ExecEnv`: `BrpcStubCache`, `ProfileReportWorker`, default workgroup initialization, and `LoadChannelMgr`.
 
+PR2 sequencing note: `LoadChannelMgr` now depends explicitly on `lake::TabletManager*`, so `ExecEnv` wiring must construct or inject it only after lake services exist. Do not keep an `ExecEnv` reach-back in `LoadChannelMgr` just to preserve the old initialization order.
+
 ### PR3: Introduce QueryExecutionServices into runtime state
 
 Change `RuntimeState`, `QueryContext`, fragment setup, and related construction paths so query execution carries `QueryExecutionServices*` instead of `ExecEnv*`.

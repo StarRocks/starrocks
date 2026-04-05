@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/mem_tracker.h"

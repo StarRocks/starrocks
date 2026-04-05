@@ -46,7 +46,6 @@
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"
@@ -110,7 +109,7 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
-LoadChannelMgr::LoadChannelMgr() {
+LoadChannelMgr::LoadChannelMgr(lake::TabletManager* lake_tablet_manager) : _lake_tablet_manager(lake_tablet_manager) {
     REGISTER_GAUGE_STARROCKS_METRIC(load_channel_count, [this]() {
         std::lock_guard l(_lock);
         return _load_channels.size();
@@ -213,8 +212,8 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            channel = std::make_shared<LoadChannel>(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id,
-                                                    txn_id, request.txn_trace_parent(), job_timeout_s,
+            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, load_id, txn_id,
+                                                    request.txn_trace_parent(), job_timeout_s,
                                                     std::move(job_mem_tracker));
             if (request.has_load_channel_profile_config()) {
                 channel->set_profile_config(request.load_channel_profile_config());
@@ -403,8 +402,8 @@ void LoadChannelMgr::_start_load_channels_clean() {
     }
 
     // clean load in writing data size
-    if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
-        lake_tablet_manager->clean_in_writing_data_size();
+    if (_lake_tablet_manager != nullptr) {
+        _lake_tablet_manager->clean_in_writing_data_size();
     }
 }
 
