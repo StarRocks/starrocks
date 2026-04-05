@@ -20,13 +20,28 @@
 #include "gen_cpp/lake_service.pb.h"
 #endif
 #include "base/failpoint/fail_point.h"
-#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-BrpcStubCache::BrpcStubCache(ExecEnv* exec_env) : _pipeline_timer(exec_env->pipeline_timer()) {
+namespace {
+
+template <typename Cache>
+Cache*& singleton_cache() {
+    static Cache* cache = nullptr;
+    return cache;
+}
+
+template <typename Cache>
+std::once_flag& singleton_cache_once() {
+    static std::once_flag once;
+    return once;
+}
+
+} // namespace
+
+BrpcStubCache::BrpcStubCache(pipeline::PipelineTimer* pipeline_timer) : _pipeline_timer(pipeline_timer) {
     _stub_map.init(239);
     REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
         std::lock_guard<SpinLock> l(_lock);
@@ -129,14 +144,18 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
     return _stubs[_idx];
 }
 
-HttpBrpcStubCache* HttpBrpcStubCache::getInstance() {
-    static HttpBrpcStubCache cache;
-    return &cache;
+void HttpBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
+    DCHECK(pipeline_timer != nullptr);
+    std::call_once(singleton_cache_once<HttpBrpcStubCache>(),
+                   [pipeline_timer] { singleton_cache<HttpBrpcStubCache>() = new HttpBrpcStubCache(pipeline_timer); });
 }
 
-HttpBrpcStubCache::HttpBrpcStubCache() {
+HttpBrpcStubCache* HttpBrpcStubCache::getInstance() {
+    return singleton_cache<HttpBrpcStubCache>();
+}
+
+HttpBrpcStubCache::HttpBrpcStubCache(pipeline::PipelineTimer* pipeline_timer) : _pipeline_timer(pipeline_timer) {
     _stub_map.init(500);
-    _pipeline_timer = ExecEnv::GetInstance()->pipeline_timer();
 }
 
 HttpBrpcStubCache::~HttpBrpcStubCache() {
@@ -219,14 +238,20 @@ void HttpBrpcStubCache::cleanup_expired(const butil::EndPoint& endpoint) {
 
 #ifndef __APPLE__
 
-LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
-    static LakeServiceBrpcStubCache cache;
-    return &cache;
+void LakeServiceBrpcStubCache::initialize(pipeline::PipelineTimer* pipeline_timer) {
+    DCHECK(pipeline_timer != nullptr);
+    std::call_once(singleton_cache_once<LakeServiceBrpcStubCache>(), [pipeline_timer] {
+        singleton_cache<LakeServiceBrpcStubCache>() = new LakeServiceBrpcStubCache(pipeline_timer);
+    });
 }
 
-LakeServiceBrpcStubCache::LakeServiceBrpcStubCache() {
+LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
+    return singleton_cache<LakeServiceBrpcStubCache>();
+}
+
+LakeServiceBrpcStubCache::LakeServiceBrpcStubCache(pipeline::PipelineTimer* pipeline_timer)
+        : _pipeline_timer(pipeline_timer) {
     _stub_map.init(500);
-    _pipeline_timer = ExecEnv::GetInstance()->pipeline_timer();
 }
 
 LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {

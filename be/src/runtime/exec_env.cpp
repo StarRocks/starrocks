@@ -554,6 +554,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _pipeline_timer = new pipeline::PipelineTimer();
     RETURN_IF_ERROR(_pipeline_timer->start());
+    HttpBrpcStubCache::initialize(_pipeline_timer);
+#ifndef __APPLE__
+    LakeServiceBrpcStubCache::initialize(_pipeline_timer);
+#endif
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -582,7 +586,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
-    workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), _max_executor_threads);
 
     if (store_paths.empty() && as_cn) {
         _load_path_mgr = new DummyLoadPathMgr();
@@ -620,9 +624,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-    _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache(this);
+    _brpc_stub_cache = new BrpcStubCache(_pipeline_timer);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -651,7 +654,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-    _profile_report_worker = new ProfileReportWorker(this);
+    _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
     auto runtime_filter_event_func = [] {
         auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
@@ -745,6 +748,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_memtable_flush_thread_pool));
 #endif
+
+    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager);
 
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
                             .set_min_threads(0)
