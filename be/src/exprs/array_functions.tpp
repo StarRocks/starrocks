@@ -2292,15 +2292,14 @@ private:
         }
 
         const auto& elements_column = down_cast<const ArrayColumn*>(arrays.get())->elements_column();
-        const auto& elements = down_cast<const NullableColumn*>(elements_column.get())->data_column();
-        const CppType* elements_data = reinterpret_cast<const CppType*>(elements->raw_data());
+        const auto& elements_data = GetContainer<LT>::get_data(elements_column);
         const NullColumn::ValueType* elements_null_data =
                 down_cast<const NullableColumn*>(elements_column.get())->immutable_null_column_data().data();
 
         const auto& offsets_column = down_cast<const ArrayColumn*>(arrays.get())->offsets_column();
         const auto offsets_data = offsets_column->immutable_data();
 
-        const CppType* targets_data = reinterpret_cast<const CppType*>(targets->raw_data());
+        const auto& targets_data = GetContainer<LT>::get_data(targets);
 
         // if both two columns are constant, we only compute the first row once
         size_t num_rows = (is_const_array && is_const_target) ? 1 : std::max(arrays->size(), targets->size());
