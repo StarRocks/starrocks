@@ -16,6 +16,7 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
+
 #include <string_view>
 
 #include "arrow/type.h"
@@ -80,12 +81,19 @@ struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::BOOL, guard::Guard> {
 VALUE_GUARD(ArrowTypeId, BinaryATGuard, at_is_binary, ArrowTypeId::BINARY, ArrowTypeId::STRING,
             ArrowTypeId::FIXED_SIZE_BINARY, ArrowTypeId::LARGE_BINARY, ArrowTypeId::LARGE_STRING)
 
+// StringView uses a fundamentally different memory layout (inline + variadic buffers) from
+// the contiguous offset-based layout of Binary/String types. It gets its own guard so that
+// template specializations can dispatch to a safe per-element iteration path rather than
+// the bulk-memcpy fast path used by BinaryATGuard types.
 VALUE_GUARD(ArrowTypeId, StringViewATGuard, at_is_string_view, ArrowTypeId::STRING_VIEW)
 
 template <ArrowTypeId AT>
 struct ArrowTypeIdToCppTypeStruct<AT, BinaryATGuard<AT>> {
     using type = const uint8_t*;
 };
+
+// StringView values are accessed via GetView() which returns std::string_view, unlike
+// Binary/String types that use raw uint8_t* offsets into a contiguous data buffer.
 template <>
 struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::STRING_VIEW, guard::Guard> {
     using type = std::string_view;

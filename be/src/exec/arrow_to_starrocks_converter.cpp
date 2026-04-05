@@ -347,9 +347,22 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     }
 };
 
-// StringView converter: uses per-element GetView(i) instead of bulk offset copy.
-// StringView out-of-line strings (>12 bytes) may span multiple variadic buffers,
-// so offset-based optimize_non_fixed_size_binary is NOT safe here.
+// Arrow StringView converter specialization.
+//
+// StringView (Arrow Utf8View / BinaryView) stores strings in a split layout:
+//   - Inline:  strings <= 12 bytes live directly in the 16-byte view struct
+//   - Out-of-line: strings > 12 bytes reference data in one of potentially many
+//     variadic data buffers (not a single contiguous offset buffer)
+//
+// This means the offset-based bulk-memcpy path (optimize_non_fixed_size_binary) used by
+// Binary/String types is NOT safe for StringView — it assumes a single contiguous data
+// buffer, which would silently corrupt out-of-line strings. Instead, we iterate per-element
+// using GetView(i), which correctly resolves both inline and out-of-line storage.
+//
+// An alternative would be to cast StringView -> String via arrow::compute::Cast() first,
+// producing a contiguous offset-based array, then reuse the existing Binary/String converter.
+// We avoid that because it copies the string data twice: once into an intermediate Arrow
+// String array, then again into BinaryColumn. The direct approach here copies once.
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, StringOrBinaryGuard<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
@@ -370,7 +383,18 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
         }
 
         concrete_column->reserve(concrete_column->size() + num_elements);
-        bool reported = false;
+        bool repeated = false;
+        // Unlike offset-based Binary/String arrays where null slots still have valid offsets,
+        // StringView null slots may contain an undefined 16-byte view struct per the Arrow spec.
+        // GetView() would dereference a garbage buffer_index for out-of-line views. When
+        // is_nullable=true, null_data already guards this. For is_nullable=false, we check once
+        // whether the source array has nulls and guard per-element only when needed.
+        // The framework's fill_filter() typically handles this upstream, but we guard here
+        // defensively since GetView() on a garbage view is a segfault, not a wrong result.
+        const bool needs_null_guard = !is_nullable && concrete_array->null_count() > 0;
+        // Per-element iteration: GetView(i) returns a std::string_view that transparently
+        // handles both inline views (data in the struct) and out-of-line views (pointer
+        // into a variadic buffer). This is O(n) per element but necessary for correctness.
         for (size_t i = 0; i < num_elements; ++i) {
             size_t array_idx = array_start_idx + i;
             if constexpr (is_nullable) {
@@ -379,18 +403,28 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StringViewATGuard<AT>, Str
                     continue;
                 }
             }
+            if (needs_null_guard && concrete_array->IsNull(array_idx)) {
+                concrete_column->append_default();
+                // Regardless of fill_filter called or not, we are setting this idx to be filtered out.
+                filter_data[i] = 0;
+                continue;
+            }
             auto sv = concrete_array->GetView(array_idx);
             Slice s{sv.data(), sv.size()};
             if (s.size > max_length) {
+                // String exceeds column's max length (VARCHAR limit or CHAR(N) width).
+                // How we handle it depends on nullable/strict mode:
+                //   - nullable + non-strict: convert to NULL (preserves row, loses value)
+                //   - strict or non-nullable: filter out the row and report the error once
                 concrete_column->append_default();
                 if constexpr (is_nullable && !is_strict) {
                     null_data[i] = DATUM_NULL;
                 } else {
                     filter_data[i] = 0;
-                    if (ctx != nullptr && !reported) {
-                        reported = true;
-                        std::string reason = strings::Substitute(
-                                "string length $0 exceeds max length $1", sv.size(), max_length);
+                    if (ctx != nullptr && !repeated) {
+                        repeated = true;
+                        std::string reason =
+                                strings::Substitute("string length $0 exceeds max length $1", sv.size(), max_length);
                         ctx->report_error_message(reason, std::string(sv));
                     }
                 }

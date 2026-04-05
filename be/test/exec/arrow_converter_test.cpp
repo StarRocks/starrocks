@@ -50,11 +50,11 @@ static_assert(std::is_same_v<ArrowTypeIdToArrayType<ArrowTypeId::STRING_VIEW>, a
 static_assert(std::is_same_v<ArrowTypeIdToCppType<ArrowTypeId::STRING_VIEW>, std::string_view>,
               "ArrowTypeIdToCppType<STRING_VIEW> must resolve to std::string_view");
 
-static_assert(at_is_string_view<ArrowTypeId::STRING_VIEW>,
-              "at_is_string_view must be true for STRING_VIEW");
+static_assert(at_is_string_view<ArrowTypeId::STRING_VIEW>, "at_is_string_view must be true for STRING_VIEW");
 
-static_assert(!at_is_binary<ArrowTypeId::STRING_VIEW>,
-              "at_is_binary must be false for STRING_VIEW (guard isolation)");
+// STRING_VIEW must NOT match BinaryATGuard — if it did, the Binary/String converter's
+// bulk offset-based memcpy path would be selected, silently corrupting out-of-line strings.
+static_assert(!at_is_binary<ArrowTypeId::STRING_VIEW>, "at_is_binary must be false for STRING_VIEW (guard isolation)");
 
 class ArrowConverterTest : public ::testing::Test {
 public:
@@ -1684,11 +1684,10 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     ASSERT_EQ(st_col->debug_item(8), "{col1:8,col2:'char-8'}");
 }
 
-
 // Helper: builds a StringViewArray from a vector of strings.
 // When with_nulls=true, even-indexed positions are null.
 static std::shared_ptr<arrow::Array> create_string_view_array(const std::vector<std::string>& values,
-                                                               bool with_nulls = false) {
+                                                              bool with_nulls = false) {
     arrow::StringViewBuilder builder(arrow::default_memory_pool());
     for (size_t i = 0; i < values.size(); ++i) {
         if (with_nulls && i % 2 == 0) {
@@ -1773,12 +1772,12 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_varchar) {
     // Even indices -> null, odd indices -> value.
     // Mix of inline (<= 12 bytes) and out-of-line (> 12 bytes) strings.
     std::vector<std::string> values = {
-            "short",                      // index 0 -> null
-            "hello world!",               // index 1 -> value (12 bytes, inline)
-            "out-of-line-string-here",    // index 2 -> null
-            "x",                          // index 3 -> value (1 byte, inline)
-            "twelve_chars",               // index 4 -> null
-            std::string(50, 'z'),         // index 5 -> value (50 bytes, out-of-line)
+            "short",                   // index 0 -> null
+            "hello world!",            // index 1 -> value (12 bytes, inline)
+            "out-of-line-string-here", // index 2 -> null
+            "x",                       // index 3 -> value (1 byte, inline)
+            "twelve_chars",            // index 4 -> null
+            std::string(50, 'z'),      // index 5 -> value (50 bytes, out-of-line)
     };
     auto array = create_string_view_array(values, /*with_nulls=*/true);
 
@@ -1795,8 +1794,7 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_varchar) {
     auto* null_data = &nul_col->get_data().front();
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(
-            conv_func(array.get(), 0, array->length(), bin_col, 0, null_data, &filter, nullptr, nullptr));
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), bin_col, 0, null_data, &filter, nullptr, nullptr));
     ASSERT_EQ(bin_col->size(), values.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (i % 2 == 0) {
@@ -1813,9 +1811,9 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_char) {
     // Strings <= 255 bytes: stored verbatim, filter = 1.
     // Strings > 255 bytes: rejected (append_default + filter = 0 in strict mode).
     std::vector<std::string> pass_values = {
-            "a",                        // 1 byte (inline)
-            std::string(254, 'p'),      // 254 bytes (just under limit, out-of-line)
-            std::string(255, 'q'),      // 255 bytes (at limit, out-of-line)
+            "a",                   // 1 byte (inline)
+            std::string(254, 'p'), // 254 bytes (just under limit, out-of-line)
+            std::string(255, 'q'), // 255 bytes (at limit, out-of-line)
     };
     auto pass_array = create_string_view_array(pass_values);
 
@@ -1834,8 +1832,8 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_char) {
 
     // Test failing values (exceed MAX_CHAR_LENGTH=255) in strict mode
     std::vector<std::string> fail_values = {
-            std::string(256, 'r'),      // 1 over limit
-            std::string(512, 's'),      // well over limit
+            std::string(256, 'r'), // 1 over limit
+            std::string(512, 's'), // well over limit
     };
     auto fail_array = create_string_view_array(fail_values);
     auto fail_conv = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
