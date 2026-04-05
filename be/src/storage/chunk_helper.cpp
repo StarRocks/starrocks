@@ -706,8 +706,6 @@ public:
     template <class Offset>
     Status do_visit(const BinaryColumnBase<Offset>& column) {
         using ColumnT = BinaryColumnBase<Offset>;
-        using ContainerT = typename ColumnT::Container*;
-        using Bytes = typename ColumnT::Bytes;
         using Byte = typename ColumnT::Byte;
         using Offsets = typename ColumnT::Offsets;
 
@@ -723,7 +721,7 @@ public:
         std::vector<const Offsets*> input_offsets;
         for (auto& seg_column : columns) {
             auto col_ptr = ColumnHelper::as_column<ColumnT>(seg_column);
-            input_bytes.push_back(col_ptr->continuous_data());
+            input_bytes.push_back(col_ptr->raw_bytes());
             input_offsets.push_back(&col_ptr->get_offset());
         }
 
