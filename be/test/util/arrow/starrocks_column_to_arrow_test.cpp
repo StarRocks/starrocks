@@ -38,7 +38,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 #endif
 
-#include <arrow/json/from_string.h>
+#include <arrow/ipc/json_simple.h>
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
@@ -572,9 +572,9 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     convert_to_arrow(array_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
-    auto s = arrow::json::ArrayFromJSONString(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueOrDie()->Equals(array));
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
@@ -599,9 +599,10 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::json::ArrayFromJSONString(arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueOrDie()->Equals(array));
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
@@ -626,15 +627,15 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     convert_to_arrow(struct_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
-    auto s = arrow::json::ArrayFromJSONString(arrow_type,
-                                              R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       R"([
                         {"id": 1, "name": "test1"},
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
                         {"id": null, "name": null}
                     ])");
     ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueOrDie()->Equals(array));
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
@@ -662,8 +663,8 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::json::ArrayFromJSONString(arrow_type,
-                                              R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       R"([
                         {"id": 1, "name": "test1"},
                         null,
                         {"id": null, "name": "test2"},
@@ -671,7 +672,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
                         {"id": null, "name": null}
                     ])");
     ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueOrDie()->Equals(array));
+    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
