@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#pragma once
 #include <chrono>
 #include <memory>
 
@@ -2583,8 +2584,8 @@ private:
         return true;
     }
 
-    static inline bool _check_element_equal(const CppType* left_data, const NullColumn::ValueType* left_null_data,
-                                            const CppType* right_data, const NullColumn::ValueType* right_null_data,
+    static inline bool _check_element_equal(const ColumnType::ImmContainer& left_data, const NullColumn::ValueType* left_null_data,
+                                            const ColumnType::ImmContainer& right_data, const NullColumn::ValueType* right_null_data,
                                             size_t lhs, size_t rhs) {
         bool is_lhs_null = left_null_data[lhs];
         bool is_rhs_null = right_null_data[rhs];
