@@ -575,9 +575,9 @@ SET(DW_TEST_FILES
 )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
-    list(APPEND TEST_FILES ./http/datacache_action_test.cpp)
-    list(APPEND TEST_FILES ./http/action/update_config_action_test.cpp)
-    list(APPEND TEST_FILES ./cache/peer_cache_test.cpp)
+    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
+    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
+    list(APPEND EXEC_FILES ./cache/peer_cache_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_space_monitor_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/starcache_engine_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/block_cache_test.cpp)
