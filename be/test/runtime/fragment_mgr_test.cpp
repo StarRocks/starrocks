@@ -50,8 +50,9 @@
 namespace starrocks {
 
 // Mock used for this unittest
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
-        : _exec_env(exec_env), _report_status_cb(std::move(report_status_cb)) {}
+PlanFragmentExecutor::PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
+                                           report_status_callback report_status_cb)
+        : _query_execution_services(query_execution_services), _report_status_cb(std::move(report_status_cb)) {}
 
 PlanFragmentExecutor::~PlanFragmentExecutor() = default;
 

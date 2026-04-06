@@ -199,7 +199,8 @@ TEST_F(RuntimeFilterExecCoreTest, ProbeCollectorWaitLoadsCachedFilter) {
     TUniqueId fragment_instance_id;
     fragment_instance_id.hi = 3;
     fragment_instance_id.lo = 4;
-    RuntimeState state(query_id, fragment_instance_id, TQueryOptions(), TQueryGlobals(), nullptr);
+    RuntimeState state(query_id, fragment_instance_id, TQueryOptions(), TQueryGlobals(),
+                       static_cast<ExecEnv*>(nullptr));
 
     RuntimeFilterCache cache(2);
     ASSERT_OK(cache.init());

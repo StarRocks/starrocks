@@ -32,6 +32,7 @@
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"
@@ -56,7 +57,10 @@ class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
-    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
@@ -318,7 +322,7 @@ public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
 private:
-    ExecEnv* _exec_env = nullptr;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;

@@ -92,7 +92,8 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     if (timezone != "") {
         query_globals.__set_time_zone(timezone);
     }
-    _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _runtime_state =
+            _pool.add(new RuntimeState(fragment_id, query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
     _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();

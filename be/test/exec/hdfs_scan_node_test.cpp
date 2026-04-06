@@ -145,7 +145,8 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                    &_exec_env->query_execution_services(), _exec_env);
     _fragment_dict_state = std::make_unique<FragmentDictState>();
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     TUniqueId id;

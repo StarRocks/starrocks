@@ -61,7 +61,8 @@ void CacheSelectScannerTest::_create_runtime_state(const std::string& timezone) 
     if (timezone != "") {
         query_globals.__set_time_zone(timezone);
     }
-    _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _runtime_state =
+            _pool.add(new RuntimeState(fragment_id, query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
     _runtime_state->init_instance_mem_tracker();
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});

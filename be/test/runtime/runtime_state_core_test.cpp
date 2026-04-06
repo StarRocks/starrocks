@@ -51,4 +51,23 @@ TEST(RuntimeStateCoreTest, SetFragmentCtxKeepsFragmentDictStateExplicit) {
             ::testing::ExitedWithCode(0), "");
 }
 
+TEST(RuntimeStateCoreTest, QueryExecutionServicesCanBeInjectedAlongsideExecEnv) {
+    auto* query_execution_services = reinterpret_cast<const QueryExecutionServices*>(static_cast<uintptr_t>(0x1234));
+    auto* exec_env = reinterpret_cast<ExecEnv*>(static_cast<uintptr_t>(0x5678));
+
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), query_execution_services, exec_env);
+
+    EXPECT_EQ(query_execution_services, state.query_execution_services());
+    EXPECT_EQ(exec_env, state.exec_env());
+}
+
+TEST(RuntimeStateCoreTest, ExecEnvOnlyConstructorKeepsQueryExecutionServicesNull) {
+    auto* exec_env = reinterpret_cast<ExecEnv*>(static_cast<uintptr_t>(0x5678));
+
+    RuntimeState state(exec_env);
+
+    EXPECT_EQ(nullptr, state.query_execution_services());
+    EXPECT_EQ(exec_env, state.exec_env());
+}
+
 } // namespace starrocks

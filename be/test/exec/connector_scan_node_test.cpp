@@ -75,8 +75,8 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state() {
 std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const TQueryOptions& query_options) {
     TUniqueId fragment_id;
     TQueryGlobals query_globals;
-    std::shared_ptr<RuntimeState> runtime_state =
-            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+            fragment_id, query_options, query_globals, &_exec_env->query_execution_services(), _exec_env);
     auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
     runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;

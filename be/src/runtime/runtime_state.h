@@ -52,6 +52,7 @@
 #include "common/logging.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -59,7 +60,6 @@ namespace starrocks {
 class DescriptorTbl;
 class ObjectPool;
 class Status;
-class ExecEnv;
 class Expr;
 class DateTimeValue;
 class MemPool;
@@ -95,7 +95,15 @@ public:
     RuntimeState(const RuntimeState&) = delete;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
+    // for ut only
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -103,6 +111,7 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env);
     explicit RuntimeState(ExecEnv* exec_env);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
@@ -140,6 +149,7 @@ public:
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
@@ -556,7 +566,7 @@ private:
 
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -587,6 +597,7 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.

@@ -92,7 +92,8 @@ public:
     }
 
     void SetUp() override {
-        _runtime_state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        _runtime_state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         _runtime_profile = _runtime_state->runtime_profile();
         _mem_tracker = std::make_unique<MemTracker>();
     }

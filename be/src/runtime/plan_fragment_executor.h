@@ -42,6 +42,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
@@ -92,7 +93,8 @@ public:
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution open().
-    PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
+    PlanFragmentExecutor(const QueryExecutionServices* query_execution_services,
+                         report_status_callback report_status_cb);
 
     // Closes the underlying plan fragment and frees up all resources allocated in open()
     // It is an error to delete a PlanFragmentExecutor with a report callback before open()
@@ -151,8 +153,8 @@ public:
 private:
     Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
 
-    ExecEnv* _exec_env;        // not owned
-    ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
+    const QueryExecutionServices* _query_execution_services; // not owned
+    ExecNode* _plan = nullptr;                               // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 

@@ -19,6 +19,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

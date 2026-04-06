@@ -138,7 +138,8 @@ public:
         }
         tuple_desc_builder.build(&desc_tbl_builder);
 
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         DescriptorTbl* desc_tbl = nullptr;
         Status st = DescriptorTbl::create(state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
                                           config::vector_chunk_size);
@@ -209,7 +210,8 @@ void MemoryScratchSinkTest::init_runtime_state() {
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;
-    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), _exec_env);
+    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), &_exec_env->query_execution_services(),
+                              _exec_env);
     _state->init_instance_mem_tracker();
     _state->set_desc_tbl(_desc_tbl);
     _state->init_mem_trackers(TUniqueId());
