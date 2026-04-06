@@ -33,6 +33,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -40,8 +41,12 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -251,6 +256,59 @@ public class StmtExecutorTest {
 
         String redacted = executor.getRedactedOriginStmtInString();
         Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testPlannerFailurePathUsesRedactedSqlWithoutPrivateMocking() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"PLANNER_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR, "mock planner failure");
+            }
+        };
+
+        executor.execute();
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertFalse(redacted.contains("PLANNER_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testLargeInPredicateFailurePathUsesRedactedSqlWithoutPrivateMocking() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"LARGE_IN_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                throw new LargeInPredicateException("mock large in failure");
+            }
+        };
+
+        Assertions.assertThrows(LargeInPredicateException.class, executor::execute);
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("LARGE_IN_SECRET"));
         Assertions.assertTrue(redacted.contains("***"));
     }
 
