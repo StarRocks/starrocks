@@ -114,6 +114,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
@@ -777,6 +778,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelBackupStatement(CancelBackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().cancel(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropSnapshotStatement(DropSnapshotStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().dropSnapshot(stmt);
             });
             return null;
         }
