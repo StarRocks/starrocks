@@ -14,58 +14,99 @@
 
 #include "exec/workgroup/lock_free_scan_task_queue.h"
 
-#include <algorithm>
-
 namespace starrocks::workgroup {
 
 LockFreeScanTaskQueue::LockFreeScanTaskQueue(int num_workers) : _queue(num_workers) {}
 
 bool LockFreeScanTaskQueue::try_offer(ScanTask task, int worker_id) {
-    int level = _clamp_priority(task.priority);
+    DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
+    int level = task.priority;
     _queue.enqueue(std::move(task), level, worker_id);
+    uint32_t mask = 1u << level;
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
     return true;
 }
 
 bool LockFreeScanTaskQueue::try_offer(ScanTask task) {
-    int level = _clamp_priority(task.priority);
+    DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
+    int level = task.priority;
     _queue.enqueue(std::move(task), level);
+    uint32_t mask = 1u << level;
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
     return true;
 }
 
 void LockFreeScanTaskQueue::force_put(ScanTask task, int worker_id) {
-    int level = _clamp_priority(task.priority);
+    DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
+    int level = task.priority;
     _queue.enqueue(std::move(task), level, worker_id);
+    uint32_t mask = 1u << level;
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 void LockFreeScanTaskQueue::force_put(ScanTask task) {
-    int level = _clamp_priority(task.priority);
+    DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
+    int level = task.priority;
     _queue.enqueue(std::move(task), level);
+    uint32_t mask = 1u << level;
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
+    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    // Scan from highest priority (level 20) down to lowest (level 0).
+    // Only try levels with bitmap bit set.
+    uint32_t to_clear = 0;
     for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
+        uint32_t mask = 1u << level;
+        if (!(bitmap & mask)) continue;
         if (_queue.try_dequeue(level, task, worker_id)) {
+            if (to_clear) {
+                _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
+            }
             return true;
         }
+        to_clear |= mask;
     }
+
+    // All attempted levels were empty — batch clear.
+    _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
     return false;
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
+    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    uint32_t to_clear = 0;
     for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
+        uint32_t mask = 1u << level;
+        if (!(bitmap & mask)) continue;
         if (_queue.try_dequeue(level, task)) {
+            if (to_clear) {
+                _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
+            }
             return true;
         }
+        to_clear |= mask;
     }
+
+    _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
     return false;
 }
 
 size_t LockFreeScanTaskQueue::size() const {
     return _queue.size_approx();
-}
-
-int LockFreeScanTaskQueue::_clamp_priority(int priority) {
-    return std::clamp(priority, 0, NUM_PRIORITY_LEVELS - 1);
 }
 
 } // namespace starrocks::workgroup

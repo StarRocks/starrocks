@@ -1,10 +1,20 @@
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// ...Apache 2.0 header...
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <atomic>
 #include <thread>
 #include <vector>
@@ -26,145 +36,191 @@ static void BM_ThreadArgs(benchmark::internal::Benchmark* b) {
     }
 }
 
-// Pre-fill count: large enough that queue never empties during take+put.
-// Keep prefill small to avoid penalizing old queue's O(N) _adjust_priority_if_needed,
-// but large enough that take() never blocks (prefill >> num_threads).
-static constexpr int PREFILL = 1000;
-// Ops per thread per benchmark iteration.
+static constexpr int PREFILL_MIN = 4096;
+static constexpr int PREFILL_PER_THREAD = 256;
 static constexpr int OPS_PER_THREAD = 5000;
+
+static int prefill_count(int num_threads) {
+    return std::max(PREFILL_MIN, num_threads * PREFILL_PER_THREAD);
+}
 
 // ---------------------------------------------------------------------------
 // Scenario 1: Sustained Mixed take+put (queue always has data)
 //
-// Queue is pre-filled ONCE before the benchmark loop. Each iteration just
-// measures the take+put hot path. The queue is always non-empty because
-// every take is immediately followed by a put.
+// Matches ScanExecutor::worker_thread() pattern:
+//   take → task.run() → force_put (resubmit)
+// Queue is pre-filled ONCE before the loop.
 // ---------------------------------------------------------------------------
 
 static void BM_LockFreeScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
+    const int fill_count = prefill_count(num_threads);
 
     LockFreeScanTaskQueue queue(num_threads);
-    for (int i = 0; i < PREFILL; ++i) {
-        queue.force_put(make_bench_task(i % 21), 0);
+    for (int i = 0; i < fill_count; ++i) {
+        queue.force_put(make_bench_task(i % 21), i % num_threads);
     }
 
     int64_t cumulative_ops = 0;
+    int64_t cumulative_failed_ops = 0;
     for (auto _ : state) {
-        std::atomic<int64_t> total_ops{0};
+        state.PauseTiming();
+        std::vector<int64_t> local_ops(num_threads, 0);
+        std::vector<int64_t> local_fail_ops(num_threads, 0);
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
+        std::atomic<bool> start{false};
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &total_ops, t]() {
-                int64_t local_ops = 0;
+            threads.emplace_back([&queue, &local_ops, &local_fail_ops, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                int64_t ops = 0;
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     ScanTask task;
                     if (queue.try_take(task, t)) {
                         queue.force_put(std::move(task), t);
-                        local_ops++;
+                        ++ops;
+                    } else {
+                        ++local_fail_ops[t];
                     }
                 }
-                total_ops.fetch_add(local_ops, std::memory_order_relaxed);
+                local_ops[t] = ops;
             });
         }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
 
         for (auto& th : threads) th.join();
-        cumulative_ops += total_ops.load();
+
+        for (int t = 0; t < num_threads; ++t) {
+            cumulative_ops += local_ops[t];
+            cumulative_failed_ops += local_fail_ops[t];
+        }
     }
     state.SetItemsProcessed(cumulative_ops);
+    state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
 }
 
-BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs);
+BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs)->UseRealTime();
 
 static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
+    const int fill_count = prefill_count(num_threads);
 
-    PriorityScanTaskQueue queue(PREFILL * 2);
-    for (int i = 0; i < PREFILL; ++i) {
+    PriorityScanTaskQueue queue(fill_count * 2);
+    for (int i = 0; i < fill_count; ++i) {
         queue.force_put(make_bench_task(i % 21));
     }
 
     int64_t cumulative_ops = 0;
+    int64_t cumulative_failed_ops = 0;
     for (auto _ : state) {
-        std::atomic<int64_t> total_ops{0};
+        state.PauseTiming();
+        std::vector<int64_t> local_ops(num_threads, 0);
+        std::vector<int64_t> local_fail_ops(num_threads, 0);
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
+        std::atomic<bool> start{false};
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, &total_ops]() {
-                int64_t local_ops = 0;
+            threads.emplace_back([&queue, &local_ops, &local_fail_ops, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                int64_t ops = 0;
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     auto result = queue.take();
                     if (result.ok()) {
                         queue.force_put(std::move(result).value());
-                        local_ops++;
+                        ++ops;
+                    } else {
+                        ++local_fail_ops[t];
                     }
                 }
-                total_ops.fetch_add(local_ops, std::memory_order_relaxed);
+                local_ops[t] = ops;
             });
         }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
 
         for (auto& th : threads) th.join();
-        cumulative_ops += total_ops.load();
+
+        for (int t = 0; t < num_threads; ++t) {
+            cumulative_ops += local_ops[t];
+            cumulative_failed_ops += local_fail_ops[t];
+        }
     }
+    state.SetItemsProcessed(cumulative_ops);
+    state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
 }
 
-BENCHMARK(BM_PriorityScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs);
+BENCHMARK(BM_PriorityScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs)->UseRealTime();
 
 // ---------------------------------------------------------------------------
 // Scenario 2: Pure enqueue contention
-//
-// N threads each enqueue OPS_PER_THREAD items concurrently.
-// Queue is drained after each iteration to prevent unbounded growth.
 // ---------------------------------------------------------------------------
 
 static void BM_LockFreeScanTaskQueue_EnqueueOnly(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
 
     for (auto _ : state) {
+        state.PauseTiming();
         LockFreeScanTaskQueue queue(num_threads);
-
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
+        std::atomic<bool> start{false};
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue, t]() {
+            threads.emplace_back([&queue, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     queue.force_put(make_bench_task(i % 21), t);
                 }
             });
         }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
 
         for (auto& th : threads) th.join();
 
         state.PauseTiming();
         ScanTask drain;
-        while (queue.try_take(drain)) {}
+        while (queue.try_take(drain)) {
+        }
         state.ResumeTiming();
     }
 
     state.SetItemsProcessed(state.iterations() * num_threads * OPS_PER_THREAD);
 }
 
-BENCHMARK(BM_LockFreeScanTaskQueue_EnqueueOnly)->Apply(BM_ThreadArgs);
+BENCHMARK(BM_LockFreeScanTaskQueue_EnqueueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
 
 static void BM_PriorityScanTaskQueue_EnqueueOnly(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
 
     for (auto _ : state) {
+        state.PauseTiming();
         PriorityScanTaskQueue queue(num_threads * OPS_PER_THREAD + 1);
-
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
+        std::atomic<bool> start{false};
 
         for (int t = 0; t < num_threads; ++t) {
-            threads.emplace_back([&queue]() {
+            threads.emplace_back([&queue, &start]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
                     queue.force_put(make_bench_task(i % 21));
                 }
             });
         }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
 
         for (auto& th : threads) th.join();
 
@@ -176,7 +232,96 @@ static void BM_PriorityScanTaskQueue_EnqueueOnly(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * num_threads * OPS_PER_THREAD);
 }
 
-BENCHMARK(BM_PriorityScanTaskQueue_EnqueueOnly)->Apply(BM_ThreadArgs);
+BENCHMARK(BM_PriorityScanTaskQueue_EnqueueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
+
+// ---------------------------------------------------------------------------
+// Scenario 3: Pure dequeue contention
+//
+// Pre-fill the queue, then N threads all compete to dequeue.
+// Isolates the try_take hot path.
+// ---------------------------------------------------------------------------
+
+static void BM_LockFreeScanTaskQueue_DequeueOnly(benchmark::State& state) {
+    const int num_threads = static_cast<int>(state.range(0));
+    const int total_ops = num_threads * OPS_PER_THREAD;
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        LockFreeScanTaskQueue queue(num_threads);
+        for (int i = 0; i < total_ops; ++i) {
+            queue.force_put(make_bench_task(i % 21), i % num_threads);
+        }
+
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::atomic<bool> start{false};
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&queue, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                ScanTask task;
+                while (queue.try_take(task, t)) {
+                }
+            });
+        }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
+
+        for (auto& th : threads) th.join();
+    }
+
+    state.SetItemsProcessed(state.iterations() * total_ops);
+}
+
+BENCHMARK(BM_LockFreeScanTaskQueue_DequeueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
+
+static void BM_PriorityScanTaskQueue_DequeueOnly(benchmark::State& state) {
+    const int num_threads = static_cast<int>(state.range(0));
+    const int total_ops = num_threads * OPS_PER_THREAD;
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        PriorityScanTaskQueue queue(total_ops + 1);
+        for (int i = 0; i < total_ops; ++i) {
+            queue.force_put(make_bench_task(i % 21));
+        }
+
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::atomic<bool> start{false};
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&queue, &start]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                while (true) {
+                    auto r = queue.take();
+                    if (!r.ok()) break;
+                }
+            });
+        }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
+
+        // PriorityScanTaskQueue::take() blocks when empty.
+        // Close the queue so blocked threads wake up and exit.
+        while (queue.size() > 0) {
+            std::this_thread::yield();
+        }
+        state.PauseTiming();
+        queue.close();
+        state.ResumeTiming();
+
+        for (auto& th : threads) th.join();
+    }
+
+    state.SetItemsProcessed(state.iterations() * total_ops);
+}
+
+BENCHMARK(BM_PriorityScanTaskQueue_DequeueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
 
 } // namespace starrocks::workgroup
 

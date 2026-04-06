@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "exec/pipeline/work_stealing_queue.h"
 #include "exec/workgroup/scan_task_queue.h"
 
@@ -59,10 +61,13 @@ public:
     size_t size() const;
 
 private:
-    // Clamp a priority value to the valid range [0, NUM_PRIORITY_LEVELS - 1].
-    static int _clamp_priority(int priority);
-
     pipeline::WorkStealingQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
+
+    // Bitmap of levels that are known to be non-empty.
+    // bit i = 1 means level i MAY have items (no false negatives).
+    // bit i = 0 means level i is DEFINITELY empty.
+    // Replaces 21 × O(P) try_dequeue probes with a single atomic read on the hot path.
+    std::atomic<uint32_t> _non_empty_bitmap{0};
 };
 
 } // namespace starrocks::workgroup
