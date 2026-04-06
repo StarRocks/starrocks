@@ -204,7 +204,7 @@ void ChunkPredicateEvaluator::eval_filter_null_values(Chunk* chunk,
         // let compiler does everything.
         // let's pray for compiler,
         // till the end of the world.
-        const uint8_t* nulls = nullable_column->null_column()->raw_data();
+        const auto& nulls = nullable_column->immutable_null_column_data();
         uint8_t* sel = selection.data();
         for (size_t i = 0; i < before_size; i++) {
             sel[i] &= !nulls[i];

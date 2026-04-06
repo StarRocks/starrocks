@@ -705,7 +705,7 @@ Status ScalarColumnWriter::append(const Column& column) {
     const uint8_t* ptr = column.raw_data();
     // Currently, ColumnWriter does not support null-only columns
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     return _append(ptr, null, column.size(), column.has_null());
 }
 
@@ -941,7 +941,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     const BinaryColumn* bin_col;
 
     if (is_nullable()) {

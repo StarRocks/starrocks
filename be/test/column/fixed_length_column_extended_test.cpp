@@ -183,8 +183,8 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
+    const auto& p = c1->immutable_data();
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(c1->raw_data());
         ASSERT_EQ(values[i], p[i]);
     }
 
@@ -192,10 +192,9 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_EQ(values.size(), c2->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c2->size());
-    auto* nullable_c2 = down_cast<NullableColumn*>(c2.get());
+    const auto& datas = GetContainer<TYPE_INT>::get_data(c2.get());
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(nullable_c2->data_column()->raw_data());
-        ASSERT_EQ(values[i], p[i]);
+        ASSERT_EQ(values[i], datas[i]);
     }
 }
 
@@ -674,7 +673,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     Filter filter{1, 0, 1, 0, 1};
     ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
-    auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
+    const auto& p = c1->immutable_data();
     ASSERT_EQ(0, p[0]);
     ASSERT_EQ(values[1], p[1]);
     ASSERT_EQ(0, p[2]);

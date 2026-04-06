@@ -185,8 +185,8 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         // |column_ptr| will be released after this method return, have to ensure that
         // the corresponding external storage will not be deallocated while the slice
         // still been used.
-        const auto* slice = reinterpret_cast<const Slice*>(data->raw_data());
-        std::string* str = obj_pool->add(new std::string(slice->data, slice->size));
+        const auto slice = GetContainer<TYPE_VARCHAR>::get_data(data.get(), 0);
+        std::string* str = obj_pool->add(new std::string(slice.data, slice.size));
         *value = *str;
     } else {
         *value = *reinterpret_cast<const ValueType*>(data->raw_data());
