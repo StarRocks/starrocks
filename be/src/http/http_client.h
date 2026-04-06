@@ -160,7 +160,7 @@ private:
     const HttpCallback* _callback = nullptr;
     char _error_buf[CURL_ERROR_SIZE];
     curl_slist* _header_list = nullptr;
-    curl_slist* _resolve_list = nullptr;  // For CURLOPT_RESOLVE (DNS pinning to prevent rebinding)
+    curl_slist* _resolve_list = nullptr; // For CURLOPT_RESOLVE (DNS pinning to prevent rebinding)
 
     // Store headers for easy management
     std::unordered_map<std::string, std::string> _headers;

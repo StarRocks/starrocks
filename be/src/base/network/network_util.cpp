@@ -37,7 +37,6 @@
 #include <arpa/inet.h>
 #include <curl/curl.h>
 #include <fmt/format.h>
-
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -387,8 +386,7 @@ StatusOr<std::string> extract_host_from_url(const std::string& url) {
     // This ensures we parse URLs exactly the same way curl will when making requests
     CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
     if (rc != CURLUE_OK) {
-        return Status::InvalidArgument(
-                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
+        return Status::InvalidArgument(fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
     }
 
     // Extract the host component
@@ -396,8 +394,7 @@ StatusOr<std::string> extract_host_from_url(const std::string& url) {
     rc = curl_url_get(curl_url.get(), CURLUPART_HOST, &host, 0);
     if (rc != CURLUE_OK || host == nullptr) {
         return Status::InvalidArgument(
-                fmt::format("Failed to extract host from URL '{}': {}",
-                            url, curl_url_strerror(rc)));
+                fmt::format("Failed to extract host from URL '{}': {}", url, curl_url_strerror(rc)));
     }
 
     CurlString host_guard(host);
@@ -424,8 +421,7 @@ StatusOr<int> extract_port_from_url(const std::string& url) {
     // Parse the URL using libcurl's URL parser
     CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
     if (rc != CURLUE_OK) {
-        return Status::InvalidArgument(
-                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
+        return Status::InvalidArgument(fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
     }
 
     // Extract the port component
@@ -434,8 +430,7 @@ StatusOr<int> extract_port_from_url(const std::string& url) {
     rc = curl_url_get(curl_url.get(), CURLUPART_PORT, &port_str, CURLU_DEFAULT_PORT);
     if (rc != CURLUE_OK || port_str == nullptr) {
         return Status::InvalidArgument(
-                fmt::format("Failed to extract port from URL '{}': {}",
-                            url, curl_url_strerror(rc)));
+                fmt::format("Failed to extract port from URL '{}': {}", url, curl_url_strerror(rc)));
     }
 
     CurlString port_guard(port_str);
@@ -443,13 +438,11 @@ StatusOr<int> extract_port_from_url(const std::string& url) {
     try {
         int port = std::stoi(port_guard.get());
         if (port <= 0 || port > 65535) {
-            return Status::InvalidArgument(
-                    fmt::format("Port out of range in URL '{}': {}", url, port));
+            return Status::InvalidArgument(fmt::format("Port out of range in URL '{}': {}", url, port));
         }
         return port;
     } catch (const std::exception& e) {
-        return Status::InvalidArgument(
-                fmt::format("Invalid port in URL '{}': {}", url, e.what()));
+        return Status::InvalidArgument(fmt::format("Invalid port in URL '{}': {}", url, e.what()));
     }
 }
 

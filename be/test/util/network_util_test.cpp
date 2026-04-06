@@ -80,12 +80,12 @@ PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv4_CurrentNetwork) {
 
 PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv4_PublicAddresses) {
     // Public IP addresses should return false
-    EXPECT_FALSE(is_private_ip("8.8.8.8"));       // Google DNS
-    EXPECT_FALSE(is_private_ip("1.1.1.1"));       // Cloudflare DNS
-    EXPECT_FALSE(is_private_ip("203.0.113.1"));   // TEST-NET-3
+    EXPECT_FALSE(is_private_ip("8.8.8.8"));        // Google DNS
+    EXPECT_FALSE(is_private_ip("1.1.1.1"));        // Cloudflare DNS
+    EXPECT_FALSE(is_private_ip("203.0.113.1"));    // TEST-NET-3
     EXPECT_FALSE(is_private_ip("142.250.190.78")); // google.com
-    EXPECT_FALSE(is_private_ip("157.240.1.35"));  // facebook.com
-    EXPECT_FALSE(is_private_ip("52.94.236.248")); // AWS
+    EXPECT_FALSE(is_private_ip("157.240.1.35"));   // facebook.com
+    EXPECT_FALSE(is_private_ip("52.94.236.248"));  // AWS
 }
 
 //=============================================================================
@@ -130,8 +130,8 @@ PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv6_IPv4Mapped) {
 
 PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_IPv6_PublicAddresses) {
     // Public IPv6 addresses should return false
-    EXPECT_FALSE(is_private_ip("2001:4860:4860::8888")); // Google DNS
-    EXPECT_FALSE(is_private_ip("2606:4700:4700::1111")); // Cloudflare DNS
+    EXPECT_FALSE(is_private_ip("2001:4860:4860::8888"));     // Google DNS
+    EXPECT_FALSE(is_private_ip("2606:4700:4700::1111"));     // Cloudflare DNS
     EXPECT_FALSE(is_private_ip("2607:f8b0:4004:800::200e")); // google.com
 }
 
@@ -155,11 +155,11 @@ PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_InvalidInput) {
 //=============================================================================
 
 // Helper macro to check StatusOr<std::string> result
-#define EXPECT_HOST_EQ(url, expected_host) \
-    do { \
-        auto result = extract_host_from_url(url); \
+#define EXPECT_HOST_EQ(url, expected_host)                          \
+    do {                                                            \
+        auto result = extract_host_from_url(url);                   \
         ASSERT_TRUE(result.ok()) << "Failed to parse URL: " << url; \
-        EXPECT_EQ(result.value(), expected_host); \
+        EXPECT_EQ(result.value(), expected_host);                   \
     } while (0)
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_BasicUrls) {
@@ -219,7 +219,7 @@ PARALLEL_TEST(NetworkUtilTest, ExtractHost_InvalidUrls) {
     // Invalid URLs should return error Status
     EXPECT_FALSE(extract_host_from_url("").ok());
     EXPECT_FALSE(extract_host_from_url("not-a-url").ok());
-    EXPECT_FALSE(extract_host_from_url("example.com").ok());  // Missing scheme
+    EXPECT_FALSE(extract_host_from_url("example.com").ok());    // Missing scheme
     EXPECT_FALSE(extract_host_from_url("://example.com").ok()); // Missing scheme name
     // Note: curl accepts "http:/example.com" (single slash) - treats path as host
 }
@@ -235,7 +235,7 @@ PARALLEL_TEST(NetworkUtilTest, ExtractHost_SSRFBypassPrevention) {
 
     // Normal credentials should still work correctly
     EXPECT_HOST_EQ("http://user:pass@example.com/", "example.com");
-    EXPECT_HOST_EQ("http://user:p%40ss@example.com/", "example.com");  // URL-encoded @
+    EXPECT_HOST_EQ("http://user:p%40ss@example.com/", "example.com"); // URL-encoded @
 }
 
 //=============================================================================
@@ -244,11 +244,11 @@ PARALLEL_TEST(NetworkUtilTest, ExtractHost_SSRFBypassPrevention) {
 //=============================================================================
 
 // Helper macro to check StatusOr<int> result
-#define EXPECT_PORT_EQ(url, expected_port) \
-    do { \
-        auto result = extract_port_from_url(url); \
+#define EXPECT_PORT_EQ(url, expected_port)                          \
+    do {                                                            \
+        auto result = extract_port_from_url(url);                   \
         ASSERT_TRUE(result.ok()) << "Failed to parse URL: " << url; \
-        EXPECT_EQ(result.value(), expected_port); \
+        EXPECT_EQ(result.value(), expected_port);                   \
     } while (0)
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_DefaultPorts) {
@@ -290,7 +290,7 @@ PARALLEL_TEST(NetworkUtilTest, ExtractPort_InvalidUrls) {
     // Invalid URLs should return error Status
     EXPECT_FALSE(extract_port_from_url("").ok());
     EXPECT_FALSE(extract_port_from_url("not-a-url").ok());
-    EXPECT_FALSE(extract_port_from_url("example.com").ok());  // Missing scheme
+    EXPECT_FALSE(extract_port_from_url("example.com").ok()); // Missing scheme
 }
 
 // SECURITY TEST: SSRF bypass prevention for port extraction
@@ -380,7 +380,7 @@ PARALLEL_TEST(NetworkUtilTest, IsLinkLocalIP_IPv4_LinkLocal) {
     // 169.254.0.0/16 - Link-local range
     EXPECT_TRUE(is_link_local_ip("169.254.0.0"));
     EXPECT_TRUE(is_link_local_ip("169.254.0.1"));
-    EXPECT_TRUE(is_link_local_ip("169.254.169.254"));  // AWS metadata endpoint
+    EXPECT_TRUE(is_link_local_ip("169.254.169.254")); // AWS metadata endpoint
     EXPECT_TRUE(is_link_local_ip("169.254.255.255"));
     EXPECT_TRUE(is_link_local_ip("169.254.100.50"));
 }
@@ -389,7 +389,7 @@ PARALLEL_TEST(NetworkUtilTest, IsLinkLocalIP_IPv6_LinkLocal) {
     // fe80::/10 - IPv6 Link-local range
     EXPECT_TRUE(is_link_local_ip("fe80::1"));
     EXPECT_TRUE(is_link_local_ip("fe80::1234:5678:abcd:ef01"));
-    EXPECT_TRUE(is_link_local_ip("febf::1"));  // fe80::/10 includes up to febf
+    EXPECT_TRUE(is_link_local_ip("febf::1")); // fe80::/10 includes up to febf
 }
 
 PARALLEL_TEST(NetworkUtilTest, IsLinkLocalIP_NotLinkLocal) {

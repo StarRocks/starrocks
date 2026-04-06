@@ -23,11 +23,11 @@
 #include <optional>
 #include <sstream>
 
+#include "base/network/network_util.h"
 #include "column/column_helper.h"
 #include "http/http_client.h"
 #include "http/http_method.h"
 #include "runtime/runtime_state.h"
-#include "base/network/network_util.h"
 
 namespace starrocks {
 
@@ -60,7 +60,7 @@ struct HttpRequestConfig {
 };
 
 // Default values for HTTP request function configuration
-const int64_t DEFAULT_MAX_RESPONSE_SIZE = 1048576;  // 1MB
+const int64_t DEFAULT_MAX_RESPONSE_SIZE = 1048576; // 1MB
 
 // Helper function: Parse HTTP method from string
 // Returns error for invalid methods instead of silently defaulting to GET
@@ -84,8 +84,7 @@ static StatusOr<HttpMethod> parse_http_method(const Slice& method_str) {
     }
 
     return Status::InvalidArgument(fmt::format(
-            "Invalid HTTP method '{}'. Allowed: GET, POST, PUT, DELETE, HEAD, OPTIONS",
-            method_str.to_string()));
+            "Invalid HTTP method '{}'. Allowed: GET, POST, PUT, DELETE, HEAD, OPTIONS", method_str.to_string()));
 }
 
 // Public helper: Validate HTTP method string (exposed for testing)
@@ -106,7 +105,7 @@ bool is_valid_utf8(const std::string& s) {
 
         int char_len;
         if ((c & 0x80) == 0) {
-            char_len = 1;  // ASCII
+            char_len = 1; // ASCII
         } else if ((c & 0xE0) == 0xC0) {
             char_len = 2;
         } else if ((c & 0xF0) == 0xE0) {
@@ -114,17 +113,17 @@ bool is_valid_utf8(const std::string& s) {
         } else if ((c & 0xF8) == 0xF0) {
             char_len = 4;
         } else {
-            return false;  // Invalid start byte
+            return false; // Invalid start byte
         }
 
         if (i + char_len > s.size()) {
-            return false;  // Truncated sequence
+            return false; // Truncated sequence
         }
 
         // Check continuation bytes
         for (int j = 1; j < char_len; ++j) {
             if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80) {
-                return false;  // Invalid continuation byte
+                return false; // Invalid continuation byte
             }
         }
 
@@ -136,23 +135,37 @@ bool is_valid_utf8(const std::string& s) {
 // Helper function: Escape string for JSON
 std::string escape_json_string(const std::string& s) {
     std::string result;
-    result.reserve(s.size() + 16);  // Reserve some extra space for escapes
+    result.reserve(s.size() + 16); // Reserve some extra space for escapes
     for (char c : s) {
         switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            case '\b': result += "\\b"; break;
-            case '\f': result += "\\f"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20) {
-                    // Control characters - encode as \uXXXX
-                    result += fmt::format("\\u{:04x}", static_cast<unsigned char>(c));
-                } else {
-                    result += c;
-                }
+        case '"':
+            result += "\\\"";
+            break;
+        case '\\':
+            result += "\\\\";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        case '\b':
+            result += "\\b";
+            break;
+        case '\f':
+            result += "\\f";
+            break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20) {
+                // Control characters - encode as \uXXXX
+                result += fmt::format("\\u{:04x}", static_cast<unsigned char>(c));
+            } else {
+                result += c;
+            }
         }
     }
     return result;
@@ -367,8 +380,7 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     bool has_http = starts_with_icase(url, "http://");
     bool has_https = starts_with_icase(url, "https://");
     if (!has_http && !has_https) {
-        return Status::InvalidArgument(
-                "Invalid protocol. Only http:// and https:// are supported");
+        return Status::InvalidArgument("Invalid protocol. Only http:// and https:// are supported");
     }
 
     int level = state.security_level;
@@ -402,8 +414,8 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     // Unknown security level - block by default
     if (level != static_cast<int>(HttpSecurityLevel::PUBLIC) &&
         level != static_cast<int>(HttpSecurityLevel::RESTRICTED)) {
-        return Status::InvalidArgument(fmt::format(
-                "SSRF Protection: Unknown security level {}. Request blocked.", level));
+        return Status::InvalidArgument(
+                fmt::format("SSRF Protection: Unknown security level {}. Request blocked.", level));
     }
 
     // Level 2 and 3: Extract host from URL
@@ -431,15 +443,14 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     // Level 3 (RESTRICTED): Require allowlist for all hosts
     if (level == static_cast<int>(HttpSecurityLevel::RESTRICTED)) {
         if (state.ip_allowlist.empty() && state.host_allowlist_patterns.empty()) {
-            return Status::InvalidArgument(fmt::format(
-                    "SSRF Protection: '{}' blocked. Configure: "
-                    "(\"http_request_ip_allowlist\" = \"<ip>\") or "
-                    "(\"http_request_host_allowlist_regexp\" = \"{}\")",
-                    host, host));
+            return Status::InvalidArgument(
+                    fmt::format("SSRF Protection: '{}' blocked. Configure: "
+                                "(\"http_request_ip_allowlist\" = \"<ip>\") or "
+                                "(\"http_request_host_allowlist_regexp\" = \"{}\")",
+                                host, host));
         }
         if (!check_allowlist(host, resolved_ips, state)) {
-            return Status::InvalidArgument(
-                    fmt::format("SSRF Protection: '{}' not in allowlist.", host));
+            return Status::InvalidArgument(fmt::format("SSRF Protection: '{}' not in allowlist.", host));
         }
     }
 
@@ -468,10 +479,10 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
             // Different error messages based on IP type
             if (is_link_local) {
                 // CRITICAL: Link-local IPs (169.254.x.x) are commonly used for cloud metadata services
-                return Status::InvalidArgument(fmt::format(
-                        "SSRF Protection: Link-local IP '{}' blocked (cloud metadata service). "
-                        "WARNING: Allowing this IP can expose cloud credentials and sensitive metadata.",
-                        private_ip));
+                return Status::InvalidArgument(
+                        fmt::format("SSRF Protection: Link-local IP '{}' blocked (cloud metadata service). "
+                                    "WARNING: Allowing this IP can expose cloud credentials and sensitive metadata.",
+                                    private_ip));
             }
             // Standard private IP warning
             return Status::InvalidArgument(fmt::format(
@@ -493,8 +504,8 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
 
 // Helper function: Execute HTTP request with HttpRequestConfig
 static StatusOr<std::string> execute_http_request_with_config(HttpClient& client, const Slice& url_slice,
-                                                               const HttpRequestConfig& config,
-                                                               const HttpRequestFunctionState* state) {
+                                                              const HttpRequestConfig& config,
+                                                              const HttpRequestFunctionState* state) {
     std::string url_str = url_slice.to_string();
 
     // SSRF protection: Validate host and get resolved IPs for DNS pinning
@@ -560,7 +571,8 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
     }
 
     // Apply body
-    if (!config.body.empty() && (method == HttpMethod::POST || method == HttpMethod::PUT || method == HttpMethod::DELETE)) {
+    if (!config.body.empty() &&
+        (method == HttpMethod::POST || method == HttpMethod::PUT || method == HttpMethod::DELETE)) {
         client.set_payload(config.body);
     }
 
@@ -593,7 +605,7 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
         total_size += length;
         if (total_size > static_cast<size_t>(DEFAULT_MAX_RESPONSE_SIZE)) {
             size_exceeded = true;
-            return false;  // Abort download immediately
+            return false; // Abort download immediately
         }
         response.append(static_cast<const char*>(data), length);
         return true;
@@ -606,7 +618,8 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
 
     // Check if size limit was exceeded during streaming
     if (size_exceeded) {
-        return build_json_error_response(fmt::format("Response size exceeds limit ({} bytes)", DEFAULT_MAX_RESPONSE_SIZE));
+        return build_json_error_response(
+                fmt::format("Response size exceeds limit ({} bytes)", DEFAULT_MAX_RESPONSE_SIZE));
     }
 
     // Check for network/curl errors
@@ -667,8 +680,8 @@ StatusOr<ColumnPtr> HttpRequestFunctions::http_request(FunctionContext* context,
     size_t num_rows = columns[0]->size();
 
     // Get function state
-    auto* state = reinterpret_cast<HttpRequestFunctionState*>(
-            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state =
+            reinterpret_cast<HttpRequestFunctionState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state == nullptr) {
         return Status::InternalError("HTTP request function state not initialized");
     }

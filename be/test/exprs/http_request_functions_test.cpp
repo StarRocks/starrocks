@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exprs/http_request_functions.h"
+
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "exprs/http_request_functions.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
 #include "runtime/runtime_state.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/parallel_test.h"
 
 namespace starrocks {
 
@@ -306,7 +307,7 @@ TEST_F(HttpRequestFunctionsTest, ipAndHostRegexOrConditionTest) {
 // Test validate_host_security at Level 1 (TRUSTED) - allows everything
 TEST_F(HttpRequestFunctionsTest, securityLevel1AllowsEverythingTest) {
     HttpRequestFunctionState state;
-    state.security_level = 1;  // TRUSTED
+    state.security_level = 1; // TRUSTED
 
     // Private IPs should be allowed at level 1
     ASSERT_TRUE(validate_host_security("http://127.0.0.1/api", state).ok());
@@ -320,7 +321,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel1AllowsEverythingTest) {
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 1 (TRUSTED)
 TEST_F(HttpRequestFunctionsTest, securityLevel1ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
-    state.security_level = 1;  // TRUSTED
+    state.security_level = 1; // TRUSTED
 
     std::vector<std::string> resolved_ips;
     // Use localhost which should always resolve
@@ -334,7 +335,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel1ReturnsDnsPinningIpsTest) {
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 2 (PUBLIC)
 TEST_F(HttpRequestFunctionsTest, securityLevel2ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
-    state.security_level = 2;  // PUBLIC
+    state.security_level = 2; // PUBLIC
     state.ip_allowlist = {"127.0.0.1"};
     state.allow_private_in_allowlist = true;
 
@@ -349,7 +350,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel2ReturnsDnsPinningIpsTest) {
 // Test validate_host_security returns resolved IPs for DNS pinning at Level 3 (RESTRICTED)
 TEST_F(HttpRequestFunctionsTest, securityLevel3ReturnsDnsPinningIpsTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     state.ip_allowlist = {"127.0.0.1"};
     state.allow_private_in_allowlist = true;
 
@@ -364,7 +365,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3ReturnsDnsPinningIpsTest) {
 // Test validate_host_security does NOT return IPs at Level 4 (PARANOID) - request blocked
 TEST_F(HttpRequestFunctionsTest, securityLevel4NoDnsPinningTest) {
     HttpRequestFunctionState state;
-    state.security_level = 4;  // PARANOID
+    state.security_level = 4; // PARANOID
 
     std::vector<std::string> resolved_ips;
     auto status = validate_host_security("http://127.0.0.1/api", state, &resolved_ips);
@@ -377,7 +378,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel4NoDnsPinningTest) {
 // Test validate_host_security at Level 2 (PUBLIC) - public hosts allowed, private IPs need allowlist
 TEST_F(HttpRequestFunctionsTest, securityLevel2PublicOpenPrivateNeedsAllowlistTest) {
     HttpRequestFunctionState state;
-    state.security_level = 2;  // PUBLIC
+    state.security_level = 2; // PUBLIC
 
     // Public hosts should be allowed without allowlist at level 2
     ASSERT_TRUE(validate_host_security("http://example.com/api", state).ok());
@@ -401,9 +402,9 @@ TEST_F(HttpRequestFunctionsTest, securityLevel2PublicOpenPrivateNeedsAllowlistTe
 // Test validate_host_security at Level 2 (PUBLIC) - private IPs allowed with allowlist + allow_private_in_allowlist
 TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPAllowedWithAllowlistTest) {
     HttpRequestFunctionState state;
-    state.security_level = 2;  // PUBLIC
+    state.security_level = 2; // PUBLIC
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
-    state.allow_private_in_allowlist = true;  // Must enable this flag
+    state.allow_private_in_allowlist = true; // Must enable this flag
 
     // Private IPs in allowlist should be allowed at level 2 with allow_private_in_allowlist=true
     ASSERT_TRUE(validate_host_security("http://127.0.0.1/api", state).ok());
@@ -417,9 +418,9 @@ TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPAllowedWithAllowlistTest
 // Test validate_host_security at Level 2 - private IPs blocked even in allowlist without allow_private_in_allowlist
 TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPBlockedWithoutFlagTest) {
     HttpRequestFunctionState state;
-    state.security_level = 2;  // PUBLIC
+    state.security_level = 2; // PUBLIC
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
-    state.allow_private_in_allowlist = false;  // Default: false
+    state.allow_private_in_allowlist = false; // Default: false
 
     // Private IPs in allowlist should be BLOCKED without allow_private_in_allowlist flag
     auto status1 = validate_host_security("http://127.0.0.1/api", state);
@@ -432,7 +433,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel2PrivateIPBlockedWithoutFlagTest) 
 // Test validate_host_security at Level 3 (RESTRICTED) - requires allowlist
 TEST_F(HttpRequestFunctionsTest, securityLevel3RequiresAllowlistTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     // Empty allowlists
 
     // With empty allowlist, all requests should be blocked
@@ -446,9 +447,9 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3RequiresAllowlistTest) {
 // Note: This test uses IP addresses to avoid DNS resolution dependencies
 TEST_F(HttpRequestFunctionsTest, securityLevel3AllowlistWorksTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     // Use IP allowlist for direct IP access
-    state.ip_allowlist = {"93.184.216.34", "1.2.3.4"};  // example.com's IP and test IP
+    state.ip_allowlist = {"93.184.216.34", "1.2.3.4"}; // example.com's IP and test IP
 
     // IPs in allowlist should be allowed (using public IPs)
     ASSERT_TRUE(validate_host_security("http://93.184.216.34/v1", state).ok());
@@ -462,9 +463,9 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3AllowlistWorksTest) {
 // Test validate_host_security at Level 3 - private IP allowed with allowlist + allow_private_in_allowlist
 TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllowlistTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
-    state.allow_private_in_allowlist = true;  // Must enable this flag
+    state.allow_private_in_allowlist = true; // Must enable this flag
 
     // Private IPs in allowlist should be allowed at level 3 with allow_private_in_allowlist=true
     ASSERT_TRUE(validate_host_security("http://127.0.0.1/api", state).ok());
@@ -478,9 +479,9 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllowlistTest
 // Test validate_host_security at Level 3 - private IP blocked even in allowlist without flag
 TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
-    state.allow_private_in_allowlist = false;  // Default: false
+    state.allow_private_in_allowlist = false; // Default: false
 
     // Private IPs in allowlist should be BLOCKED without allow_private_in_allowlist flag
     auto status1 = validate_host_security("http://127.0.0.1/api", state);
@@ -493,7 +494,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) 
 // Test validate_host_security at Level 4 (PARANOID) - blocks ALL requests
 TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
     HttpRequestFunctionState state;
-    state.security_level = 4;  // PARANOID
+    state.security_level = 4; // PARANOID
     state.ip_allowlist = {"127.0.0.1"};
     state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
     state.allow_private_in_allowlist = true;
@@ -514,7 +515,7 @@ TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
 // Test validate_host_security with invalid URL format
 TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
     HttpRequestFunctionState state;
-    state.security_level = 3;  // RESTRICTED
+    state.security_level = 3; // RESTRICTED
     state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
 
     // Invalid URL format should be blocked
@@ -531,12 +532,12 @@ TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
 // Test protocol validation - only http:// and https:// allowed
 TEST_F(HttpRequestFunctionsTest, protocolValidationTest) {
     HttpRequestFunctionState state;
-    state.security_level = 1;  // TRUSTED (allow everything except protocol check)
+    state.security_level = 1; // TRUSTED (allow everything except protocol check)
 
     // Valid protocols should pass protocol check
     ASSERT_TRUE(validate_host_security("http://example.com/api", state).ok());
     ASSERT_TRUE(validate_host_security("https://example.com/api", state).ok());
-    ASSERT_TRUE(validate_host_security("HTTP://example.com/api", state).ok());  // case insensitive
+    ASSERT_TRUE(validate_host_security("HTTP://example.com/api", state).ok()); // case insensitive
     ASSERT_TRUE(validate_host_security("HTTPS://example.com/api", state).ok());
 
     // Invalid protocols should be blocked BEFORE DNS resolution
@@ -1395,9 +1396,7 @@ public:
 
 class HttpRequestTestErrorHandler : public HttpHandler {
 public:
-    void handle(HttpRequest* req) override {
-        HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR);
-    }
+    void handle(HttpRequest* req) override { HttpChannel::send_error(req, HttpStatus::INTERNAL_SERVER_ERROR); }
 };
 
 static HttpRequestTestJsonHandler s_integ_json_handler;
@@ -1456,9 +1455,8 @@ protected:
     }
 
     // Helper to create 8-column input for http_request function
-    Columns make_columns(const std::string& url, const std::string& method = "GET",
-                         const std::string& body = "", const std::string& headers = "{}",
-                         int timeout = 5000, bool ssl_verify = true,
+    Columns make_columns(const std::string& url, const std::string& method = "GET", const std::string& body = "",
+                         const std::string& headers = "{}", int timeout = 5000, bool ssl_verify = true,
                          const std::string& user = "", const std::string& pass = "") {
         Columns columns;
 
@@ -1543,8 +1541,8 @@ TEST_F(HttpRequestIntegrationTest, GetTextResponse) {
 // POST echo body - covers POST method path, set_payload, body transmission
 TEST_F(HttpRequestIntegrationTest, PostEchoBody) {
     std::string post_body = R"({"key": "value", "num": 42})";
-    auto columns = make_columns(s_integ_base_url + "/echo", "POST", post_body,
-                                R"({"Content-Type": "application/json"})");
+    auto columns =
+            make_columns(s_integ_base_url + "/echo", "POST", post_body, R"({"Content-Type": "application/json"})");
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
     ASSERT_TRUE(result.ok());
     ASSERT_FALSE(result.value()->is_null(0));
@@ -1558,8 +1556,7 @@ TEST_F(HttpRequestIntegrationTest, PostEchoBody) {
 
 // Custom headers - covers parse_headers_json success path, set_header loop
 TEST_F(HttpRequestIntegrationTest, CustomHeaders) {
-    auto columns = make_columns(s_integ_base_url + "/headers", "GET", "",
-                                R"({"X-Custom": "test-value"})");
+    auto columns = make_columns(s_integ_base_url + "/headers", "GET", "", R"({"X-Custom": "test-value"})");
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
     ASSERT_TRUE(result.ok());
     ASSERT_FALSE(result.value()->is_null(0));
@@ -1582,8 +1579,7 @@ TEST_F(HttpRequestIntegrationTest, Http500Response) {
 
 // Basic auth - covers set_basic_auth path
 TEST_F(HttpRequestIntegrationTest, BasicAuth) {
-    auto columns = make_columns(s_integ_base_url + "/headers", "GET", "", "{}",
-                                5000, true, "myuser", "mypass");
+    auto columns = make_columns(s_integ_base_url + "/headers", "GET", "", "{}", 5000, true, "myuser", "mypass");
     auto result = HttpRequestFunctions::http_request(_ctx.get(), columns);
     ASSERT_TRUE(result.ok());
     ASSERT_FALSE(result.value()->is_null(0));
@@ -1652,8 +1648,8 @@ TEST_F(HttpRequestIntegrationTest, SslVerifyEnforced) {
 // RuntimeState init - covers init_security_state with all getter calls
 TEST_F(HttpRequestIntegrationTest, RuntimeStateInit) {
     // Verify that the function state was initialized correctly from RuntimeState
-    auto* state = reinterpret_cast<HttpRequestFunctionState*>(
-            _ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state =
+            reinterpret_cast<HttpRequestFunctionState*>(_ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     ASSERT_NE(nullptr, state);
     EXPECT_EQ(1, state->security_level); // TRUSTED
     EXPECT_FALSE(state->ssl_verify_required);
