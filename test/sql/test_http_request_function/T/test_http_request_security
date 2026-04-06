@@ -1,4 +1,4 @@
--- name: test_http_request_security
+-- name: test_http_request_security @sequential
 -- description: SSRF protection tests for http_request() function
 -- Note: Tests security levels and allowlist configuration
 -- Security Levels:
@@ -508,7 +508,10 @@ SELECT json_query(http_request(
 -- Cleanup - Restore Default Configuration
 -- ============================================================
 
-ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
-ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
-ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+    ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+    ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+    ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+} END CLEANUP
+
