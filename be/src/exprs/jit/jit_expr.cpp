@@ -101,7 +101,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
         const int8_t* null_flags_ptr = nullptr;
         if (un_col_null != nullptr) {
-            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->raw_data());
+            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->immutable_data().data());
         }
         jit_columns.emplace_back(JITColumn{data_col_ptr, null_flags_ptr});
     };
