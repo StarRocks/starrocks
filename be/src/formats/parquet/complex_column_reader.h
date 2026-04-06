@@ -385,6 +385,10 @@ public:
     // _shredded_fields recursively. Returns nullptr if the path is absent or has no typed_value_reader.
     // Array segments are not supported (shredded paths are object-key-only).
     const ColumnReader* typed_value_reader_for_path(const VariantPath& path) const;
+    // Returns the typed_value read type for the given parsed variant path.
+    // The returned descriptor reflects the shredded leaf's physical typed_value encoding,
+    // not the virtual slot's target type.
+    const TypeDescriptor* typed_value_read_type_for_path(const VariantPath& path) const;
 
 private:
     VariantTopLevelReaders _top_level;
@@ -403,8 +407,8 @@ private:
 // methods on the underlying shredded leaf column's statistics.
 class VariantVirtualZoneMapReader final : public ColumnReader {
 public:
-    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path)
-            : ColumnReader(nullptr), _source(source), _leaf_path(std::move(leaf_path)) {}
+    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path);
+    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path, TypeDescriptor virtual_slot_type);
     ~VariantVirtualZoneMapReader() override = default;
 
     Status prepare() override { return Status::OK(); }
@@ -426,7 +430,7 @@ public:
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
                                              const uint64_t rg_num_rows) const override {
-        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
         if (leaf == nullptr) return false;
         return leaf->row_group_zone_map_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
     }
@@ -434,7 +438,7 @@ public:
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
         if (leaf == nullptr) return false;
         // page_index_zone_map_filter is non-const in the base class; cast is safe because
         // the underlying object is non-const (it's a reader owned by VariantColumnReader).
@@ -448,14 +452,19 @@ public:
     StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                           CompoundNodeType pred_relation, const uint64_t rg_first_row,
                                           const uint64_t rg_num_rows) const override {
-        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
         if (leaf == nullptr) return false;
         return leaf->row_group_bloom_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
     }
 
 private:
+    const TypeDescriptor* _delegate_leaf_type() const;
+    bool _can_delegate_filters(const std::vector<const ColumnPredicate*>& predicates) const;
+    const ColumnReader* _delegate_leaf_reader(const std::vector<const ColumnPredicate*>& predicates) const;
+
     VariantColumnReader* _source;
     VariantPath _leaf_path;
+    TypeDescriptor _virtual_slot_type;
 };
 
 } // namespace starrocks::parquet

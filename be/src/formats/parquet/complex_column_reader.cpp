@@ -38,6 +38,44 @@
 
 namespace starrocks::parquet {
 
+namespace {
+
+TypeDescriptor resolve_virtual_slot_type(VariantColumnReader* source, const VariantPath& leaf_path) {
+    if (source == nullptr) {
+        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+    }
+    const TypeDescriptor* leaf_type = source->typed_value_read_type_for_path(leaf_path);
+    if (leaf_type == nullptr) {
+        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+    }
+    return *leaf_type;
+}
+
+const ShreddedFieldNode* find_shredded_field_node_for_path(const std::vector<ShreddedFieldNode>& shredded_fields,
+                                                           const VariantPath& path) {
+    if (path.empty()) return nullptr;
+    const std::vector<ShreddedFieldNode>* current = &shredded_fields;
+    const ShreddedFieldNode* found_node = nullptr;
+    for (size_t i = 0; i < path.segments.size(); ++i) {
+        const auto& seg = path.segments[i];
+        if (!seg.is_object()) return nullptr;
+        found_node = nullptr;
+        for (const auto& node : *current) {
+            if (node.name == seg.key) {
+                found_node = &node;
+                break;
+            }
+        }
+        if (found_node == nullptr) return nullptr;
+        if (i + 1 < path.segments.size()) {
+            current = &found_node->children;
+        }
+    }
+    return found_node;
+}
+
+} // namespace
+
 // File-scope helper — avoids repeated construction and deduplicate the several
 // `static const TypeDescriptor k_variant_type` locals scattered through the file.
 static const TypeDescriptor& variant_type_desc() {
@@ -1612,6 +1650,16 @@ Status VariantColumnReader::prepare() {
     return Status::OK();
 }
 
+VariantVirtualZoneMapReader::VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path)
+        : VariantVirtualZoneMapReader(source, leaf_path, resolve_virtual_slot_type(source, leaf_path)) {}
+
+VariantVirtualZoneMapReader::VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path,
+                                                         TypeDescriptor virtual_slot_type)
+        : ColumnReader(nullptr),
+          _source(source),
+          _leaf_path(std::move(leaf_path)),
+          _virtual_slot_type(std::move(virtual_slot_type)) {}
+
 void VariantColumnReader::get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
     // Only value_reader carries def/rep levels; metadata_reader levels would be dead-written.
     // _top_level.value_reader != nullptr is guaranteed by the constructor DCHECK.
@@ -1795,24 +1843,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 }
 
 const ColumnReader* VariantColumnReader::typed_value_reader_for_path(const VariantPath& path) const {
-    if (path.empty()) return nullptr;
-    const std::vector<ShreddedFieldNode>* current = &_shredded_fields;
-    const ShreddedFieldNode* found_node = nullptr;
-    for (size_t i = 0; i < path.segments.size(); ++i) {
-        const auto& seg = path.segments[i];
-        if (!seg.is_object()) return nullptr; // array segments not supported in shredded paths
-        found_node = nullptr;
-        for (const auto& node : *current) {
-            if (node.name == seg.key) {
-                found_node = &node;
-                break;
-            }
-        }
-        if (found_node == nullptr) return nullptr;
-        if (i + 1 < path.segments.size()) {
-            current = &found_node->children;
-        }
-    }
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     // Only SCALAR leaf nodes carry reliable typed statistics.
     // NONE means no typed_value was shredded; ARRAY means the leaf is an array boundary —
@@ -1828,6 +1859,37 @@ const ColumnReader* VariantColumnReader::typed_value_reader_for_path(const Varia
         if (lt == TYPE_BINARY || lt == TYPE_VARBINARY) return nullptr;
     }
     return found_node->typed_value_reader.get();
+}
+
+const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    return found_node->typed_value_read_type.get();
+}
+
+const TypeDescriptor* VariantVirtualZoneMapReader::_delegate_leaf_type() const {
+    if (_source == nullptr) return nullptr;
+    const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
+    if (leaf_type == nullptr) return nullptr;
+    // TODO(variant): if the virtual slot type and shredded leaf type are compatible but
+    // not identical, convert predicates to the leaf type before delegating instead of
+    // conservatively disabling index pushdown here.
+    if (*leaf_type != _virtual_slot_type) return nullptr;
+    return leaf_type;
+}
+
+bool VariantVirtualZoneMapReader::_can_delegate_filters(const std::vector<const ColumnPredicate*>& predicates) const {
+    const TypeDescriptor* leaf_type = _delegate_leaf_type();
+    if (leaf_type == nullptr) return false;
+    return std::ranges::all_of(predicates, [&](const ColumnPredicate* pred) {
+        return pred != nullptr && pred->type_info() != nullptr && pred->type_info()->type() == leaf_type->type;
+    });
+}
+
+const ColumnReader* VariantVirtualZoneMapReader::_delegate_leaf_reader(
+        const std::vector<const ColumnPredicate*>& predicates) const {
+    if (!_can_delegate_filters(predicates) || _source == nullptr) return nullptr;
+    return _source->typed_value_reader_for_path(_leaf_path);
 }
 
 } // namespace starrocks::parquet

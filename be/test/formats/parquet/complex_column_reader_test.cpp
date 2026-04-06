@@ -551,8 +551,7 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathEmptyPath) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     EXPECT_EQ(nullptr, vr->typed_value_reader_for_path(VariantPath{}));
 }
@@ -562,8 +561,7 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("nonexistent"));
     ASSERT_OK(path);
@@ -575,12 +573,44 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
     EXPECT_NE(nullptr, vr->typed_value_reader_for_path(*path));
+}
+
+TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path);
+
+    ASSERT_OK(zm_reader.prepare());
+
+    ColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    auto st = zm_reader.read_range(Range<uint64_t>(0, 1), nullptr, dst);
+    ASSERT_TRUE(st.is_not_supported());
+
+    level_t* def_levels = nullptr;
+    level_t* rep_levels = nullptr;
+    size_t num_levels = 0;
+    zm_reader.get_levels(&def_levels, &rep_levels, &num_levels);
+    zm_reader.set_need_parse_levels(true);
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 77;
+    zm_reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+    EXPECT_TRUE(ranges.empty());
+    EXPECT_EQ(77, end_offset);
+
+    SparseRange<uint64_t> sparse_range;
+    sparse_range.add(Range<uint64_t>(0, 3));
+    zm_reader.select_offset_index(sparse_range, 0);
 }
 
 // VariantVirtualZoneMapReader: non-existent path → row_group_zone_map_filter returns false
@@ -588,8 +618,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderNonExistentPathReturnsFalse) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("nonexistent")));
 
@@ -607,8 +636,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderValidPathNoStatsReturnsFalse) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
 
@@ -630,8 +658,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderFiltersWhenPredicateOutOfStatRange) {
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
 
@@ -654,8 +681,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     ColumnReaderOptions opts;
     opts.file_meta_data = file_meta.get();
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
-    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
-    ASSERT_NE(vr, nullptr);
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
     VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
 
@@ -667,6 +693,39 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(result);
     EXPECT_FALSE(result.value()); // row group should NOT be filtered
+}
+
+TEST(VariantZoneMapTest, ZoneMapReaderTypeMismatchSkipsAllIndexPushdown) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))));
+
+    auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(row_group_result);
+    EXPECT_FALSE(row_group_result.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_result = zm_reader.page_index_zone_map_filter({pred}, &row_ranges, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(page_result);
+    EXPECT_FALSE(page_result.value());
+    EXPECT_TRUE(row_ranges.empty());
+
+    auto bloom_result = zm_reader.row_group_bloom_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(bloom_result);
+    EXPECT_FALSE(bloom_result.value());
 }
 
 } // namespace starrocks::parquet

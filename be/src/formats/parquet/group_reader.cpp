@@ -924,10 +924,10 @@ Status GroupReader::_create_column_readers() {
             }
         }
         if (source_reader == nullptr) continue;
-        auto* variant_reader = dynamic_cast<VariantColumnReader*>(source_reader);
-        if (variant_reader == nullptr) continue;
+        auto* variant_reader = down_cast<VariantColumnReader*>(source_reader);
         _column_readers.emplace(virtual_slot_id,
-                                std::make_unique<VariantVirtualZoneMapReader>(variant_reader, projection.parsed_path));
+                                std::make_unique<VariantVirtualZoneMapReader>(variant_reader, projection.parsed_path,
+                                                                              projection.target_type));
     }
 
     return Status::OK();
