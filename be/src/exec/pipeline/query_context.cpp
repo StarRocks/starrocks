@@ -42,6 +42,14 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+const RuntimeServices* runtime_services(const QueryExecutionServices* query_execution_services) {
+    return query_execution_services != nullptr ? query_execution_services->runtime : nullptr;
+}
+
+} // namespace
+
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
 
@@ -81,11 +89,11 @@ QueryContext::~QueryContext() noexcept {
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
-    if (_exec_env != nullptr) {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
         if (_is_runtime_filter_coordinator) {
-            _exec_env->runtime_filter_worker()->close_query(_query_id);
+            services->runtime_filter_worker->close_query(_query_id);
         }
-        _exec_env->runtime_filter_cache()->remove(_query_id);
+        services->runtime_filter_cache->remove(_query_id);
     }
 
     // Make sure all bytes are released back to parent trackers.
@@ -114,6 +122,9 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 }
 
 void QueryContext::count_down_fragments() {
+    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
+        return this->count_down_fragments(services->query_context_mgr);
+    }
     return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
 }
 
@@ -196,7 +207,9 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
 Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
-        auto* g_spill_manager = ExecEnv::GetInstance()->global_spill_manager();
+        auto* services = runtime_services(_query_execution_services);
+        auto* g_spill_manager =
+                services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
         _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
         st = _spill_manager->init_block_manager(query_options);
     });

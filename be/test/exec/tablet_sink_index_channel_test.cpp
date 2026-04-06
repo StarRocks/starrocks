@@ -50,7 +50,8 @@ protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals,
+                                                            &_exec_env->query_execution_services(), _exec_env);
         _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
         runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
         return runtime_state;

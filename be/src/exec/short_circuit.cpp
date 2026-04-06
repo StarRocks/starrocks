@@ -141,8 +141,8 @@ ShortCircuitExecutor::ShortCircuitExecutor(ExecEnv* exec_env)
         : _query_id(generate_uuid()), _fragment_instance_id(generate_uuid()), _exec_env(exec_env) {
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    _runtime_state =
-            std::make_shared<RuntimeState>(_query_id, _fragment_instance_id, query_options, query_globals, _exec_env);
+    _runtime_state = std::make_shared<RuntimeState>(_query_id, _fragment_instance_id, query_options, query_globals,
+                                                    &_exec_env->query_execution_services(), _exec_env);
     _fragment_dict_state = std::make_unique<FragmentDictState>();
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     _runtime_state->init_instance_mem_tracker();

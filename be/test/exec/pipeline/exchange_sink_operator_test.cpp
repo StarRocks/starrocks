@@ -62,12 +62,13 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_exec_env(_exec_env);
+        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
@@ -100,7 +101,7 @@ public:
         _factory->set_runtime_state(_runtime_state.get());
     }
 
-    void TearDown() override { _query_context->set_exec_env(nullptr); }
+    void TearDown() override { _query_context->set_query_execution_services(nullptr); }
 
     // Build a minimal single-column INT chunk.
     static ChunkPtr make_chunk() {

@@ -19,8 +19,18 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
+
+TEST(QueryContextManagerTest, QueryExecutionServicesSetterStoresPointer) {
+    ExecEnv env;
+    QueryContext query_ctx;
+
+    query_ctx.set_query_execution_services(&env.query_execution_services());
+
+    EXPECT_EQ(&env.query_execution_services(), query_ctx.query_execution_services());
+}
 
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
