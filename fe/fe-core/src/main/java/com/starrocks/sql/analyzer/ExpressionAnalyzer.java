@@ -559,7 +559,7 @@ public class ExpressionAnalyzer {
                     if (originalType == AnyMapType.ANY_MAP) {
                         keyType = getKeyCommonType(node);
                         if (!keyType.isValidMapKeyType()) {
-                            throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
+                            throw new SemanticException("Map key doesn't support type: " + keyType, node.getPos());
                         }
                         valueType = getValueCommonType(node);
                     } else {
