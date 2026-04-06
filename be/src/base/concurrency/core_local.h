@@ -104,8 +104,8 @@ public:
     CoreDataAllocator* allocator(int i) const { return _allocators[i]; }
 
     static CoreLocalValueController<T>* instance() {
-        static CoreLocalValueController<T> _s_instance;
-        return &_s_instance;
+        static CoreLocalValueController<T>* _s_instance = new CoreLocalValueController<T>();
+        return _s_instance;
     }
 
 private:
