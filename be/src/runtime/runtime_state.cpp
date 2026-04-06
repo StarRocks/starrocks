@@ -59,11 +59,6 @@ namespace starrocks {
 // for ut only
 RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
 
-// for ut only
-RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                           const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services)
-        : RuntimeState(fragment_instance_id, query_options, query_globals, query_execution_services, nullptr) {}
-
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
                            ExecEnv* exec_env)
@@ -88,12 +83,6 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
         : RuntimeState(fragment_instance_id, query_options, query_globals,
                        static_cast<const QueryExecutionServices*>(nullptr), exec_env) {}
-
-RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                           const TQueryOptions& query_options, const TQueryGlobals& query_globals,
-                           const QueryExecutionServices* query_execution_services)
-        : RuntimeState(query_id, fragment_instance_id, query_options, query_globals, query_execution_services,
-                       nullptr) {}
 
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                            const TQueryOptions& query_options, const TQueryGlobals& query_globals,
@@ -145,9 +134,6 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     }
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
-
-RuntimeState::RuntimeState(const QueryExecutionServices* query_execution_services)
-        : RuntimeState(query_execution_services, nullptr) {}
 
 RuntimeState::RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env)
         : _query_execution_services(query_execution_services), _exec_env(exec_env) {

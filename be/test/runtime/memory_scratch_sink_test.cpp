@@ -138,8 +138,8 @@ public:
         }
         tuple_desc_builder.build(&desc_tbl_builder);
 
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(),
-                                                             static_cast<const QueryExecutionServices*>(nullptr)));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         DescriptorTbl* desc_tbl = nullptr;
         Status st = DescriptorTbl::create(state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
                                           config::vector_chunk_size);
