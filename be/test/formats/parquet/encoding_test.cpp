@@ -21,9 +21,9 @@
 
 #include "base/simd/byte_stream_split.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "formats/parquet/types.h"
 
