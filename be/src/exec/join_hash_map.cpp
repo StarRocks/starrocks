@@ -716,8 +716,6 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
         columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
 
-<<<<<<< HEAD:be/src/exec/join_hash_map.cpp
-=======
     auto& key_columns = _table_items->key_columns;
     auto& other_key_columns = ht._table_items->key_columns;
     for (size_t i = 0; i < key_columns.size(); i++) {
@@ -737,7 +735,6 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
             }
         }
     }
->>>>>>> 9125ad097f ([BugFix] Fix JoinHashTable::merge_ht to skip dummy row for expression-based join key columns (#70465)):be/src/exec/join/join_hash_table.cpp
     defer.cancel();
 }
 
