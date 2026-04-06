@@ -2509,8 +2509,9 @@ public:
 private:
     static constexpr bool is_supported(LogicalType type) { return is_scalar_logical_type(type); }
 
-    static void _build_hash_table(const ColumnType::ImmContainer& elements_data, const NullColumn::ValueType* elements_null_data,
-                                  size_t offset, size_t array_size, ArrayContainsAllState* state) {
+    static void _build_hash_table(const ColumnType::ImmContainer& elements_data,
+                                  const NullColumn::ValueType* elements_null_data, size_t offset, size_t array_size,
+                                  ArrayContainsAllState* state) {
         HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
         DCHECK(hash_map != nullptr);
 
@@ -2528,7 +2529,8 @@ private:
     }
 
     template <bool HTFromLeft>
-    static bool _process_with_hash_table(const ArrayContainsAllState* state, const ColumnType::ImmContainer& elements_data,
+    static bool _process_with_hash_table(const ArrayContainsAllState* state,
+                                         const ColumnType::ImmContainer& elements_data,
                                          const NullColumn::ValueType* elements_null_data, size_t offset,
                                          size_t array_size) {
         const HashMap* hash_map = std::get_if<HashMap>(&(state->variant));
@@ -2583,9 +2585,10 @@ private:
         return true;
     }
 
-    static inline bool _check_element_equal(const ColumnType::ImmContainer& left_data, const NullColumn::ValueType* left_null_data,
-                                            const ColumnType::ImmContainer& right_data, const NullColumn::ValueType* right_null_data,
-                                            size_t lhs, size_t rhs) {
+    static inline bool _check_element_equal(const ColumnType::ImmContainer& left_data,
+                                            const NullColumn::ValueType* left_null_data,
+                                            const ColumnType::ImmContainer& right_data,
+                                            const NullColumn::ValueType* right_null_data, size_t lhs, size_t rhs) {
         bool is_lhs_null = left_null_data[lhs];
         bool is_rhs_null = right_null_data[rhs];
         if (is_lhs_null ^ is_rhs_null) {
@@ -2597,8 +2600,9 @@ private:
         return left_data[lhs] == right_data[rhs];
     }
 
-    static void _build_prefix_table(const ColumnType::ImmContainer& elements_data, const NullColumn::ValueType* null_data, size_t offset,
-                                    size_t array_size, ArrayContainsAllState* state) {
+    static void _build_prefix_table(const ColumnType::ImmContainer& elements_data,
+                                    const NullColumn::ValueType* null_data, size_t offset, size_t array_size,
+                                    ArrayContainsAllState* state) {
         if (array_size == 0) {
             return;
         }
