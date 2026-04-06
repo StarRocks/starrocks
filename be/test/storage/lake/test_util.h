@@ -24,6 +24,7 @@
 #include "common/config_exec_fwd.h"
 #include "connector/connector.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
