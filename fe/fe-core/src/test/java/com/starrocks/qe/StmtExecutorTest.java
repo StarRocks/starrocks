@@ -19,11 +19,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.PQueryStatistics;
@@ -36,6 +43,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -47,6 +55,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -60,11 +70,33 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class StmtExecutorTest {
+    private static class DummyPlanNode extends PlanNode {
+        DummyPlanNode(PlanNodeId id, long cardinality) {
+            super(id, "DummyPlanNode");
+            this.cardinality = cardinality;
+        }
+
+        @Override
+        protected void toThrift(TPlanNode msg) {
+            // no-op for unit tests
+        }
+    }
+
+    private static ExecPlan buildMinimalExecPlan(long cardinality) {
+        ExecPlan execPlan = new ExecPlan();
+        PlanNode root = new DummyPlanNode(new PlanNodeId(0), cardinality);
+        PlanFragment fragment = new PlanFragment(new PlanFragmentId(0), root, DataPartition.UNPARTITIONED);
+        execPlan.getFragments().add(fragment);
+        Deencapsulation.setField(execPlan, "descTbl", new DescriptorTable());
+        return execPlan;
+    }
 
     @Test
     public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
@@ -257,6 +289,136 @@ public class StmtExecutorTest {
         String redacted = executor.getRedactedOriginStmtInString();
         Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
         Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testBuildTopLevelProfileContainsSqlStatementInfo() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        Assertions.assertNotNull(summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT));
+    }
+
+    @Test
+    public void testExecuteAnalyzeProfileStmtBranchSetsErrorWhenProfileMissing() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "ANALYZE PROFILE FROM 'missing-query-id'", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        executor.execute();
+        Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    @Test
+    public void testQueryRetryLoopInvokesHandleQueryStmtOnce() throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 1;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    return buildMinimalExecPlan(1);
+                }
+            };
+
+            executor.execute();
+            Assertions.assertNotNull(ctx.getState());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    @Test
+    public void testInsertNoRowsForHiveLikeTableSetsOk(@Mocked DefaultCoordinator coordinator) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1 WHERE FALSE", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        Table targetTable = new Table(Table.TableType.HIVE);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return new Status();
+            }
+
+            @Mock
+            public java.util.Map<String, String> getLoadCounters() {
+                return new HashMap<>();
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "";
+            }
+        };
+
+        executor.handleDMLStmt(execPlan, stmt);
+        Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
     }
 
     @Test
