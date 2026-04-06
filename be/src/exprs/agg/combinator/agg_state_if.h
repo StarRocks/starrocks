@@ -132,10 +132,9 @@ public:
                 }
             }
         } else {
-            const auto& predicate_column_raw_data =
-                    ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(predicate_column)->immutable_data();
+            const auto& predicate_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(predicate_column)->immutable_data();
             for (size_t i = 0; i < chunk_size; ++i) {
-                fake_null_column_raw_data[i] = !predicate_column_raw_data[i];
+                fake_null_column_raw_data[i] = !predicate_data[i];
             }
         }
 
