@@ -206,7 +206,7 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto cols = chunk->mutable_columns();
-            for (long key : keys) {
+            for (int64_t key : keys) {
                 cols[0]->append_datum(Datum(key));
                 cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
             }

@@ -325,7 +325,7 @@ TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
             new_mock_expr(ColumnTestHelper::build_column<Slice>({slice}), type_varchar, objpool));
 
     dictionary_get_expr->add_child(
-            new_mock_expr(ColumnTestHelper::build_column<long>({0}), LogicalType::TYPE_BIGINT, objpool));
+            new_mock_expr(ColumnTestHelper::build_column<int64_t>({0}), LogicalType::TYPE_BIGINT, objpool));
 
     ASSERT_TRUE(dictionary_get_expr->prepare(nullptr, nullptr).ok());
     auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);

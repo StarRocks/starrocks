@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <ranges>
 
 #include "common/system/cpu_info.h"
 #include "runtime/exec_env.h"
@@ -26,6 +27,9 @@
 #define protected public
 
 #include "runtime/snapshot_loader.h"
+
+#undef protected
+#undef private
 
 namespace starrocks {
 

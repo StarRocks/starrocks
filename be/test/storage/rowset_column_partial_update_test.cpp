@@ -92,7 +92,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
-        for (long key : keys) {
+        for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
             cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
@@ -187,7 +187,7 @@ public:
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        for (long key : keys) {
+        for (int64_t key : keys) {
             int idx = 0;
             for (int colid : column_indexes) {
                 auto col = chunk->get_column_raw_ptr_by_index(idx);

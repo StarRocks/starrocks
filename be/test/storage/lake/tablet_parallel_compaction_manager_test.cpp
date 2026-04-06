@@ -25,6 +25,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"

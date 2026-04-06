@@ -86,7 +86,7 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
-    size_t _next_value = 0;
+    uint64_t _next_value = 0;
     size_t _chunk_size;
 };
 

@@ -15,7 +15,9 @@
 #include "storage/primary_index.h"
 
 #include <gtest/gtest.h>
+#include <pthread.h>
 
+#include <cstdint>
 #include <random>
 
 #include "base/testutil/parallel_test.h"
@@ -35,8 +37,9 @@ namespace starrocks {
 template <typename DatumType>
 void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>& current_index_stat) {
     std::srand(static_cast<unsigned int>(time(nullptr)));
-    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
-                                       std::to_string(static_cast<int64_t>(pthread_self()));
+    std::string kPrimaryIndexDumpDir =
+            "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
+            std::to_string(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pthread_self())));
     std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
     bool created;
     FileSystem* fs = FileSystem::Default();
