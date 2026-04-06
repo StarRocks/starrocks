@@ -318,15 +318,8 @@ public class StmtExecutor {
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
-<<<<<<< HEAD
-=======
     // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
     private ExecPlan lastExecPlan = null;
-
-    // Store table query timeout info for error message
-    private String tableQueryTimeoutTableName = null;
-    private int tableQueryTimeoutValue = -1;
->>>>>>> 238b51f4d6 ([Enhancement] support dump plan when query exception (#70387))
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
