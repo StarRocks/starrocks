@@ -571,8 +571,7 @@ public class ExpressionAnalyzer {
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         Type desired = (i % 2 == 0) ? keyType : valueType;
                         Expr child = node.getChildren().get(i);
-                        if (!child.getType().matchesType(desired)
-                                && TypeManager.canCastTo(child.getType(), desired)) {
+                        if (!child.getType().matchesType(desired)) {
                             ExprCastFunction.castChild(node, desired, i);
                         }
                     }
