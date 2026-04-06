@@ -381,8 +381,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     // prepare query context and desc table first
     pipeline::FragmentExecutor fragment_executor;
-    const auto* query_execution_services = &_exec_env->query_execution_services();
-    Status status = fragment_executor.prepare_global_state(query_execution_services, common_request);
+    Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
         status.to_protobuf(response->mutable_status());
         return;
@@ -396,15 +395,14 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
-    auto* exec_env = _exec_env;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
         submitted = _exec_env->pipeline_prepare_pool()->try_offer(
-                [ms, i, fragment_executors, t_batch_requests, query_execution_services, exec_env] {
+                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
                     auto& unique_requests = t_batch_requests->unique_param_per_instance;
                     auto& req = unique_requests[i];
                     auto& fragment_executor = fragment_executors->at(i);
-                    ms->set_value(fragment_executor.prepare(query_execution_services, exec_env, req, req));
+                    ms->set_value(fragment_executor.prepare(exec_env, req, req));
                 });
         if (!submitted) {
             failed_idx = i;
@@ -436,7 +434,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
         status = prepare_futures[i].get();
         if (status.ok()) {
-            status = fragment_executors->at(i).execute(query_execution_services);
+            status = fragment_executors->at(i).execute(_exec_env);
         } else if (status.is_duplicate_rpc_invocation()) {
             status = Status::OK();
         }
@@ -562,8 +560,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(&_exec_env->query_execution_services(),
-                                                                                 t_request, &t_result);
+        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -603,10 +600,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
-    auto status = fragment_executor.prepare(&_exec_env->query_execution_services(), _exec_env, t_common_param,
-                                            t_unique_request);
+    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
-        return fragment_executor.execute(&_exec_env->query_execution_services());
+        return fragment_executor.execute(_exec_env);
     } else {
         return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
     }
@@ -1270,9 +1266,8 @@ Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTa
     auto& fragments = start_maintenance.fragments;
     for (const auto& fragment : fragments) {
         pipeline::FragmentExecutor fragment_executor;
-        RETURN_IF_ERROR(
-                fragment_executor.prepare(&_exec_env->query_execution_services(), _exec_env, fragment, fragment));
-        RETURN_IF_ERROR(fragment_executor.execute(&_exec_env->query_execution_services()));
+        RETURN_IF_ERROR(fragment_executor.prepare(_exec_env, fragment, fragment));
+        RETURN_IF_ERROR(fragment_executor.execute(_exec_env));
     }
 
     // Prepare EpochManager

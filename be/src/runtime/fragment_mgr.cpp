@@ -78,16 +78,6 @@
 
 namespace starrocks {
 
-namespace {
-
-const RuntimeServices& runtime_services(const QueryExecutionServices* query_execution_services) {
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->runtime != nullptr);
-    return *query_execution_services->runtime;
-}
-
-} // namespace
-
 std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
@@ -105,7 +95,6 @@ class RuntimeProfile;
 class FragmentExecState {
 public:
     FragmentExecState(const TUniqueId& query_id, const TUniqueId& instance_id, int backend_num, ExecEnv* exec_env,
-                      const QueryExecutionServices* query_execution_services, std::string token,
                       const TNetworkAddress& coord_hostport);
 
     ~FragmentExecState();
@@ -128,6 +117,8 @@ public:
     const DateTimeValue& start_time() const { return _start_time; }
 
     const TNetworkAddress& coord_addr() const { return _coord_addr; }
+
+    ExecEnv* exec_env() const { return _exec_env; }
 
     const TUniqueId& query_id() const { return _query_id; }
 
@@ -170,8 +161,6 @@ private:
     // Used to reoprt to coordinator which backend is over
     int _backend_num;
     ExecEnv* _exec_env;
-    const QueryExecutionServices* _query_execution_services;
-    std::string _token;
     TNetworkAddress _coord_addr;
 
     PlanFragmentExecutor _executor;
@@ -184,17 +173,14 @@ private:
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
-                                     ExecEnv* exec_env, const QueryExecutionServices* query_execution_services,
-                                     std::string token, const TNetworkAddress& coord_addr)
+                                     ExecEnv* exec_env, const TNetworkAddress& coord_addr)
         : _fragment_dict_state(std::make_unique<FragmentDictState>()),
           _query_id(query_id),
           _fragment_instance_id(fragment_instance_id),
           _backend_num(backend_num),
           _exec_env(exec_env),
-          _query_execution_services(query_execution_services),
-          _token(std::move(token)),
           _coord_addr(coord_addr),
-          _executor(query_execution_services,
+          _executor(&exec_env->query_execution_services(),
                     std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this, std::placeholders::_1,
                                     std::placeholders::_2, std::placeholders::_3, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
@@ -207,14 +193,15 @@ FragmentExecState::~FragmentExecState() {
 }
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
+    const auto* query_execution_services = &_exec_env->query_execution_services();
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
                                                     params.query_options, params.query_globals,
-                                                    _query_execution_services, _exec_env);
+                                                    query_execution_services, _exec_env);
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     _runtime_state->set_func_version(func_version);
-    _runtime_state->init_mem_trackers(_query_id, GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _runtime_state->init_mem_trackers(_query_id, _exec_env->query_pool_mem_tracker());
     _executor.set_runtime_state(_runtime_state.get());
     RuntimeStateHelper::init_runtime_filter_port(_runtime_state.get());
 
@@ -255,7 +242,7 @@ void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
     url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
-        << "token=" << _token << "&file=" << file_name;
+        << "token=" << _exec_env->token() << "&file=" << file_name;
     return url.str();
 }
 
@@ -456,8 +443,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         }
     }
     exec_state = std::make_shared<FragmentExecState>(params.params.query_id, fragment_instance_id, params.backend_num,
-                                                     _exec_env, &_exec_env->query_execution_services(),
-                                                     _exec_env->token(), params.coord);
+                                                     _exec_env, params.coord);
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
     {
@@ -520,9 +506,8 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
                                          const std::shared_ptr<const RuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
-    runtime_services(&_exec_env->query_execution_services())
-            .runtime_filter_cache->add_rf_event(
-                    {query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
+    _exec_env->runtime_filter_cache()->add_rf_event(
+            {query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
     size_t size = params.probe_finst_ids_size();
     for (size_t i = 0; i < size; i++) {
         TUniqueId frag_inst_id;
@@ -545,8 +530,7 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
             TUniqueId tquery_id;
             tquery_id.lo = query_id.lo();
             tquery_id.hi = query_id.hi();
-            runtime_services(&_exec_env->query_execution_services())
-                    .runtime_filter_cache->put_if_absent(tquery_id, params.filter_id(), shared_rf);
+            _exec_env->runtime_filter_cache()->put_if_absent(tquery_id, params.filter_id(), shared_rf);
         } else {
             auto profile = exec_state->runtime_state()->runtime_profile_ptr();
             auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
@@ -653,9 +637,8 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
-                runtime_services(&_exec_env->query_execution_services())
-                        .profile_report_worker->unregister_non_pipeline_load(
-                                fragment_exec_state->fragment_instance_id());
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -719,9 +702,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
-                runtime_services(&_exec_env->query_execution_services())
-                        .profile_report_worker->unregister_non_pipeline_load(
-                                fragment_exec_state->fragment_instance_id());
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -789,8 +771,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
     }
 
     for (const auto& fragment_instance_id : fragments_non_exist) {
-        runtime_services(&_exec_env->query_execution_services())
-                .profile_report_worker->unregister_non_pipeline_load(fragment_instance_id);
+        _exec_env->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
     }
 }
 
@@ -955,10 +936,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
     pipeline::FragmentExecutor fragment_executor;
-    auto status = fragment_executor.prepare(&ExecEnv::GetInstance()->query_execution_services(), ExecEnv::GetInstance(),
-                                            exec_fragment_params, exec_fragment_params);
+    auto status = fragment_executor.prepare(ExecEnv::GetInstance(), exec_fragment_params, exec_fragment_params);
     if (status.ok()) {
-        return fragment_executor.execute(&ExecEnv::GetInstance()->query_execution_services());
+        return fragment_executor.execute(ExecEnv::GetInstance());
     }
     return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
 }

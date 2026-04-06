@@ -103,23 +103,19 @@ class FragmentExecutor {
 public:
     FragmentExecutor();
 
-    Status prepare(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env,
-                   const TExecPlanFragmentParams& common_request, const TExecPlanFragmentParams& unique_request);
-    Status execute(const QueryExecutionServices* query_execution_services);
+    Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
+                   const TExecPlanFragmentParams& unique_request);
+    Status execute(ExecEnv* exec_env);
 
-    static Status append_incremental_scan_ranges(const QueryExecutionServices* query_execution_services,
-                                                 const TExecPlanFragmentParams& request,
+    static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 
-    Status prepare_global_state(const QueryExecutionServices* query_execution_services,
-                                const TExecPlanFragmentParams& common_request);
+    Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
 
 private:
-    uint32_t _calc_dop(const QueryExecutionServices* query_execution_services,
-                       const UnifiedExecPlanFragmentParams& request) const;
-    uint32_t _calc_sink_dop(const QueryExecutionServices* query_execution_services,
-                            const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
+    uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
     int _calc_query_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;
 
@@ -130,19 +126,14 @@ private:
     // 4. runtime state
     // 5. exec plan
     // 6. pipeline driver
-    Status _prepare_query_ctx(const QueryExecutionServices* query_execution_services,
-                              const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_fragment_ctx(const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_workgroup(const QueryExecutionServices* query_execution_services,
-                              const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_runtime_state(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env,
-                                  const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_exec_plan(const QueryExecutionServices* query_execution_services,
-                              const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_workgroup(const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_pipeline_driver(const QueryExecutionServices* query_execution_services,
-                                    const UnifiedExecPlanFragmentParams& request);
-    Status _prepare_stream_load_pipe(const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     std::unordered_map<int32_t, ExecutionGroupPtr> _colocate_exec_groups;
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
