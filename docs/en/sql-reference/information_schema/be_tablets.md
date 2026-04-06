@@ -19,7 +19,7 @@ The following fields are provided in `be_tablets`:
 | MIN_VERSION   | Minimum version of the tablet.                               |
 | NUM_ROWSET    | Number of rowsets in the tablet.                             |
 | NUM_ROW       | Number of rows in the tablet.                                |
-| DATA_SIZE     | On-disk size of rowset segment files (column data **plus rowset-embedded indexes** such as short key, zone map, and bloom filter, in bytes). Does **not** include any external persistent primary-key index bytes, which are reported in `INDEX_DISK`. |
+| DATA_SIZE     | Data size of the tablet (in bytes).                          |
 | INDEX_MEM     | Index memory usage of the tablet (in bytes).                 |
 | CREATE_TIME   | Creation time of the tablet (Unix timestamp in seconds).     |
 | STATE         | State of the tablet (e.g., `NORMAL`, `REPLICA_MISSING`).     |
@@ -27,6 +27,6 @@ The following fields are provided in `be_tablets`:
 | DATA_DIR      | Data directory where the tablet is stored.                   |
 | SHARD_ID      | Shard ID of the tablet.                                      |
 | SCHEMA_HASH   | Schema hash of the tablet.                                   |
-| INDEX_DISK    | For **primary key** tablets, on-disk size of the **persistent primary-key index** (for example cloud-native PK SSTables), not rowset-embedded indexes. For other tablet types this field may be zero even when rowsets have on-disk index data. |
+| INDEX_DISK    | Index disk usage of the tablet (in bytes).                   |
 | MEDIUM_TYPE   | Medium type of the tablet (e.g., `HDD`, `SSD`).              |
 | NUM_SEGMENT   | Number of segments in the tablet.                            |

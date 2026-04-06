@@ -150,8 +150,8 @@ public:
     size_t num_rows() const;
     // disk space occupied by tablet
     size_t tablet_footprint() const;
-    // Sum of RowsetMeta::data_disk_size() (segment file bytes, including embedded index pages); excludes
-    // separately-accounted RowsetMeta::index_disk_size() bytes. See tablet_footprint() for total.
+    // Sum of RowsetMeta::data_disk_size() across all rowsets (column data bytes, excluding
+    // embedded index bytes). See tablet_footprint() for total disk usage (data + index).
     size_t tablet_data_size() const;
     size_t version_count() const;
     size_t segment_count() const;
