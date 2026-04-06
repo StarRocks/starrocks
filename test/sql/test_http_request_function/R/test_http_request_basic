@@ -120,7 +120,7 @@ SELECT json_query(http_request(
     ssl_verify => false
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 SELECT json_query(http_request(url => 'https://expired.badssl.com/'), '$.status') as status;
 -- result:
@@ -131,7 +131,7 @@ SELECT json_query(http_request(
     ssl_verify => false
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 SELECT json_query(http_request(
     method => 'GET',
@@ -146,28 +146,28 @@ SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1'
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'HEAD'
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'OPTIONS'
 ), '$.status') as status;
 -- result:
--1
+204
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'HEAD'
 ), '$.body') as body;
 -- result:
-null
+""
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
@@ -181,7 +181,7 @@ SELECT CAST(json_query(http_request(
     method => 'INVALID'
 ), '$.error') AS STRING) LIKE '%Invalid HTTP method%' as has_error_message;
 -- result:
-0
+1
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
@@ -202,14 +202,14 @@ SELECT json_query(http_request(
     method => 'get'
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1',
     method => 'GeT'
 ), '$.status') as status;
 -- result:
--1
+200
 -- !result
 CLEANUP {
     ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
