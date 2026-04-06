@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <memory>
+#include <ranges>
 #include <thread>
 #include <vector>
 
@@ -41,17 +42,17 @@ namespace {
 constexpr int32_t kSourceNodeId = 1;
 
 int reserve_unused_local_port() {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     EXPECT_NE(fd, -1);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;
-    EXPECT_EQ(bind(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)), 0);
+    EXPECT_EQ(::bind(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)), 0);
     socklen_t len = sizeof(addr);
-    EXPECT_EQ(getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len), 0);
+    EXPECT_EQ(::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len), 0);
     int port = ntohs(addr.sin_port);
-    EXPECT_EQ(close(fd), 0);
+    EXPECT_EQ(::close(fd), 0);
     return port;
 }
 
