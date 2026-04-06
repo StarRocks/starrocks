@@ -442,6 +442,17 @@ public:
                                                                             rg_first_row, rg_num_rows);
     }
 
+    // Delegates bloom-filter evaluation to the shredded typed_value leaf reader.
+    // Only equality predicates reach this path; range predicates use zone map instead.
+    // Returns false (= don't skip) when the leaf is not shredded or has no bloom filter.
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        if (leaf == nullptr) return false;
+        return leaf->row_group_bloom_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
+    }
+
 private:
     VariantColumnReader* _source;
     VariantPath _leaf_path;

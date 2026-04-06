@@ -1823,7 +1823,10 @@ const ColumnReader* VariantColumnReader::typed_value_reader_for_path(const Varia
     // min/max reflects byte-order, not semantic value order.  Filtering on them would
     // produce incorrect results (false negatives), so bail out conservatively.
     if (found_node->typed_value_read_type == nullptr) return nullptr;
-    if (lt_is_binary(found_node->typed_value_read_type->type)) return nullptr;
+    {
+        LogicalType lt = found_node->typed_value_read_type->type;
+        if (lt == TYPE_BINARY || lt == TYPE_VARBINARY) return nullptr;
+    }
     return found_node->typed_value_reader.get();
 }
 

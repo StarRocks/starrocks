@@ -16,12 +16,19 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
+#include "common/object_pool.h"
+#include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/metadata.h"
+#include "storage/column_predicate.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
+#include "types/type_info.h"
 #include "types/variant.h"
 
 namespace starrocks::parquet {
@@ -430,6 +437,236 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
             0, binding, full_row.get_metadata().raw(),
             VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
     EXPECT_FALSE(st.ok());
+}
+
+// ─── VariantVirtualZoneMapReader tests ───────────────────────────────────────
+//
+// Builds a VariantColumnReader with a single shredded INT32 "age" leaf:
+//
+//   data (STRUCT)
+//     metadata (BYTE_ARRAY, col 0)
+//     value    (BYTE_ARRAY, col 1)
+//     typed_value (STRUCT)
+//       age (STRUCT)
+//         value       (BYTE_ARRAY, col 2)
+//         typed_value (INT32,      col 3)  <-- zone-map leaf
+//
+// When stats_on_age_chunk=true, col 3 gets INT32 statistics [20, 24].
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tparquet::RowGroup& rg,
+                                                                            ColumnReaderOptions& opts,
+                                                                            bool stats_on_age_chunk = false) {
+    ParquetField meta_f;
+    meta_f.name = "metadata";
+    meta_f.type = ColumnType::SCALAR;
+    meta_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    meta_f.physical_column_index = 0;
+
+    ParquetField val_f;
+    val_f.name = "value";
+    val_f.type = ColumnType::SCALAR;
+    val_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    val_f.physical_column_index = 1;
+
+    ParquetField age_val_f;
+    age_val_f.name = "value";
+    age_val_f.type = ColumnType::SCALAR;
+    age_val_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    age_val_f.physical_column_index = 2;
+
+    ParquetField age_typed_f;
+    age_typed_f.name = "typed_value";
+    age_typed_f.type = ColumnType::SCALAR;
+    age_typed_f.physical_type = tparquet::Type::INT32;
+    age_typed_f.physical_column_index = 3;
+    {
+        tparquet::IntType int_type;
+        int_type.__set_bitWidth(32);
+        int_type.__set_isSigned(true);
+        tparquet::LogicalType logical_type;
+        logical_type.__set_INTEGER(int_type);
+        age_typed_f.schema_element.__set_logicalType(logical_type);
+    }
+
+    ParquetField age_node;
+    age_node.name = "age";
+    age_node.type = ColumnType::STRUCT;
+    age_node.children = {age_val_f, age_typed_f};
+
+    ParquetField tv_struct;
+    tv_struct.name = "typed_value";
+    tv_struct.type = ColumnType::STRUCT;
+    tv_struct.children = {age_node};
+
+    ParquetField field;
+    field.name = "data";
+    field.type = ColumnType::STRUCT;
+    field.children = {meta_f, val_f, tv_struct};
+
+    for (int i = 0; i <= 3; ++i) {
+        tparquet::ColumnChunk chunk;
+        chunk.__set_file_path("col" + std::to_string(i));
+        chunk.file_offset = 0;
+        chunk.meta_data.data_page_offset = 4;
+        chunk.meta_data.__set_type(i == 3 ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
+        if (i == 3 && stats_on_age_chunk) {
+            int32_t min_val = 20, max_val = 24;
+            tparquet::Statistics stats;
+            stats.__set_null_count(0);
+            stats.__set_min_value(std::string(reinterpret_cast<const char*>(&min_val), sizeof(min_val)));
+            stats.__set_max_value(std::string(reinterpret_cast<const char*>(&max_val), sizeof(max_val)));
+            chunk.meta_data.__set_statistics(stats);
+        }
+        rg.columns.emplace_back(std::move(chunk));
+    }
+    rg.__set_num_rows(5);
+    opts.row_group_meta = &rg;
+
+    return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
+}
+
+// Build a minimal FileMetaData (writer version "unknown") so that
+// has_correct_min_max_stats does not dereference a null pointer.
+// For INT32 with SIGNED sort order HasCorrectStatistics returns true regardless of version.
+static std::unique_ptr<FileMetaData> make_minimal_file_meta() {
+    tparquet::FileMetaData t_meta;
+    t_meta.__set_version(2);
+    t_meta.__set_num_rows(5);
+    // Root must have num_children > 0 so that SchemaDescriptor::from_thrift
+    // considers it a group (is_group() checks num_children > 0).
+    tparquet::SchemaElement root_sch;
+    root_sch.__set_name("hive_schema");
+    root_sch.__set_num_children(1);
+    // Minimal INT32 leaf child so the schema parses correctly.
+    tparquet::SchemaElement leaf_sch;
+    leaf_sch.__set_name("dummy");
+    leaf_sch.__set_type(tparquet::Type::INT32);
+    t_meta.__set_schema({root_sch, leaf_sch});
+    auto meta = std::make_unique<FileMetaData>();
+    if (!meta->init(t_meta, false).ok()) return nullptr;
+    return meta;
+}
+
+// typed_value_reader_for_path: empty path → nullptr
+TEST(VariantZoneMapTest, TypedValueReaderForPathEmptyPath) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    EXPECT_EQ(nullptr, vr->typed_value_reader_for_path(VariantPath{}));
+}
+
+// typed_value_reader_for_path: key not in shredded fields → nullptr
+TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("nonexistent"));
+    ASSERT_OK(path);
+    EXPECT_EQ(nullptr, vr->typed_value_reader_for_path(*path));
+}
+
+// typed_value_reader_for_path: "age" is a SCALAR INT32 leaf → returns non-null reader
+TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    EXPECT_NE(nullptr, vr->typed_value_reader_for_path(*path));
+}
+
+// VariantVirtualZoneMapReader: non-existent path → row_group_zone_map_filter returns false
+TEST(VariantZoneMapTest, ZoneMapReaderNonExistentPathReturnsFalse) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("nonexistent")));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(10))));
+
+    auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(result);
+    EXPECT_FALSE(result.value()); // no shredded leaf found → no filtering
+}
+
+// VariantVirtualZoneMapReader: valid path but no statistics → returns false (can't filter)
+TEST(VariantZoneMapTest, ZoneMapReaderValidPathNoStatsReturnsFalse) {
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
+
+    auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(result);
+    EXPECT_FALSE(result.value()); // stats absent → can't filter
+}
+
+// VariantVirtualZoneMapReader: statistics [20,24]; predicate "age > 100" → row group filtered
+TEST(VariantZoneMapTest, ZoneMapReaderFiltersWhenPredicateOutOfStatRange) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    // age > 100; but all ages are in [20,24] → entire row group can be skipped
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
+
+    auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(result);
+    EXPECT_TRUE(result.value()); // row group should be filtered (skipped)
+}
+
+// VariantVirtualZoneMapReader: statistics [20,24]; predicate "age > 10" → row group kept
+TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
+    auto* vr = dynamic_cast<VariantColumnReader*>(reader.get());
+    ASSERT_NE(vr, nullptr);
+
+    VariantVirtualZoneMapReader zm_reader(vr, *VariantPathParser::parse_shredded_path(std::string_view("age")));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    // age > 10; max is 24 > 10, so some rows may satisfy → do not skip
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(10))));
+
+    auto result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(result);
+    EXPECT_FALSE(result.value()); // row group should NOT be filtered
 }
 
 } // namespace starrocks::parquet
