@@ -341,5 +341,43 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "     tabletList=10140,10142,10144\n" +
                 "     actualRows=0, avgRowSize=6.0\n" +
                 "     cardinality: 1");
+
+    }
+
+    @Test
+    public void testRewriterSharedMutationWithCaseWhen() throws Exception {
+        // Bug: PushDownAggregateRewriter.rewriteProject() mutates shared CaseWhenOperator
+        // in-place via setThenClause(). When two aggregations (SUM + MIN) reference the same
+        // CASE WHEN column, the first aggregation's processing corrupts the CaseWhenOperator,
+        // causing the second aggregation to see pushed-down column refs instead of original columns.
+        String sql = "SELECT SUM(sub.cval), MIN(sub.cval), sub.fk " +
+                "FROM ( " +
+                "    SELECT t1d AS fk, " +
+                "           CASE WHEN t1b = 1 THEN t1e ELSE NULL END AS cval " +
+                "    FROM test_all_type " +
+                ") sub " +
+                "JOIN t0 ON sub.fk = t0.v1 " +
+                "GROUP BY sub.fk";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "sum");
+        assertContains(plan, "min");
+    }
+
+    @Test
+    public void testRewriterSharedMutationWithIf() throws Exception {
+        // Bug: PushDownAggregateRewriter.rewriteProject() mutates shared CallOperator (IF)
+        // in-place via setChild(). Same root cause as the CaseWhen bug but on the IF path.
+        String sql = "SELECT SUM(sub.cval), MIN(sub.cval), sub.fk " +
+                "FROM ( " +
+                "    SELECT t1d AS fk, " +
+                "           IF(t1b = 1, t1e, NULL) AS cval " +
+                "    FROM test_all_type " +
+                ") sub " +
+                "JOIN t0 ON sub.fk = t0.v1 " +
+                "GROUP BY sub.fk";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "sum");
+        assertContains(plan, "min");
     }
 }
