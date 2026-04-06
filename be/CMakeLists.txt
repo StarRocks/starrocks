@@ -113,6 +113,22 @@ set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
+# Keep the active Thrift package version in the compile command so cached
+# objects built against an older Thrift header ABI cannot be reused after
+# a runtime upgrade.
+set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
+if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
+    file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
+         REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
+    if (STARROCKS_THRIFT_VERSION_LINE)
+        string(REGEX REPLACE "^#define PACKAGE_VERSION \"([^\"]+)\"$" "\\1"
+               STARROCKS_THRIFT_PACKAGE_VERSION "${STARROCKS_THRIFT_VERSION_LINE}")
+        add_compile_definitions(STARROCKS_THRIFT_PACKAGE_VERSION="${STARROCKS_THRIFT_PACKAGE_VERSION}")
+        message(STATUS "Thrift package version is ${STARROCKS_THRIFT_PACKAGE_VERSION}")
+    endif()
+endif()
+
 if (APPLE)
     find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
                  ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
