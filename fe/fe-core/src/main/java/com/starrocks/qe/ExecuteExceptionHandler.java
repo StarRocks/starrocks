@@ -36,7 +36,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
