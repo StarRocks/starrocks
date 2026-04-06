@@ -731,7 +731,7 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
             // other_sz == 1 means the other partition only had the dummy row and no real rows.
             const size_t other_sz = other_key_columns[i]->size();
             if (other_sz > 1) {
-                key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i], 1, other_sz - 1);
+                key_columns[i]->append(*other_key_columns[i], 1, other_sz - 1);
             }
         }
     }
