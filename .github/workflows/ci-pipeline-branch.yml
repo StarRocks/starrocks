@@ -291,7 +291,7 @@ jobs:
     needs:
       - be-checker
       - thirdparty-update
-    if: always() && needs.be-checker.outputs.output1 == 'true'
+    if: "!cancelled() && needs.be-checker.outputs.output1 == 'true'"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}

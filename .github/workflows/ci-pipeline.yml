@@ -169,7 +169,7 @@ jobs:
           ./scripts/check-approve.sh
       
       - name: Check Test Case Info
-        if: always() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''
+        if: "!cancelled() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''"
         id: check_test_case_info
         run: |
           echo "TEST_PR=${{ steps.check_test_case.outputs.TEST_PR }}" >> ./test-pr-info.txt
@@ -479,7 +479,7 @@ jobs:
     needs:
       - be-checker
       - thirdparty-update
-    if: always() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')
+    if: "!cancelled() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
@@ -520,7 +520,7 @@ jobs:
     timeout-minutes: 150
     name: BE UT
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -550,7 +550,7 @@ jobs:
 
       - name: Upload Log
         uses: actions/upload-artifact@v6
-        if: always() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''
+        if: "!cancelled() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''"
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -569,7 +569,7 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -880,9 +880,9 @@ jobs:
       sys_test_need: ${{ steps.run_build.outputs.sys_test_need }}
       pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     if: >
-      always() && 
-      needs.thirdparty-info.result != 'failure' && 
-      needs.fe-codestyle-check.result != 'failure' && 
+      !cancelled() &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.fe-codestyle-check.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
       (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:
@@ -999,7 +999,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, normal]
     needs: build
-    if: always() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'
+    if: "!cancelled() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'"
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1148,7 +1148,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs: [build, deploy]
-    if: always() && needs.deploy.result == 'success'
+    if: "!cancelled() && needs.deploy.result == 'success'"
     timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1228,7 +1228,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
@@ -1254,7 +1254,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1287,7 +1287,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: [deploy, restart-fe, restart-be]
-    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
+    if: "!cancelled() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'"
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1355,7 +1355,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1388,7 +1388,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
