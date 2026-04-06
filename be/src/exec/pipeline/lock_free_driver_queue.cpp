@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/lock_free_driver_queue.h"
 
+#include <limits>
+
 #include "common/config_exec_flow_fwd.h"
 
 namespace starrocks::pipeline {
@@ -46,59 +48,104 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver, int worker_id) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     _queue.enqueue(driver, level, worker_id);
+    // Mark level as non-empty. Skip the RMW if bit is already set (steady-state fast path).
+    uint8_t mask = static_cast<uint8_t>(1u << level);
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     _queue.enqueue(driver, level);
+    uint8_t mask = static_cast<uint8_t>(1u << level);
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
-    // Build a sorted order of levels by weighted accu_time.
-    // With only 8 elements, this is cheaper than the CAS operations in try_dequeue.
-    std::array<std::pair<double, int>, QUEUE_SIZE> scored;
-    int non_empty_count = 0;
-    for (int i = 0; i < QUEUE_SIZE; ++i) {
-        if (_queue.empty(i)) continue;
+    // Read the non-empty bitmap once — replaces 8 × O(P) size_approx() calls.
+    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    // Find the level with minimum weighted accu_time among non-empty levels.
+    int best_level = -1;
+    double min_time = std::numeric_limits<double>::max();
+    int start = worker_id % QUEUE_SIZE;
+    for (int j = 0; j < QUEUE_SIZE; ++j) {
+        int i = (start + j) % QUEUE_SIZE;
+        if (!(bitmap & (1u << i))) continue;
         double weighted_time =
                 static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
                 _level_stats[i].factor;
-        scored[non_empty_count++] = {weighted_time, i};
-    }
-
-    if (non_empty_count == 0) return false;
-
-    std::sort(scored.begin(), scored.begin() + non_empty_count);
-
-    for (int j = 0; j < non_empty_count; ++j) {
-        if (_queue.try_dequeue(scored[j].second, driver, worker_id)) {
-            return true;
+        if (weighted_time < min_time) {
+            min_time = weighted_time;
+            best_level = i;
         }
     }
+
+    if (best_level < 0) return false;
+
+    // Try the best level first — this succeeds most of the time.
+    if (_queue.try_dequeue(best_level, driver, worker_id)) {
+        return true;
+    }
+
+    // Best level was empty (lost race). Try remaining levels with bitmap bit set.
+    // Track which levels failed so we can batch-clear their bits.
+    uint8_t to_clear = static_cast<uint8_t>(1u << best_level);
+    for (int j = 0; j < QUEUE_SIZE; ++j) {
+        int i = (start + j) % QUEUE_SIZE;
+        if (i == best_level || !(bitmap & (1u << i))) continue;
+        if (_queue.try_dequeue(i, driver, worker_id)) {
+            // Clear bits for levels confirmed empty.
+            _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
+            return true;
+        }
+        to_clear |= static_cast<uint8_t>(1u << i);
+    }
+
+    // All levels empty — batch clear.
+    _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
     return false;
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
-    std::array<std::pair<double, int>, QUEUE_SIZE> scored;
-    int non_empty_count = 0;
+    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    int best_level = -1;
+    double min_time = std::numeric_limits<double>::max();
     for (int i = 0; i < QUEUE_SIZE; ++i) {
-        if (_queue.empty(i)) continue;
+        if (!(bitmap & (1u << i))) continue;
         double weighted_time =
                 static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
                 _level_stats[i].factor;
-        scored[non_empty_count++] = {weighted_time, i};
-    }
-
-    if (non_empty_count == 0) return false;
-
-    std::sort(scored.begin(), scored.begin() + non_empty_count);
-
-    for (int j = 0; j < non_empty_count; ++j) {
-        if (_queue.try_dequeue(scored[j].second, driver)) {
-            return true;
+        if (weighted_time < min_time) {
+            min_time = weighted_time;
+            best_level = i;
         }
     }
+
+    if (best_level < 0) return false;
+
+    if (_queue.try_dequeue(best_level, driver)) {
+        return true;
+    }
+
+    uint8_t to_clear = static_cast<uint8_t>(1u << best_level);
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        if (i == best_level || !(bitmap & (1u << i))) continue;
+        if (_queue.try_dequeue(i, driver)) {
+            _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
+            return true;
+        }
+        to_clear |= static_cast<uint8_t>(1u << i);
+    }
+
+    _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
     return false;
 }
 

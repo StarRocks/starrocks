@@ -73,6 +73,12 @@ private:
 
     WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 
+    // Bitmap of levels that are known to be non-empty.
+    // bit i = 1 means level i MAY have items (no false negatives).
+    // bit i = 0 means level i is DEFINITELY empty.
+    // Replaces 8 × O(P) size_approx() calls with a single atomic read on the hot path.
+    std::atomic<uint8_t> _non_empty_bitmap{0};
+
     // Per-level statistics, cache-line aligned to prevent false sharing.
     struct alignas(64) LevelStats {
         std::atomic<int64_t> accu_time_ns{0};
