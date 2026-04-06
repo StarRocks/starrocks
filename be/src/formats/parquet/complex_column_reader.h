@@ -381,6 +381,11 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
+    // Returns the typed_value ColumnReader for the given parsed variant path by walking
+    // _shredded_fields recursively. Returns nullptr if the path is absent or has no typed_value_reader.
+    // Array segments are not supported (shredded paths are object-key-only).
+    const ColumnReader* typed_value_reader_for_path(const VariantPath& path) const;
+
 private:
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
@@ -389,6 +394,57 @@ private:
     // _shredded_fields is fixed after construction, so this only needs to be computed once.
     mutable std::vector<std::string> _cached_auto_paths;
     mutable bool _auto_paths_cached = false;
+};
+
+// A thin, read-only wrapper ColumnReader that exposes zone-map filtering for a specific
+// shredded typed-leaf path within a VariantColumnReader.  It registers no IO ranges and
+// does not support actual data reads.  Registered in GroupReader::_column_readers under
+// the virtual variant slot id so that PredicateFilterEvaluator can invoke zone-map
+// methods on the underlying shredded leaf column's statistics.
+class VariantVirtualZoneMapReader final : public ColumnReader {
+public:
+    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path)
+            : ColumnReader(nullptr), _source(source), _leaf_path(std::move(leaf_path)) {}
+    ~VariantVirtualZoneMapReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override {
+        return Status::NotSupported("VariantVirtualZoneMapReader does not support read_range");
+    }
+
+    void get_levels(level_t**, level_t**, size_t*) override {}
+
+    void set_need_parse_levels(bool) override {}
+
+    // No IO ranges — this reader has no Parquet pages of its own.
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*,
+                                 ColumnIOTypeFlags, bool) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        if (leaf == nullptr) return false;
+        return leaf->row_group_zone_map_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        const ColumnReader* leaf = _source->typed_value_reader_for_path(_leaf_path);
+        if (leaf == nullptr) return false;
+        // page_index_zone_map_filter is non-const in the base class; cast is safe because
+        // the underlying object is non-const (it's a reader owned by VariantColumnReader).
+        return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(predicates, row_ranges, pred_relation,
+                                                                            rg_first_row, rg_num_rows);
+    }
+
+private:
+    VariantColumnReader* _source;
+    VariantPath _leaf_path;
 };
 
 } // namespace starrocks::parquet

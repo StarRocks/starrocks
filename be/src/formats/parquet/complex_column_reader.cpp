@@ -1794,4 +1794,37 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     return Status::OK();
 }
 
+const ColumnReader* VariantColumnReader::typed_value_reader_for_path(const VariantPath& path) const {
+    if (path.empty()) return nullptr;
+    const std::vector<ShreddedFieldNode>* current = &_shredded_fields;
+    const ShreddedFieldNode* found_node = nullptr;
+    for (size_t i = 0; i < path.segments.size(); ++i) {
+        const auto& seg = path.segments[i];
+        if (!seg.is_object()) return nullptr; // array segments not supported in shredded paths
+        found_node = nullptr;
+        for (const auto& node : *current) {
+            if (node.name == seg.key) {
+                found_node = &node;
+                break;
+            }
+        }
+        if (found_node == nullptr) return nullptr;
+        if (i + 1 < path.segments.size()) {
+            current = &found_node->children;
+        }
+    }
+    if (found_node == nullptr) return nullptr;
+    // Only SCALAR leaf nodes carry reliable typed statistics.
+    // NONE means no typed_value was shredded; ARRAY means the leaf is an array boundary —
+    // neither has meaningful scalar min/max for zone-map filtering.
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
+    // Binary types (BINARY, VARBINARY) store raw variant-encoded bytes whose Parquet
+    // min/max reflects byte-order, not semantic value order.  Filtering on them would
+    // produce incorrect results (false negatives), so bail out conservatively.
+    if (found_node->typed_value_read_type == nullptr) return nullptr;
+    if (lt_is_binary(found_node->typed_value_read_type->type)) return nullptr;
+    return found_node->typed_value_reader.get();
+}
+
 } // namespace starrocks::parquet
