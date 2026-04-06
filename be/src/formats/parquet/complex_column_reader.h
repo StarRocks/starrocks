@@ -418,8 +418,8 @@ public:
     void set_need_parse_levels(bool) override {}
 
     // No IO ranges — this reader has no Parquet pages of its own.
-    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*,
-                                 ColumnIOTypeFlags, bool) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
 
     void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
 
@@ -439,7 +439,7 @@ public:
         // page_index_zone_map_filter is non-const in the base class; cast is safe because
         // the underlying object is non-const (it's a reader owned by VariantColumnReader).
         return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                                                            rg_first_row, rg_num_rows);
+                                                                           rg_first_row, rg_num_rows);
     }
 
     // Delegates bloom-filter evaluation to the shredded typed_value leaf reader.
