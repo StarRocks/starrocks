@@ -224,11 +224,8 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-<<<<<<< HEAD
     public static String dump_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
-=======
->>>>>>> 238b51f4d6 ([Enhancement] support dump plan when query exception (#70387))
     public static int dump_log_roll_num = 10;
     @ConfField
     public static String[] dump_log_modules = {"query"};
