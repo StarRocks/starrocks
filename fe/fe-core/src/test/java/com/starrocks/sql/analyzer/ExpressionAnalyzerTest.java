@@ -20,7 +20,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -321,13 +320,12 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Assertions.assertEquals(IntegerType.SMALLINT, resultType.getKeyType());
         Assertions.assertEquals(IntegerType.SMALLINT, resultType.getValueType());
 
-        // Each child must have been wrapped in a CastExpr targeting SMALLINT,
-        // not left as a raw TINYINT literal — this is what caused the BE crash.
+        // Each child must have been coerced to SMALLINT (the declared map key/value type).
+        // castIntLiteral may fold the cast into a typed IntLiteral rather than a CastExpr,
+        // so we only assert the resulting type — not the specific Expr subclass.
         for (Expr child : mapExpr.getChildren()) {
-            Assertions.assertInstanceOf(CastExpr.class, child,
-                    "Expected CastExpr but got: " + child.getClass().getSimpleName());
             Assertions.assertEquals(IntegerType.SMALLINT, child.getType(),
-                    "Cast target type must be SMALLINT");
+                    "Child type must be SMALLINT after coercion");
         }
     }
 
