@@ -716,6 +716,25 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
         columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
 
+    auto& key_columns = _table_items->key_columns;
+    auto& other_key_columns = ht._table_items->key_columns;
+    for (size_t i = 0; i < key_columns.size(); i++) {
+        // If the join key is slot ref, will get from build chunk directly,
+        // otherwise will append from key_column of input
+        if (_table_items->join_keys[i].col_ref == nullptr) {
+            // upgrade to nullable column
+            if (!key_columns[i]->is_nullable() && other_key_columns[i]->is_nullable()) {
+                const size_t row_count = key_columns[i]->size();
+                key_columns[i] = NullableColumn::create(key_columns[i], NullColumn::create(row_count, 0));
+            }
+            // Skip the dummy row at index 0 (same as build column merge above).
+            // other_sz == 1 means the other partition only had the dummy row and no real rows.
+            const size_t other_sz = other_key_columns[i]->size();
+            if (other_sz > 1) {
+                key_columns[i]->append(*other_key_columns[i], 1, other_sz - 1);
+            }
+        }
+    }
     defer.cancel();
 }
 
