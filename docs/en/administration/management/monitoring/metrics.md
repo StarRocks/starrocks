@@ -1,22 +1,25 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks metrics for monitoring"
+sidebar_position: 10
 ---
 
 # General Monitoring Metrics
 
-This topic introduces some important general metrics of StarRocks.
+:::note
 
-For dedicated metrics for materialized views and shared-data clusters, please refer to the corresponding sections:
+Metrics for materialized views and shared-data clusters are detailed in the corresponding sections:
 
 - [Metrics for asynchronous materialized view metrics](./metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](./metrics-shared-data.md)
 
 For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](./Monitor_and_Alert.md).
 
-## Metric items
+:::
 
-### be_broker_count
+Monitoring metrics are listed alphabetically in these files:
 
+<<<<<<< HEAD
 - Unit: Count
 - Type: Average
 - Description: Number of brokers.
@@ -2054,3 +2057,9 @@ ks. For `metadata` delete, this represents the number of rows in deleted data fi
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of delete files removed by Iceberg manual compaction tasks.
+=======
+- [a - c](./metric_details/a-c.md)
+- [d - h](./metric_details/d-h.md)
+- [i - p](./metric_details/i-p.md)
+- [q - z](./metric_details/q-z.md)
+>>>>>>> d27dfe4e55 ([Doc] split metrics doc into multiple pages to improve indexing (#71117))
