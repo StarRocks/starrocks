@@ -23,7 +23,10 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 
+#include <fstream>
+#include <sstream>
 #include <thread>
 #include <tuple>
 
@@ -283,14 +286,18 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
             continue;
         }
         if (e.second.size() == 1) {
-            ret += strings::Substitute("$0tid: $1\n", line_prefix, e.second[0]);
+            int tid = e.second[0];
+            ret += strings::Substitute("$0tid: $1:$2\n", line_prefix, tid, get_thread_name(tid));
         } else {
             ret += strings::Substitute("$0$1 tids: ", line_prefix, e.second.size());
             for (size_t i = 0; i < e.second.size(); i++) {
+                int tid = e.second[i];
                 if (i > 0) {
-                    ret += ",";
+                    ret += ", ";
                 }
-                ret += std::to_string(e.second[i]);
+                ret += std::to_string(tid);
+                ret += ":";
+                ret += get_thread_name(tid);
             }
             ret += "\n";
         }
@@ -346,6 +353,19 @@ std::vector<int> get_thread_id_list() {
     }
     closedir(dir);
     return thread_id_list;
+}
+
+std::string get_thread_name(int tid) {
+    std::string self_path = "/proc/self/task/" + std::to_string(tid) + "/comm";
+    std::ifstream self_file(self_path);
+    if (self_file.is_open()) {
+        std::string name;
+        std::getline(self_file, name);
+        if (!name.empty()) {
+            return name;
+        }
+    }
+    return "unknown";
 }
 
 class ExceptionStackContext {
