@@ -20,7 +20,6 @@
 #include <atomic>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/container/raw_container.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -28,6 +27,7 @@
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config_lake_fwd.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"

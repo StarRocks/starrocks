@@ -22,7 +22,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/simd/simd.h"
 #include "base/time/timezone_utils.h"
@@ -37,6 +36,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"

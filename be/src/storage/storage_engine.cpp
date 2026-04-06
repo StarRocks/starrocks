@@ -45,7 +45,6 @@
 #include <random>
 #include <set>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
@@ -57,6 +56,7 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/bthreads/executor.h"
 #include "cumulative_compaction.h"

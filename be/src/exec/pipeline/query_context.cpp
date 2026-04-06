@@ -17,12 +17,12 @@
 #include <memory>
 #include <vector>
 
-#include "agent/master_info.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"

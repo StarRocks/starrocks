@@ -14,7 +14,7 @@
 
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

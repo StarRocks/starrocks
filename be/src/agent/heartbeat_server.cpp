@@ -42,7 +42,6 @@
 #include <fstream>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "agent/task_worker_pool.h"
 #include "base/network/network_util.h"
 #include "common/config_network_fwd.h"
@@ -52,6 +51,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"

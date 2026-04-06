@@ -39,7 +39,6 @@
 #include <thread>
 
 #include "agent/agent_server.h"
-#include "agent/master_info.h"
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
@@ -49,6 +48,7 @@
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"

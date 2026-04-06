@@ -17,8 +17,8 @@
 #include <bvar/bvar.h>
 #include <fmt/format.h>
 
-#include "agent/master_info.h"
 #include "column/binary_column.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
