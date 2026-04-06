@@ -183,8 +183,8 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
+    const auto& p = c1->immutable_data();
     for (size_t i = 0; i < values.size(); i++) {
-        const auto& p = c1->immutable_data();
         ASSERT_EQ(values[i], p[i]);
     }
 

@@ -90,13 +90,13 @@ public:
         }
 
         if (auto* nullable = dynamic_cast<const NullableColumn*>(arg0.get()); nullable != nullptr) {
-            const auto& nulls = nullable->null_column()->immutable_data();
+            const auto& nulls = nullable->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[i];
             }
         }
         if (auto* nullable = dynamic_cast<const NullableColumn*>(arg1.get()); nullable != nullptr) {
-            const auto& nulls = nullable->null_column()->immutable_data();
+            const auto& nulls = nullable->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[i];
             }
@@ -118,7 +118,7 @@ public:
 
         if (array_elements->has_null()) {
             const auto* nullable_elements = down_cast<const NullableColumn*>(array_elements);
-            const auto& nulls = nullable_elements->null_column()->immutable_data();
+            const auto& nulls = nullable_elements->immutable_null_column_data();
             for (size_t i = 0; i < num_rows; i++) {
                 null_flags[i] |= nulls[selection[i]];
             }
