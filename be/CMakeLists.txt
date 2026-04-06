@@ -742,7 +742,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (APPLE)
+        # Darwin only supports the dynamic ASan runtime selected by -fsanitize=address.
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
         set(DEP_SANITIZE_LIBS -static-libsan)
     else()
