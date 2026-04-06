@@ -573,7 +573,12 @@ public class ExpressionAnalyzer {
                         Expr child = node.getChildren().get(i);
                         if (!child.getType().matchesType(desired)
                                 && TypeManager.canCastTo(child.getType(), desired)) {
-                            ExprCastFunction.castChild(node, desired, i);
+                            try {
+                                ExprCastFunction.castChild(node, desired, i);
+                            } catch (AnalysisException ignored) {
+                                // Value-level cast failed (e.g. '2s' -> INT): leave as-is,
+                                // the runtime will report the error.
+                            }
                         }
                     }
 
