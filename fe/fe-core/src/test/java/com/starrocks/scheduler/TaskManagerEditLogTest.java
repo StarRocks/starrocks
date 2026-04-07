@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class TaskManagerEditLogTest {
@@ -119,5 +120,50 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskState.ACTIVE, followerAlteredTask.getState());
         Assertions.assertNotNull(followerAlteredTask.getSchedule());
         Assertions.assertEquals(120, followerAlteredTask.getSchedule().getPeriod());
+    }
+
+    @Test
+    public void testStopSchedulerWithPausedTask() throws Exception {
+        // Verifies that stopScheduler() cancels the scheduled future even when the task
+        // state is PAUSE. Before the fix, stopScheduler() returned early (true) for PAUSE
+        // tasks without actually cancelling the future.
+        String taskName = "stop_scheduler_paused_task";
+        Task task = new Task(taskName);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setDefinition("SELECT 1");
+        task.setDbName("test_db");
+        task.setCatalogName("test_catalog");
+        task.setState(Constants.TaskState.ACTIVE);
+
+        TaskSchedule schedule = new TaskSchedule();
+        schedule.setStartTime(System.currentTimeMillis() / 1000);
+        schedule.setPeriod(3600);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+
+        // 1. Create the periodical task so it registers a scheduler future
+        masterTaskManager.createTask(task, false);
+        Task createdTask = masterTaskManager.getTask(taskName);
+        Assertions.assertNotNull(createdTask);
+        Assertions.assertEquals(Constants.TaskState.ACTIVE, createdTask.getState());
+
+        ScheduledFuture<?> scheduledFuture = masterTaskManager.getPeriodFutureMap().get(createdTask.getId());
+        Assertions.assertNotNull(scheduledFuture, "Periodical task must register a scheduler future");
+
+        // 2. Manually set task state to PAUSE to simulate an already-paused task
+        createdTask.setState(Constants.TaskState.PAUSE);
+
+        // 3. Alter to EVENT_TRIGGERED which triggers stopScheduler() internally
+        Task changedTask = new Task(taskName);
+        changedTask.setType(Constants.TaskType.EVENT_TRIGGERED);
+        changedTask.setDefinition("SELECT 1");
+        changedTask.setDbName("test_db");
+        changedTask.setCatalogName("test_catalog");
+
+        masterTaskManager.alterTask(createdTask, changedTask, false);
+
+        // 4. The scheduler future must have been cancelled after the fix
+        Assertions.assertTrue(scheduledFuture.isCancelled(),
+                "stopScheduler should cancel the future even when task state is PAUSE");
     }
 }
