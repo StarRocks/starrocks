@@ -296,6 +296,7 @@ jobs:
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+      thirdparty_updated: ${{ steps.info.outputs.thirdparty_updated }}
     steps:
       - name: Check Result
         run: |
@@ -319,9 +320,11 @@ jobs:
             echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
             image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+            echo "thirdparty_updated=true" >> $GITHUB_OUTPUT
           else
             echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
             echo "ubuntu_image_cache_id=" >> $GITHUB_OUTPUT
+            echo "thirdparty_updated=false" >> $GITHUB_OUTPUT
           fi
 
   be-ut:
@@ -495,7 +498,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           IMAGE_CACHE_ID="${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}"
-          if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
+          if [[ "${{ needs.thirdparty-info.outputs.thirdparty_updated }}" == 'true' ]] && [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
