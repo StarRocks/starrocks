@@ -176,6 +176,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
+            LOG.warn("get primary compute node id for tablet {} fail {}.", tabletId, e.getMessage());
             return null;
         }
     }
@@ -188,6 +189,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids for tablet {} fail {}.", tabletId, e.getMessage());
             return null;
         }
     }
