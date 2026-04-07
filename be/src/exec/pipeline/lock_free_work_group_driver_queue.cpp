@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/lock_free_work_group_driver_queue.h"
 
+#include <limits>
+
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
@@ -90,6 +92,16 @@ size_t LockFreeWorkGroupDriverQueue::size() const {
     return _num_drivers.load(std::memory_order_relaxed);
 }
 
+bool LockFreeWorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const {
+    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(driver->workgroup())) {
+        return true;
+    }
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
+    auto* min_entity = _min_wg_entity.load();
+    return min_entity != wg_entity && min_entity &&
+           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
+}
+
 LockFreeDriverQueue* LockFreeWorkGroupDriverQueue::_get_or_create_wg_queue(workgroup::WorkGroup* wg) {
     // Fast path: read lock to check existing entry.
     {
@@ -133,6 +145,22 @@ LockFreeWorkGroupDriverQueue::CandidateList LockFreeWorkGroupDriverQueue::_pick_
 
     // Sort by vruntime ascending (min first).
     std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    // Update min entity cache for should_yield().
+    if (!snapshot.empty()) {
+        workgroup::WorkGroupDriverSchedEntity* min_entity = nullptr;
+        int64_t min_vrt = std::numeric_limits<int64_t>::max();
+        for (auto& [wg, queue] : snapshot) {
+            auto* entity = wg->driver_sched_entity();
+            if (entity->vruntime_ns() < min_vrt) {
+                min_vrt = entity->vruntime_ns();
+                min_entity = entity;
+            }
+        }
+        _min_wg_entity.store(min_entity, std::memory_order_relaxed);
+    } else {
+        _min_wg_entity.store(nullptr, std::memory_order_relaxed);
+    }
 
     return candidates;
 }

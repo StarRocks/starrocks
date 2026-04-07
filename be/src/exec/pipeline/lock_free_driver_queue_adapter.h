@@ -16,6 +16,8 @@
 
 #include "exec/pipeline/lock_free_work_group_driver_queue.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/pipeline_metrics.h"
+#include "exec/workgroup/work_group.h"
 
 namespace starrocks::pipeline {
 
@@ -29,10 +31,7 @@ public:
     void close() override { _impl.close(); }
 
     void put_back(const DriverRawPtr driver) override {
-        DCHECK(!driver->is_in_ready());
-        driver->set_in_ready(true);
-        driver->set_in_queue(this);
-        driver->update_peak_driver_queue_size_counter(_impl.size());
+        _enqueue_driver(driver);
         _impl.put_back(driver);
         _metrics->driver_queue_len.increment(1);
     }
@@ -47,10 +46,7 @@ public:
 
     // Extended version with worker_id for executor threads.
     void put_back_from_executor(const DriverRawPtr driver, int worker_id) {
-        DCHECK(!driver->is_in_ready());
-        driver->set_in_ready(true);
-        driver->set_in_queue(this);
-        driver->update_peak_driver_queue_size_counter(_impl.size());
+        _enqueue_driver(driver);
         _impl.put_back(driver, worker_id);
         _metrics->driver_queue_len.increment(1);
     }
@@ -75,11 +71,20 @@ public:
     size_t size() const override { return _impl.size(); }
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override {
-        // TODO: Implement vruntime-based yield check for lock-free path.
-        return false;
+        return _impl.should_yield(driver, unaccounted_runtime_ns);
     }
 
 private:
+    void _enqueue_driver(const DriverRawPtr driver) {
+        DCHECK(!driver->is_in_ready());
+        driver->set_in_ready(true);
+        driver->set_in_queue(this);
+        driver->update_peak_driver_queue_size_counter(_impl.size());
+        if (driver->workgroup()) {
+            driver->workgroup()->driver_sched_entity()->set_in_queue(this);
+        }
+    }
+
     LockFreeWorkGroupDriverQueue _impl;
 };
 

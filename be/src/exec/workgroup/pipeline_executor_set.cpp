@@ -117,7 +117,8 @@ Status PipelineExecutorSet::start() {
     _scan_executor = std::make_unique<ScanExecutor>(
             std::move(scan_thread_pool),
             config::enable_lock_free_queue
-                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(num_scan_threads()))
+                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(
+                              ScanSchedEntityType::OLAP, num_scan_threads()))
                     : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP),
             _conf.metrics->get_scan_executor_metrics());
     _scan_executor->initialize(num_scan_threads());
@@ -134,8 +135,8 @@ Status PipelineExecutorSet::start() {
     _connector_scan_executor = std::make_unique<ScanExecutor>(
             std::move(connector_scan_thread_pool),
             config::enable_lock_free_queue
-                    ? std::unique_ptr<ScanTaskQueue>(
-                              std::make_unique<LockFreeScanTaskQueueAdapter>(num_connector_scan_threads()))
+                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(
+                              ScanSchedEntityType::CONNECTOR, num_connector_scan_threads()))
                     : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
             _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());

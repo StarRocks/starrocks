@@ -34,7 +34,7 @@ namespace starrocks::workgroup {
 /// No cancel mechanism — scan tasks handle cancellation at execution level.
 class LockFreeWorkGroupScanTaskQueue {
 public:
-    explicit LockFreeWorkGroupScanTaskQueue(int num_workers);
+    LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers);
     ~LockFreeWorkGroupScanTaskQueue() = default;
 
     LockFreeWorkGroupScanTaskQueue(const LockFreeWorkGroupScanTaskQueue&) = delete;
@@ -49,6 +49,10 @@ public:
     bool take(ScanTask& task, bool blocking);
 
     void update_statistics(ScanTask& task, int64_t runtime_ns);
+
+    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const;
+
+    ScanSchedEntityType sched_entity_type() const { return _sched_entity_type; }
     void close();
     size_t size() const;
 
@@ -58,9 +62,15 @@ private:
     LockFreeScanTaskQueue* _get_or_create_wg_queue(WorkGroup* wg);
     CandidateList _pick_sorted_wgs();
 
+    const WorkGroupScanSchedEntity* _sched_entity(const WorkGroup* wg) const;
+
+    ScanSchedEntityType _sched_entity_type;
     int _num_workers;
     std::atomic<size_t> _num_tasks{0};
     std::atomic<bool> _closed{false};
+
+    // Cached min-vruntime entity for lock-free should_yield check.
+    std::atomic<const WorkGroupScanSchedEntity*> _min_wg_entity{nullptr};
 
     moodycamel::LightweightSemaphore _sema;
 

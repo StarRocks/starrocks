@@ -14,12 +14,15 @@
 
 #include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 
+#include <limits>
+
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
-LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(int num_workers) : _num_workers(num_workers) {}
+LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers)
+        : _sched_entity_type(sched_entity_type), _num_workers(num_workers) {}
 
 bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task, int worker_id) {
     auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
@@ -74,10 +77,18 @@ bool LockFreeWorkGroupScanTaskQueue::take(ScanTask& task, bool blocking) {
 }
 
 void LockFreeWorkGroupScanTaskQueue::update_statistics(ScanTask& task, int64_t runtime_ns) {
-    auto* entity = task.workgroup->scan_sched_entity();
-    // NOTE: incr_runtime_ns writes to non-atomic _vruntime_ns.
-    // Task 8 must make _vruntime_ns atomic before enabling this code.
+    auto* entity = const_cast<WorkGroupScanSchedEntity*>(_sched_entity(task.workgroup.get()));
     entity->incr_runtime_ns(runtime_ns);
+}
+
+bool LockFreeWorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
+    if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg)) {
+        return true;
+    }
+    const auto* wg_entity = _sched_entity(wg);
+    const auto* min_entity = _min_wg_entity.load();
+    return min_entity != wg_entity && min_entity &&
+           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
 }
 
 void LockFreeWorkGroupScanTaskQueue::close() {
@@ -124,13 +135,37 @@ LockFreeWorkGroupScanTaskQueue::CandidateList LockFreeWorkGroupScanTaskQueue::_p
     // Score by vruntime without holding any lock.
     candidates.reserve(snapshot.size());
     for (auto& [wg, queue] : snapshot) {
-        int64_t vrt = wg->scan_sched_entity()->vruntime_ns();
-        candidates.push_back({vrt, queue});
+        int64_t vrt = _sched_entity(wg)->vruntime_ns();
+        candidates.emplace_back(vrt, queue);
     }
 
     std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
+    // Update min entity cache for should_yield().
+    if (!candidates.empty()) {
+        // Find the workgroup with minimum vruntime from snapshot.
+        const WorkGroupScanSchedEntity* min_entity = nullptr;
+        int64_t min_vrt = std::numeric_limits<int64_t>::max();
+        for (auto& [wg, queue] : snapshot) {
+            auto* entity = _sched_entity(wg);
+            if (entity->vruntime_ns() < min_vrt) {
+                min_vrt = entity->vruntime_ns();
+                min_entity = entity;
+            }
+        }
+        _min_wg_entity.store(min_entity, std::memory_order_relaxed);
+    } else {
+        _min_wg_entity.store(nullptr, std::memory_order_relaxed);
+    }
+
     return candidates;
+}
+
+const WorkGroupScanSchedEntity* LockFreeWorkGroupScanTaskQueue::_sched_entity(const WorkGroup* wg) const {
+    if (_sched_entity_type == ScanSchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    }
+    return wg->scan_sched_entity();
 }
 
 } // namespace starrocks::workgroup

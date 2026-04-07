@@ -62,6 +62,8 @@ public:
 
     size_t size() const;
 
+    bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const;
+
 private:
     using CandidateList = std::vector<std::pair<int64_t, LockFreeDriverQueue*>>;
 
@@ -74,6 +76,9 @@ private:
     int _num_workers;
     std::atomic<size_t> _num_drivers{0};
     std::atomic<bool> _closed{false};
+
+    // Cached min-vruntime entity for lock-free should_yield check.
+    std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity{nullptr};
 
     moodycamel::LightweightSemaphore _sema;
 
