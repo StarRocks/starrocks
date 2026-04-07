@@ -16,6 +16,8 @@
 
 #include <atomic>
 
+#include "common/logging.h"
+
 namespace starrocks {
 
 // The TP-relative offset of tls_thread_status, written once at startup by
@@ -35,6 +37,10 @@ void init_tls_thread_status_offset() {
         g_tls_thread_status_tpoff =
                 static_cast<int64_t>(reinterpret_cast<uintptr_t>(&tls_thread_status)) - static_cast<int64_t>(tp);
     }
+
+    LOG(INFO) << "[eBPF] tls_thread_status tpoff=" << g_tls_thread_status_tpoff
+              << " query_id_offset=" << CurrentThread::query_id_offset()
+              << " module_type_offset=" << CurrentThread::module_type_offset();
 }
 
 namespace {

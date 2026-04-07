@@ -83,7 +83,9 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 }
 
 void GlobalDriverExecutor::_worker_thread() {
-    auto current_thread = Thread::current_thread();
+    // This executor is dedicated to query pipeline drivers.
+    SET_MODULE_TYPE(ThreadModuleType::QUERY);
+    auto* current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
     std::queue<DriverRawPtr> local_driver_queue;
     while (true) {

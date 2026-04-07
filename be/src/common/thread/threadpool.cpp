@@ -592,7 +592,7 @@ void ThreadPool::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuU
 
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
-    auto current_thread = Thread::current_thread();
+    auto* current_thread = Thread::current_thread();
     InsertOrDie(&_threads, current_thread);
     DCHECK_GT(_num_threads_pending_start, 0);
     _num_threads++;
