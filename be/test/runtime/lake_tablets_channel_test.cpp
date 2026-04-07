@@ -28,6 +28,7 @@
 #include "column/schema.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "runtime/exec_env.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -198,8 +199,10 @@ protected:
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel =
-                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
-                                              next_id(), string(), 1000, std::move(load_mem_tracker));
+                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
+                                              ExecEnv::GetInstance()->diagnose_daemon(),
+                                              ExecEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(), next_id(),
+                                              string(), 1000, std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 0, kIndexId};
         _tablets_channel = new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key,
                                                     _load_channel->mem_tracker(), _root_profile.get());
