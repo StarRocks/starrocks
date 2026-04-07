@@ -612,9 +612,6 @@ public class CostModel {
                 PhysicalHashAggregateOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
                 if (skewInfo != null) {
-                    // Only zero-out the exchange cost for internal skew-elimination edges (stages 1-3).
-                    // Stage 4 is the final aggregate whose parent exchange may serve unrelated purposes
-                    // (e.g., repartitioning for a join), so it must retain its normal cost.
                     if (enableForceGroupBySkewEliminateWhenSkewed && skewInfo.isGroupBySkewDetected()
                             && skewInfo.getStage() < 4) {
                         factor = 0.0;
