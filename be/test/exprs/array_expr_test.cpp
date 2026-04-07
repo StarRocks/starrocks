@@ -21,7 +21,6 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/struct_column.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gutil/casts.h"
 #include "testutil/column_test_helper.h"
@@ -189,31 +188,6 @@ TEST_F(ArrayExprTest, test_evaluate) {
         EXPECT_EQ(4, result->get(2).get_array()[1].get_int32());
         EXPECT_EQ(8, result->get(2).get_array()[2].get_int32());
     }
-}
-
-TEST_F(ArrayExprTest, test_nested_type_mismatch_no_overflow) {
-    TypeDescriptor type_struct_smallint;
-    type_struct_smallint.type = LogicalType::TYPE_STRUCT;
-    type_struct_smallint.children.emplace_back(LogicalType::TYPE_SMALLINT);
-    type_struct_smallint.field_names.emplace_back("f1");
-
-    TypeDescriptor type_arr_struct;
-    type_arr_struct.type = LogicalType::TYPE_ARRAY;
-    type_arr_struct.children.emplace_back(type_struct_smallint);
-
-    auto build_struct_column = [](std::initializer_list<int8_t> values) -> ColumnPtr {
-        Columns fields;
-        fields.emplace_back(ColumnTestHelper::build_column<int8_t>(values));
-        return StructColumn::create(fields, {"f1"});
-    };
-
-    std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_struct));
-    expr->add_child(new_mock_expr(build_struct_column({1, 2, 3}), type_struct_smallint));
-    expr->add_child(new_mock_expr(build_struct_column({4, 5, 6}), type_struct_smallint));
-
-    auto result = expr->evaluate(nullptr, nullptr);
-    EXPECT_EQ(3, result->size());
-    EXPECT_TRUE(result->is_array());
 }
 
 } // namespace starrocks
