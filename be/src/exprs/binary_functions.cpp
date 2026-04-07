@@ -119,9 +119,11 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
     (void)has_null;
-    const int size = c0->size();
+    const int size = num_rows;
     int32_t width = c1->get(0).get_int32();
     uint8_t* raw_null_flags = null_flags->get_data().data();
     auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
@@ -133,7 +135,7 @@ StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* co
         if (raw_null_flags[i]) {
             result.append_null();
         } else {
-            Slice src_value = raw_c0[i];
+            Slice src_value = raw_c0[c0_is_const ? 0 : i];
             result.append(Slice(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size())));
         }
     }

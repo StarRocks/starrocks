@@ -330,8 +330,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
     const int32_t original_scale = decimalv3_col->scale();
@@ -347,24 +349,38 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* con
 
     const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
     MutableColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
-    res->resize_uninitialized(size);
-
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
-    for (auto i = 0; i < size; i++) {
-        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-    }
+    if (c0_is_const) {
+        res->resize_uninitialized(1);
+        RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
 #define ABS(x) ((x) < 0 ? -(x) : (x))
-    for (int i = 0; i < size; i++) {
-        if (raw_null_flags[i] != 1 && ABS(raw_res[i]) >= max_val) {
+        if (raw_null_flags[0] != 1 && ABS(raw_res[0]) >= max_val) {
             std::stringstream error;
             error << "Truncate to decimal(" << original_precision << ", " << original_scale
                   << ") failed, because the result is overflow.";
             context->set_error(error.str().c_str());
             return Status::RuntimeError(error.str());
         }
-    }
 #undef ABS
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        res->resize_uninitialized(size);
+        RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+        for (auto i = 0; i < size; i++) {
+            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
+        }
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+        for (int i = 0; i < size; i++) {
+            if (raw_null_flags[i] != 1 && ABS(raw_res[i]) >= max_val) {
+                std::stringstream error;
+                error << "Truncate to decimal(" << original_precision << ", " << original_scale
+                      << ") failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+        }
+#undef ABS
+    }
     if (has_null) {
         res = NullableColumn::create(std::move(res), std::move(null_flags));
     }
@@ -381,28 +397,42 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
 
     const auto& raw_null_flags = null_flags->immutable_data();
     auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
     const auto& raw_c0 = int_col->immutable_data();
     MutableColumnPtr res = RunTimeColumnType<Type>::create();
-    res->resize_uninitialized(size);
 
-    // result column is mutable, use non-const raw pointer
-    auto& raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data();
-    for (auto i = 0; i < size; i++) {
-        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-    }
 #define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
-    for (int i = 0; i < size; i++) {
-        if (raw_null_flags[i] != 1 && haveDifferentSigns(raw_res[i], raw_c0[i])) {
+    if (c0_is_const) {
+        res->resize_uninitialized(1);
+        RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
+        if (raw_null_flags[0] != 1 && haveDifferentSigns(raw_res[0], raw_c0[0])) {
             std::stringstream error;
             error << "Truncate to integer failed, because the result is overflow.";
             context->set_error(error.str().c_str());
             return Status::RuntimeError(error.str());
+        }
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        res->resize_uninitialized(size);
+        RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+        for (auto i = 0; i < size; i++) {
+            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
+        }
+        for (int i = 0; i < size; i++) {
+            if (raw_null_flags[i] != 1 && haveDifferentSigns(raw_res[i], raw_c0[i])) {
+                std::stringstream error;
+                error << "Truncate to integer failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
         }
     }
 #undef haveDifferentSigns
@@ -420,8 +450,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, 
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<Type>(c0);
@@ -450,8 +482,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
@@ -476,8 +510,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
@@ -504,8 +540,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* cont
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
 
     auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
@@ -558,8 +596,10 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* conte
     ColumnPtr c1 = columns[1];
     NullColumn::MutablePtr null_flags;
     bool has_null = false;
+    bool c0_is_const = false;
+    int num_rows = 0;
     PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
+    const int size = num_rows;
     int64_t width = c1->get(0).get_int32();
     auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
 
