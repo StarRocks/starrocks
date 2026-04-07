@@ -660,12 +660,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
     _small_file_mgr = new SmallFileMgr(config::small_file_dir);
-    _runtime_filter_worker = new RuntimeFilterWorker(this);
+    _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
-    auto runtime_filter_event_func = [] {
-        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
+    auto runtime_filter_event_func = [this] {
+        auto pool = _runtime_filter_worker;
         return (pool == nullptr) ? 0U : pool->queue_size();
     };
     REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
