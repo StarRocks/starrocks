@@ -16,7 +16,12 @@
 
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_task_queue.h"
+<<<<<<< HEAD
 #include "util/starrocks_metrics.h"
+=======
+#include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
+>>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
 
 namespace starrocks::workgroup {
 
@@ -50,7 +55,9 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
 }
 
 void ScanExecutor::worker_thread() {
-    auto current_thread = Thread::current_thread();
+    // This executor is dedicated to query scan/IO tasks.
+    SET_MODULE_TYPE(ThreadModuleType::QUERY);
+    auto* current_thread = Thread::current_thread();
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;

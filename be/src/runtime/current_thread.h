@@ -64,10 +64,14 @@ class TUniqueId;
 // Stored in CurrentThread::_module_type (TLS) so external profilers can
 // attribute CPU samples to non-query workloads (compaction, load, etc.).
 enum class ThreadModuleType : int32_t {
-    UNKNOWN = 0, // background / unclassified
-    QUERY = 1,   // SQL query execution (pipeline driver / scan I/O)
-    // More module types (COMPACTION, LOAD, SCHEMA_CHANGE, CLONE,
-    // REPLICATION, UPDATE …) will be added in future commits.
+    UNKNOWN = 0,       // background / unclassified
+    QUERY = 1,         // SQL query execution (pipeline driver / scan I/O)
+    LOAD = 2,          // data import (stream load, broker load, push, etc.)
+    COMPACTION = 3,    // compaction tasks
+    SCHEMA_CHANGE = 4, // schema change / alter tablet
+    CLONE = 5,         // tablet clone / replica
+    REPLICATION = 6,   // cross-cluster replication (remote/replicate snapshot)
+    STORAGE = 7,       // storage background maintenance (GC, checkpoint, cache, etc.)
 };
 
 inline thread_local MemTracker* tls_mem_tracker = nullptr;
@@ -279,6 +283,11 @@ public:
     void set_module_type(ThreadModuleType type) { _module_type = type; }
     ThreadModuleType get_module_type() const { return _module_type; }
 
+    // Field offsets within CurrentThread, exposed for eBPF programs that locate
+    // these fields via g_tls_thread_status_tpoff + g_tls_*_offset.
+    static constexpr size_t query_id_offset() { return offsetof(CurrentThread, _query_id); }
+    static constexpr size_t module_type_offset() { return offsetof(CurrentThread, _module_type); }
+
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
     const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
@@ -407,6 +416,7 @@ inline thread_local CurrentThread tls_thread_status;
 // Written once at startup by init_tls_thread_status_offset(); external profilers
 // such as query_cpu_profile.py read this from /proc/PID/mem to obtain the exact
 // offset without ELF arithmetic or DTV walking.
+// TP-relative offset of the tls_thread_status object itself.
 extern volatile int64_t g_tls_thread_status_tpoff;
 void init_tls_thread_status_offset();
 
@@ -512,6 +522,12 @@ public:
 private:
     ThreadModuleType _old;
 };
+
+// Usage: SET_MODULE_TYPE(ThreadModuleType::QUERY);
+// Sets the module type without saving/restoring the previous value.
+// Use this at the top of a dedicated worker thread that always runs the same
+// module type for its entire lifetime.
+#define SET_MODULE_TYPE(type) tls_thread_status.set_module_type(type)
 
 // Usage: SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
 // Restores the previous module type on scope exit (supports nesting).

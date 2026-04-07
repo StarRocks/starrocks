@@ -17,7 +17,14 @@
 #include <chrono>
 #include <thread>
 
+<<<<<<< HEAD
 #include "compaction_manager.h"
+=======
+#include "common/config_compaction_fwd.h"
+#include "common/thread/thread.h"
+#include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
+>>>>>>> 5b591b6191 ([Enhancement] Propagate query_id and ThreadModuleType to all worker threads (#71314))
 #include "storage/data_dir.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
@@ -68,6 +75,7 @@ void CompactionManager::schedule() {
 }
 
 void CompactionManager::_schedule() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     LOG(INFO) << "start compaction scheduler";
     while (!_stop.load(std::memory_order_consume)) {
         ++_round;
@@ -99,6 +107,7 @@ void CompactionManager::submit_compaction_task(const CompactionCandidate& compac
     auto tablet = std::move(compaction_candidate.tablet);
     auto type = compaction_candidate.type;
     auto st = _compaction_pool->submit_func([tablet, task_id, manager, type] {
+        SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
         auto compaction_task = tablet->create_compaction_task();
         if (compaction_task != nullptr) {
             CompactionCandidate candidate;
@@ -341,6 +350,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
 }
 
 void CompactionManager::_dispatch_worker() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     while (!_stop.load(std::memory_order_consume)) {
         {
             std::lock_guard lock(_dispatch_mutex);
