@@ -1962,7 +1962,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testGetQueryProfileWithoutRequestAllFrontendDoesNotForward() throws TException {
+    public void testGetQueryProfileWithoutRequestAllFrontend() throws TException {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetProfileRequest request = new TGetProfileRequest();
         request.setQuery_id(Lists.newArrayList("3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90"));
@@ -2036,11 +2036,11 @@ public class FrontendServiceImplTest {
         request.setQuery_id(Lists.newArrayList(queryId));
         request.setIs_request_all_frontend(true);
 
-        Frontend failedFrontend = new Frontend(FrontendNodeType.FOLLOWER, "failed", "127.0.0.2", 9010);
+        Frontend failedFrontend = new Frontend(FrontendNodeType.FOLLOWER, "node01", "127.0.0.2", 9010);
         failedFrontend.setRpcPort(9021);
         failedFrontend.setAlive(true);
 
-        Frontend frontend = new Frontend(FrontendNodeType.FOLLOWER, "empty", "127.0.0.3", 9010);
+        Frontend frontend = new Frontend(FrontendNodeType.FOLLOWER, "node02", "127.0.0.3", 9010);
         frontend.setRpcPort(9022);
         frontend.setAlive(true);
 
