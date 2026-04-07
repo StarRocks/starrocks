@@ -19,7 +19,7 @@ displayed_sidebar: docs
 | MIN_VERSION   | タブレットの最小バージョン。                     |
 | NUM_ROWSET    | タブレット内の Rowset 数。                       |
 | NUM_ROW       | タブレット内の行数。                             |
-| DATA_SIZE     | Rowset **データ**のディスクサイズ（セグメントファイルサイズに基づく列データ、バイト）。Short Key、Zone Map、Bloom Filter などの Rowset 内埋め込みインデックスも含みますが、クラウドネイティブ PK の SSTable など別ファイルとして管理される永続化主キーインデックスは含みません。 |
+| DATA_SIZE     | タブレットのデータサイズ（バイト）。             |
 | INDEX_MEM     | タブレットのインデックスメモリ使用量（バイト）。 |
 | CREATE_TIME   | タブレットの作成時刻（Unix タイムスタンプ、秒）。 |
 | STATE         | タブレットの状態（例: `NORMAL`、`REPLICA_MISSING`）。 |
@@ -27,6 +27,6 @@ displayed_sidebar: docs
 | DATA_DIR      | タブレットが保存されているデータディレクトリ。   |
 | SHARD_ID      | タブレットのシャード ID。                        |
 | SCHEMA_HASH   | タブレットのスキーマハッシュ。                   |
-| INDEX_DISK    | **主キー**タブレットでは**永続化主キーインデックス**のディスクサイズ（クラウドネイティブ PK の SSTable など）。Rowset 内埋め込みインデックスは含みません。その他のタイプでは 0 になる場合があります。 |
+| INDEX_DISK    | タブレットのインデックスディスク使用量（バイト）。 |
 | MEDIUM_TYPE   | タブレットのメディアタイプ（例: `HDD`、`SSD`）。  |
 | NUM_SEGMENT   | タブレット内のセグメント数。                     |

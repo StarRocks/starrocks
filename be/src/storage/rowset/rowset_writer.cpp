@@ -1353,6 +1353,7 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1365,10 +1366,7 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
@@ -1376,11 +1374,10 @@ Status VerticalRowsetWriter::final_flush() {
         segment_writer.reset();
     }
     {
-        // _total_data_size now holds total segment file bytes (data + embedded index).
-        // _total_index_size was accumulated earlier by _flush_columns(). Subtract it so
-        // _total_data_size holds only column data bytes, matching the horizontal writer path.
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size -= _total_index_size;
+        _total_data_size += total_segment_file_bytes - _total_index_size;
     }
     return Status::OK();
 }
