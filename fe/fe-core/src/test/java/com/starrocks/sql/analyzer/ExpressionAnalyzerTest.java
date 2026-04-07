@@ -42,12 +42,8 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-<<<<<<< HEAD
-=======
 import java.util.Arrays;
-import java.util.List;
 
->>>>>>> fdc3329597 ([BugFix] Fix type mismatch in map literal when explicit key/value types are declared (#71316))
 public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
