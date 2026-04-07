@@ -175,16 +175,16 @@ public class DataSkew {
             if (nullSkewInfo.nullSkewFactor.get() >= mcvSkewInfo.mcvSkewFactor.get()) {
                 return new SkewInfo(SkewType.SKEWED_NULL);
             } else {
-                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.mcvs);
+                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
             }
         } else if (nullSkewInfo.skewed) {
             return new SkewInfo(SkewType.SKEWED_NULL);
         } else if (mcvSkewInfo.skewed) {
-            return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.mcvs);
+            return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
         }
 
         // Can not deduce skew.
-        return new SkewInfo(SkewType.NOT_SKEWED);
+        return new SkewInfo(SkewType.NOT_SKEWED, mcvSkewInfo.additionalInfo);
     }
 
     public static SkewCandidates getSkewCandidates(@NotNull Statistics statistics,
