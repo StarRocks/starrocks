@@ -233,8 +233,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > std::numeric_limits<RunTimeCppType<Type>>::max())) {
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
@@ -250,8 +250,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > std::numeric_limits<RunTimeCppType<Type>>::max())) {
                     nulls[i] = 1;
                 }
             }
@@ -290,8 +290,8 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
             for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                    value > numeric_limits<RunTimeCppType<Type>>::max()) {
+                if (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                    value > std::numeric_limits<RunTimeCppType<Type>>::max()) {
                     // can not accept null, so we have to discard it.
                     filter[i] = 0;
                     if (!reported) {

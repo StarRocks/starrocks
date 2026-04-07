@@ -72,8 +72,8 @@ struct StackTraceTask {
     int depth{0};
     bool done = false;
     int64_t cost_us = 0;
-    string to_string(const std::string& line_prefix = "") const {
-        string ret;
+    std::string to_string(const std::string& line_prefix = "") const {
+        std::string ret;
         for (int i = 0; i < depth; ++i) {
             char line[2048];
             char buf[1024];
@@ -215,7 +215,7 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
     return ret;
 }
 
-std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tids, const string& pattern,
+std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tids, const std::string& pattern,
                                                      int timeout_ms, const std::string& line_prefix = "") {
     int64_t start_us = MonotonicMicros();
     static bool sighandler_installed = false;
@@ -283,13 +283,13 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
             total_task_cost_us += task.cost_us;
         }
     }
-    string ret;
+    std::string ret;
     int64_t total_symbolize_cost_us = 0;
     for (auto& e : task_map) {
         int64_t ts = MonotonicMicros();
-        string stack_trace = e.first.to_string(line_prefix);
+        std::string stack_trace = e.first.to_string(line_prefix);
         total_symbolize_cost_us += MonotonicMicros() - ts;
-        if (!pattern.empty() && stack_trace.find(pattern) == string::npos) {
+        if (!pattern.empty() && stack_trace.find(pattern) == std::string::npos) {
             continue;
         }
         if (e.second.size() == 1) {
@@ -402,7 +402,7 @@ public:
         }
         return exception_name;
     }
-    bool prefix_in_black_list(const string& exception) {
+    bool prefix_in_black_list(const std::string& exception) {
         for (auto const& str : _black_list) {
             if (exception.rfind(str, 0) == 0) {
                 return true;
@@ -411,7 +411,7 @@ public:
         return false;
     }
 
-    bool prefix_in_white_list(const string& exception) {
+    bool prefix_in_white_list(const std::string& exception) {
         for (auto const& str : _white_list) {
             if (exception.rfind(str, 0) == 0) {
                 return true;
@@ -432,8 +432,8 @@ private:
         _black_list = strings::Split(starrocks::config::exception_stack_black_list, ",");
     }
     ~ExceptionStackContext() = default;
-    std::vector<string> _white_list;
-    std::vector<string> _black_list;
+    std::vector<std::string> _white_list;
+    std::vector<std::string> _black_list;
     int _level;
 };
 
@@ -447,7 +447,7 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
     SCOPED_SET_CATCHED(false);
     auto print_level = ExceptionStackContext::get_instance()->get_level();
     if (print_level != 0) {
-        string exception_name = ExceptionStackContext::get_exception_name((void*)info);
+        std::string exception_name = ExceptionStackContext::get_exception_name((void*)info);
         if ((print_level == 1 && ExceptionStackContext::get_instance()->prefix_in_white_list(exception_name)) ||
             print_level == -1 ||
             (print_level == 2 && !ExceptionStackContext::get_instance()->prefix_in_black_list(exception_name))) {

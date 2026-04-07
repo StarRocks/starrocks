@@ -107,7 +107,7 @@ Status DataCacheUtils::parse_conf_datacache_disk_paths(const std::string& config
             continue;
         }
 
-        string canonicalized_path;
+        std::string canonicalized_path;
         status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
         if (!status.ok()) {
             LOG(WARNING) << "datacache path can not be canonicalized. may be not exist. path: " << item;
