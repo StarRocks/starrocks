@@ -291,7 +291,7 @@ std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator:
         }
         if (should_spill_hash_table && _agg_op->aggregator()->hash_map_variant().size() > 0) {
             if (!iterator_initialized) {
-                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
+                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->_state_allocator.begin();
                 iterator_initialized = true;
             }
             if (!_agg_op->aggregator()->is_ht_eos()) {
