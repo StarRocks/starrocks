@@ -81,13 +81,15 @@ std::shared_ptr<FetchProcessor> create_fetch_processor(const std::shared_ptr<Sta
 }
 
 std::unique_ptr<RuntimeState> create_runtime_state(int query_timeout_s) {
+    ExecEnv* exec_env = ExecEnv::GetInstance();
     TUniqueId fragment_instance_id;
     fragment_instance_id.hi = 1;
     fragment_instance_id.lo = 2;
     TQueryOptions query_options;
     query_options.__set_query_timeout(query_timeout_s);
     TQueryGlobals query_globals;
-    return std::make_unique<RuntimeState>(fragment_instance_id, query_options, query_globals, ExecEnv::GetInstance());
+    return std::make_unique<RuntimeState>(fragment_instance_id, query_options, query_globals,
+                                          &exec_env->query_execution_services(), exec_env);
 }
 
 bool wait_task_done(const FetchTaskPtr& task, int timeout_ms) {
