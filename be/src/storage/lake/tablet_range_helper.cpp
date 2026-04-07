@@ -26,9 +26,56 @@
 #include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/types.h"
+#include "types/storage_type_traits.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+// Produce a Datum holding the minimum value for the given logical type.
+// Uses TypeInfo::set_to_min() which calls std::numeric_limits<CppType>::lowest().
+// Covers all PK-supported types (APPLY_FOR_ALL_PK_SUPPORT_TYPE in logical_type_infra.h).
+template <LogicalType TYPE>
+static Datum datum_from_type_min_impl() {
+    using CppType = StorageCppType<TYPE>;
+    CppType value{};
+    get_type_info(TYPE)->set_to_min(&value);
+    Datum d;
+    d.set(value);
+    return d;
+}
+
+static StatusOr<Datum> datum_from_type_min(LogicalType type) {
+    switch (type) {
+    case TYPE_BOOLEAN: {
+        bool v;
+        get_type_info(TYPE_BOOLEAN)->set_to_min(&v);
+        Datum d;
+        d.set_int8(v);
+        return d;
+    }
+    case TYPE_TINYINT:
+        return datum_from_type_min_impl<TYPE_TINYINT>();
+    case TYPE_SMALLINT:
+        return datum_from_type_min_impl<TYPE_SMALLINT>();
+    case TYPE_INT:
+        return datum_from_type_min_impl<TYPE_INT>();
+    case TYPE_BIGINT:
+        return datum_from_type_min_impl<TYPE_BIGINT>();
+    case TYPE_LARGEINT:
+        return datum_from_type_min_impl<TYPE_LARGEINT>();
+    case TYPE_DATE:
+        return datum_from_type_min_impl<TYPE_DATE>();
+    case TYPE_DATETIME:
+        return datum_from_type_min_impl<TYPE_DATETIME>();
+    case TYPE_VARCHAR: {
+        Datum d;
+        d.set_slice(Slice("", 0));
+        return d;
+    }
+    default:
+        return Status::NotSupported(fmt::format("unsupported type for PK min datum: {}", type));
+    }
+}
 
 Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
@@ -146,11 +193,18 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
             RETURN_IF_ERROR(DatumVariant::from_proto(tuple.values(i), &datum, &type_desc));
             const bool is_nullable = tablet_schema->column(idx).is_nullable();
             if (!is_nullable && datum.is_null()) {
-                return Status::InvalidArgument("Non-nullable primary key contains NULL in tablet range");
+                // PK columns are non-nullable, so a NULL variant in the range boundary
+                // can only represent a MIN sentinel (FE maps MIN → NULL_VALUE).
+                // Fill with the per-type minimum value for correct PK encoding.
+                ASSIGN_OR_RETURN(datum, datum_from_type_min(type_desc.type));
+                auto column = ColumnHelper::create_column(type_desc, false);
+                column->append_datum(datum);
+                chunk->append_column(std::move(column), (SlotId)idx);
+            } else {
+                auto column = ColumnHelper::create_column(type_desc, is_nullable);
+                column->append_datum(datum);
+                chunk->append_column(std::move(column), (SlotId)idx);
             }
-            auto column = ColumnHelper::create_column(type_desc, is_nullable);
-            column->append_datum(datum);
-            chunk->append_column(std::move(column), (SlotId)idx);
         }
 
         std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -198,15 +252,17 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
 
             if (t_val.__isset.value) {
                 pb_val->set_value(t_val.value);
-            } else {
-                return Status::InvalidArgument("TVariant value is required");
+            } else if (!t_val.__isset.variant_type || t_val.variant_type == TVariantType::NORMAL_VALUE) {
+                return Status::InvalidArgument("TVariant value is required for NORMAL_VALUE variant");
             }
 
-            if (t_val.__isset.variant_type) {
-                pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
-            } else {
+            if (!t_val.__isset.variant_type) {
                 return Status::InvalidArgument("TVariant variant_type is required");
             }
+            if (t_val.variant_type == TVariantType::MINIMUM || t_val.variant_type == TVariantType::MAXIMUM) {
+                return Status::InvalidArgument("MINIMUM/MAXIMUM variant is not supported in tablet range");
+            }
+            pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
         }
         return Status::OK();
     };
