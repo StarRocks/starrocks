@@ -193,15 +193,6 @@ MemTracker* process_mem_tracker_provider() {
     return GlobalEnv::GetInstance()->process_mem_tracker();
 }
 
-std::vector<std::string> collect_store_root_paths(const std::vector<StorePath>& store_paths) {
-    std::vector<std::string> store_roots;
-    store_roots.reserve(store_paths.size());
-    for (const auto& store_path : store_paths) {
-        store_roots.emplace_back(store_path.path);
-    }
-    return store_roots;
-}
-
 } // namespace
 
 bool GlobalEnv::_is_init = false;
@@ -600,7 +591,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (store_paths.empty() && as_cn) {
         _load_path_mgr = new DummyLoadPathMgr();
     } else {
-        _load_path_mgr = new LoadPathMgr(collect_store_root_paths(store_paths));
+        _load_path_mgr = new LoadPathMgr(this);
     }
 
     std::unique_ptr<ThreadPool> load_rowset_pool;

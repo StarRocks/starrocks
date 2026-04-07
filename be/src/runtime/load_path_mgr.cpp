@@ -47,6 +47,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/join.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 
@@ -55,26 +56,20 @@ namespace starrocks {
 static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
 
-LoadPathMgr::LoadPathMgr(std::vector<std::string> store_roots) : _store_roots(std::move(store_roots)) {}
+LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env) {}
 LoadPathMgr::~LoadPathMgr() {
     _stop.set_value(true);
     pthread_join(_cleaner_id, nullptr);
 }
 Status LoadPathMgr::init() {
     _path_vec.clear();
-    if (_store_roots.empty()) {
-        return Status::InternalError("No load path configed.");
-    }
-
-    _path_vec.reserve(_store_roots.size());
-    for (const auto& path : _store_roots) {
-        _path_vec.push_back(path + MINI_PREFIX);
+    for (auto& path : _exec_env->store_paths()) {
+        _path_vec.push_back(path.path + MINI_PREFIX);
     }
     LOG(INFO) << "Load path configured to [" << JoinStrings(_path_vec, ",") << "]";
 
     // error log is saved in first root path
-    _error_log_dir = _store_roots[0] + ERROR_LOG_PREFIX;
-    _rejected_record_dir = _store_roots[0] + REJECTED_RECORD_PREFIX;
+    _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
 
     // check and make dir
     RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
@@ -174,7 +169,7 @@ std::string LoadPathMgr::get_load_rejected_record_absolute_path(const std::strin
                                                                 const TUniqueId& fragment_instance_id) {
     std::string path;
     if (rejected_record_dir.empty()) {
-        path = _rejected_record_dir;
+        path = _exec_env->store_paths()[0].path + REJECTED_RECORD_PREFIX;
     } else {
         path = rejected_record_dir;
     }
