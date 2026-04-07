@@ -21,7 +21,6 @@ src/exec/pipeline/pipeline_driver_poller.cpp
 src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
 src/exec/pipeline/sink/sink_io_buffer.cpp
-src/exec/query_cache/cache_operator.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/spill/query_spill_manager.cpp

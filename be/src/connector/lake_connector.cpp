@@ -33,7 +33,6 @@
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/service_contexts.h"
@@ -53,11 +52,10 @@ namespace starrocks::connector {
 namespace {
 
 lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
-    if (const auto* services = state->query_execution_services(); services != nullptr && services->lake != nullptr) {
-        return services->lake->lake_tablet_manager;
-    }
-    auto* exec_env = state->exec_env();
-    return exec_env != nullptr ? exec_env->lake_tablet_manager() : nullptr;
+    const auto* query_execution_services = state->query_execution_services();
+    return query_execution_services != nullptr && query_execution_services->lake != nullptr
+                   ? query_execution_services->lake->lake_tablet_manager
+                   : nullptr;
 }
 
 } // namespace
@@ -1215,7 +1213,9 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
-    _tablet_manager = lake_tablet_manager(state);
+    if (_tablet_manager == nullptr) {
+        _tablet_manager = lake_tablet_manager(state);
+    }
     RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
