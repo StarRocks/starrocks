@@ -53,7 +53,7 @@
 #include "util/scoped_cleanup.h"
 #include "util/spinlock.h"
 
-        using std::atomic;
+using std::atomic;
 using std::shared_ptr;
 using std::string;
 using std::thread;
