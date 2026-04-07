@@ -200,7 +200,13 @@ From v3.3.0 onwards, StarRocks supports the metadata reading and caching policie
 
 ### Iceberg views
 
+<<<<<<< HEAD
 StarRocks supports querying Iceberg views from v3.3.2 onwards. Currently, only Iceberg views created through StarRocks are supported.
+=======
+StarRocks supports Iceberg views on REST from v3.3.2 and on Hive from v3.4.1.
+
+Currently, only Iceberg views created through StarRocks are supported. Starting with v3.5, adding StarRocks syntax style definitions to existing Iceberg views is supported.
+>>>>>>> dc60cc63b4 ([Doc] Clarify Iceberg views support in documentation (#71358))
 
 ### Query statistics interfaces
 
