@@ -60,8 +60,13 @@ public abstract class TabletMetadataUpdateAgentTask extends AgentTask {
 
     protected long txnId;
 
+    // The original signature computed at construction time (e.g., tablets.hashCode()).
+    // Kept immutable so that setTxnId() is idempotent.
+    private final long baseSignature;
+
     protected TabletMetadataUpdateAgentTask(long backendId, long signature) {
         super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO, -1L, -1L, -1L, -1L, -1L, signature);
+        this.baseSignature = signature;
     }
 
     public void setLatch(MarkedCountDownLatch<Long, Set<Long>> latch) {
@@ -75,7 +80,7 @@ public abstract class TabletMetadataUpdateAgentTask extends AgentTask {
         // table/partition produce identical signatures, causing AgentTaskQueue to
         // reject the second task or FE to match BE's old task completion report
         // to the wrong job.
-        this.signature = Objects.hash(this.signature, txnId);
+        this.signature = Objects.hash(baseSignature, txnId);
     }
 
     public void countDownLatch(long backendId, Set<Long> tablets) {

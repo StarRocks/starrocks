@@ -45,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 3. When BE reported old task completion, FE matched it to the new task (wrong job)
  * 4. New job proceeded with wrong txnId -> publish failed with 404
  *
- * Fix: setTxnId() now updates signature to Objects.hash(tablets, txnId), ensuring
+ * Fix: setTxnId() now updates signature to Objects.hash(baseSignature, txnId), ensuring
  * different alter jobs produce different signatures even for the same tablet set.
  */
 public class AgentTaskQueueSignatureCollisionTest {
