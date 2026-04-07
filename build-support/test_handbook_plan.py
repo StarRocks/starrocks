@@ -70,7 +70,7 @@ class HandbookPlanTest(unittest.TestCase):
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
                 result = MODULE.main(
-                    ["create", "--local", "--from", "handbook/plans/active/roadmap.md"],
+                    ["create", "--local", "--from", "handbook/plans/active/../active/roadmap.md"],
                     repo_root=repo,
                 )
 
@@ -83,6 +83,30 @@ class HandbookPlanTest(unittest.TestCase):
             self.assertIn("## Summary", created_text)
             self.assertIn("## Decision Log", created_text)
 
+    def test_create_local_override_rejects_duplicate_after_path_normalization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    0,
+                    MODULE.main(
+                        ["create", "--local", "--from", "handbook/plans/active/../active/roadmap.md"],
+                        repo_root=repo,
+                    ),
+                )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = MODULE.main(
+                    ["create", "--local", "--from", "handbook/plans/active/roadmap.md"],
+                    repo_root=repo,
+                )
+
+            self.assertEqual(1, result)
+            self.assertIn("a local override already exists for handbook/plans/active/roadmap.md", stderr.getvalue())
+
     def test_list_resolves_local_overrides_and_additive_local_plans(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -92,7 +116,7 @@ class HandbookPlanTest(unittest.TestCase):
                 self.assertEqual(
                     0,
                     MODULE.main(
-                        ["create", "--local", "--from", "handbook/plans/active/roadmap.md"],
+                        ["create", "--local", "--from", "handbook/plans/active/../active/roadmap.md"],
                         repo_root=repo,
                     ),
                 )
@@ -142,6 +166,122 @@ class HandbookPlanTest(unittest.TestCase):
             self.assertFalse(created_path.exists())
             local_index = (repo / "handbook" / "plans" / "local" / "index.md").read_text()
             self.assertNotIn("[Scratch Plan](", local_index)
+
+    def test_complete_local_plan_rejects_tracked_path_without_deleting_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            tracked_path = repo / "handbook" / "plans" / "active" / "roadmap.md"
+            original_text = tracked_path.read_text()
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    0,
+                    MODULE.main(
+                        ["create", "--local", "--title", "Scratch Plan", "--owner", "Engineering Productivity"],
+                        repo_root=repo,
+                    ),
+                )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = MODULE.main(
+                    ["complete", "--local", "--plan", "handbook/plans/active/roadmap.md"],
+                    repo_root=repo,
+                )
+
+            self.assertEqual(1, result)
+            self.assertTrue(tracked_path.exists())
+            self.assertEqual(original_text, tracked_path.read_text())
+            self.assertIn("no local handbook plan matched 'handbook/plans/active/roadmap.md'", stderr.getvalue())
+
+    def test_complete_local_plan_unlinks_symlinked_local_entry_without_touching_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            tracked_path = repo / "handbook" / "plans" / "active" / "roadmap.md"
+            local_active_dir = repo / "handbook" / "plans" / "local" / "active"
+            local_active_dir.mkdir(parents=True)
+            symlink_path = local_active_dir / "evil.md"
+
+            try:
+                symlink_path.symlink_to(Path("../../active/roadmap.md"))
+            except OSError as err:
+                self.skipTest(f"symlink creation failed: {err}")
+
+            self.assertTrue(symlink_path.is_symlink())
+            self.assertTrue(symlink_path.exists())
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = MODULE.main(["complete", "--local", "--plan", "evil"], repo_root=repo)
+
+            self.assertEqual(0, result)
+            self.assertEqual("handbook/plans/local/active/evil.md", stdout.getvalue().strip())
+            self.assertFalse(symlink_path.exists())
+            self.assertFalse(symlink_path.is_symlink())
+            self.assertTrue(tracked_path.exists())
+            self.assertEqual(
+                tracked_path.read_text(),
+                textwrap.dedent(
+                    """\
+                    # Harness Engineering Roadmap
+
+                    - Status: active
+                    - Owner: Engineering Productivity
+                    - Last Updated: 2026-03-27
+
+                    ## Summary
+
+                    Track the staged conversion toward a harness-engineering workflow.
+
+                    ## Acceptance Criteria
+
+                    - Keep handbook structure validated mechanically.
+
+                    ## Decision Log
+
+                    - 2026-03-27: Use handbook/ for execution plans.
+                    """
+                ),
+            )
+
+    def test_complete_local_plan_rejects_traversal_ref_without_deleting_tracked_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            tracked_path = repo / "handbook" / "plans" / "active" / "roadmap.md"
+            original_text = tracked_path.read_text()
+            local_entry = repo / "handbook" / "plans" / "local" / "active" / "evil.md"
+            local_entry.parent.mkdir(parents=True)
+            local_entry.write_text(
+                textwrap.dedent(
+                    """\
+                    # Evil Local Plan
+
+                    - Status: active
+                    - Owner: Security
+                    - Last Updated: 2026-04-07
+
+                    ## Summary
+
+                    Keep this local.
+                    """
+                )
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = MODULE.main(
+                    ["complete", "--local", "--plan", "../../active/roadmap.md"],
+                    repo_root=repo,
+                )
+
+            self.assertEqual(1, result)
+            self.assertTrue(tracked_path.exists())
+            self.assertEqual(original_text, tracked_path.read_text())
+            self.assertTrue(local_entry.exists())
+            self.assertIn("no local handbook plan matched '../../active/roadmap.md'", stderr.getvalue())
 
     def _write_sample_repo(self, repo: Path) -> None:
         (repo / "handbook" / "plans" / "active").mkdir(parents=True)

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import posixpath
 import re
 import sys
 import unicodedata
@@ -68,7 +69,7 @@ def template_path(repo_root: Path) -> Path:
 
 
 def rel_path(path: Path, repo_root: Path) -> str:
-    return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    return path.relative_to(repo_root).as_posix()
 
 
 def resolve_link(source_path: Path, raw_target: str, repo_root: Path) -> str | None:
@@ -248,14 +249,23 @@ def render_local_override(repo_root: Path, source_rel_path: str, title: str | No
     return render_plan(title=title, owner=owner, sections=sections, overrides=source_rel_path)
 
 
+def canonical_tracked_plan_path(repo_root: Path, source_rel_path: str) -> str:
+    source_path = (repo_root / source_rel_path.strip()).resolve(strict=False)
+    try:
+        canonical_rel_path = source_path.relative_to(repo_root.resolve()).as_posix()
+    except ValueError as err:
+        raise ValueError("--from must point to handbook/plans/active/<plan>.md") from err
+    if not canonical_rel_path.startswith("handbook/plans/active/"):
+        raise ValueError("--from must point to handbook/plans/active/<plan>.md")
+    return canonical_rel_path
+
+
 def create_local_plan(repo_root: Path, title: str | None, owner: str | None, source_rel_path: str | None) -> Path:
     ensure_local_tree(repo_root)
     existing_local = collect_local_plans(repo_root)
     validate_override_collisions(existing_local)
     if source_rel_path is not None:
-        source_rel_path = source_rel_path.strip()
-        if not source_rel_path.startswith("handbook/plans/active/"):
-            raise ValueError("--from must point to handbook/plans/active/<plan>.md")
+        source_rel_path = canonical_tracked_plan_path(repo_root, source_rel_path)
         if any(plan.overrides == source_rel_path for plan in existing_local):
             raise ValueError(f"a local override already exists for {source_rel_path}")
         content = render_local_override(repo_root, source_rel_path, title=title, owner=owner)
@@ -280,27 +290,26 @@ def resolve_local_plan(repo_root: Path, plan_ref: str) -> Path:
     if not candidates:
         raise ValueError("no local handbook plans exist")
 
-    direct_candidates = [
-        repo_root / plan_ref,
-        active_dir / plan_ref,
-        active_dir / f"{plan_ref}.md",
-    ]
-    for candidate in direct_candidates:
-        if candidate.exists():
-            return candidate.resolve()
-
-    repo_ref = plan_ref.strip()
+    requested_ref = plan_ref.strip()
+    normalized_ref = posixpath.normpath(requested_ref) if requested_ref else requested_ref
     matches = [
         candidate
         for candidate in candidates
-        if rel_path(candidate, repo_root) == repo_ref or candidate.name == repo_ref or candidate.stem == repo_ref
+        if normalized_ref
+        in {
+            candidate.name,
+            candidate.stem,
+            candidate.relative_to(active_dir).as_posix(),
+            candidate.relative_to(local_root_path(repo_root)).as_posix(),
+            rel_path(candidate, repo_root),
+        }
     ]
     if not matches:
         raise ValueError(f"no local handbook plan matched {plan_ref!r}")
     if len(matches) > 1:
         joined = ", ".join(rel_path(match, repo_root) for match in matches)
         raise ValueError(f"ambiguous local plan reference {plan_ref!r}: {joined}")
-    return matches[0].resolve()
+    return matches[0]
 
 
 def complete_local_plan(repo_root: Path, plan_ref: str) -> Path:
