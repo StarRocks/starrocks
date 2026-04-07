@@ -393,6 +393,36 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
     }
 
+    @Test
+    public void testColumnNotEqualToOutOfDomainConstantWithMcvOnlyHistogram() {
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("0", 1L);
+        mcv.put("1", 3L);
+        Histogram histogram = new Histogram(new ArrayList<>(), mcv);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
+        ColumnStatistic columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(4);
+        builder.addColumnStatistic(columnRefOperator, columnStatistic);
+        Statistics statistics = builder.build();
+
+        BinaryPredicateOperator neOutOfDomain = new BinaryPredicateOperator(
+                BinaryType.NE,
+                columnRefOperator,
+                ConstantOperator.createBigint(2));
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator),
+                columnStatistic,
+                neOutOfDomain,
+                Optional.of(ConstantOperator.createBigint(2)),
+                statistics);
+
+        Assertions.assertFalse(Double.isNaN(estimated.getOutputRowCount()));
+        Assertions.assertEquals(3L, estimated.getOutputRowCount(), 0.001);
+    }
+
 
     @Test
     public void testUpdateHistWithJoin() {
