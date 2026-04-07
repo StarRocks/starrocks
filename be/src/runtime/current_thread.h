@@ -288,8 +288,8 @@ public:
 
     // Field offsets within CurrentThread, exposed for eBPF programs that locate
     // these fields via g_tls_thread_status_tpoff + g_tls_*_offset.
-    static constexpr size_t query_id_offset() { return offsetof(CurrentThread, _query_id); }
-    static constexpr size_t module_type_offset() { return offsetof(CurrentThread, _module_type); }
+    static size_t query_id_offset();
+    static size_t module_type_offset();
 
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
