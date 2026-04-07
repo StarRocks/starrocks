@@ -36,6 +36,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/service_contexts.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -48,6 +49,18 @@
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
+
+namespace {
+
+lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
+    if (const auto* services = state->query_execution_services(); services != nullptr && services->lake != nullptr) {
+        return services->lake->lake_tablet_manager;
+    }
+    auto* exec_env = state->exec_env();
+    return exec_env != nullptr ? exec_env->lake_tablet_manager() : nullptr;
+}
+
+} // namespace
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
@@ -196,7 +209,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_manager = _provider->tablet_manager();
     ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
     auto& lake_scan_node = _provider->_t_lake_scan_node;
     if (lake_scan_node.__isset.schema_key) {
@@ -430,7 +443,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
         has_all_pk_columns_selected(_tablet_schema.get(), *_slots)) {
         auto metadata = _tablet.metadata();
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = _provider->tablet_manager();
         _params.lake_io_opts.sst_warmup_done = std::make_shared<std::atomic<bool>>(false);
         _params.lake_io_opts.sst_warmup_fn = [metadata, tablet_mgr]() -> Status {
             return warmup_pk_index_sst_files(metadata.get(), tablet_mgr);
@@ -1202,6 +1215,8 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    _tablet_manager = lake_tablet_manager(state);
+    RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
@@ -1267,7 +1282,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #else
         ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
+                         _tablet_manager->get_tablet_num_rows(
                                  tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #endif
@@ -1307,9 +1322,9 @@ StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
             _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #else
-    ASSIGN_OR_RETURN(auto first_tablet_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
-                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    ASSIGN_OR_RETURN(
+            auto first_tablet_schema,
+            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #endif
 
