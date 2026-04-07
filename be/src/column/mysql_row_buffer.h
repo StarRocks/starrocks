@@ -42,12 +42,28 @@
 
 namespace starrocks {
 
+// Options controlling how MysqlRowBuffer serializes certain types.
+// Currently only affects how binary data (VARBINARY) is encoded when it
+// appears inside a nested type (ARRAY / MAP / STRUCT).
+struct MysqlRowBufferOptions {
+    enum class NestedBinaryFormat {
+        HEX,    // encode as uppercase hex string, e.g. "48656C6C6F"  (default)
+        BASE64, // encode as standard base64 string, e.g. "SGVsbG8="
+    };
+
+    NestedBinaryFormat nested_binary_format = NestedBinaryFormat::HEX;
+};
+
 // Reference:
 //   https://dev.mysql.com/doc/internals/en/com-query-response.html#text-resultset-row
 class MysqlRowBuffer final {
 public:
     MysqlRowBuffer() = default;
-    MysqlRowBuffer(bool is_binary_format) : _is_binary_format(is_binary_format){};
+    MysqlRowBuffer(bool is_binary_format) : _is_binary_format(is_binary_format) {}
+    MysqlRowBuffer(bool is_binary_format, MysqlRowBufferOptions options)
+            : _is_binary_format(is_binary_format), _options(options) {}
+
+    const MysqlRowBufferOptions& options() const { return _options; }
     ~MysqlRowBuffer() = default;
 
     void reset() { _data.clear(); }
@@ -64,6 +80,12 @@ public:
     void push_double(double data) { push_number(data); }
     void push_string(const char* str, size_t length, char escape_char = '"');
     void push_string(const Slice& s) { push_string(s.data, s.size); }
+
+    // Serialize raw binary data (VARBINARY).
+    // - At top level (_nesting_level == 0): length-prefixed raw bytes, same as push_string.
+    // - Inside a nested type (_nesting_level > 0): encodes the bytes according to
+    //   options().nested_binary_format (hex or base64) and wraps in double-quotes.
+    void push_binary(const char* data, size_t length);
 
     template <typename T>
     void push_number(T data, bool is_binary_protocol = false);
@@ -112,12 +134,15 @@ private:
     void _push_string_normal(const char* str, size_t lenght);
 
     raw::RawString _data;
-    uint32_t _array_level = 0;
+    // Tracks how many nested scopes (ARRAY / MAP / STRUCT) are currently open.
+    // 0 means top-level; > 0 means inside at least one nested type.
+    uint32_t _nesting_level = 0;
     uint32_t _array_offset = 0;
 
     bool _is_binary_format = false;
     // used for calculate null position if is_binary_format = true
     uint32_t _field_pos = 0;
+    MysqlRowBufferOptions _options;
 };
 
 } // namespace starrocks

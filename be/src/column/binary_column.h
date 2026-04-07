@@ -307,6 +307,12 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
+    // Mark this column as holding VARBINARY (rather than VARCHAR/CHAR) data.
+    // When set, put_mysql_row_buffer uses push_binary inside nested types so that
+    // raw bytes are encoded as hex/base64 instead of being emitted verbatim.
+    void set_is_varbinary(bool v) { _is_varbinary = v; }
+    bool is_varbinary_type() const { return _is_varbinary; }
+
     std::string get_name() const override {
         static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
         if (std::is_same_v<T, uint32_t>) {
@@ -426,6 +432,11 @@ private:
     mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
+
+    // True when this column holds VARBINARY data.  Causes put_mysql_row_buffer to
+    // use push_binary (hex/base64 encoding) instead of push_string when inside a
+    // nested type context.
+    bool _is_varbinary = false;
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
