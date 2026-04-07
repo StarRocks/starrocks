@@ -598,26 +598,22 @@ public class CostModel {
             if (childOp instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null) {
-                    if (enableForceGroupBySkewEliminateWhenSkewed && skewInfo.isGroupBySkewDetected()
-                            && skewInfo.getStage() < 4) {
-                        factor = 0.0;
-                    } else if (skewInfo.getStage() == 3) {
-                        factor = skewInfo.getPenaltyFactor();
-                    }
+                if (skewInfo != null && enableForceGroupBySkewEliminateWhenSkewed
+                        && skewInfo.isGroupBySkewDetected() && skewInfo.getStage() < 4) {
+                    factor = 0.0;
+                } else if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
                 } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
                     factor = 0.1;
                 }
             } else if (childOp instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null) {
-                    if (enableForceGroupBySkewEliminateWhenSkewed && skewInfo.isGroupBySkewDetected()
-                            && skewInfo.getStage() < 4) {
-                        factor = 0.0;
-                    } else if (skewInfo.getStage() == 3) {
-                        factor = skewInfo.getPenaltyFactor();
-                    }
+                if (skewInfo != null && enableForceGroupBySkewEliminateWhenSkewed
+                        && skewInfo.isGroupBySkewDetected() && skewInfo.getStage() < 4) {
+                    factor = 0.0;
+                } else if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
                 } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
                     factor = 0.1;
                 }
